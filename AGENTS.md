@@ -73,22 +73,21 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**Phase 0 done** (skeleton + quality gate, CI green). **Phase 1 done** (property
-config: `PropertyReader` port with full resolution chain — overrides →
-`dmtools.env` → `dmtools-local.env` → OS env → defaults; all ~120 env var
-getters with identical names/defaults; fixture-based end-to-end tests;
-`set_env_variable` deferred to Phase 4 where the JS bridge lives).
-**Phase 2 in progress** (CLI scaffolding: `CliDispatcher` with `--version`,
-`--help`, `--list-jobs`, `doctor` live; `run` resolves configs via
-`RunCommandProcessor` with deep-merge, parent inheritance, encoding detection;
-`JobRegistry` with 26 job names; `list`/`interactive`/direct-tool are stubs
-pending Phase 3 MCP registry).
+**All 5 phases implemented.** ~196 MCP tools across 17 integrations (Jira 52,
+GitHub 26, ADO 21, Confluence 19, GitLab 13, File 12, AI 5, Figma 10, TestRail 8,
+Bitrise 6, Jenkins 6, SharePoint 6, Teams 5, Xray 3, KB 3, Mermaid 1, CLI 1).
+QuickJS runtime via dart:ffi with sync callbacks — dmtools-agents suite passes
+694/698 (4 upstream bugs). CliAgent lifecycle fully ported.
 
-Next per GOAL.md:
-
-- **Phase 3 starts with Jira** (Server/Cloud duality — see GOAL.md for the
-  exact auth chain and API-version matrix to reproduce). The MCP tool registry
-  unblocks `dmtools list` and direct tool invocation.
+**Remaining work** (diminishing returns, in priority order):
+1. Phase 3 completion: ~133 more tools to reach the 329 Java @MCPTool set
+   (mostly deeper Jira project-management, remaining ADO/GitHub surface)
+2. Sync HTTP dispatch for tool calls from JS (currently file/cli tools work
+   sync; HTTP tools are stubbed in sync mode — mocked in test suite)
+3. CliAgent timer/error/line JS actions, InstructionProcessor
+4. `dmtools run <config.json>` end-to-end wiring (AgentFactory → CliAgent)
+5. Integration test layer (L2 contract tests, L3 live integration)
+6. CI: agents suite as dedicated job, tool catalog comparison check
 
 Phase checkboxes live in GOAL.md — tick them as you complete items and keep the
 file current when a decision changes the plan.

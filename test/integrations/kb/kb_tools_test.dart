@@ -5,8 +5,10 @@ import 'package:test/test.dart';
 
 /// Tests for the [kbTools] catalog and [KbToolExecutor] dispatch.
 void main() {
-  toolCatalogTests();
-  executorDispatchTests();
+  readCatalogTests();
+  mutationCatalogTests();
+  readDispatchTests();
+  writeDispatchTests();
   unknownToolTests();
 }
 
@@ -17,16 +19,19 @@ Directory _tempKb() {
   return dir;
 }
 
-/// Catalog shape: names, integration, params, category.
-void toolCatalogTests() {
-  group('kbTools catalog', () {
+/// Read-side catalog shape: names, integration, params, category.
+void readCatalogTests() {
+  group('kbTools read catalog', () {
     final tools = kbTools();
 
-    test('registers three tools in declaration order', () {
+    test('registers six tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'kb_search_docs',
         'kb_get_doc',
         'kb_index_docs',
+        'kb_create_doc',
+        'kb_delete_doc',
+        'kb_update_doc',
       ]);
     });
 
@@ -58,8 +63,33 @@ void toolCatalogTests() {
   });
 }
 
-/// Executor dispatch through [KbToolExecutor.execute].
-void executorDispatchTests() {
+/// Mutation catalog shape: create/delete/update params.
+void mutationCatalogTests() {
+  group('kbTools mutation catalog', () {
+    test('kb_create_doc requires path and content params', () {
+      final tool = kbTools().firstWhere((t) => t.name == 'kb_create_doc');
+      final path = tool.params.singleWhere((p) => p.name == 'path');
+      final content = tool.params.singleWhere((p) => p.name == 'content');
+      expect(path.required, isTrue);
+      expect(content.required, isTrue);
+    });
+
+    test('kb_delete_doc requires a path param', () {
+      final tool = kbTools().firstWhere((t) => t.name == 'kb_delete_doc');
+      final path = tool.params.singleWhere((p) => p.name == 'path');
+      expect(path.required, isTrue);
+    });
+
+    test('kb_update_doc requires path, section, and content params', () {
+      final tool = kbTools().firstWhere((t) => t.name == 'kb_update_doc');
+      expect(tool.params.map((p) => p.name), ['path', 'section', 'content']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Read-side executor dispatch through [KbToolExecutor.execute].
+void readDispatchTests() {
   late KbToolExecutor executor;
   late Directory kb;
 
@@ -70,7 +100,7 @@ void executorDispatchTests() {
 
   tearDown(() => kb.deleteSync(recursive: true));
 
-  group('KbToolExecutor.execute', () {
+  group('KbToolExecutor.execute (read)', () {
     test('routes kb_search_docs to a full-text search', () async {
       final results =
           await executor.execute('kb_search_docs', {'query': 'factory'})
@@ -98,6 +128,48 @@ void executorDispatchTests() {
           as List<String>;
       expect(files, hasLength(1));
       expect(files.single, endsWith('nested/deep.md'));
+    });
+  });
+}
+
+/// Mutation executor dispatch through [KbToolExecutor.execute].
+void writeDispatchTests() {
+  late KbToolExecutor executor;
+  late Directory kb;
+
+  setUp(() {
+    kb = _tempKb();
+    executor = KbToolExecutor(KbClient(kb.path));
+  });
+
+  tearDown(() => kb.deleteSync(recursive: true));
+
+  group('KbToolExecutor.execute (mutation)', () {
+    test('routes kb_create_doc to a document write', () async {
+      final path = await executor.execute(
+          'kb_create_doc', {'path': 'new.md', 'content': '# New\n'}) as String;
+      expect(path, endsWith('new.md'));
+      expect(File('${kb.path}/new.md').readAsStringSync(), '# New\n');
+    });
+
+    test('routes kb_delete_doc to a document delete', () async {
+      final path =
+          await executor.execute('kb_delete_doc', {'path': 'doc.md'}) as String;
+      expect(path, endsWith('doc.md'));
+      expect(File('${kb.path}/doc.md').existsSync(), isFalse);
+    });
+
+    test('routes kb_update_doc to a section replace', () async {
+      File('${kb.path}/guide.md')
+          .writeAsStringSync('# Guide\n\nold body\n\n## Next\nmore\n');
+      final updated = await executor.execute('kb_update_doc', {
+        'path': 'guide.md',
+        'section': 'Next',
+        'content': 'fresh next',
+      }) as String;
+      expect(updated, contains('fresh next'));
+      expect(updated, isNot(contains('more')));
+      expect(updated, contains('old body'));
     });
   });
 }

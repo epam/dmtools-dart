@@ -108,6 +108,47 @@ class JenkinsClient {
     return _decodeMap(body);
   }
 
+  /// `jenkins_get_job_details` — GET `job/{name}/api/json`.
+  ///
+  /// Requests a trimmed view via `tree=builds[number,result]`. Returns `null`
+  /// when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getJobDetails(String name) async {
+    final body = await _http.get(
+      'job/${_encodeJob(name)}/api/json',
+      queryParams: {'tree': 'builds[number,result]'},
+    );
+    return _decodeMap(body);
+  }
+
+  /// `jenkins_get_queue` — GET `queue/api/json`.
+  ///
+  /// Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getQueue() async {
+    final body = await _http.get('queue/api/json');
+    return _decodeMap(body);
+  }
+
+  /// `jenkins_cancel_build` — POST `cancelItem?id={queueId}`.
+  ///
+  /// Cancels the queued build identified by [queueId]. Returns a
+  /// success/failure map since the Jenkins response body is empty.
+  Future<Map<String, dynamic>> cancelBuild(int queueId) async {
+    try {
+      await _http.post('cancelItem?id=$queueId');
+      return {
+        'success': true,
+        'message': 'Queue item $queueId cancelled',
+        'queueId': queueId,
+      };
+    } on Object catch (e) {
+      return {
+        'success': false,
+        'message': 'Failed to cancel queue item $queueId',
+        'error': e.toString(),
+      };
+    }
+  }
+
   /// Decodes a JSON body to a map, or `null` when not an object.
   Map<String, dynamic>? _decodeMap(String body) {
     final decoded = jsonDecode(body);

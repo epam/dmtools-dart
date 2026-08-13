@@ -151,6 +151,33 @@ class GitlabClient {
         'projects/${_encodeProject(project)}/merge_requests/$iid/changes',
       );
 
+  /// `gitlab_approve_mr` — POST
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/approve`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> approveMr(String project, int iid) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/approve',
+        null,
+      );
+
+  /// `gitlab_unapprove_mr` — POST
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/unapprove`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> unapproveMr(String project, int iid) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/unapprove',
+        null,
+      );
+
+  /// `gitlab_get_mr_notes` — GET
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/notes`.
+  Future<List<Map<String, dynamic>>> getMrNotes(String project, int iid) =>
+      _getList(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/notes',
+      );
+
   /// `gitlab_get_issue` — GET `/api/v4/projects/{id}/issues/{iid}`.
   ///
   /// Returns `null` for non-object bodies.
@@ -187,6 +214,29 @@ class GitlabClient {
         queryParams: {'state': state, 'per_page': 20},
       );
 
+  /// `gitlab_get_pipelines` — GET `/api/v4/projects/{id}/pipelines`.
+  Future<List<Map<String, dynamic>>> getPipelines(String project) =>
+      _getList('projects/${_encodeProject(project)}/pipelines');
+
+  /// `gitlab_trigger_pipeline` — POST `/api/v4/projects/{id}/pipeline`.
+  ///
+  /// [ref] is the branch or tag to run the pipeline for. Returns the created
+  /// pipeline, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> triggerPipeline(
+    String project,
+    String ref,
+  ) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/pipeline',
+        jsonEncode({'ref': ref}),
+      );
+
+  /// `gitlab_get_pipeline` — GET `/api/v4/projects/{id}/pipelines/{id}`.
+  ///
+  /// Returns `null` for non-object bodies.
+  Future<Map<String, dynamic>?> getPipeline(String project, int id) =>
+      _getObject('projects/${_encodeProject(project)}/pipelines/$id');
+
   /// `gitlab_create_branch` — POST
   /// `/api/v4/projects/{id}/repository/branches`.
   ///
@@ -220,7 +270,35 @@ class GitlabClient {
         ref == null ? null : {'ref': ref},
       );
 
+  /// `gitlab_create_tag` — POST
+  /// `/api/v4/projects/{id}/repository/tags`.
+  ///
+  /// [tagName] is the new tag name; [ref] is the branch, tag, or commit to
+  /// create it from. Returns the created tag, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> createTag(
+    String project,
+    String tagName,
+    String ref,
+  ) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/repository/tags',
+        jsonEncode({'tag_name': tagName, 'ref': ref}),
+      );
+
+  /// `gitlab_get_tags` — GET `/api/v4/projects/{id}/repository/tags`.
+  Future<List<Map<String, dynamic>>> getTags(String project) =>
+      _getList('projects/${_encodeProject(project)}/repository/tags');
+
+  /// `gitlab_get_branches` — GET
+  /// `/api/v4/projects/{id}/repository/branches`.
+  Future<List<Map<String, dynamic>>> getBranches(String project) =>
+      _getList('projects/${_encodeProject(project)}/repository/branches');
+
   /// `gitlab_get_project_members` — GET `/api/v4/projects/{id}/members`.
   Future<List<Map<String, dynamic>>> getProjectMembers(String project) =>
       _getList('projects/${_encodeProject(project)}/members');
+
+  /// `gitlab_get_group_members` — GET `/api/v4/groups/{id}/members`.
+  Future<List<Map<String, dynamic>>> getGroupMembers(String groupId) =>
+      _getList('groups/${Uri.encodeComponent(groupId)}/members');
 }

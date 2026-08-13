@@ -8,8 +8,10 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   toolCatalogParamTests();
+  batch3CatalogParamTests();
   executorDispatchTests();
   fileToolDispatchTests();
+  batch3ToolDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -21,7 +23,7 @@ void toolCatalogTests() {
   group('sharepointTools catalog', () {
     final tools = sharepointTools();
 
-    test('registers the six tools in declaration order', () {
+    test('registers the nine tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'sharepoint_test',
         'sharepoint_get_drive',
@@ -29,6 +31,9 @@ void toolCatalogTests() {
         'sharepoint_get_file',
         'sharepoint_upload_file',
         'sharepoint_create_folder',
+        'sharepoint_get_drive_items',
+        'sharepoint_search_drive',
+        'sharepoint_delete_drive_item',
       ]);
     });
 
@@ -38,7 +43,7 @@ void toolCatalogTests() {
   });
 }
 
-/// Per-tool parameter declarations in the catalog.
+/// Per-tool parameter declarations in the catalog (core tools).
 void toolCatalogParamTests() {
   group('sharepoint_get_drive', () {
     final tool = toolNamed('sharepoint_get_drive');
@@ -83,6 +88,36 @@ void toolCatalogParamTests() {
 
     test('declares required drive_id, parent_id, name', () {
       expect(tool.params.map((p) => p.name), ['drive_id', 'parent_id', 'name']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Per-tool parameter declarations for the batch-3 drive tools.
+void batch3CatalogParamTests() {
+  group('sharepoint_get_drive_items', () {
+    final tool = toolNamed('sharepoint_get_drive_items');
+
+    test('declares required drive_id and folder_id', () {
+      expect(tool.params.map((p) => p.name), ['drive_id', 'folder_id']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('sharepoint_search_drive', () {
+    final tool = toolNamed('sharepoint_search_drive');
+
+    test('declares required drive_id and query', () {
+      expect(tool.params.map((p) => p.name), ['drive_id', 'query']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('sharepoint_delete_drive_item', () {
+    final tool = toolNamed('sharepoint_delete_drive_item');
+
+    test('declares required drive_id and item_id', () {
+      expect(tool.params.map((p) => p.name), ['drive_id', 'item_id']);
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
@@ -166,6 +201,45 @@ void fileToolDispatchTests() {
   });
 }
 
+/// Dispatch tests for the batch-3 drive tools.
+void batch3ToolDispatchTests() {
+  group('SharepointToolExecutor.execute batch-3 tools', () {
+    late _SpySharepointClient spy;
+    late SharepointToolExecutor executor;
+
+    setUp(() {
+      spy = _SpySharepointClient(mockSharepointHttp((o) => '{}').http);
+      executor = SharepointToolExecutor(spy);
+    });
+
+    test('routes sharepoint_get_drive_items with drive_id and folder_id',
+        () async {
+      await executor.execute(
+        'sharepoint_get_drive_items',
+        {'drive_id': 'd1', 'folder_id': 'f1'},
+      );
+      expect(spy.calls, ['getDriveItems:d1:f1']);
+    });
+
+    test('routes sharepoint_search_drive with drive_id and query', () async {
+      await executor.execute(
+        'sharepoint_search_drive',
+        {'drive_id': 'd1', 'query': 'report'},
+      );
+      expect(spy.calls, ['searchDrive:d1:report']);
+    });
+
+    test('routes sharepoint_delete_drive_item with drive_id and item_id',
+        () async {
+      await executor.execute(
+        'sharepoint_delete_drive_item',
+        {'drive_id': 'd1', 'item_id': 'i1'},
+      );
+      expect(spy.calls, ['deleteDriveItem:d1:i1']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpySharepointClient extends SharepointClient {
   _SpySharepointClient(super.http);
@@ -215,5 +289,23 @@ class _SpySharepointClient extends SharepointClient {
   ) {
     calls.add('createFolder:$driveId:$parentId:$name');
     return super.createFolder(driveId, parentId, name);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getDriveItems(String driveId, String folderId) {
+    calls.add('getDriveItems:$driveId:$folderId');
+    return super.getDriveItems(driveId, folderId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> searchDrive(String driveId, String query) {
+    calls.add('searchDrive:$driveId:$query');
+    return super.searchDrive(driveId, query);
+  }
+
+  @override
+  Future<Map<String, dynamic>> deleteDriveItem(String driveId, String itemId) {
+    calls.add('deleteDriveItem:$driveId:$itemId');
+    return super.deleteDriveItem(driveId, itemId);
   }
 }

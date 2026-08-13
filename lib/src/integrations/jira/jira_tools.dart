@@ -9,6 +9,7 @@ import '../../mcp/tool_param.dart';
 import 'jira_client.dart';
 
 part 'jira_tools_batch5.dart';
+part 'jira_tools_batch6.dart';
 
 /// Reusable parameter: Jira ticket key.
 const _keyParam = ToolParam(
@@ -72,6 +73,7 @@ List<ToolDefinition> jiraTools() => [
       ..._genericRequestTools(),
       ..._projectDetailTools(),
       ..._batch5Tools(),
+      ..._batch6Tools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -563,6 +565,7 @@ class JiraToolExecutor {
     ..._batch3Handlers(),
     ..._batch4Handlers(),
     ..._batch5Handlers(),
+    ...batch6Handlers(),
   };
 
   /// Dispatch entries for the batch-1/2 Jira tools.

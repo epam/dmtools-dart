@@ -7,7 +7,9 @@ import 'teams_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
+  batch3CatalogParamTests();
   executorDispatchTests();
+  batch3ToolDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -19,13 +21,16 @@ void toolCatalogTests() {
   group('teamsTools catalog', () {
     final tools = teamsTools();
 
-    test('registers the five tools in declaration order', () {
+    test('registers the eight tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'teams_test',
         'teams_send_message',
         'teams_list_chats',
         'teams_get_chat_messages',
         'teams_send_email',
+        'teams_get_chat_members',
+        'teams_create_chat',
+        'teams_get_teams',
       ]);
     });
 
@@ -66,6 +71,36 @@ void toolCatalogTests() {
     test('declares required to, subject, and body', () {
       expect(tool.params.map((p) => p.name), ['to', 'subject', 'body']);
       expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Per-tool parameter declarations for the batch-3 chat/team tools.
+void batch3CatalogParamTests() {
+  group('teams_get_chat_members', () {
+    final tool = toolNamed('teams_get_chat_members');
+
+    test('declares a required chat_id', () {
+      expect(tool.params.single.name, 'chat_id');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('teams_create_chat', () {
+    final tool = toolNamed('teams_create_chat');
+
+    test('declares a required members array', () {
+      expect(tool.params.single.name, 'members');
+      expect(tool.params.single.required, isTrue);
+      expect(tool.params.single.type, 'array');
+    });
+  });
+
+  group('teams_get_teams', () {
+    final tool = toolNamed('teams_get_teams');
+
+    test('takes no parameters', () {
+      expect(tool.params, isEmpty);
     });
   });
 }
@@ -121,6 +156,39 @@ void executorDispatchTests() {
   });
 }
 
+/// Dispatch tests for the batch-3 chat/team tools.
+void batch3ToolDispatchTests() {
+  group('TeamsToolExecutor.execute batch-3 tools', () {
+    late _SpyTeamsClient spy;
+    late TeamsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTeamsClient(mockHttp((o) => '{}').http);
+      executor = TeamsToolExecutor(spy);
+    });
+
+    test('routes teams_get_chat_members with chat_id', () async {
+      await executor.execute('teams_get_chat_members', {'chat_id': 'c1'});
+      expect(spy.calls, ['getChatMembers:c1']);
+    });
+
+    test('routes teams_create_chat with the members list', () async {
+      await executor.execute(
+        'teams_create_chat',
+        {
+          'members': ['u1', 'u2']
+        },
+      );
+      expect(spy.calls, ['createChat:u1,u2']);
+    });
+
+    test('routes teams_get_teams', () async {
+      await executor.execute('teams_get_teams', {});
+      expect(spy.calls, ['getTeams']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyTeamsClient extends TeamsClient {
   _SpyTeamsClient(super.http);
@@ -159,5 +227,23 @@ class _SpyTeamsClient extends TeamsClient {
   ) {
     calls.add('sendEmail:$to:$subject:$body');
     return super.sendEmail(to, subject, body);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getChatMembers(String chatId) {
+    calls.add('getChatMembers:$chatId');
+    return super.getChatMembers(chatId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createChat(List<String> members) {
+    calls.add('createChat:${members.join(',')}');
+    return super.createChat(members);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTeams() {
+    calls.add('getTeams');
+    return super.getTeams();
   }
 }

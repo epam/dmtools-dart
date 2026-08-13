@@ -19,6 +19,8 @@ List<ToolDefinition> testrailTools() => [
       ..._caseWriteTools(),
       ..._resultTools(),
       ..._runTools(),
+      ..._milestoneTools(),
+      ..._runWriteTools(),
     ];
 
 /// Connectivity-check tool: `testrail_test`.
@@ -168,6 +170,80 @@ List<ToolDefinition> _runTools() => [
       ),
     ];
 
+/// Milestone and plan tools: `testrail_get_milestones`, `testrail_get_plans`.
+List<ToolDefinition> _milestoneTools() => [
+      ToolDefinition(
+        name: 'testrail_get_milestones',
+        description: 'Get TestRail milestones for a project',
+        integration: 'testrail',
+        category: 'milestones',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_plans',
+        description: 'Get TestRail test plans for a project',
+        integration: 'testrail',
+        category: 'test_plans',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Run-write tools: `testrail_add_run`, `testrail_update_run`.
+List<ToolDefinition> _runWriteTools() => [
+      ToolDefinition(
+        name: 'testrail_add_run',
+        description: 'Add a TestRail test run to a project',
+        integration: 'testrail',
+        category: 'test_runs',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+          ToolParam(
+            name: 'name',
+            description: 'The test run name',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_update_run',
+        description: 'Update a TestRail test run name',
+        integration: 'testrail',
+        category: 'test_runs',
+        params: [
+          ToolParam(
+            name: 'runId',
+            description: 'The test run ID',
+            type: 'number',
+            required: true,
+          ),
+          ToolParam(
+            name: 'name',
+            description: 'The new test run name',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes TestRail MCP tools by dispatching to [TestRailClient].
 class TestRailToolExecutor {
   final TestRailClient _client;
@@ -207,6 +283,17 @@ class TestRailToolExecutor {
     'testrail_update_case': (a) => _client.updateCase(
           requiredInt(a, 'id'),
           a['fields'] as Map<String, dynamic>,
+        ),
+    'testrail_get_milestones': (a) =>
+        _client.getMilestones(requiredInt(a, 'projectId')),
+    'testrail_get_plans': (a) => _client.getPlans(requiredInt(a, 'projectId')),
+    'testrail_add_run': (a) => _client.addRun(
+          requiredInt(a, 'projectId'),
+          a['name'] as String,
+        ),
+    'testrail_update_run': (a) => _client.updateRun(
+          requiredInt(a, 'runId'),
+          a['name'] as String,
         ),
   };
 }

@@ -17,6 +17,10 @@ void main() {
   getSectionsTests();
   addCaseTests();
   updateCaseTests();
+  getMilestonesTests();
+  getPlansTests();
+  addRunTests();
+  updateRunTests();
 }
 
 /// The expected `Authorization` value produced by the fixture's config.
@@ -297,3 +301,105 @@ const _newCaseBody = '{"id":42,"title":"New case"}';
 
 /// Canned `update_case` response body.
 const _updatedCaseBody = '{"id":9,"title":"Updated"}';
+
+/// `testrail_get_milestones` — GET `get_milestones/{projectId}`.
+void getMilestonesTests() {
+  group('TestRailClient.getMilestones', () {
+    test('returns the decoded list of milestones', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_milestones/5': _milestonesBody}, o),
+      );
+      final milestones = await f.client.getMilestones(5);
+      expect(milestones.map((m) => m['id']).toList(), [200, 201]);
+      expect(f.adapter.calls.single.path, contains('get_milestones/5'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_milestones/5': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getMilestones(5), isEmpty);
+    });
+  });
+}
+
+/// `testrail_get_plans` — GET `get_plans/{projectId}`.
+void getPlansTests() {
+  group('TestRailClient.getPlans', () {
+    test('returns the decoded list of plans', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_plans/5': _plansBody}, o),
+      );
+      final plans = await f.client.getPlans(5);
+      expect(plans.map((p) => p['id']).toList(), [300, 301]);
+      expect(f.adapter.calls.single.path, contains('get_plans/5'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_plans/5': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getPlans(5), isEmpty);
+    });
+  });
+}
+
+/// `testrail_add_run` — POST `add_run/{projectId}`.
+void addRunTests() {
+  group('TestRailClient.addRun', () {
+    test('POSTs the name and returns the decoded run', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'add_run/5': _newRunBody}, o),
+      );
+      final result = await f.client.addRun(5, 'Sprint 42');
+      expect(result['id'], 500);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('add_run/5'));
+      expect(jsonDecode(call.data as String), {'name': 'Sprint 42'});
+    });
+
+    test('returns empty map when the body is not an object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'add_run/5': '[1, 2]'}, o),
+      );
+      expect(await f.client.addRun(5, 'x'), isEmpty);
+    });
+  });
+}
+
+/// `testrail_update_run` — POST `update_run/{runId}`.
+void updateRunTests() {
+  group('TestRailClient.updateRun', () {
+    test('POSTs the name and returns the decoded run', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'update_run/500': _updatedRunBody}, o),
+      );
+      final result = await f.client.updateRun(500, 'Sprint 43');
+      expect(result['id'], 500);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('update_run/500'));
+      expect(jsonDecode(call.data as String), {'name': 'Sprint 43'});
+    });
+
+    test('returns empty map when the body is not an object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'update_run/500': '[1, 2]'}, o),
+      );
+      expect(await f.client.updateRun(500, 'x'), isEmpty);
+    });
+  });
+}
+
+/// Canned `get_milestones` response body.
+const _milestonesBody = '[{"id":200},{"id":201}]';
+
+/// Canned `get_plans` response body.
+const _plansBody = '[{"id":300},{"id":301}]';
+
+/// Canned `add_run` response body.
+const _newRunBody = '{"id":500,"name":"Sprint 42"}';
+
+/// Canned `update_run` response body.
+const _updatedRunBody = '{"id":500,"name":"Sprint 43"}';

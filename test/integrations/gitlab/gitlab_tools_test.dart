@@ -23,12 +23,22 @@ const _expectedToolOrder = [
   'gitlab_merge_mr',
   'gitlab_close_mr',
   'gitlab_get_mr_diff',
+  'gitlab_approve_mr',
+  'gitlab_unapprove_mr',
+  'gitlab_get_mr_notes',
   'gitlab_get_issue',
   'gitlab_create_issue',
   'gitlab_list_issues',
   'gitlab_create_branch',
   'gitlab_get_file_content',
+  'gitlab_create_tag',
+  'gitlab_get_tags',
+  'gitlab_get_branches',
+  'gitlab_get_pipelines',
+  'gitlab_trigger_pipeline',
+  'gitlab_get_pipeline',
   'gitlab_get_project_members',
+  'gitlab_get_group_members',
 ];
 
 /// Catalog shape: tool count, order, integration, params.
@@ -36,7 +46,7 @@ void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the thirteen tools in declaration order', () {
+    test('registers the twenty-three tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 

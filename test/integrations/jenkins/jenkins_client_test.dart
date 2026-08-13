@@ -15,6 +15,9 @@ void main() {
   getBuildTests();
   getBuildLogTests();
   getLastBuildTests();
+  getJobDetailsTests();
+  getQueueTests();
+  cancelBuildTests();
 }
 
 /// The expected `Basic` header value produced by the fixture's config.
@@ -212,3 +215,79 @@ const _logBody = 'Started by user admin\nFinished: SUCCESS';
 
 /// Canned last-build response body.
 const _lastBuildBody = '{"number":10,"result":"SUCCESS"}';
+
+/// `jenkins_get_job_details` — GET `job/{name}/api/json?tree=builds[...]`.
+void getJobDetailsTests() {
+  group('JenkinsClient.getJobDetails', () {
+    test('returns the decoded job details with the tree query', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/api/json': _jobDetailsBody}, o),
+      );
+      final details = await f.client.getJobDetails('job-a');
+      expect(details?['builds'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.path, endsWith('/job/job-a/api/json'));
+      expect(call.queryParameters['tree'], 'builds[number,result]');
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/api/json': '[1]'}, o),
+      );
+      expect(await f.client.getJobDetails('job-a'), isNull);
+    });
+  });
+}
+
+/// `jenkins_get_queue` — GET `queue/api/json`.
+void getQueueTests() {
+  group('JenkinsClient.getQueue', () {
+    test('returns the decoded queue object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/queue/api/json': _queueBody}, o),
+      );
+      final queue = await f.client.getQueue();
+      expect(queue?['items'], isA<List>());
+      expect(f.adapter.calls.single.path, endsWith('/queue/api/json'));
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/queue/api/json': '[1]'}, o),
+      );
+      expect(await f.client.getQueue(), isNull);
+    });
+  });
+}
+
+/// `jenkins_cancel_build` — POST `cancelItem?id={queueId}`.
+void cancelBuildTests() {
+  group('JenkinsClient.cancelBuild', () {
+    test('POSTs the cancel and reports success', () async {
+      final f = mockJenkins((o) => '');
+      final result = await f.client.cancelBuild(42);
+      expect(result['success'], isTrue);
+      expect(result['queueId'], 42);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/cancelItem?id=42'));
+    });
+
+    test('reports failure when the POST throws', () async {
+      final f = mockJenkins(
+        (o) => o.path.contains('cancelItem') ? throw StateError('boom') : '{}',
+      );
+      final result = await f.client.cancelBuild(42);
+      expect(result['success'], isFalse);
+      expect(result['error'], isNotNull);
+    });
+  });
+}
+
+/// Canned job-details response body.
+const _jobDetailsBody =
+    '{"name":"job-a","builds":[{"number":1,"result":"SUCCESS"},'
+    '{"number":2,"result":"FAILURE"}]}';
+
+/// Canned queue response body.
+const _queueBody = '{"items":[{"id":42},{"id":43}]}';

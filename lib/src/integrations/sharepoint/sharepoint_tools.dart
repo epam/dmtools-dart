@@ -19,6 +19,9 @@ List<ToolDefinition> sharepointTools() => [
       _getFileTool(),
       _uploadFileTool(),
       _createFolderTool(),
+      _getDriveItemsTool(),
+      _searchDriveTool(),
+      _deleteDriveItemTool(),
     ];
 
 /// Connectivity-check tool: `sharepoint_test`.
@@ -130,6 +133,68 @@ ToolDefinition _createFolderTool() => ToolDefinition(
       ],
     );
 
+/// Get-drive-items tool: `sharepoint_get_drive_items`.
+ToolDefinition _getDriveItemsTool() => ToolDefinition(
+      name: 'sharepoint_get_drive_items',
+      description: 'List items in a SharePoint drive folder by drive and '
+          'folder id',
+      integration: 'sharepoint',
+      category: 'files',
+      params: [
+        ToolParam(
+          name: 'drive_id',
+          description: 'The SharePoint drive id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'folder_id',
+          description: 'The SharePoint folder item id',
+          required: true,
+        ),
+      ],
+    );
+
+/// Search-drive tool: `sharepoint_search_drive`.
+ToolDefinition _searchDriveTool() => ToolDefinition(
+      name: 'sharepoint_search_drive',
+      description: 'Search a SharePoint drive for items matching a query',
+      integration: 'sharepoint',
+      category: 'files',
+      params: [
+        ToolParam(
+          name: 'drive_id',
+          description: 'The SharePoint drive id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'query',
+          description: 'The search text to match item names against',
+          required: true,
+        ),
+      ],
+    );
+
+/// Delete-drive-item tool: `sharepoint_delete_drive_item`.
+ToolDefinition _deleteDriveItemTool() => ToolDefinition(
+      name: 'sharepoint_delete_drive_item',
+      description: 'Delete an item from a SharePoint drive by drive and '
+          'item id',
+      integration: 'sharepoint',
+      category: 'files',
+      params: [
+        ToolParam(
+          name: 'drive_id',
+          description: 'The SharePoint drive id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'item_id',
+          description: 'The SharePoint item id',
+          required: true,
+        ),
+      ],
+    );
+
 /// Executes SharePoint MCP tools by dispatching to [SharepointClient].
 class SharepointToolExecutor {
   final SharepointClient _client;
@@ -168,6 +233,18 @@ class SharepointToolExecutor {
           a['drive_id'] as String,
           a['parent_id'] as String,
           a['name'] as String,
+        ),
+    'sharepoint_get_drive_items': (a) => _client.getDriveItems(
+          a['drive_id'] as String,
+          a['folder_id'] as String,
+        ),
+    'sharepoint_search_drive': (a) => _client.searchDrive(
+          a['drive_id'] as String,
+          a['query'] as String,
+        ),
+    'sharepoint_delete_drive_item': (a) => _client.deleteDriveItem(
+          a['drive_id'] as String,
+          a['item_id'] as String,
         ),
   };
 }

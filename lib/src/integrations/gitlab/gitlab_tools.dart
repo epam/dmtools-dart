@@ -17,7 +17,9 @@ List<ToolDefinition> gitlabTools() => [
       ..._mergeRequestTools(),
       ..._issueTools(),
       ..._repositoryTools(),
+      ..._pipelineTools(),
       ..._memberTools(),
+      ..._groupTools(),
     ];
 
 /// Shared `project` param — numeric id or `group/project` path.
@@ -35,6 +37,13 @@ ToolParam _iidParam(String entity) => ToolParam(
       required: true,
     );
 
+/// Shared `group_id` param — numeric id or `group/subgroup` path.
+const ToolParam _groupIdParam = ToolParam(
+  name: 'group_id',
+  description: 'Group id or group/subgroup path',
+  required: true,
+);
+
 /// Connectivity-check tool: `gitlab_test`.
 List<ToolDefinition> _systemTools() => [
       ToolDefinition(
@@ -48,7 +57,8 @@ List<ToolDefinition> _systemTools() => [
 
 /// Merge-request tools: `gitlab_get_mr`, `gitlab_list_mrs`,
 /// `gitlab_create_mr_note`, `gitlab_merge_mr`, `gitlab_close_mr`,
-/// `gitlab_get_mr_diff`.
+/// `gitlab_get_mr_diff`, `gitlab_approve_mr`, `gitlab_unapprove_mr`,
+/// `gitlab_get_mr_notes`.
 List<ToolDefinition> _mergeRequestTools() => [
       _getMrTool(),
       _listMrsTool(),
@@ -56,6 +66,9 @@ List<ToolDefinition> _mergeRequestTools() => [
       _mergeMrTool(),
       _closeMrTool(),
       _getMrDiffTool(),
+      _approveMrTool(),
+      _unapproveMrTool(),
+      _getMrNotesTool(),
     ];
 
 /// Issue tools: `gitlab_get_issue`, `gitlab_create_issue`,
@@ -66,10 +79,22 @@ List<ToolDefinition> _issueTools() => [
       _listIssuesTool(),
     ];
 
-/// Repository tools: `gitlab_create_branch`, `gitlab_get_file_content`.
+/// Repository tools: `gitlab_create_branch`, `gitlab_get_file_content`,
+/// `gitlab_create_tag`, `gitlab_get_tags`, `gitlab_get_branches`.
 List<ToolDefinition> _repositoryTools() => [
       _createBranchTool(),
       _getFileContentTool(),
+      _createTagTool(),
+      _getTagsTool(),
+      _getBranchesTool(),
+    ];
+
+/// Pipeline tools: `gitlab_get_pipelines`, `gitlab_trigger_pipeline`,
+/// `gitlab_get_pipeline`.
+List<ToolDefinition> _pipelineTools() => [
+      _getPipelinesTool(),
+      _triggerPipelineTool(),
+      _getPipelineTool(),
     ];
 
 /// Project-member tools: `gitlab_get_project_members`.
@@ -80,6 +105,17 @@ List<ToolDefinition> _memberTools() => [
         integration: 'gitlab',
         category: 'members',
         params: [_projectParam],
+      ),
+    ];
+
+/// Group-member tools: `gitlab_get_group_members`.
+List<ToolDefinition> _groupTools() => [
+      ToolDefinition(
+        name: 'gitlab_get_group_members',
+        description: 'List the members of a GitLab group',
+        integration: 'gitlab',
+        category: 'members',
+        params: [_groupIdParam],
       ),
     ];
 
@@ -147,6 +183,33 @@ ToolDefinition _closeMrTool() => ToolDefinition(
 ToolDefinition _getMrDiffTool() => ToolDefinition(
       name: 'gitlab_get_mr_diff',
       description: 'Get the diffs (changes) of a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request approve tool: `gitlab_approve_mr`.
+ToolDefinition _approveMrTool() => ToolDefinition(
+      name: 'gitlab_approve_mr',
+      description: 'Approve a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request unapprove tool: `gitlab_unapprove_mr`.
+ToolDefinition _unapproveMrTool() => ToolDefinition(
+      name: 'gitlab_unapprove_mr',
+      description: 'Unapprove a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request notes tool: `gitlab_get_mr_notes`.
+ToolDefinition _getMrNotesTool() => ToolDefinition(
+      name: 'gitlab_get_mr_notes',
+      description: 'List the notes (comments) of a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
       params: [_projectParam, _iidParam('merge request')],
@@ -240,6 +303,87 @@ ToolDefinition _getFileContentTool() => ToolDefinition(
       ],
     );
 
+/// Tag-create tool: `gitlab_create_tag`.
+ToolDefinition _createTagTool() => ToolDefinition(
+      name: 'gitlab_create_tag',
+      description: 'Create a tag in a GitLab project repository',
+      integration: 'gitlab',
+      category: 'repository',
+      params: [
+        _projectParam,
+        ToolParam(
+          name: 'tag_name',
+          description: 'The name of the tag to create',
+          required: true,
+        ),
+        ToolParam(
+          name: 'ref',
+          description: 'The branch, tag, or commit to create the tag from',
+          required: true,
+        ),
+      ],
+    );
+
+/// Tag-list tool: `gitlab_get_tags`.
+ToolDefinition _getTagsTool() => ToolDefinition(
+      name: 'gitlab_get_tags',
+      description: 'List the tags of a GitLab project repository',
+      integration: 'gitlab',
+      category: 'repository',
+      params: [_projectParam],
+    );
+
+/// Branch-list tool: `gitlab_get_branches`.
+ToolDefinition _getBranchesTool() => ToolDefinition(
+      name: 'gitlab_get_branches',
+      description: 'List the branches of a GitLab project repository',
+      integration: 'gitlab',
+      category: 'repository',
+      params: [_projectParam],
+    );
+
+/// Pipeline-list tool: `gitlab_get_pipelines`.
+ToolDefinition _getPipelinesTool() => ToolDefinition(
+      name: 'gitlab_get_pipelines',
+      description: 'List the pipelines of a GitLab project',
+      integration: 'gitlab',
+      category: 'pipelines',
+      params: [_projectParam],
+    );
+
+/// Pipeline-trigger tool: `gitlab_trigger_pipeline`.
+ToolDefinition _triggerPipelineTool() => ToolDefinition(
+      name: 'gitlab_trigger_pipeline',
+      description: 'Trigger a new pipeline for a GitLab project ref',
+      integration: 'gitlab',
+      category: 'pipelines',
+      params: [
+        _projectParam,
+        ToolParam(
+          name: 'ref',
+          description: 'The branch or tag to run the pipeline for',
+          required: true,
+        ),
+      ],
+    );
+
+/// Pipeline-read tool: `gitlab_get_pipeline`.
+ToolDefinition _getPipelineTool() => ToolDefinition(
+      name: 'gitlab_get_pipeline',
+      description: 'Get a GitLab project pipeline by id',
+      integration: 'gitlab',
+      category: 'pipelines',
+      params: [
+        _projectParam,
+        ToolParam(
+          name: 'pipeline_id',
+          description: 'The pipeline id',
+          type: 'number',
+          required: true,
+        ),
+      ],
+    );
+
 /// Parses a JSON `iid` argument into an int (accepts int or numeric string).
 int _toInt(Object? value) {
   if (value is int) return value;
@@ -267,56 +411,124 @@ class GitlabToolExecutor {
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
-    'gitlab_test': (_) => _client.testConnection(),
-    'gitlab_get_mr': (a) => _client.getMr(
-          a['project'] as String,
-          _toInt(a['iid']),
-        ),
-    'gitlab_list_mrs': (a) => _client.listMrs(
-          a['project'] as String,
-          a['state'] as String? ?? 'opened',
-        ),
-    'gitlab_create_mr_note': (a) => _client.createMrNote(
-          a['project'] as String,
-          _toInt(a['iid']),
-          a['body'] as String,
-        ),
-    'gitlab_merge_mr': (a) => _client.mergeMr(
-          a['project'] as String,
-          _toInt(a['iid']),
-        ),
-    'gitlab_close_mr': (a) => _client.closeMr(
-          a['project'] as String,
-          _toInt(a['iid']),
-        ),
-    'gitlab_get_mr_diff': (a) => _client.getMrDiff(
-          a['project'] as String,
-          _toInt(a['iid']),
-        ),
-    'gitlab_get_issue': (a) => _client.getIssue(
-          a['project'] as String,
-          _toInt(a['iid']),
-        ),
-    'gitlab_create_issue': (a) => _client.createIssue(
-          a['project'] as String,
-          a['title'] as String,
-          a['description'] as String?,
-        ),
-    'gitlab_list_issues': (a) => _client.listIssues(
-          a['project'] as String,
-          a['state'] as String? ?? 'opened',
-        ),
-    'gitlab_create_branch': (a) => _client.createBranch(
-          a['project'] as String,
-          a['branch'] as String,
-          a['ref'] as String,
-        ),
-    'gitlab_get_file_content': (a) => _client.getFileContent(
-          a['project'] as String,
-          a['file_path'] as String,
-          a['ref'] as String?,
-        ),
-    'gitlab_get_project_members': (a) =>
-        _client.getProjectMembers(a['project'] as String),
+    ..._systemHandlers(),
+    ..._mergeRequestHandlers(),
+    ..._issueHandlers(),
+    ..._repositoryHandlers(),
+    ..._pipelineHandlers(),
+    ..._memberHandlers(),
   };
+
+  /// Connectivity-check handler.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _systemHandlers() => {
+            'gitlab_test': (_) => _client.testConnection(),
+          };
+
+  /// Merge-request tool handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _mergeRequestHandlers() => {
+            'gitlab_get_mr': (a) => _client.getMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_list_mrs': (a) => _client.listMrs(
+                  a['project'] as String,
+                  a['state'] as String? ?? 'opened',
+                ),
+            'gitlab_create_mr_note': (a) => _client.createMrNote(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                  a['body'] as String,
+                ),
+            'gitlab_merge_mr': (a) => _client.mergeMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_close_mr': (a) => _client.closeMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_get_mr_diff': (a) => _client.getMrDiff(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_approve_mr': (a) => _client.approveMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_unapprove_mr': (a) => _client.unapproveMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_get_mr_notes': (a) => _client.getMrNotes(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+          };
+
+  /// Issue tool handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _issueHandlers() => {
+            'gitlab_get_issue': (a) => _client.getIssue(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_create_issue': (a) => _client.createIssue(
+                  a['project'] as String,
+                  a['title'] as String,
+                  a['description'] as String?,
+                ),
+            'gitlab_list_issues': (a) => _client.listIssues(
+                  a['project'] as String,
+                  a['state'] as String? ?? 'opened',
+                ),
+          };
+
+  /// Repository tool handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _repositoryHandlers() => {
+            'gitlab_create_branch': (a) => _client.createBranch(
+                  a['project'] as String,
+                  a['branch'] as String,
+                  a['ref'] as String,
+                ),
+            'gitlab_get_file_content': (a) => _client.getFileContent(
+                  a['project'] as String,
+                  a['file_path'] as String,
+                  a['ref'] as String?,
+                ),
+            'gitlab_create_tag': (a) => _client.createTag(
+                  a['project'] as String,
+                  a['tag_name'] as String,
+                  a['ref'] as String,
+                ),
+            'gitlab_get_tags': (a) => _client.getTags(a['project'] as String),
+            'gitlab_get_branches': (a) =>
+                _client.getBranches(a['project'] as String),
+          };
+
+  /// Pipeline tool handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _pipelineHandlers() => {
+            'gitlab_get_pipelines': (a) =>
+                _client.getPipelines(a['project'] as String),
+            'gitlab_trigger_pipeline': (a) => _client.triggerPipeline(
+                  a['project'] as String,
+                  a['ref'] as String,
+                ),
+            'gitlab_get_pipeline': (a) => _client.getPipeline(
+                  a['project'] as String,
+                  _toInt(a['pipeline_id']),
+                ),
+          };
+
+  /// Member tool handlers (project and group scopes).
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _memberHandlers() => {
+            'gitlab_get_project_members': (a) =>
+                _client.getProjectMembers(a['project'] as String),
+            'gitlab_get_group_members': (a) =>
+                _client.getGroupMembers(a['group_id'] as String),
+          };
 }

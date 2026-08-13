@@ -80,6 +80,20 @@ class BitriseClient {
     return _decodeObject(body);
   }
 
+  /// `bitrise_abort_build` — POST `apps/{appSlug}/builds/{buildSlug}/abort`.
+  ///
+  /// Aborts an in-progress build. Returns the decoded response object, or
+  /// `null` when the body is not a JSON object.
+  Future<Map<String, dynamic>?> abortBuild(
+    String appSlug,
+    String buildSlug,
+  ) async {
+    final body = await _http.post(
+      'apps/${_encodeSlug(appSlug)}/builds/${_encodeSlug(buildSlug)}/abort',
+    );
+    return _decodeObject(body);
+  }
+
   /// `bitrise_trigger_build_with_params` — POST `apps/{appSlug}/builds`.
   ///
   /// Triggers a build with the given [workflow] and optional [environments].

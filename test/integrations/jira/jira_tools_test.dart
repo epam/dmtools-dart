@@ -70,6 +70,14 @@ const _expectedToolNames = [
   'jira_add_fix_version',
   'jira_remove_fix_version',
   'jira_get_my_profile',
+  'jira_search_by_page',
+  'jira_search_with_pagination',
+  'jira_get_attachments',
+  'jira_get_worklogs',
+  'jira_get_watchers',
+  'jira_add_watcher',
+  'jira_remove_watcher',
+  'jira_get_resolutions',
 ];
 
 /// Catalog shape: tool count, declaration order, and integration ownership.
@@ -77,7 +85,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the fifty-two tools in declaration order', () {
+    test('registers the sixty tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 

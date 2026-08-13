@@ -14,6 +14,9 @@ void main() {
   getFileTests();
   uploadFileTests();
   createFolderTests();
+  getDriveItemsTests();
+  searchDriveTests();
+  deleteDriveItemTests();
 }
 
 /// `sharepoint_test` — connectivity check via GET `me/drive`.
@@ -158,12 +161,82 @@ void createFolderTests() {
   });
 }
 
+/// `sharepoint_get_drive_items` — GET `drives/{driveId}/items/{folderId}/children`.
+void getDriveItemsTests() {
+  group('SharepointClient.getDriveItems', () {
+    test('returns the decoded items object', () async {
+      final f =
+          mockSharepoint((o) => routeByPath({'/children': _itemsBody}, o));
+      final items = await f.client.getDriveItems('drive-1', 'folder-1');
+      expect(items['value'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v1.0/drives/drive-1/items/folder-1/children'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockSharepoint((o) => routeByPath({'/children': '[1]'}, o));
+      expect(await f.client.getDriveItems('drive-1', 'folder-1'), isEmpty);
+    });
+  });
+}
+
+/// `sharepoint_search_drive` — GET `drives/{driveId}/root/search(q='{query}')`.
+void searchDriveTests() {
+  group('SharepointClient.searchDrive', () {
+    test('returns the decoded search results', () async {
+      final f = mockSharepoint(
+        (o) => routeByPath({"search(q='report')": _searchBody}, o),
+      );
+      final results = await f.client.searchDrive('drive-1', 'report');
+      expect(results['value'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith("/v1.0/drives/drive-1/root/search(q='report')"),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockSharepoint(
+        (o) => routeByPath({"search(q='report')": '[1]'}, o),
+      );
+      expect(await f.client.searchDrive('drive-1', 'report'), isEmpty);
+    });
+  });
+}
+
+/// `sharepoint_delete_drive_item` — DELETE `drives/{driveId}/items/{itemId}`.
+void deleteDriveItemTests() {
+  group('SharepointClient.deleteDriveItem', () {
+    test('DELETEs the item and returns success', () async {
+      final f = mockSharepoint((o) => '');
+      final result = await f.client.deleteDriveItem('drive-1', 'item-1');
+      expect(result['success'], isTrue);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'DELETE');
+      expect(
+        call.path,
+        endsWith('/v1.0/drives/drive-1/items/item-1'),
+      );
+    });
+  });
+}
+
 /// Canned `me/drive` response body (the default drive object).
 const _driveBody = '{"id":"drive-1","name":"MyDrive","driveType":"personal"}';
 
 /// Canned files response body.
 const _filesBody =
     '{"value":[{"id":"f1","name":"a.txt"},{"id":"f2","name":"b.txt"}]}';
+
+/// Canned drive-items response body.
+const _itemsBody =
+    '{"value":[{"id":"i1","name":"doc.docx"},{"id":"i2","name":"sub"}]}';
+
+/// Canned search-results response body.
+const _searchBody =
+    '{"value":[{"id":"s1","name":"report.xlsx"},{"id":"s2","name":"report.pdf"}]}';
 
 /// Canned upload-file response body.
 const _uploadedBody = '{"id":"item-9","name":"file.txt"}';

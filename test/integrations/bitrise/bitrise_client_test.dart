@@ -15,6 +15,7 @@ void main() {
   getBuildDetailTests();
   triggerBuildTests();
   triggerBuildWithParamsTests();
+  abortBuildTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -210,3 +211,25 @@ void triggerBuildWithParamsTests() {
 
 /// Canned build-detail response body.
 const _detailBody = '{"slug":"build-2","status":1}';
+
+/// `bitrise_abort_build` — POST `apps/{appSlug}/builds/{buildSlug}/abort`.
+void abortBuildTests() {
+  group('BitriseClient.abortBuild', () {
+    test('POSTs the abort and returns the decoded object', () async {
+      final f = mockBitrise((o) => routeByPath({'/abort': _abortBody}, o));
+      final result = await f.client.abortBuild('app-1', 'build-2');
+      expect(result?['status'], 'ok');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/v0.1/apps/app-1/builds/build-2/abort'));
+    });
+
+    test('returns null when the response is not an object', () async {
+      final f = mockBitrise((o) => routeByPath({'/abort': '[1]'}, o));
+      expect(await f.client.abortBuild('app-1', 'build-2'), isNull);
+    });
+  });
+}
+
+/// Canned abort-build response body.
+const _abortBody = '{"status":"ok","build_slug":"build-2"}';

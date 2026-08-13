@@ -7,8 +7,10 @@ import 'jenkins_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
+  toolCatalogBatch3ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
+  executorBatch3DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -20,14 +22,17 @@ void toolCatalogTests() {
   group('jenkinsTools catalog', () {
     final tools = jenkinsTools();
 
-    test('registers the six tools in declaration order', () {
+    test('registers the nine tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jenkins_test',
         'jenkins_get_jobs',
         'jenkins_trigger_job',
+        'jenkins_get_job_details',
         'jenkins_get_build',
         'jenkins_get_build_log',
         'jenkins_get_last_build',
+        'jenkins_get_queue',
+        'jenkins_cancel_build',
       ]);
     });
 
@@ -64,12 +69,42 @@ void toolCatalogTests() {
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
+}
 
+/// Batch-2+3 catalog params: last build, job details, queue, cancel build.
+void toolCatalogBatch3ParamTests() {
   group('jenkins_get_last_build', () {
     final tool = toolNamed('jenkins_get_last_build');
 
     test('declares a required name', () {
       expect(tool.params.single.name, 'name');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('jenkins_get_job_details', () {
+    final tool = toolNamed('jenkins_get_job_details');
+
+    test('declares a required name', () {
+      expect(tool.params.single.name, 'name');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('jenkins_get_queue', () {
+    final tool = toolNamed('jenkins_get_queue');
+
+    test('takes no parameters', () {
+      expect(tool.params, isEmpty);
+    });
+  });
+
+  group('jenkins_cancel_build', () {
+    final tool = toolNamed('jenkins_cancel_build');
+
+    test('declares a required numeric queueId', () {
+      expect(tool.params.single.name, 'queueId');
+      expect(tool.params.single.type, 'number');
       expect(tool.params.single.required, isTrue);
     });
   });
@@ -152,6 +187,39 @@ void executorBatch2DispatchTests() {
   });
 }
 
+/// Batch-3 dispatch tests for job details, queue, and cancel build.
+void executorBatch3DispatchTests() {
+  group('JenkinsToolExecutor.execute (batch 3)', () {
+    late _SpyJenkinsClient spy;
+    late JenkinsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJenkinsClient(mockHttp((o) => '{}').http);
+      executor = JenkinsToolExecutor(spy);
+    });
+
+    test('routes jenkins_get_job_details with name', () async {
+      await executor.execute('jenkins_get_job_details', {'name': 'job-a'});
+      expect(spy.calls, ['getJobDetails:job-a']);
+    });
+
+    test('routes jenkins_get_queue', () async {
+      await executor.execute('jenkins_get_queue', {});
+      expect(spy.calls, ['getQueue']);
+    });
+
+    test('routes jenkins_cancel_build with queueId', () async {
+      await executor.execute('jenkins_cancel_build', {'queueId': 42});
+      expect(spy.calls, ['cancelBuild:42']);
+    });
+
+    test('accepts string queueId from the MCP protocol', () async {
+      await executor.execute('jenkins_cancel_build', {'queueId': '42'});
+      expect(spy.calls, ['cancelBuild:42']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyJenkinsClient extends JenkinsClient {
   _SpyJenkinsClient(super.http);
@@ -192,5 +260,23 @@ class _SpyJenkinsClient extends JenkinsClient {
   Future<Map<String, dynamic>?> getLastBuild(String name) {
     calls.add('getLastBuild:$name');
     return super.getLastBuild(name);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getJobDetails(String name) {
+    calls.add('getJobDetails:$name');
+    return super.getJobDetails(name);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getQueue() {
+    calls.add('getQueue');
+    return super.getQueue();
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelBuild(int queueId) {
+    calls.add('cancelBuild:$queueId');
+    return super.cancelBuild(queueId);
   }
 }

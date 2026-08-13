@@ -111,4 +111,53 @@ class TeamsClient {
     );
     return {'success': true, 'message': 'Email sent to $to'};
   }
+
+  /// `teams_get_chat_members` — GET `chats/{chatId}/members`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getChatMembers(String chatId) async {
+    final body = await _http.get('chats/${_encodeId(chatId)}/members');
+    return _decodeObject(body);
+  }
+
+  /// `teams_create_chat` — POST `chats`.
+  ///
+  /// Creates a chat with [members] (Graph user ids or UPNs). Chats with a
+  /// single other member are one-on-one; more become group chats. Returns
+  /// the decoded Graph chat object, or an empty map for non-object bodies.
+  Future<Map<String, dynamic>> createChat(List<String> members) async {
+    final result = await _http.post(
+      'chats',
+      body: jsonEncode({
+        'chatType': members.length <= 1 ? 'oneOnOne' : 'group',
+        'members': [
+          for (final member in members)
+            {
+              '@odata.type': '#microsoft.graph.aadUserConversationMember',
+              'roles': ['owner'],
+              'user@odata.bind':
+                  "https://graph.microsoft.com/v1.0/users('$member')",
+            },
+        ],
+      }),
+    );
+    return _decodeObject(result);
+  }
+
+  /// `teams_get_teams` — GET `me/joinedTeams`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getTeams() async {
+    final body = await _http.get('me/joinedTeams');
+    return _decodeObject(body);
+  }
+
+  /// Decodes a Graph JSON body into a map, or returns empty for non-objects.
+  Map<String, dynamic> _decodeObject(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return const {};
+  }
 }

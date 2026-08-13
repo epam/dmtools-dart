@@ -35,6 +35,7 @@ List<ToolDefinition> jenkinsTools() => [
       ..._systemTools(),
       ..._jobTools(),
       ..._buildTools(),
+      ..._queueTools(),
     ];
 
 /// Connectivity-check tool: `jenkins_test`.
@@ -48,10 +49,12 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Job tools: `jenkins_get_jobs`, `jenkins_trigger_job`.
+/// Job tools: `jenkins_get_jobs`, `jenkins_trigger_job`,
+/// `jenkins_get_job_details`.
 List<ToolDefinition> _jobTools() => [
       _getJobsTool(),
       _triggerJobTool(),
+      _getJobDetailsTool(),
     ];
 
 /// Build tools: `jenkins_get_build`, `jenkins_get_build_log`,
@@ -107,6 +110,40 @@ ToolDefinition _getLastBuildTool() => ToolDefinition(
       params: [_nameParam],
     );
 
+/// Job-details tool: `jenkins_get_job_details`.
+ToolDefinition _getJobDetailsTool() => ToolDefinition(
+      name: 'jenkins_get_job_details',
+      description: 'Get Jenkins job details with recent build results',
+      integration: 'jenkins',
+      category: 'jobs',
+      params: [_nameParam],
+    );
+
+/// Queue tools: `jenkins_get_queue`, `jenkins_cancel_build`.
+List<ToolDefinition> _queueTools() => [
+      ToolDefinition(
+        name: 'jenkins_get_queue',
+        description: 'Get the current Jenkins build queue',
+        integration: 'jenkins',
+        category: 'queue',
+        params: [],
+      ),
+      ToolDefinition(
+        name: 'jenkins_cancel_build',
+        description: 'Cancel a queued Jenkins build by queue ID',
+        integration: 'jenkins',
+        category: 'queue',
+        params: [
+          ToolParam(
+            name: 'queueId',
+            description: 'The queue item ID to cancel',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes Jenkins MCP tools by dispatching to [JenkinsClient].
 class JenkinsToolExecutor {
   final JenkinsClient _client;
@@ -140,5 +177,10 @@ class JenkinsToolExecutor {
           requiredInt(a, 'buildNumber'),
         ),
     'jenkins_get_last_build': (a) => _client.getLastBuild(a['name'] as String),
+    'jenkins_get_job_details': (a) =>
+        _client.getJobDetails(a['name'] as String),
+    'jenkins_get_queue': (_) => _client.getQueue(),
+    'jenkins_cancel_build': (a) =>
+        _client.cancelBuild(requiredInt(a, 'queueId')),
   };
 }

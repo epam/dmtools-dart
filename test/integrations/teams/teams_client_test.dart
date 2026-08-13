@@ -14,6 +14,9 @@ void main() {
   listChatsTests();
   getChatMessagesTests();
   sendEmailTests();
+  getChatMembersTests();
+  createChatTests();
+  getTeamsTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -170,6 +173,94 @@ void sendEmailTests() {
   });
 }
 
+/// `teams_get_chat_members` — GET `chats/{chatId}/members`.
+void getChatMembersTests() {
+  group('TeamsClient.getChatMembers', () {
+    test('returns the decoded members object', () async {
+      final f = mockTeams((o) => routeByPath({'/members': _membersBody}, o));
+      final members = await f.client.getChatMembers('chat-1');
+      expect(members['value'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v1.0/chats/chat-1/members'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/members': '[1]'}, o));
+      expect(await f.client.getChatMembers('chat-1'), isEmpty);
+    });
+  });
+}
+
+/// `teams_create_chat` — POST `chats`.
+void createChatTests() {
+  group('TeamsClient.createChat', () {
+    test('POSTs a one-on-one chat payload and returns the decoded chat',
+        () async {
+      final f = mockTeams((o) => routeByPath({'/chats': _chatBody}, o));
+      final chat = await f.client.createChat(['user-1']);
+      expect(chat['id'], 'chat-9');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/v1.0/chats'));
+      expect(
+        jsonDecode(call.data as String),
+        {
+          'chatType': 'oneOnOne',
+          'members': [
+            {
+              '@odata.type': '#microsoft.graph.aadUserConversationMember',
+              'roles': ['owner'],
+              'user@odata.bind':
+                  "https://graph.microsoft.com/v1.0/users('user-1')",
+            },
+          ],
+        },
+      );
+    });
+
+    test('creates a group chat with a member entry per id', () async {
+      final f = mockTeams((o) => routeByPath({'/chats': _chatBody}, o));
+      await f.client.createChat(['user-1', 'user-2']);
+      final payload = jsonDecode(f.adapter.calls.single.data as String)
+          as Map<String, dynamic>;
+      expect(payload['chatType'], 'group');
+      final members = payload['members'] as List;
+      expect(members.length, 2);
+      expect(
+        (members.last as Map<String, dynamic>)['user@odata.bind'],
+        "https://graph.microsoft.com/v1.0/users('user-2')",
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/chats': '[1]'}, o));
+      expect(await f.client.createChat(['user-1']), isEmpty);
+    });
+  });
+}
+
+/// `teams_get_teams` — GET `me/joinedTeams`.
+void getTeamsTests() {
+  group('TeamsClient.getTeams', () {
+    test('returns the decoded joined teams object', () async {
+      final f = mockTeams((o) => routeByPath({'/joinedTeams': _teamsBody}, o));
+      final teams = await f.client.getTeams();
+      expect(teams['value'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v1.0/me/joinedTeams'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/joinedTeams': '[1]'}, o));
+      expect(await f.client.getTeams(), isEmpty);
+    });
+  });
+}
+
 /// Canned `me` response body (the authenticated user profile).
 const _meBody =
     '{"displayName":"Ada Lovelace","userPrincipalName":"ada@x.com"}';
@@ -184,3 +275,13 @@ const _chatsBody = '{"@odata.context":"ctx","value":[{"id":"c1"},{"id":"c2"}]}';
 const _chatMessagesBody =
     '{"value":[{"id":"m1","body":{"content":"hi"}},{"id":"m2","body":'
     '{"content":"yo"}}]}';
+
+/// Canned chat-members response body.
+const _membersBody =
+    '{"value":[{"userId":"u1","displayName":"Ada"},{"userId":"u2"}]}';
+
+/// Canned create-chat response body.
+const _chatBody = '{"id":"chat-9","chatType":"oneOnOne"}';
+
+/// Canned joined-teams response body.
+const _teamsBody = '{"value":[{"id":"t1","displayName":"Team A"}]}';

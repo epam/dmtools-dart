@@ -10,6 +10,7 @@ void main() {
   toolCatalogParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
+  executorBatch3DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -21,7 +22,7 @@ void toolCatalogShapeTests() {
   group('bitriseTools catalog', () {
     final tools = bitriseTools();
 
-    test('registers the six tools in declaration order', () {
+    test('registers the seven tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'bitrise_test',
         'bitrise_get_apps',
@@ -29,6 +30,7 @@ void toolCatalogShapeTests() {
         'bitrise_get_build_detail',
         'bitrise_trigger_build',
         'bitrise_trigger_build_with_params',
+        'bitrise_abort_build',
       ]);
     });
 
@@ -161,6 +163,27 @@ void executorBatch2DispatchTests() {
   });
 }
 
+/// Batch-3 dispatch tests for the build-abort tool.
+void executorBatch3DispatchTests() {
+  group('BitriseToolExecutor.execute (batch 3)', () {
+    late _SpyBitriseClient spy;
+    late BitriseToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
+      executor = BitriseToolExecutor(spy);
+    });
+
+    test('routes bitrise_abort_build with app_slug and build_slug', () async {
+      await executor.execute('bitrise_abort_build', {
+        'app_slug': 'app-1',
+        'build_slug': 'build-2',
+      });
+      expect(spy.calls, ['abortBuild:app-1:build-2']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyBitriseClient extends BitriseClient {
   _SpyBitriseClient(super.http);
@@ -209,5 +232,14 @@ class _SpyBitriseClient extends BitriseClient {
     final envCount = environments?.length;
     calls.add('triggerBuildWithParams:$appSlug:$workflow:$envCount');
     return super.triggerBuildWithParams(appSlug, workflow, environments);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> abortBuild(
+    String appSlug,
+    String buildSlug,
+  ) {
+    calls.add('abortBuild:$appSlug:$buildSlug');
+    return super.abortBuild(appSlug, buildSlug);
   }
 }

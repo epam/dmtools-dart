@@ -105,6 +105,22 @@ class JiraHttpClient extends BaseHttpClient {
     return response.data ?? '';
   }
 
+  /// Performs a DELETE against `/rest/api/latest/` with query parameters.
+  ///
+  /// Used for endpoints such as removing a watcher, where the target is
+  /// identified by a query parameter (`?accountId=…`) rather than the path.
+  Future<String> deleteWithQuery(
+    String path, {
+    Map<String, dynamic>? queryParams,
+  }) async {
+    final response = await dio.delete<String>(
+      buildUrl(path),
+      queryParameters: queryParams,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
   /// Downloads binary content from a full [url] (e.g. an attachment URL).
   Future<List<int>> getBytes(String url) async {
     final response = await dio.get<List<int>>(

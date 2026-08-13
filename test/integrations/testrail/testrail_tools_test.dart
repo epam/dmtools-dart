@@ -9,8 +9,10 @@ void main() {
   toolCatalogShapeTests();
   toolCatalogParamTests();
   toolCatalogBatch2ParamTests();
+  toolCatalogBatch3ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
+  executorBatch3DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -22,7 +24,7 @@ void toolCatalogShapeTests() {
   group('testrailTools catalog', () {
     final tools = testrailTools();
 
-    test('registers the eight tools in declaration order', () {
+    test('registers the twelve tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'testrail_test',
         'testrail_get_case',
@@ -32,6 +34,10 @@ void toolCatalogShapeTests() {
         'testrail_add_result',
         'testrail_get_runs',
         'testrail_get_sections',
+        'testrail_get_milestones',
+        'testrail_get_plans',
+        'testrail_add_run',
+        'testrail_update_run',
       ]);
     });
 
@@ -199,6 +205,80 @@ void executorBatch2DispatchTests() {
   });
 }
 
+/// Batch-3 catalog params: milestones, plans, and run write tools.
+void toolCatalogBatch3ParamTests() {
+  test('testrail_get_milestones requires a numeric projectId', () {
+    final tool = toolNamed('testrail_get_milestones');
+    expect(tool.category, 'milestones');
+    expect(tool.params.single.name, 'projectId');
+    expect(tool.params.single.type, 'number');
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('testrail_get_plans requires a numeric projectId', () {
+    final tool = toolNamed('testrail_get_plans');
+    expect(tool.category, 'test_plans');
+    expect(tool.params.single.name, 'projectId');
+    expect(tool.params.single.type, 'number');
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('testrail_add_run requires projectId and name', () {
+    final tool = toolNamed('testrail_add_run');
+    expect(tool.category, 'test_runs');
+    expect(tool.params.map((p) => p.name), ['projectId', 'name']);
+    expect(tool.params[0].type, 'number');
+    expect(tool.params.every((p) => p.required), isTrue);
+  });
+
+  test('testrail_update_run requires runId and name', () {
+    final tool = toolNamed('testrail_update_run');
+    expect(tool.category, 'test_runs');
+    expect(tool.params.map((p) => p.name), ['runId', 'name']);
+    expect(tool.params[0].type, 'number');
+    expect(tool.params.every((p) => p.required), isTrue);
+  });
+}
+
+/// Batch-3 dispatch tests for milestones, plans, and run write tools.
+void executorBatch3DispatchTests() {
+  group('TestRailToolExecutor.execute (batch 3)', () {
+    late _SpyTestRailClient spy;
+    late TestRailToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTestRailClient(mockTestRailHttp((o) => '{}').http);
+      executor = TestRailToolExecutor(spy);
+    });
+
+    test('routes testrail_get_milestones with projectId', () async {
+      await executor.execute('testrail_get_milestones', {'projectId': 5});
+      expect(spy.calls, ['getMilestones:5']);
+    });
+
+    test('routes testrail_get_plans with projectId', () async {
+      await executor.execute('testrail_get_plans', {'projectId': 5});
+      expect(spy.calls, ['getPlans:5']);
+    });
+
+    test('routes testrail_add_run with projectId and name', () async {
+      await executor.execute('testrail_add_run', {
+        'projectId': 5,
+        'name': 'Sprint 42',
+      });
+      expect(spy.calls, ['addRun:5:Sprint 42']);
+    });
+
+    test('routes testrail_update_run with runId and name', () async {
+      await executor.execute('testrail_update_run', {
+        'runId': 500,
+        'name': 'Sprint 43',
+      });
+      expect(spy.calls, ['updateRun:500:Sprint 43']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyTestRailClient extends TestRailClient {
   _SpyTestRailClient(super.http);
@@ -258,5 +338,29 @@ class _SpyTestRailClient extends TestRailClient {
   ) {
     calls.add('updateCase:$id');
     return super.updateCase(id, fields);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getMilestones(int projectId) {
+    calls.add('getMilestones:$projectId');
+    return super.getMilestones(projectId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getPlans(int projectId) {
+    calls.add('getPlans:$projectId');
+    return super.getPlans(projectId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> addRun(int projectId, String name) {
+    calls.add('addRun:$projectId:$name');
+    return super.addRun(projectId, name);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateRun(int runId, String name) {
+    calls.add('updateRun:$runId:$name');
+    return super.updateRun(runId, name);
   }
 }

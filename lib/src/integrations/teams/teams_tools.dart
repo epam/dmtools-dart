@@ -18,6 +18,9 @@ List<ToolDefinition> teamsTools() => [
       _listChatsTool(),
       _getChatMessagesTool(),
       _sendEmailTool(),
+      _getChatMembersTool(),
+      _createChatTool(),
+      _getTeamsTool(),
     ];
 
 /// Connectivity-check tool: `teams_test`.
@@ -98,6 +101,46 @@ ToolDefinition _sendEmailTool() => ToolDefinition(
       ],
     );
 
+/// Get-chat-members tool: `teams_get_chat_members`.
+ToolDefinition _getChatMembersTool() => ToolDefinition(
+      name: 'teams_get_chat_members',
+      description: 'Get the members of a Teams chat by chat id',
+      integration: 'teams',
+      category: 'chats',
+      params: [
+        ToolParam(
+          name: 'chat_id',
+          description: 'The Teams chat id',
+          required: true,
+        ),
+      ],
+    );
+
+/// Create-chat tool: `teams_create_chat`.
+ToolDefinition _createChatTool() => ToolDefinition(
+      name: 'teams_create_chat',
+      description: 'Create a Teams chat with the given member user ids',
+      integration: 'teams',
+      category: 'chats',
+      params: [
+        ToolParam(
+          name: 'members',
+          description: 'The member Graph user ids or UPNs for the chat',
+          required: true,
+          type: 'array',
+        ),
+      ],
+    );
+
+/// Get-teams tool: `teams_get_teams`.
+ToolDefinition _getTeamsTool() => ToolDefinition(
+      name: 'teams_get_teams',
+      description: 'List the teams the current user has joined',
+      integration: 'teams',
+      category: 'teams',
+      params: [],
+    );
+
 /// Executes Teams MCP tools by dispatching to [TeamsClient].
 class TeamsToolExecutor {
   final TeamsClient _client;
@@ -133,5 +176,12 @@ class TeamsToolExecutor {
           a['subject'] as String,
           a['body'] as String,
         ),
+    'teams_get_chat_members': (a) => _client.getChatMembers(
+          a['chat_id'] as String,
+        ),
+    'teams_create_chat': (a) => _client.createChat(
+          (a['members'] as List).cast<String>(),
+        ),
+    'teams_get_teams': (_) => _client.getTeams(),
   };
 }

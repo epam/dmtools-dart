@@ -47,6 +47,7 @@ List<ToolDefinition> _buildTools() => [
       _getBuildDetailTool(),
       _triggerBuildTool(),
       _triggerBuildWithParamsTool(),
+      _abortBuildTool(),
     ];
 
 /// Build-list tool: `bitrise_get_builds`.
@@ -125,6 +126,26 @@ ToolDefinition _triggerBuildWithParamsTool() => ToolDefinition(
       ],
     );
 
+/// Build-abort tool: `bitrise_abort_build`.
+ToolDefinition _abortBuildTool() => ToolDefinition(
+      name: 'bitrise_abort_build',
+      description: 'Abort an in-progress Bitrise build',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'build_slug',
+          description: 'The Bitrise build slug',
+          required: true,
+        ),
+      ],
+    );
+
 /// Executes Bitrise MCP tools by dispatching to [BitriseClient].
 class BitriseToolExecutor {
   final BitriseClient _client;
@@ -159,6 +180,10 @@ class BitriseToolExecutor {
           a['app_slug'] as String,
           a['workflow'] as String,
           _optionalEnvList(a, 'environments'),
+        ),
+    'bitrise_abort_build': (a) => _client.abortBuild(
+          a['app_slug'] as String,
+          a['build_slug'] as String,
         ),
   };
 }

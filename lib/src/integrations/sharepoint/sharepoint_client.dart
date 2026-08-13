@@ -116,4 +116,54 @@ class SharepointClient {
     if (decoded is Map<String, dynamic>) return decoded;
     return const {};
   }
+
+  /// `sharepoint_get_drive_items` — GET
+  /// `drives/{driveId}/items/{folderId}/children`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getDriveItems(
+    String driveId,
+    String folderId,
+  ) async {
+    final body = await _http.get(
+      'drives/${_encodeId(driveId)}/items/${_encodeId(folderId)}/children',
+    );
+    return _decodeObject(body);
+  }
+
+  /// `sharepoint_search_drive` — GET
+  /// `drives/{driveId}/root/search(q='{query}')`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> searchDrive(String driveId, String query) async {
+    final body = await _http.get(
+      'drives/${_encodeId(driveId)}/root/search'
+      "(q='${_encodeId(query)}')",
+    );
+    return _decodeObject(body);
+  }
+
+  /// `sharepoint_delete_drive_item` — DELETE
+  /// `drives/{driveId}/items/{itemId}`.
+  ///
+  /// Graph responds 204 with no body on success, so a success map is
+  /// returned rather than a decoded payload.
+  Future<Map<String, dynamic>> deleteDriveItem(
+    String driveId,
+    String itemId,
+  ) async {
+    await _http.delete(
+      'drives/${_encodeId(driveId)}/items/${_encodeId(itemId)}',
+    );
+    return {'success': true, 'message': 'Item $itemId deleted'};
+  }
+
+  /// Decodes a Graph JSON body into a map, or returns empty for non-objects.
+  Map<String, dynamic> _decodeObject(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return const {};
+  }
 }

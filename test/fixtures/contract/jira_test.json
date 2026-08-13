@@ -1,0 +1,13 @@
+{
+  "tool_name": "jira_test",
+  "request_args": {},
+  "java_api_endpoint": "/rest/api/latest/myself",
+  "java_http_method": "GET",
+  "mock_response_body": "{\"displayName\":\"Jane Doe\",\"emailAddress\":\"jane@example.com\",\"accountId\":\"5b10a0dam\"}",
+  "expected_response": {
+    "success": true,
+    "message": "Jira connection successful",
+    "user": "Jane Doe",
+    "email": "jane@example.com"
+  }
+}

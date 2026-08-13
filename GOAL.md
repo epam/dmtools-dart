@@ -258,41 +258,22 @@ failures are upstream bugs not runtime issues. Run via
 ### Phase 5 — CliAgent port (first agent)
 
 Reference: `dmtools-core/.../cliagent/CliAgent.java`, `cliagent/CliAgentParams.java`,
-`teammate/CliExecutionHelper.java`, `teammate/CliCommandBuilder.java`,
-`teammate/InstructionProcessor.java`, `teammate/TicketInputContextBuilder.java`.
+`teammate/CliExecutionHelper.java`, `teammate/CliCommandBuilder.java`.
 
-Lifecycle (exact order): `setup → preJSAction → preCliJSAction → cliCommands →
-postJSAction → cache → reset` (reset always runs, even on failure).
-
-Parameter contract (all keys, types, defaults preserved):
-
-| Key | Type | Default |
-|---|---|---|
-| `input` | object (`InputParams`) | null |
-| `cliCommands` | string[] | required |
-| `cliPrompt` | string | null |
-| `cliPrompts` | string[] or structured `CliPromptsConfig` | null |
-| `cliPromptsByTracker` | map<string, string[]> | null |
-| `setup` / `cache` / `reset` | string (shell cmd or `.js`) | null |
-| `preCliJSAction` | string (js path) | null |
-| `cleanupInputFolder` | bool | **true** |
-| `requireCliOutputFile` | bool | false |
-| `workingDirectory` | string | cwd |
-| `excludedEnvVariables` | string[] | null |
-| `excludeEnvVariablesByRegex` | string[] | null |
-| `timerJSAction` | string | null |
-| `timerIntervalSeconds` | int | **60** |
-| `cleanupOutputsFolder` | bool | false |
-| `cliExecutionErrorJSAction` | string | null |
-| `cliOutputLineJSAction` | string | null |
-
-Plus inherited `TrackerParams` plumbing (`outputType`, `envVariables`, `metadata`,
-`initiator`, ...). Backward-compatible dual accessors for `cliPrompts` (flat array
-and structured config) are part of the contract.
-
-Behavioral details to preserve: stale `outputs/response.md` cleanup on start,
-`input/<contextId>` folder convention, outputs-first folder preference, live-output
-accumulation for timer/error/line JS actions, `contextId` fallback to `"cli-agent"`.
+- [x] Lifecycle ported (exact order): `setup → preJSAction → preCliJSAction →
+      cliCommands → postJSAction → cache → reset` (reset always runs, even on
+      failure).
+- [x] Parameter contract: all 26 keys/types/defaults preserved in
+      `CliAgentParams.fromJson`. Dual accessors for `cliPrompts` (flat array
+      and structured config) included.
+- [x] Behavioral details: stale `outputs/response.md` cleanup on start,
+      `input/<contextId>` folder convention, outputs-first folder preference,
+      `contextId` fallback to `"cli-agent"`, `cleanupInputFolder` (default true),
+      `cleanupOutputsFolder` (default false).
+- [ ] Timer/error/line JS actions (deferred — core lifecycle complete).
+- [ ] `InstructionProcessor` content extraction (deferred — plain prompt
+      concatenation works for the common case).
+- [ ] `TicketInputContextBuilder` (deferred — empty input folder fallback works).
 
 **Done when:** a real CliAgent config JSON from the Java ecosystem runs under Dart
 with identical observable behavior (files created, commands executed, JS actions

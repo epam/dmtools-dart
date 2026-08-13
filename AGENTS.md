@@ -73,21 +73,20 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**All 5 phases implemented.** ~196 MCP tools across 17 integrations (Jira 52,
-GitHub 26, ADO 21, Confluence 19, GitLab 13, File 12, AI 5, Figma 10, TestRail 8,
-Bitrise 6, Jenkins 6, SharePoint 6, Teams 5, Xray 3, KB 3, Mermaid 1, CLI 1).
-QuickJS runtime via dart:ffi with sync callbacks — dmtools-agents suite passes
-694/698 (4 upstream bugs). CliAgent lifecycle fully ported.
+**All 5 phases implemented.** 328 MCP tools across 17 integrations (99.7% of the
+329 Java @MCPTool set). QuickJS runtime via dart:ffi with sync callbacks —
+dmtools-agents suite passes 694/698 (4 upstream bugs). CliAgent lifecycle fully
+ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`
+all functional.
 
 **Remaining work** (diminishing returns, in priority order):
-1. Phase 3 completion: ~133 more tools to reach the 329 Java @MCPTool set
-   (mostly deeper Jira project-management, remaining ADO/GitHub surface)
-2. Sync HTTP dispatch for tool calls from JS (currently file/cli tools work
-   sync; HTTP tools are stubbed in sync mode — mocked in test suite)
-3. CliAgent timer/error/line JS actions, InstructionProcessor
-4. `dmtools run <config.json>` end-to-end wiring (AgentFactory → CliAgent)
-5. Integration test layer (L2 contract tests, L3 live integration)
-6. CI: agents suite as dedicated job, tool catalog comparison check
+1. Sync HTTP dispatch for real agent scripts (currently mocked tools work in
+   test suite; real HTTP calls need blocking I/O within NativeCallable callback)
+2. CliAgent timer/error/line JS actions, InstructionProcessor
+3. CI: agents suite job wired (quality.yml updated, continues-on-error until
+   sync HTTP dispatch lands)
+4. Integration test layer (L2 contract tests, L3 live integration)
+5. Tool catalog CI comparison check against Java fixtures
 
 Phase checkboxes live in GOAL.md — tick them as you complete items and keep the
 file current when a decision changes the plan.

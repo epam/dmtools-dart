@@ -73,13 +73,22 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**Phase 0 done** (skeleton + quality gate, CI green). Next per GOAL.md:
+**Phase 0 done** (skeleton + quality gate, CI green). **Phase 1 done** (property
+config: `PropertyReader` port with full resolution chain — overrides →
+`dmtools.env` → `dmtools-local.env` → OS env → defaults; all ~120 env var
+getters with identical names/defaults; fixture-based end-to-end tests;
+`set_env_variable` deferred to Phase 4 where the JS bridge lives).
+**Phase 2 in progress** (CLI scaffolding: `CliDispatcher` with `--version`,
+`--help`, `--list-jobs`, `doctor` live; `run` resolves configs via
+`RunCommandProcessor` with deep-merge, parent inheritance, encoding detection;
+`JobRegistry` with 26 job names; `list`/`interactive`/direct-tool are stubs
+pending Phase 3 MCP registry).
 
-- **Phase 1** — property config: port `PropertyReader`/`ApplicationConfiguration`
-  semantics (resolution chain: real env → `dmtools.env` → `dmtools-local.env`;
-  zone-local overrides; every env var getter with identical names).
-- Then **Phase 3 starts with Jira** (Server/Cloud duality — see GOAL.md for the
-  exact auth chain and API-version matrix to reproduce).
+Next per GOAL.md:
+
+- **Phase 3 starts with Jira** (Server/Cloud duality — see GOAL.md for the
+  exact auth chain and API-version matrix to reproduce). The MCP tool registry
+  unblocks `dmtools list` and direct tool invocation.
 
 Phase checkboxes live in GOAL.md — tick them as you complete items and keep the
 file current when a decision changes the plan.

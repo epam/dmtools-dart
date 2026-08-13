@@ -137,10 +137,10 @@ dart run bin/dmtools.dart run agents/js/unit-tests/run_all.json
 
 ### Phase 0 — Repo bootstrap (quality first)
 
-- [ ] `dart create` package layout (`lib/`, `bin/dmtools.dart`, `test/`).
-- [ ] `crap4dart init` → review config, keep `crap.threshold: 8.0`.
-- [ ] `crap4dart install --ci` → pre-commit hook + `.github/workflows/quality.yml`.
-- [ ] GitHub repo connected; first CI run green on the empty skeleton.
+- [x] `dart create` package layout (`lib/`, `bin/dmtools.dart`, `test/`).
+- [x] `crap4dart init` → review config, keep `crap.threshold: 8.0`.
+- [x] `crap4dart install --ci` → pre-commit hook + `.github/workflows/quality.yml`.
+- [x] GitHub repo connected; first CI run green on the empty skeleton.
 
 **Done when:** an empty Dart skeleton commits through the hook and passes the workflow.
 
@@ -149,15 +149,21 @@ dart run bin/dmtools.dart run agents/js/unit-tests/run_all.json
 Reference: `dmtools-core/.../common/utils/PropertyReader.java` (1567 lines),
 `common/config/ApplicationConfiguration.java`.
 
-- [ ] Config resolution order identical to Java: real env vars → `dmtools.env` →
+- [x] Config resolution order identical to Java: real env vars → `dmtools.env` →
       `dmtools-local.env` → defaults; real env always wins (mirrors
       `run-teammate-local.sh` semantics).
-- [ ] Thread-local/zone-local overrides (`PropertyReader.getOverrides()` equivalent)
+      **Note:** Java `PropertyReader.getValue()` actually checks OS env *last*
+      (overrides → config.properties → dmtools.env → OS env). The Dart port
+      follows the Java source (the spec per AGENTS.md), so `dmtools.env` in CWD
+      overrides real OS env vars. `dmtools-local.env` sits between the two
+      (replaces the shell-launcher `export` from `dmtools.sh`).
+- [x] Thread-local/zone-local overrides (`PropertyReader.getOverrides()` equivalent)
       — required by `CLI_ALLOWED_COMMANDS` and job-level `envVariables`.
-- [ ] Every env var getter used by integrations (Jira, ADO, GitHub, GitLab,
+- [x] Every env var getter used by integrations (Jira, ADO, GitHub, GitLab,
       Confluence, Figma, TestRail, AI providers, Bitrise, Jenkins, Teams, SharePoint)
       with identical names and defaults.
-- [ ] `set_env_variable(name, envVar)` runtime switching.
+- [ ] `set_env_variable(name, envVar)` runtime switching. **Deferred to Phase 4**
+      (lives in `JobJavaScriptBridge`, requires the QuickJS runtime).
 
 **Done when:** a Java `dmtools.env` dropped into a Dart run resolves to the same
 effective configuration (unit-tested against fixture env files).
@@ -167,16 +173,24 @@ effective configuration (unit-tested against fixture env files).
 Reference: `dmtools-core/.../job/JobRunner.java`, `job/RunCommandProcessor.java`,
 `dmtools.sh`.
 
-- [ ] Commands: `run <config_file> [override_json]`, `list`, `doctor`, `interactive`,
+- [x] Commands: `run <config_file> [override_json]`, `list`, `doctor`, `interactive`,
       `--version`/`-v`, `--help`/`-h`, `--list-jobs`.
-- [ ] Direct tool invocation: `dmtools <tool_name> '<json_args>'` → dispatches to the
-      MCP tool registry, same JSON in/out as Java.
-- [ ] Deep-merge semantics of the `run` override: override wraps into `params`
+      **Note:** `--version`, `--help`, `--list-jobs`, `doctor` are fully live.
+      `run` resolves configs (deep-merge, parent inheritance, encoding detection)
+      but defers job execution to Phase 3+. `list`, `interactive`, and direct
+      tool invocation are stubs (require MCP tool registry from Phase 3).
+- [x] Direct tool invocation: `dmtools <tool_name> '<json_args>'` — **stub**
+      (dispatches to MCP tool registry, which is Phase 3).
+- [x] Deep-merge semantics of the `run` override: override wraps into `params`
       exactly like Java (`{"params":{"jobParams":{...}}}`); bare `{"jobParams":...}`
-      is ignored the same way (documented quirk preserved).
-- [ ] Job-name dispatch (`cliagent`, `teammate`, `jsrunner`, ...) — registry keyed by
-      the same lowercase names, aliases included.
+      is ignored the same way (documented quirk preserved). Implemented in
+      `config_merger.dart` + `run_command_processor.dart`.
+- [x] Job-name dispatch (`cliagent`, `teammate`, `jsrunner`, ...) — registry keyed by
+      the same lowercase names, aliases included. Implemented in `job_registry.dart`
+      (26 names, case-insensitive).
 - [ ] STDIN / heredoc / file input modes of `dmtools.sh` (as a Dart executable).
+      `--data` and `--file` flag parsing is done (`cli_args.dart`); STDIN reading
+      still needs wiring in `bin/dmtools.dart`.
 
 **Done when:** `dmtools list` prints the same tool catalog as Java for the same env
 configuration; golden tests on CLI stdout/stderr and exit codes.

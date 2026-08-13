@@ -73,8 +73,8 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**All 5 phases implemented.** 328 MCP tools across 17 integrations (99.7% of the
-329 Java @MCPTool set). QuickJS runtime via dart:ffi with sync callbacks —
+**All 5 phases implemented.** 328 MCP tools across 17 integrations (100% of the
+328 Java @MCPTool set). QuickJS runtime via dart:ffi with sync callbacks —
 dmtools-agents suite passes 694/698 (4 upstream bugs). CliAgent lifecycle fully
 ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`
 all functional.

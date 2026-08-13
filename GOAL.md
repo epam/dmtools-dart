@@ -48,7 +48,7 @@ that works with the Java version MUST work unchanged with the Dart version.
   `params.jobParams/ticket/response`, ...). Agent JS files from the Java ecosystem
   must run unmodified (synchronous call style preserved).
 - **Full `@MCPTool` coverage**: every method annotated `@MCPTool` in
-  `dmtools-mcp-annotations`-processed classes (329 annotations across 27 classes in
+  `dmtools-mcp-annotations`-processed classes (328 annotations across 26 classes in
   `dmtools-core`) gets a Dart implementation with the same tool name, argument
   schema, and behavior. No "partial registry" releases.
 - **The existing agent test suite is a primary acceptance gate** (see below).
@@ -98,7 +98,7 @@ unavailable).
   (126), `jira_remove_label` (102), `jira_move_to_status` (93), `file_read` (89),
   `file_write` (64), `jira_search_by_jql` (45), `jira_add_label` (42),
   `jira_get_ticket` (32).
-- The MCP surface is annotation-driven: 329 `@MCPTool` annotations across 27 classes,
+- The MCP surface is annotation-driven: 328 `@MCPTool` annotations across 26 classes,
   processed by `dmtools-annotation-processor` into the schema registry
   (`MCPSchemaGenerator`). The Dart port needs an equivalent build-time registry
   generation (annotated Dart classes → tool schemas), not a hand-maintained list.
@@ -217,8 +217,8 @@ after.
       availability rules (tool appears only when its integration is configured).
       `default_tool_registry.dart` registers all 16 catalogs; `dmtools list` prints
       the full catalog (85 tools).
-- [x] **Complete `@MCPTool` parity**: all 329 `@MCPTool`-annotated methods (27 classes)
-      are ported. **328/329 tools across 17 integrations** (Jira 65, GitHub 40,
+- [x] **Complete `@MCPTool` parity**: all 328 `@MCPTool`-annotated methods (26 classes)
+      are ported. **328/328 tools across 17 integrations** (Jira 65, GitHub 40,
       GitLab 33, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
       SharePoint 12, Teams 12, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
       Registry is the Dart equivalent of the generated catalog — the catalog cannot

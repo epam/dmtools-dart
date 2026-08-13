@@ -8,6 +8,7 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   executorDispatchTests();
+  executorBatch2DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -19,11 +20,14 @@ void toolCatalogTests() {
   group('jenkinsTools catalog', () {
     final tools = jenkinsTools();
 
-    test('registers the three tools in declaration order', () {
+    test('registers the six tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jenkins_test',
         'jenkins_get_jobs',
         'jenkins_trigger_job',
+        'jenkins_get_build',
+        'jenkins_get_build_log',
+        'jenkins_get_last_build',
       ]);
     });
 
@@ -34,6 +38,35 @@ void toolCatalogTests() {
 
   group('jenkins_trigger_job', () {
     final tool = toolNamed('jenkins_trigger_job');
+
+    test('declares a required name', () {
+      expect(tool.params.single.name, 'name');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('jenkins_get_build', () {
+    final tool = toolNamed('jenkins_get_build');
+
+    test('declares required name and numeric buildNumber', () {
+      expect(tool.params.map((p) => p.name), ['name', 'buildNumber']);
+      expect(tool.params[1].type, 'number');
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('jenkins_get_build_log', () {
+    final tool = toolNamed('jenkins_get_build_log');
+
+    test('declares required name and numeric buildNumber', () {
+      expect(tool.params.map((p) => p.name), ['name', 'buildNumber']);
+      expect(tool.params[1].type, 'number');
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('jenkins_get_last_build', () {
+    final tool = toolNamed('jenkins_get_last_build');
 
     test('declares a required name', () {
       expect(tool.params.single.name, 'name');
@@ -77,6 +110,48 @@ void executorDispatchTests() {
   });
 }
 
+/// Batch-2 dispatch tests for build detail, build log, and last build.
+void executorBatch2DispatchTests() {
+  group('JenkinsToolExecutor.execute (batch 2)', () {
+    late _SpyJenkinsClient spy;
+    late JenkinsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJenkinsClient(mockHttp((o) => '{}').http);
+      executor = JenkinsToolExecutor(spy);
+    });
+
+    test('routes jenkins_get_build with name and buildNumber', () async {
+      await executor.execute('jenkins_get_build', {
+        'name': 'job-a',
+        'buildNumber': 5,
+      });
+      expect(spy.calls, ['getBuild:job-a:5']);
+    });
+
+    test('accepts string buildNumber from the MCP protocol', () async {
+      await executor.execute('jenkins_get_build', {
+        'name': 'job-a',
+        'buildNumber': '5',
+      });
+      expect(spy.calls, ['getBuild:job-a:5']);
+    });
+
+    test('routes jenkins_get_build_log with name and buildNumber', () async {
+      await executor.execute('jenkins_get_build_log', {
+        'name': 'job-a',
+        'buildNumber': 5,
+      });
+      expect(spy.calls, ['getBuildLog:job-a:5']);
+    });
+
+    test('routes jenkins_get_last_build with name', () async {
+      await executor.execute('jenkins_get_last_build', {'name': 'job-a'});
+      expect(spy.calls, ['getLastBuild:job-a']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyJenkinsClient extends JenkinsClient {
   _SpyJenkinsClient(super.http);
@@ -99,5 +174,23 @@ class _SpyJenkinsClient extends JenkinsClient {
   Future<Map<String, dynamic>> triggerJob(String name) {
     calls.add('triggerJob:$name');
     return super.triggerJob(name);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getBuild(String name, int buildNumber) {
+    calls.add('getBuild:$name:$buildNumber');
+    return super.getBuild(name, buildNumber);
+  }
+
+  @override
+  Future<String> getBuildLog(String name, int buildNumber) {
+    calls.add('getBuildLog:$name:$buildNumber');
+    return super.getBuildLog(name, buildNumber);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getLastBuild(String name) {
+    calls.add('getLastBuild:$name');
+    return super.getLastBuild(name);
   }
 }

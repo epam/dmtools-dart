@@ -27,13 +27,21 @@ void catalogTests() {
   group('adoTools catalog', () {
     final tools = adoTools();
 
-    test('registers the five tools in declaration order', () {
+    test('registers all tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'ado_test',
         'ado_get_work_item',
         'ado_create_work_item',
+        'ado_update_work_item',
+        'ado_get_work_items',
+        'ado_list_work_items',
+        'ado_get_work_item_types',
         'ado_list_prs',
         'ado_get_pr',
+        'ado_create_repo',
+        'ado_get_repos',
+        'ado_get_builds',
+        'ado_trigger_build',
       ]);
     });
 

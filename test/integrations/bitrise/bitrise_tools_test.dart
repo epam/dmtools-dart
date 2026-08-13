@@ -6,24 +6,29 @@ import 'bitrise_test_support.dart';
 /// Tests for the [bitriseTools] catalog and [BitriseToolExecutor] dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
-  toolCatalogTests();
+  toolCatalogShapeTests();
+  toolCatalogParamTests();
   executorDispatchTests();
+  executorBatch2DispatchTests();
 }
 
 /// Looks up a registered tool by name.
 ToolDefinition toolNamed(String name) =>
     bitriseTools().firstWhere((t) => t.name == name);
 
-/// Catalog shape: tool count, order, integration, params.
-void toolCatalogTests() {
+/// Catalog shape: tool count, order, integration.
+void toolCatalogShapeTests() {
   group('bitriseTools catalog', () {
     final tools = bitriseTools();
 
-    test('registers the three tools in declaration order', () {
+    test('registers the six tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'bitrise_test',
+        'bitrise_get_apps',
         'bitrise_get_builds',
+        'bitrise_get_build_detail',
         'bitrise_trigger_build',
+        'bitrise_trigger_build_with_params',
       ]);
     });
 
@@ -31,7 +36,10 @@ void toolCatalogTests() {
       expect(tools.every((t) => t.integration == 'bitrise'), isTrue);
     });
   });
+}
 
+/// Catalog params: each tool's parameter names and requiredness.
+void toolCatalogParamTests() {
   group('bitrise_get_builds', () {
     final tool = toolNamed('bitrise_get_builds');
 
@@ -41,12 +49,37 @@ void toolCatalogTests() {
     });
   });
 
+  group('bitrise_get_build_detail', () {
+    final tool = toolNamed('bitrise_get_build_detail');
+
+    test('declares required app_slug and build_slug', () {
+      expect(tool.params.map((p) => p.name), ['app_slug', 'build_slug']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
   group('bitrise_trigger_build', () {
     final tool = toolNamed('bitrise_trigger_build');
 
     test('declares a required app_slug', () {
       expect(tool.params.single.name, 'app_slug');
       expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('bitrise_trigger_build_with_params', () {
+    final tool = toolNamed('bitrise_trigger_build_with_params');
+
+    test('requires app_slug and workflow, optional environments array', () {
+      expect(tool.params.map((p) => p.name), [
+        'app_slug',
+        'workflow',
+        'environments',
+      ]);
+      expect(tool.params[2].type, 'array');
+      expect(tool.params[2].required, isFalse);
+      expect(tool.params[0].required, isTrue);
+      expect(tool.params[1].required, isTrue);
     });
   });
 }
@@ -86,6 +119,48 @@ void executorDispatchTests() {
   });
 }
 
+/// Batch-2 dispatch tests for apps, build detail, and parameterized triggers.
+void executorBatch2DispatchTests() {
+  group('BitriseToolExecutor.execute (batch 2)', () {
+    late _SpyBitriseClient spy;
+    late BitriseToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
+      executor = BitriseToolExecutor(spy);
+    });
+
+    test('routes bitrise_get_build_detail with app_slug and build_slug',
+        () async {
+      await executor.execute('bitrise_get_build_detail', {
+        'app_slug': 'app-1',
+        'build_slug': 'build-2',
+      });
+      expect(spy.calls, ['getBuildDetail:app-1:build-2']);
+    });
+
+    test('routes bitrise_trigger_build_with_params with workflow', () async {
+      await executor.execute('bitrise_trigger_build_with_params', {
+        'app_slug': 'app-1',
+        'workflow': 'primary',
+      });
+      expect(spy.calls, ['triggerBuildWithParams:app-1:primary:null']);
+    });
+
+    test('routes bitrise_trigger_build_with_params with environments',
+        () async {
+      await executor.execute('bitrise_trigger_build_with_params', {
+        'app_slug': 'app-1',
+        'workflow': 'primary',
+        'environments': [
+          {'mapped_to': 'ENV', 'value': 'prod'},
+        ],
+      });
+      expect(spy.calls, ['triggerBuildWithParams:app-1:primary:1']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyBitriseClient extends BitriseClient {
   _SpyBitriseClient(super.http);
@@ -99,14 +174,40 @@ class _SpyBitriseClient extends BitriseClient {
   }
 
   @override
+  Future<List<Map<String, dynamic>>> getApps() {
+    calls.add('getApps');
+    return super.getApps();
+  }
+
+  @override
   Future<Map<String, dynamic>> getBuilds(String appSlug) {
     calls.add('getBuilds:$appSlug');
     return super.getBuilds(appSlug);
   }
 
   @override
+  Future<Map<String, dynamic>?> getBuildDetail(
+    String appSlug,
+    String buildSlug,
+  ) {
+    calls.add('getBuildDetail:$appSlug:$buildSlug');
+    return super.getBuildDetail(appSlug, buildSlug);
+  }
+
+  @override
   Future<Map<String, dynamic>?> triggerBuild(String appSlug) {
     calls.add('triggerBuild:$appSlug');
     return super.triggerBuild(appSlug);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> triggerBuildWithParams(
+    String appSlug,
+    String workflow,
+    List<Map<String, dynamic>>? environments,
+  ) {
+    final envCount = environments?.length;
+    calls.add('triggerBuildWithParams:$appSlug:$workflow:$envCount');
+    return super.triggerBuildWithParams(appSlug, workflow, environments);
   }
 }

@@ -19,11 +19,13 @@ void toolCatalogTests() {
   group('teamsTools catalog', () {
     final tools = teamsTools();
 
-    test('registers the three tools in declaration order', () {
+    test('registers the five tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'teams_test',
         'teams_send_message',
         'teams_list_chats',
+        'teams_get_chat_messages',
+        'teams_send_email',
       ]);
     });
 
@@ -46,6 +48,24 @@ void toolCatalogTests() {
 
     test('takes no parameters', () {
       expect(tool.params, isEmpty);
+    });
+  });
+
+  group('teams_get_chat_messages', () {
+    final tool = toolNamed('teams_get_chat_messages');
+
+    test('declares a required chat_id', () {
+      expect(tool.params.single.name, 'chat_id');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('teams_send_email', () {
+    final tool = toolNamed('teams_send_email');
+
+    test('declares required to, subject, and body', () {
+      expect(tool.params.map((p) => p.name), ['to', 'subject', 'body']);
+      expect(tool.params.every((p) => p.required), isTrue);
     });
   });
 }
@@ -79,6 +99,19 @@ void executorDispatchTests() {
       expect(spy.calls, ['listChats']);
     });
 
+    test('routes teams_get_chat_messages with chat_id', () async {
+      await executor.execute('teams_get_chat_messages', {'chat_id': 'c1'});
+      expect(spy.calls, ['getChatMessages:c1']);
+    });
+
+    test('routes teams_send_email with to, subject, and body', () async {
+      await executor.execute(
+        'teams_send_email',
+        {'to': 'a@x.com', 'subject': 'Hi', 'body': 'text'},
+      );
+      expect(spy.calls, ['sendEmail:a@x.com:Hi:text']);
+    });
+
     test('throws ArgumentError for an unknown tool', () {
       expect(
         () => executor.execute('teams_no_such', {}),
@@ -110,5 +143,21 @@ class _SpyTeamsClient extends TeamsClient {
   Future<Map<String, dynamic>> listChats() {
     calls.add('listChats');
     return super.listChats();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getChatMessages(String chatId) {
+    calls.add('getChatMessages:$chatId');
+    return super.getChatMessages(chatId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendEmail(
+    String to,
+    String subject,
+    String body,
+  ) {
+    calls.add('sendEmail:$to:$subject:$body');
+    return super.sendEmail(to, subject, body);
   }
 }

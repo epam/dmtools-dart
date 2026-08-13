@@ -79,4 +79,38 @@ class JenkinsClient {
       };
     }
   }
+
+  /// `jenkins_get_build` — GET `job/{name}/{buildNumber}/api/json`.
+  ///
+  /// Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getBuild(
+    String name,
+    int buildNumber,
+  ) async {
+    final body = await _http.get(
+      'job/${_encodeJob(name)}/$buildNumber/api/json',
+    );
+    return _decodeMap(body);
+  }
+
+  /// `jenkins_get_build_log` — GET `job/{name}/{buildNumber}/consoleText`.
+  ///
+  /// Returns the raw console log text.
+  Future<String> getBuildLog(String name, int buildNumber) async {
+    return _http.get('job/${_encodeJob(name)}/$buildNumber/consoleText');
+  }
+
+  /// `jenkins_get_last_build` — GET `job/{name}/lastBuild/api/json`.
+  ///
+  /// Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getLastBuild(String name) async {
+    final body = await _http.get('job/${_encodeJob(name)}/lastBuild/api/json');
+    return _decodeMap(body);
+  }
+
+  /// Decodes a JSON body to a map, or `null` when not an object.
+  Map<String, dynamic>? _decodeMap(String body) {
+    final decoded = jsonDecode(body);
+    return decoded is Map<String, dynamic> ? decoded : null;
+  }
 }

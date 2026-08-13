@@ -16,6 +16,8 @@ List<ToolDefinition> teamsTools() => [
       _testTool(),
       _sendMessageTool(),
       _listChatsTool(),
+      _getChatMessagesTool(),
+      _sendEmailTool(),
     ];
 
 /// Connectivity-check tool: `teams_test`.
@@ -56,6 +58,46 @@ ToolDefinition _listChatsTool() => ToolDefinition(
       params: [],
     );
 
+/// Get-chat-messages tool: `teams_get_chat_messages`.
+ToolDefinition _getChatMessagesTool() => ToolDefinition(
+      name: 'teams_get_chat_messages',
+      description: 'Get messages from a Teams chat by chat id',
+      integration: 'teams',
+      category: 'messages',
+      params: [
+        ToolParam(
+          name: 'chat_id',
+          description: 'The Teams chat id',
+          required: true,
+        ),
+      ],
+    );
+
+/// Send-email tool: `teams_send_email`.
+ToolDefinition _sendEmailTool() => ToolDefinition(
+      name: 'teams_send_email',
+      description: 'Send an email via Microsoft Graph on behalf of the user',
+      integration: 'teams',
+      category: 'messages',
+      params: [
+        ToolParam(
+          name: 'to',
+          description: 'The recipient email address',
+          required: true,
+        ),
+        ToolParam(
+          name: 'subject',
+          description: 'The email subject',
+          required: true,
+        ),
+        ToolParam(
+          name: 'body',
+          description: 'The email body content',
+          required: true,
+        ),
+      ],
+    );
+
 /// Executes Teams MCP tools by dispatching to [TeamsClient].
 class TeamsToolExecutor {
   final TeamsClient _client;
@@ -83,5 +125,13 @@ class TeamsToolExecutor {
           a['message'] as String,
         ),
     'teams_list_chats': (_) => _client.listChats(),
+    'teams_get_chat_messages': (a) => _client.getChatMessages(
+          a['chat_id'] as String,
+        ),
+    'teams_send_email': (a) => _client.sendEmail(
+          a['to'] as String,
+          a['subject'] as String,
+          a['body'] as String,
+        ),
   };
 }

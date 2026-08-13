@@ -16,7 +16,13 @@ List<ToolDefinition> confluenceTools() => [
       ..._systemTools(),
       ..._pageReadTools(),
       ..._pageWriteTools(),
+      ..._pageDeleteTools(),
       ..._searchTools(),
+      ..._spaceTools(),
+      ..._labelTools(),
+      ..._attachmentTools(),
+      ..._blogTools(),
+      ..._contentTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -31,7 +37,7 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Page-read tool: `confluence_get_page`.
+/// Page-read tools: `confluence_get_page` / `confluence_get_page_by_id`.
 List<ToolDefinition> _pageReadTools() => [
       ToolDefinition(
         name: 'confluence_get_page',
@@ -47,6 +53,19 @@ List<ToolDefinition> _pageReadTools() => [
           ToolParam(
             name: 'title',
             description: 'The exact page title',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_get_page_by_id',
+        description: 'Get a Confluence page by id, including body and version',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
             required: true,
           ),
         ],
@@ -109,6 +128,23 @@ List<ToolDefinition> _pageWriteTools() => [
       ),
     ];
 
+/// Page-delete tool: `confluence_delete_page`.
+List<ToolDefinition> _pageDeleteTools() => [
+      ToolDefinition(
+        name: 'confluence_delete_page',
+        description: 'Delete a Confluence page by id',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// CQL search tool: `confluence_search`.
 List<ToolDefinition> _searchTools() => [
       ToolDefinition(
@@ -120,6 +156,103 @@ List<ToolDefinition> _searchTools() => [
           ToolParam(
             name: 'cql',
             description: 'The CQL query string',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Space tool: `confluence_get_spaces`.
+List<ToolDefinition> _spaceTools() => [
+      ToolDefinition(
+        name: 'confluence_get_spaces',
+        description: 'List all Confluence spaces visible to the user',
+        integration: 'confluence',
+        category: 'space',
+        params: [],
+      ),
+    ];
+
+/// Attachment tool: `confluence_get_page_attachments`.
+List<ToolDefinition> _attachmentTools() => [
+      ToolDefinition(
+        name: 'confluence_get_page_attachments',
+        description: 'List attachments on a Confluence page',
+        integration: 'confluence',
+        category: 'attachments',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Label tools: `confluence_add_label` / `confluence_get_labels`.
+List<ToolDefinition> _labelTools() => [
+      ToolDefinition(
+        name: 'confluence_add_label',
+        description: 'Add a label to a Confluence page',
+        integration: 'confluence',
+        category: 'labels',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+          ToolParam(
+            name: 'label',
+            description: 'The label name',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_get_labels',
+        description: 'List labels on a Confluence page',
+        integration: 'confluence',
+        category: 'labels',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Blog-post tool: `confluence_get_blog_posts`.
+List<ToolDefinition> _blogTools() => [
+      ToolDefinition(
+        name: 'confluence_get_blog_posts',
+        description: 'List blog posts in a Confluence space',
+        integration: 'confluence',
+        category: 'blog_posts',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Content-hierarchy tool: `confluence_get_content_children`.
+List<ToolDefinition> _contentTools() => [
+      ToolDefinition(
+        name: 'confluence_get_content_children',
+        description: 'List direct child pages of a Confluence page',
+        integration: 'confluence',
+        category: 'content_hierarchy',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
             required: true,
           ),
         ],
@@ -164,5 +297,19 @@ class ConfluenceToolExecutor {
           (a['version'] as num).toInt(),
         ),
     'confluence_search': (a) => _client.search(a['cql'] as String),
+    'confluence_get_page_by_id': (a) => _client.getPageById(a['id'] as String),
+    'confluence_delete_page': (a) => _client.deletePage(a['id'] as String),
+    'confluence_get_spaces': (_) => _client.getSpaces(),
+    'confluence_get_page_attachments': (a) =>
+        _client.getPageAttachments(a['pageId'] as String),
+    'confluence_add_label': (a) => _client.addLabel(
+          a['pageId'] as String,
+          a['label'] as String,
+        ),
+    'confluence_get_labels': (a) => _client.getLabels(a['pageId'] as String),
+    'confluence_get_blog_posts': (a) =>
+        _client.getBlogPosts(a['spaceKey'] as String),
+    'confluence_get_content_children': (a) =>
+        _client.getContentChildren(a['id'] as String),
   };
 }

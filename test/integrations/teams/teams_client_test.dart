@@ -12,6 +12,8 @@ void main() {
   testConnectionTests();
   sendMessageTests();
   listChatsTests();
+  getChatMessagesTests();
+  sendEmailTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -125,6 +127,49 @@ void listChatsTests() {
   });
 }
 
+/// `teams_get_chat_messages` — GET `chats/{chatId}/messages`.
+void getChatMessagesTests() {
+  group('TeamsClient.getChatMessages', () {
+    test('returns the decoded messages object', () async {
+      final f =
+          mockTeams((o) => routeByPath({'/messages': _chatMessagesBody}, o));
+      final messages = await f.client.getChatMessages('chat-1');
+      expect(messages['value'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v1.0/chats/chat-1/messages'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/messages': '[1]'}, o));
+      expect(await f.client.getChatMessages('chat-1'), isEmpty);
+    });
+  });
+}
+
+/// `teams_send_email` — POST `me/sendMail`.
+void sendEmailTests() {
+  group('TeamsClient.sendEmail', () {
+    test('POSTs the email payload and returns success', () async {
+      final f = mockTeams((o) => '{}');
+      final result =
+          await f.client.sendEmail('ada@x.com', 'Hello', 'Body text');
+      expect(result['success'], isTrue);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/v1.0/me/sendMail'));
+      final payload = jsonDecode(call.data as String) as Map<String, dynamic>;
+      final message = payload['message'] as Map<String, dynamic>;
+      expect(message['subject'], 'Hello');
+      expect(
+        (message['toRecipients'] as List).first['emailAddress']['address'],
+        'ada@x.com',
+      );
+    });
+  });
+}
+
 /// Canned `me` response body (the authenticated user profile).
 const _meBody =
     '{"displayName":"Ada Lovelace","userPrincipalName":"ada@x.com"}';
@@ -134,3 +179,8 @@ const _sentMessageBody = '{"id":"msg-1","body":{"content":"hello"}}';
 
 /// Canned chats response body.
 const _chatsBody = '{"@odata.context":"ctx","value":[{"id":"c1"},{"id":"c2"}]}';
+
+/// Canned chat-messages response body.
+const _chatMessagesBody =
+    '{"value":[{"id":"m1","body":{"content":"hi"}},{"id":"m2","body":'
+    '{"content":"yo"}}]}';

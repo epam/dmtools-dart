@@ -16,7 +16,9 @@ import 'testrail_client.dart';
 List<ToolDefinition> testrailTools() => [
       ..._systemTools(),
       ..._caseTools(),
+      ..._caseWriteTools(),
       ..._resultTools(),
+      ..._runTools(),
     ];
 
 /// Connectivity-check tool: `testrail_test`.
@@ -62,6 +64,49 @@ List<ToolDefinition> _caseTools() => [
       ),
     ];
 
+/// Case-write tools: `testrail_add_case`, `testrail_update_case`.
+List<ToolDefinition> _caseWriteTools() => [
+      ToolDefinition(
+        name: 'testrail_add_case',
+        description: 'Add a test case to a TestRail section',
+        integration: 'testrail',
+        category: 'test_cases',
+        params: [
+          ToolParam(
+            name: 'sectionId',
+            description: 'The section ID to add the case to',
+            type: 'number',
+            required: true,
+          ),
+          ToolParam(
+            name: 'title',
+            description: 'The test case title',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_update_case',
+        description: 'Update a TestRail test case with new field values',
+        integration: 'testrail',
+        category: 'test_cases',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The test case ID',
+            type: 'number',
+            required: true,
+          ),
+          ToolParam(
+            name: 'fields',
+            description: 'Case fields to update as key-value pairs',
+            type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Result tool: `testrail_add_result`.
 List<ToolDefinition> _resultTools() => [
       ToolDefinition(
@@ -85,6 +130,38 @@ List<ToolDefinition> _resultTools() => [
           ToolParam(
             name: 'comment',
             description: 'The result comment text',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Run and section tools: `testrail_get_runs`, `testrail_get_sections`.
+List<ToolDefinition> _runTools() => [
+      ToolDefinition(
+        name: 'testrail_get_runs',
+        description: 'Get TestRail test runs for a project',
+        integration: 'testrail',
+        category: 'test_runs',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_sections',
+        description: 'Get TestRail sections for a suite',
+        integration: 'testrail',
+        category: 'sections',
+        params: [
+          ToolParam(
+            name: 'suiteId',
+            description: 'The test suite ID',
+            type: 'number',
             required: true,
           ),
         ],
@@ -119,6 +196,17 @@ class TestRailToolExecutor {
           requiredInt(a, 'testId'),
           requiredInt(a, 'statusId'),
           a['comment'] as String,
+        ),
+    'testrail_get_runs': (a) => _client.getRuns(requiredInt(a, 'projectId')),
+    'testrail_get_sections': (a) =>
+        _client.getSections(requiredInt(a, 'suiteId')),
+    'testrail_add_case': (a) => _client.addCase(
+          requiredInt(a, 'sectionId'),
+          a['title'] as String,
+        ),
+    'testrail_update_case': (a) => _client.updateCase(
+          requiredInt(a, 'id'),
+          a['fields'] as Map<String, dynamic>,
         ),
   };
 }

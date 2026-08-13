@@ -100,18 +100,48 @@ class AdoHttpClient extends BaseHttpClient {
         extra: extra,
       );
 
-  /// POSTs a JSON Patch document with ADO's `application/json-patch+json`
-  /// content type, attaching the API version. Used for work-item creation.
-  Future<String> postPatch(String path, {Object? body}) async {
+  /// POSTs a JSON body, attaching the API version as a query parameter.
+  @override
+  Future<String> post(String path, {Object? body}) async {
     final response = await dio.post<String>(
       buildUrl(path),
       data: body,
       queryParameters: {'api-version': apiVersion},
-      options: Options(headers: {
-        ...authHeaders,
-        'Content-Type': 'application/json-patch+json',
-      }),
+      options: Options(headers: headers),
     );
     return response.data ?? '';
   }
+
+  /// Sends a JSON Patch document with ADO's `application/json-patch+json`
+  /// content type via [method], attaching the API version. Backs the
+  /// work-item create (POST) and update (PATCH) operations.
+  Future<String> _jsonPatchDoc(
+    String method,
+    String path, {
+    Object? body,
+  }) async {
+    final response = await dio.request<String>(
+      buildUrl(path),
+      data: body,
+      queryParameters: {'api-version': apiVersion},
+      options: Options(
+        method: method,
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json-patch+json',
+        },
+      ),
+    );
+    return response.data ?? '';
+  }
+
+  /// POSTs a JSON Patch document with ADO's `application/json-patch+json`
+  /// content type, attaching the API version. Used for work-item creation.
+  Future<String> postPatch(String path, {Object? body}) =>
+      _jsonPatchDoc('POST', path, body: body);
+
+  /// PATCHes a JSON Patch document with ADO's `application/json-patch+json`
+  /// content type, attaching the API version. Used for work-item updates.
+  Future<String> patchPatch(String path, {Object? body}) =>
+      _jsonPatchDoc('PATCH', path, body: body);
 }

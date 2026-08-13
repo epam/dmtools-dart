@@ -54,10 +54,9 @@ class ConfluenceClient {
         'expand': 'body.storage',
       },
     );
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final results = decoded['results'] as List? ?? [];
+    final results = _resultList(jsonDecode(body) as Map<String, dynamic>);
     if (results.isEmpty) return null;
-    return results.first as Map<String, dynamic>;
+    return results.first;
   }
 
   /// `confluence_create_page` — POST `content`.
@@ -123,15 +122,89 @@ class ConfluenceClient {
   /// `confluence_search` — GET `content/search?cql=`.
   ///
   /// Returns the list of search results for the given CQL [query].
-  Future<List<Map<String, dynamic>>> search(String query) async {
+  Future<List<Map<String, dynamic>>> search(String query) =>
+      _getList('content/search', queryParams: {'cql': query});
+
+  /// `confluence_get_spaces` — GET `space`.
+  ///
+  /// Returns all spaces visible to the authenticated user.
+  Future<List<Map<String, dynamic>>> getSpaces() => _getList('space');
+
+  /// `confluence_get_page_by_id` — GET `content/{id}?expand=body.storage,version`.
+  ///
+  /// Returns the page with [id] including its storage body and version.
+  Future<Map<String, dynamic>> getPageById(String id) async {
     final body = await _http.get(
-      'content/search',
-      queryParams: {'cql': query},
+      'content/$id',
+      queryParams: {'expand': 'body.storage,version'},
     );
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_delete_page` — DELETE `content/{id}`.
+  ///
+  /// Deletes the page with [id]; returns `{}` on an empty response body (the
+  /// normal case) or the decoded body otherwise.
+  Future<Map<String, dynamic>> deletePage(String id) async {
+    final body = await _http.delete('content/$id');
+    return body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_page_attachments` — GET `content/{id}/child/attachment`.
+  ///
+  /// Returns the attachments of the page with [pageId].
+  Future<List<Map<String, dynamic>>> getPageAttachments(String pageId) =>
+      _getList('content/$pageId/child/attachment');
+
+  /// `confluence_add_label` — POST `content/{id}/label`.
+  ///
+  /// Adds [label] (global prefix) to the page with [pageId]; returns the
+  /// response containing the created label entries.
+  Future<Map<String, dynamic>> addLabel(String pageId, String label) async {
+    final body = await _http.post(
+      'content/$pageId/label',
+      body: jsonEncode([_labelPayload(label)]),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_labels` — GET `content/{id}/label`.
+  ///
+  /// Returns the labels on the page with [pageId].
+  Future<List<Map<String, dynamic>>> getLabels(String pageId) =>
+      _getList('content/$pageId/label');
+
+  /// `confluence_get_blog_posts` — GET `content?type=blogpost&spaceKey=`.
+  ///
+  /// Returns the blog posts in the space with [spaceKey].
+  Future<List<Map<String, dynamic>>> getBlogPosts(String spaceKey) =>
+      _getList('content',
+          queryParams: {'type': 'blogpost', 'spaceKey': spaceKey});
+
+  /// `confluence_get_content_children` — GET `content/{id}/child/page`.
+  ///
+  /// Returns the direct child pages of the page with [id].
+  Future<List<Map<String, dynamic>>> getContentChildren(String id) =>
+      _getList('content/$id/child/page');
+
+  /// GET helper: fetches [path] and returns its `results` array as typed maps.
+  Future<List<Map<String, dynamic>>> _getList(
+    String path, {
+    Map<String, dynamic>? queryParams,
+  }) async {
+    final body = await _http.get(path, queryParams: queryParams);
+    return _resultList(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// Parses the `results` array from a Confluence list response.
+  List<Map<String, dynamic>> _resultList(Map<String, dynamic> decoded) {
     final results = decoded['results'] as List? ?? [];
     return List<Map<String, dynamic>>.from(
       results.map((r) => r as Map<String, dynamic>),
     );
   }
+
+  /// Builds a single global-prefix label entry for POST `content/{id}/label`.
+  Map<String, dynamic> _labelPayload(String label) =>
+      {'prefix': 'global', 'name': label};
 }

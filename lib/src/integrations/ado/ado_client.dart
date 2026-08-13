@@ -69,9 +69,7 @@ class AdoClient {
       'git/pullrequests',
       queryParams: {'searchCriteria.status': status ?? 'active'},
     );
-    return (jsonDecode(body) as List)
-        .map((p) => Map<String, dynamic>.from(p as Map))
-        .toList();
+    return _decodeList(body);
   }
 
   /// `ado_get_pr` — GET `{org}/{project}/_apis/git/pullrequests/{id}`.
@@ -79,4 +77,101 @@ class AdoClient {
     final body = await _http.get('git/pullrequests/$id');
     return jsonDecode(body) as Map<String, dynamic>;
   }
+
+  /// `ado_update_work_item` — PATCH `wit/workitems/{id}` with one JSON-Patch
+  /// `add` op per entry in [fields]. The request uses ADO's
+  /// `application/json-patch+json` content type.
+  Future<Map<String, dynamic>> updateWorkItem(
+    int id,
+    Map<String, dynamic> fields,
+  ) async {
+    final body = await _http.patchPatch(
+      'wit/workitems/$id',
+      body: jsonEncode([
+        for (final entry in fields.entries)
+          {'op': 'add', 'path': '/fields/${entry.key}', 'value': entry.value},
+      ]),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_work_items` — GET `wit/workitems?ids=1,2,...`.
+  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids) async {
+    final body = await _http.get(
+      'wit/workitems',
+      queryParams: {'ids': ids.join(',')},
+    );
+    return _decodeList(body);
+  }
+
+  /// `ado_list_work_items` — POST `wit/wiql` with the WIQL query [wiql].
+  Future<List<Map<String, dynamic>>> listWorkItems(String wiql) async {
+    final body = await _http.post(
+      'wit/wiql',
+      body: jsonEncode({'query': wiql}),
+    );
+    return _decodeList(body);
+  }
+
+  /// `ado_get_work_item_types` — GET `wit/workitemtypes`.
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<List<Map<String, dynamic>>> getWorkItemTypes(String project) async {
+    final body = await _http.get('wit/workitemtypes');
+    return _decodeList(body);
+  }
+
+  /// `ado_create_repo` — POST `git/repositories` with `{"name": name}`.
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<Map<String, dynamic>> createRepo(String project, String name) async {
+    final body = await _http.post(
+      'git/repositories',
+      body: jsonEncode({'name': name}),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_repos` — GET `git/repositories`.
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<List<Map<String, dynamic>>> getRepos(String project) async {
+    final body = await _http.get('git/repositories');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_builds` — GET `build/builds`, optionally filtered by
+  /// [definitions] (a comma-joined `definitions` query parameter).
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<List<Map<String, dynamic>>> getBuilds(
+    String project, [
+    List<int>? definitions,
+  ]) async {
+    final queryParams =
+        definitions == null ? null : {'definitions': definitions.join(',')};
+    final body = await _http.get('build/builds', queryParams: queryParams);
+    return _decodeList(body);
+  }
+
+  /// `ado_trigger_build` — POST `build/builds` queuing [definitionId].
+  Future<Map<String, dynamic>> triggerBuild(int definitionId) async {
+    final body = await _http.post(
+      'build/builds',
+      body: jsonEncode({
+        'definition': {'id': definitionId}
+      }),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// Decodes a JSON array body into a list of typed maps.
+  List<Map<String, dynamic>> _decodeList(String body) =>
+      (jsonDecode(body) as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
 }

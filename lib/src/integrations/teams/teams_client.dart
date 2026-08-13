@@ -73,4 +73,42 @@ class TeamsClient {
     if (decoded is Map<String, dynamic>) return decoded;
     return const {};
   }
+
+  /// `teams_get_chat_messages` — GET `chats/{chatId}/messages`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getChatMessages(String chatId) async {
+    final body = await _http.get('chats/${_encodeId(chatId)}/messages');
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return const {};
+  }
+
+  /// `teams_send_email` — POST `me/sendMail`.
+  ///
+  /// Sends an email with [subject] and [body] to the recipient [to] on
+  /// behalf of the authenticated user. Graph responds 202 with no body on
+  /// success, so a success map is returned rather than a decoded payload.
+  Future<Map<String, dynamic>> sendEmail(
+    String to,
+    String subject,
+    String body,
+  ) async {
+    await _http.post(
+      'me/sendMail',
+      body: jsonEncode({
+        'message': {
+          'subject': subject,
+          'body': {'contentType': 'Text', 'content': body},
+          'toRecipients': [
+            {
+              'emailAddress': {'address': to},
+            },
+          ],
+        },
+      }),
+    );
+    return {'success': true, 'message': 'Email sent to $to'};
+  }
 }

@@ -27,8 +27,8 @@ void toolCatalogTests() {
   group('fileTools catalog', () {
     final tools = fileTools();
 
-    test('registers five tools in declaration order', () {
-      expect(tools.map((t) => t.name), [
+    test('registers tools in declaration order, five originals first', () {
+      expect(tools.map((t) => t.name).take(5), [
         'file_read',
         'file_write',
         'file_list',
@@ -45,10 +45,9 @@ void toolCatalogTests() {
       expect(tools.every((t) => t.category == 'filesystem'), isTrue);
     });
 
-    test('every tool has a required path param', () {
+    test('every tool has a required first param', () {
       for (final tool in tools) {
-        final pathParam = tool.params.firstWhere((p) => p.name == 'path');
-        expect(pathParam.required, isTrue, reason: tool.name);
+        expect(tool.params.first.required, isTrue, reason: tool.name);
       }
     });
 

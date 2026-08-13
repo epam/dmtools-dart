@@ -12,6 +12,9 @@ void main() {
   testConnectionTests();
   getJobsTests();
   triggerJobTests();
+  getBuildTests();
+  getBuildLogTests();
+  getLastBuildTests();
 }
 
 /// The expected `Basic` header value produced by the fixture's config.
@@ -134,3 +137,78 @@ const _jobsBody = '{"jobs":['
 
 /// Canned response with no `jobs` array.
 const _noJobsBody = '{"_class":"hudson.model.Hudson","mode":"NORMAL"}';
+
+/// `jenkins_get_build` — GET `job/{name}/{buildNumber}/api/json`.
+void getBuildTests() {
+  group('JenkinsClient.getBuild', () {
+    test('returns the decoded build object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/5/api/json': _buildBody}, o),
+      );
+      final build = await f.client.getBuild('job-a', 5);
+      expect(build?['number'], 5);
+      expect(build?['result'], 'SUCCESS');
+      expect(f.adapter.calls.single.path, endsWith('/job/job-a/5/api/json'));
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/5/api/json': '[1]'}, o),
+      );
+      expect(await f.client.getBuild('job-a', 5), isNull);
+    });
+  });
+}
+
+/// `jenkins_get_build_log` — GET `job/{name}/{buildNumber}/consoleText`.
+void getBuildLogTests() {
+  group('JenkinsClient.getBuildLog', () {
+    test('returns the raw console text', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/5/consoleText': _logBody}, o),
+      );
+      final log = await f.client.getBuildLog('job-a', 5);
+      expect(log, _logBody);
+      expect(f.adapter.calls.single.path, endsWith('/job/job-a/5/consoleText'));
+    });
+  });
+}
+
+/// `jenkins_get_last_build` — GET `job/{name}/lastBuild/api/json`.
+void getLastBuildTests() {
+  group('JenkinsClient.getLastBuild', () {
+    test('returns the decoded last-build object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath(
+          {'/job/job-a/lastBuild/api/json': _lastBuildBody},
+          o,
+        ),
+      );
+      final build = await f.client.getLastBuild('job-a');
+      expect(build?['number'], 10);
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/job/job-a/lastBuild/api/json'),
+      );
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath(
+          {'/job/job-a/lastBuild/api/json': '[1]'},
+          o,
+        ),
+      );
+      expect(await f.client.getLastBuild('job-a'), isNull);
+    });
+  });
+}
+
+/// Canned build-detail response body.
+const _buildBody = '{"number":5,"result":"SUCCESS"}';
+
+/// Canned console-log text.
+const _logBody = 'Started by user admin\nFinished: SUCCESS';
+
+/// Canned last-build response body.
+const _lastBuildBody = '{"number":10,"result":"SUCCESS"}';

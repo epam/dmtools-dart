@@ -18,6 +18,13 @@ List<ToolDefinition> fileTools() => [
       _listTool(),
       _existsTool(),
       _deleteTool(),
+      _copyTool(),
+      _moveTool(),
+      _mkdirTool(),
+      _readLinesTool(),
+      _writeLinesTool(),
+      _appendTool(),
+      _infoTool(),
     ];
 
 /// `file_read` — read the contents of a text file.
@@ -76,6 +83,87 @@ ToolDefinition _deleteTool() => ToolDefinition(
       ],
     );
 
+/// `file_copy` — copy a file from source to destination.
+ToolDefinition _copyTool() => ToolDefinition(
+      name: 'file_copy',
+      description: 'Copy a file from source to destination',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'source', description: 'Source file path'),
+        ToolParam(name: 'dest', description: 'Destination file path'),
+      ],
+    );
+
+/// `file_move` — move or rename a file.
+ToolDefinition _moveTool() => ToolDefinition(
+      name: 'file_move',
+      description: 'Move or rename a file',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'source', description: 'Source file path'),
+        ToolParam(name: 'dest', description: 'Destination file path'),
+      ],
+    );
+
+/// `file_mkdir` — create a directory (including parents).
+ToolDefinition _mkdirTool() => ToolDefinition(
+      name: 'file_mkdir',
+      description: 'Create a directory, including parents',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'Directory path to create'),
+      ],
+    );
+
+/// `file_read_lines` — read a file and return its lines.
+ToolDefinition _readLinesTool() => ToolDefinition(
+      name: 'file_read_lines',
+      description: 'Read a file and return its lines as a list',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to read'),
+      ],
+    );
+
+/// `file_write_lines` — write a list of lines to a file.
+ToolDefinition _writeLinesTool() => ToolDefinition(
+      name: 'file_write_lines',
+      description: 'Write a list of lines to a file, joined by newlines',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to write'),
+        ToolParam(name: 'lines', description: 'Lines to write', type: 'array'),
+      ],
+    );
+
+/// `file_append` — append content to a file.
+ToolDefinition _appendTool() => ToolDefinition(
+      name: 'file_append',
+      description: 'Append content to the end of a file',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to append to'),
+        ToolParam(name: 'content', description: 'The text content to append'),
+      ],
+    );
+
+/// `file_info` — return metadata about a file or directory.
+ToolDefinition _infoTool() => ToolDefinition(
+      name: 'file_info',
+      description: 'Return file metadata: size, modified, isDirectory, exists',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'Path to inspect'),
+      ],
+    );
+
 /// Executes file MCP tools using `dart:io`.
 ///
 /// Each method performs a single file-system operation; [execute] dispatches
@@ -120,6 +208,49 @@ class FileToolExecutor {
     return false;
   }
 
+  /// Copies the file at [source] to [dest].
+  Future<void> copy(String source, String dest) => File(source).copy(dest);
+
+  /// Moves (renames) the file at [source] to [dest].
+  Future<void> move(String source, String dest) => File(source).rename(dest);
+
+  /// Creates the directory at [path], including parents.
+  Future<void> mkdir(String path) => Directory(path).create(recursive: true);
+
+  /// Reads the file at [path] and returns its lines.
+  Future<List<String>> readLines(String path) => File(path).readAsLines();
+
+  /// Writes [lines] to the file at [path], joined by newlines.
+  Future<void> writeLines(String path, List<String> lines) =>
+      File(path).writeAsString(lines.join('\n'));
+
+  /// Appends [content] to the file at [path], creating it if needed.
+  Future<void> append(String path, String content) =>
+      File(path).writeAsString(content, mode: FileMode.append);
+
+  /// Returns metadata about the file or directory at [path].
+  ///
+  /// The map contains `exists`, `isDirectory`, `size`, and `modified`.
+  Future<Map<String, dynamic>> getFileInfo(String path) async {
+    final type = FileSystemEntity.typeSync(path);
+    final exists = type != FileSystemEntityType.notFound;
+    if (!exists) {
+      return const {
+        'exists': false,
+        'isDirectory': false,
+        'size': 0,
+        'modified': null,
+      };
+    }
+    final stat = FileStat.statSync(path);
+    return {
+      'exists': true,
+      'isDirectory': type == FileSystemEntityType.directory,
+      'size': stat.size,
+      'modified': stat.modified,
+    };
+  }
+
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
@@ -128,5 +259,15 @@ class FileToolExecutor {
     'file_list': (a) => list(a['path'] as String),
     'file_exists': (a) => exists(a['path'] as String),
     'file_delete': (a) => delete(a['path'] as String),
+    'file_copy': (a) => copy(a['source'] as String, a['dest'] as String),
+    'file_move': (a) => move(a['source'] as String, a['dest'] as String),
+    'file_mkdir': (a) => mkdir(a['path'] as String),
+    'file_read_lines': (a) => readLines(a['path'] as String),
+    'file_write_lines': (a) => writeLines(
+          a['path'] as String,
+          (a['lines'] as List).cast<String>(),
+        ),
+    'file_append': (a) => append(a['path'] as String, a['content'] as String),
+    'file_info': (a) => getFileInfo(a['path'] as String),
   };
 }

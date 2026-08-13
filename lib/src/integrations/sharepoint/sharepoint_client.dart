@@ -61,4 +61,59 @@ class SharepointClient {
     if (decoded is Map<String, dynamic>) return decoded;
     return const {};
   }
+
+  /// `sharepoint_get_file` — GET `drives/{driveId}/items/{itemId}/content`.
+  ///
+  /// Returns the raw file content as a string.
+  Future<String> getFile(String driveId, String itemId) async {
+    return _http.get(
+      'drives/${_encodeId(driveId)}/items/${_encodeId(itemId)}/content',
+    );
+  }
+
+  /// `sharepoint_upload_file` — PUT
+  /// `drives/{driveId}/items/{folderId}:/{fileName}:/content`.
+  ///
+  /// Uploads [content] as [fileName] under the folder identified by
+  /// [folderId]. Returns the decoded Graph driveItem object, or an empty
+  /// map for non-object bodies.
+  Future<Map<String, dynamic>> uploadFile(
+    String driveId,
+    String folderId,
+    String fileName,
+    String content,
+  ) async {
+    final result = await _http.put(
+      'drives/${_encodeId(driveId)}/items/${_encodeId(folderId)}:/'
+      '${_encodeId(fileName)}:/content',
+      body: content,
+    );
+    final decoded = jsonDecode(result);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return const {};
+  }
+
+  /// `sharepoint_create_folder` — POST
+  /// `drives/{driveId}/items/{parentId}/children`.
+  ///
+  /// Creates a folder named [name] under the parent item [parentId].
+  /// Returns the decoded Graph driveItem object, or an empty map for
+  /// non-object bodies.
+  Future<Map<String, dynamic>> createFolder(
+    String driveId,
+    String parentId,
+    String name,
+  ) async {
+    final result = await _http.post(
+      'drives/${_encodeId(driveId)}/items/${_encodeId(parentId)}/children',
+      body: jsonEncode({
+        'name': name,
+        'folder': {},
+        '@microsoft.graph.conflictBehavior': 'fail',
+      }),
+    );
+    final decoded = jsonDecode(result);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return const {};
+  }
 }

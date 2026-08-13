@@ -20,13 +20,21 @@ void toolCatalogTests() {
   group('confluenceTools catalog', () {
     final tools = confluenceTools();
 
-    test('registers the five tools in declaration order', () {
+    test('registers all tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'confluence_test',
         'confluence_get_page',
+        'confluence_get_page_by_id',
         'confluence_create_page',
         'confluence_update_page',
+        'confluence_delete_page',
         'confluence_search',
+        'confluence_get_spaces',
+        'confluence_add_label',
+        'confluence_get_labels',
+        'confluence_get_page_attachments',
+        'confluence_get_blog_posts',
+        'confluence_get_content_children',
       ]);
     });
 

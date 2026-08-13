@@ -53,12 +53,8 @@ class TestRailClient {
   ///
   /// The project ID comes from the configured `TESTRAIL_PROJECT`.
   /// Returns an empty list when the response body is not a JSON array.
-  Future<List<Map<String, dynamic>>> getCases(int suiteId) async {
-    final body = await _http.get(
-      'get_cases/${_http.projectId}&suite_id=$suiteId',
-    );
-    return _decodeList(body);
-  }
+  Future<List<Map<String, dynamic>>> getCases(int suiteId) async =>
+      _getList('get_cases/${_http.projectId}&suite_id=$suiteId');
 
   /// `testrail_add_result` — POST `add_result/{testId}`.
   ///
@@ -67,11 +63,50 @@ class TestRailClient {
     int testId,
     int statusId,
     String comment,
+  ) =>
+      _postForMap(
+        'add_result/$testId',
+        {'status_id': statusId, 'comment': comment},
+      );
+
+  /// `testrail_get_runs` — GET `get_runs/{projectId}`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getRuns(int projectId) async =>
+      _getList('get_runs/$projectId');
+
+  /// `testrail_get_sections` — GET `get_sections/{projectId}&suite_id={suiteId}`.
+  ///
+  /// The project ID comes from the configured `TESTRAIL_PROJECT`.
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getSections(int suiteId) async =>
+      _getList('get_sections/${_http.projectId}&suite_id=$suiteId');
+
+  /// `testrail_add_case` — POST `add_case/{sectionId}`.
+  ///
+  /// Creates a new test case with [title] under [sectionId].
+  Future<Map<String, dynamic>> addCase(int sectionId, String title) =>
+      _postForMap('add_case/$sectionId', {'title': title});
+
+  /// `testrail_update_case` — POST `update_case/{id}`.
+  ///
+  /// Updates test case [id] with the provided [fields] map.
+  Future<Map<String, dynamic>> updateCase(
+    int id,
+    Map<String, dynamic> fields,
+  ) =>
+      _postForMap('update_case/$id', fields);
+
+  /// GETs [path] and decodes the JSON array response.
+  Future<List<Map<String, dynamic>>> _getList(String path) async =>
+      _decodeList(await _http.get(path));
+
+  /// POSTs [payload] to [path] and returns the decoded object, or `{}`.
+  Future<Map<String, dynamic>> _postForMap(
+    String path,
+    Map<String, dynamic> payload,
   ) async {
-    final body = await _http.post(
-      'add_result/$testId',
-      body: jsonEncode({'status_id': statusId, 'comment': comment}),
-    );
+    final body = await _http.post(path, body: jsonEncode(payload));
     return _decodeMap(body) ?? {};
   }
 

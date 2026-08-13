@@ -14,7 +14,10 @@ import 'ado_client.dart';
 List<ToolDefinition> adoTools() => [
       ..._systemTools(),
       ..._workItemTools(),
+      ..._workItemQueryTools(),
       ..._pullRequestTools(),
+      ..._repoTools(),
+      ..._buildTools(),
     ];
 
 /// Connectivity-check tool: `ado_test`.
@@ -29,7 +32,7 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Work-item tools: `ado_get_work_item`, `ado_create_work_item`.
+/// Work-item tools: get/create/update work items.
 List<ToolDefinition> _workItemTools() => [
       ToolDefinition(
         name: 'ado_get_work_item',
@@ -55,6 +58,54 @@ List<ToolDefinition> _workItemTools() => [
             required: true,
           ),
         ],
+      ),
+      ToolDefinition(
+        name: 'ado_update_work_item',
+        description: 'Update an Azure DevOps work item by setting fields',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          _idParam('The work item ID to update'),
+          ToolParam(
+            name: 'fields',
+            description: 'Map of field path to value, e.g. '
+                '{"System.Title": "New title"}',
+            type: 'object',
+          ),
+        ],
+      ),
+    ];
+
+/// Work-item query tools: batch fetch, WIQL queries, and work-item types.
+List<ToolDefinition> _workItemQueryTools() => [
+      ToolDefinition(
+        name: 'ado_get_work_items',
+        description: 'Get multiple Azure DevOps work items by ID',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          ToolParam(
+            name: 'ids',
+            description: 'The work item IDs to fetch',
+            type: 'array',
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_list_work_items',
+        description: 'Run a WIQL query to list Azure DevOps work items',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          ToolParam(name: 'wiql', description: 'The WIQL query string'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_get_work_item_types',
+        description: 'List the work item types defined in a project',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [_projectParam()],
       ),
     ];
 
@@ -83,6 +134,59 @@ List<ToolDefinition> _pullRequestTools() => [
       ),
     ];
 
+/// Repository tools: `ado_create_repo`, `ado_get_repos`.
+List<ToolDefinition> _repoTools() => [
+      ToolDefinition(
+        name: 'ado_create_repo',
+        description: 'Create a Git repository in an Azure DevOps project',
+        integration: 'ado',
+        category: 'repositories',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'name', description: 'The repository name'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_get_repos',
+        description: 'List Git repositories in an Azure DevOps project',
+        integration: 'ado',
+        category: 'repositories',
+        params: [_projectParam()],
+      ),
+    ];
+
+/// Build tools: `ado_get_builds`, `ado_trigger_build`.
+List<ToolDefinition> _buildTools() => [
+      ToolDefinition(
+        name: 'ado_get_builds',
+        description: 'List Azure DevOps pipeline builds, optionally filtered',
+        integration: 'ado',
+        category: 'builds',
+        params: [
+          _projectParam(),
+          ToolParam(
+            name: 'definitions',
+            description: 'Optional definition IDs to filter by',
+            type: 'array',
+            required: false,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_trigger_build',
+        description: 'Queue an Azure DevOps pipeline build by definition ID',
+        integration: 'ado',
+        category: 'builds',
+        params: [
+          ToolParam(
+            name: 'definitionId',
+            description: 'The pipeline definition ID to queue',
+            type: 'number',
+          ),
+        ],
+      ),
+    ];
+
 /// Shared numeric `id` parameter with a tool-specific [description].
 ToolParam _idParam(String description) => ToolParam(
       name: 'id',
@@ -91,11 +195,25 @@ ToolParam _idParam(String description) => ToolParam(
       required: true,
     );
 
+/// Shared `project` parameter naming the target Azure DevOps project.
+ToolParam _projectParam() => ToolParam(
+      name: 'project',
+      description: 'The Azure DevOps project name',
+    );
+
 /// Coerces the `id` argument to an int, accepting int/num/String forms.
-int _id(Map<String, dynamic> a) {
-  final v = a['id'];
+int _id(Map<String, dynamic> a) => _num(a, 'id');
+
+/// Coerces the numeric arg [key] in [a] to an int, accepting int/num/String.
+int _num(Map<String, dynamic> a, String key) {
+  final v = a[key];
   return v is int ? v : int.parse('$v');
 }
+
+/// Coerces the array arg [key] in [a] to a list of ints.
+List<int> _intList(Map<String, dynamic> a, String key) => [
+      for (final v in a[key] as List) v is int ? v : int.parse('$v'),
+    ];
 
 /// Executes Azure DevOps MCP tools by dispatching to [AdoClient].
 class AdoToolExecutor {
@@ -124,7 +242,25 @@ class AdoToolExecutor {
           a['type'] as String,
           a['title'] as String,
         ),
+    'ado_update_work_item': (a) => _client.updateWorkItem(
+          _id(a),
+          a['fields'] as Map<String, dynamic>,
+        ),
+    'ado_get_work_items': (a) => _client.getWorkItems(_intList(a, 'ids')),
+    'ado_list_work_items': (a) => _client.listWorkItems(a['wiql'] as String),
+    'ado_get_work_item_types': (a) =>
+        _client.getWorkItemTypes(a['project'] as String),
     'ado_list_prs': (a) => _client.listPrs(a['status'] as String?),
     'ado_get_pr': (a) => _client.getPr(_id(a)),
+    'ado_create_repo': (a) => _client.createRepo(
+          a['project'] as String,
+          a['name'] as String,
+        ),
+    'ado_get_repos': (a) => _client.getRepos(a['project'] as String),
+    'ado_get_builds': (a) => _client.getBuilds(
+          a['project'] as String,
+          a['definitions'] == null ? null : _intList(a, 'definitions'),
+        ),
+    'ado_trigger_build': (a) => _client.triggerBuild(_num(a, 'definitionId')),
   };
 }

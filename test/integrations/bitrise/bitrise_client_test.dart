@@ -10,8 +10,11 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   httpClientTests();
   testConnectionTests();
+  getAppsTests();
   getBuildsTests();
+  getBuildDetailTests();
   triggerBuildTests();
+  triggerBuildWithParamsTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -121,3 +124,89 @@ const _buildsBody = '{"data":[{"slug":"b1"},{"slug":"b2"}],"paging":{}}';
 
 /// Canned trigger-build response body.
 const _triggerBody = '{"status":"ok","build_slug":"b1"}';
+
+/// `bitrise_get_apps` — GET `apps`.
+void getAppsTests() {
+  group('BitriseClient.getApps', () {
+    test('returns the decoded list of apps', () async {
+      final f = mockBitrise((o) => routeByPath({'/apps': _appsBody}, o));
+      final apps = await f.client.getApps();
+      expect(apps.map((a) => a['slug']).toList(), ['app-1', 'app-2']);
+      expect(f.adapter.calls.single.path, endsWith('/v0.1/apps'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockBitrise((o) => routeByPath({'/apps': '{"x":1}'}, o));
+      expect(await f.client.getApps(), isEmpty);
+    });
+  });
+}
+
+/// `bitrise_get_build_detail` — GET `apps/{appSlug}/builds/{buildSlug}`.
+void getBuildDetailTests() {
+  group('BitriseClient.getBuildDetail', () {
+    test('returns the decoded build object', () async {
+      final f = mockBitrise(
+        (o) => routeByPath({'/builds/build-2': _detailBody}, o),
+      );
+      final detail = await f.client.getBuildDetail('app-1', 'build-2');
+      expect(detail?['slug'], 'build-2');
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v0.1/apps/app-1/builds/build-2'),
+      );
+    });
+
+    test('returns null when the response is not an object', () async {
+      final f = mockBitrise(
+        (o) => routeByPath({'/builds/build-2': '[1]'}, o),
+      );
+      expect(await f.client.getBuildDetail('app-1', 'build-2'), isNull);
+    });
+  });
+}
+
+/// `bitrise_trigger_build_with_params` — POST `apps/{appSlug}/builds`.
+void triggerBuildWithParamsTests() {
+  group('BitriseClient.triggerBuildWithParams', () {
+    test('POSTs workflow_id and environments in build_params', () async {
+      final f = mockBitrise((o) => routeByPath({'/builds': _triggerBody}, o));
+      final result = await f.client.triggerBuildWithParams(
+        'app-1',
+        'primary',
+        [
+          {'mapped_to': 'ENV', 'value': 'prod'},
+        ],
+      );
+      expect(result?['status'], 'ok');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/v0.1/apps/app-1/builds'));
+      final decoded = jsonDecode(call.data as String) as Map<String, dynamic>;
+      final params = decoded['build_params'] as Map<String, dynamic>;
+      expect(params['workflow_id'], 'primary');
+      expect(params['environments'], [
+        {'mapped_to': 'ENV', 'value': 'prod'},
+      ]);
+    });
+
+    test('omits environments key when null', () async {
+      final f = mockBitrise((o) => routeByPath({'/builds': _triggerBody}, o));
+      await f.client.triggerBuildWithParams('app-1', 'primary', null);
+      final decoded = jsonDecode(f.adapter.calls.single.data as String);
+      final params = (decoded as Map<String, dynamic>)['build_params'];
+      expect(params, {'workflow_id': 'primary'});
+    });
+
+    test('returns null when the response is not an object', () async {
+      final f = mockBitrise((o) => routeByPath({'/builds': '[1]'}, o));
+      expect(
+        await f.client.triggerBuildWithParams('app-1', 'primary', null),
+        isNull,
+      );
+    });
+  });
+}
+
+/// Canned build-detail response body.
+const _detailBody = '{"slug":"build-2","status":1}';

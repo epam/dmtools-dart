@@ -14,6 +14,7 @@ import 'bitrise_client.dart';
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> bitriseTools() => [
       ..._systemTools(),
+      ..._appTools(),
       ..._buildTools(),
     ];
 
@@ -28,10 +29,24 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Build tools: `bitrise_get_builds`, `bitrise_trigger_build`.
+/// App tool: `bitrise_get_apps`.
+List<ToolDefinition> _appTools() => [
+      ToolDefinition(
+        name: 'bitrise_get_apps',
+        description: 'List all Bitrise apps accessible to the token',
+        integration: 'bitrise',
+        category: 'apps',
+        params: [],
+      ),
+    ];
+
+/// Build tools: `bitrise_get_builds`, `bitrise_get_build_detail`,
+/// `bitrise_trigger_build`, `bitrise_trigger_build_with_params`.
 List<ToolDefinition> _buildTools() => [
       _getBuildsTool(),
+      _getBuildDetailTool(),
       _triggerBuildTool(),
+      _triggerBuildWithParamsTool(),
     ];
 
 /// Build-list tool: `bitrise_get_builds`.
@@ -49,6 +64,26 @@ ToolDefinition _getBuildsTool() => ToolDefinition(
       ],
     );
 
+/// Build-detail tool: `bitrise_get_build_detail`.
+ToolDefinition _getBuildDetailTool() => ToolDefinition(
+      name: 'bitrise_get_build_detail',
+      description: 'Get details of a single Bitrise build',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'build_slug',
+          description: 'The Bitrise build slug',
+          required: true,
+        ),
+      ],
+    );
+
 /// Build-trigger tool: `bitrise_trigger_build`.
 ToolDefinition _triggerBuildTool() => ToolDefinition(
       name: 'bitrise_trigger_build',
@@ -60,6 +95,32 @@ ToolDefinition _triggerBuildTool() => ToolDefinition(
           name: 'app_slug',
           description: 'The Bitrise app slug',
           required: true,
+        ),
+      ],
+    );
+
+/// Parameterized build-trigger tool: `bitrise_trigger_build_with_params`.
+ToolDefinition _triggerBuildWithParamsTool() => ToolDefinition(
+      name: 'bitrise_trigger_build_with_params',
+      description: 'Trigger a Bitrise build with a workflow and environments',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'workflow',
+          description: 'The workflow to run',
+          required: true,
+        ),
+        ToolParam(
+          name: 'environments',
+          description: 'Environment variable objects for the build',
+          type: 'array',
+          required: false,
         ),
       ],
     );
@@ -86,8 +147,28 @@ class BitriseToolExecutor {
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
     'bitrise_test': (_) => _client.testConnection(),
+    'bitrise_get_apps': (_) => _client.getApps(),
     'bitrise_get_builds': (a) => _client.getBuilds(a['app_slug'] as String),
+    'bitrise_get_build_detail': (a) => _client.getBuildDetail(
+          a['app_slug'] as String,
+          a['build_slug'] as String,
+        ),
     'bitrise_trigger_build': (a) =>
         _client.triggerBuild(a['app_slug'] as String),
+    'bitrise_trigger_build_with_params': (a) => _client.triggerBuildWithParams(
+          a['app_slug'] as String,
+          a['workflow'] as String,
+          _optionalEnvList(a, 'environments'),
+        ),
   };
+}
+
+/// Extracts an optional environments list from [args], or `null`.
+List<Map<String, dynamic>>? _optionalEnvList(
+  Map<String, dynamic> args,
+  String key,
+) {
+  final value = args[key];
+  if (value is! List) return null;
+  return value.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 }

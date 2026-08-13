@@ -47,9 +47,7 @@ class BitriseClient {
   /// empty map for non-object bodies.
   Future<Map<String, dynamic>> getBuilds(String appSlug) async {
     final body = await _http.get('apps/${_encodeSlug(appSlug)}/builds');
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    return const {};
+    return _decodeObject(body) ?? const {};
   }
 
   /// `bitrise_trigger_build` — POST `apps/{slug}/builds`.
@@ -57,13 +55,69 @@ class BitriseClient {
   /// Triggers a build with empty build params (the server applies workflow
   /// defaults). Returns the decoded response object, or `null` for non-object
   /// bodies.
-  Future<Map<String, dynamic>?> triggerBuild(String appSlug) async {
+  Future<Map<String, dynamic>?> triggerBuild(String appSlug) =>
+      _postBuild(appSlug, const {});
+
+  /// `bitrise_get_apps` — GET `apps`.
+  ///
+  /// Returns the decoded list of app objects, or an empty list for non-array
+  /// bodies.
+  Future<List<Map<String, dynamic>>> getApps() async {
+    final body = await _http.get('apps');
+    return _decodeList(body);
+  }
+
+  /// `bitrise_get_build_detail` — GET `apps/{appSlug}/builds/{buildSlug}`.
+  ///
+  /// Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getBuildDetail(
+    String appSlug,
+    String buildSlug,
+  ) async {
+    final body = await _http.get(
+      'apps/${_encodeSlug(appSlug)}/builds/${_encodeSlug(buildSlug)}',
+    );
+    return _decodeObject(body);
+  }
+
+  /// `bitrise_trigger_build_with_params` — POST `apps/{appSlug}/builds`.
+  ///
+  /// Triggers a build with the given [workflow] and optional [environments].
+  /// Returns the decoded response object, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> triggerBuildWithParams(
+    String appSlug,
+    String workflow,
+    List<Map<String, dynamic>>? environments,
+  ) async {
+    final buildParams = <String, dynamic>{'workflow_id': workflow};
+    if (environments != null) {
+      buildParams['environments'] = environments;
+    }
+    return _postBuild(appSlug, buildParams);
+  }
+
+  /// POSTs [buildParams] to `apps/{appSlug}/builds` and decodes the object.
+  Future<Map<String, dynamic>?> _postBuild(
+    String appSlug,
+    Map<String, dynamic> buildParams,
+  ) async {
     final result = await _http.post(
       'apps/${_encodeSlug(appSlug)}/builds',
-      body: jsonEncode({'build_params': <String, dynamic>{}}),
+      body: jsonEncode({'build_params': buildParams}),
     );
-    final decoded = jsonDecode(result);
-    if (decoded is Map<String, dynamic>) return decoded;
-    return null;
+    return _decodeObject(result);
+  }
+
+  /// Parses [body] as a JSON object map, or returns null on mismatch.
+  Map<String, dynamic>? _decodeObject(String body) {
+    final parsed = jsonDecode(body);
+    return parsed is Map<String, dynamic> ? parsed : null;
+  }
+
+  /// Parses [body] as a JSON object list, or returns empty on mismatch.
+  List<Map<String, dynamic>> _decodeList(String body) {
+    final parsed = jsonDecode(body);
+    if (parsed is! List) return const [];
+    return parsed.cast<Map>().map(Map<String, dynamic>.from).toList();
   }
 }

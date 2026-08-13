@@ -13,6 +13,10 @@ void main() {
   getCaseTests();
   getCasesTests();
   addResultTests();
+  getRunsTests();
+  getSectionsTests();
+  addCaseTests();
+  updateCaseTests();
 }
 
 /// The expected `Authorization` value produced by the fixture's config.
@@ -188,3 +192,108 @@ const _casesBody = '[{"id":1},{"id":2}]';
 
 /// Canned `add_result` response body.
 const _resultBody = '{"id":9001}';
+
+/// `testrail_get_runs` — GET `get_runs/{projectId}`.
+void getRunsTests() {
+  group('TestRailClient.getRuns', () {
+    test('returns the decoded list of runs', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_runs/5': _runsBody}, o),
+      );
+      final runs = await f.client.getRuns(5);
+      expect(runs.map((r) => r['id']).toList(), [100, 101]);
+      expect(f.adapter.calls.single.path, contains('get_runs/5'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_runs/5': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getRuns(5), isEmpty);
+    });
+  });
+}
+
+/// `testrail_get_sections` — GET `get_sections/{projectId}&suite_id={suiteId}`.
+void getSectionsTests() {
+  group('TestRailClient.getSections', () {
+    test('returns the decoded list of sections', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_sections': _sectionsBody}, o),
+      );
+      final sections = await f.client.getSections(7);
+      expect(sections.map((s) => s['id']).toList(), [10, 11]);
+      final call = f.adapter.calls.single;
+      expect(call.path, contains('get_sections'));
+      expect(call.path, contains('proj-1'));
+      expect(call.path, contains('suite_id=7'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_sections': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getSections(7), isEmpty);
+    });
+  });
+}
+
+/// `testrail_add_case` — POST `add_case/{sectionId}`.
+void addCaseTests() {
+  group('TestRailClient.addCase', () {
+    test('POSTs the title and returns the decoded case', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'add_case/4': _newCaseBody}, o),
+      );
+      final result = await f.client.addCase(4, 'New case');
+      expect(result['id'], 42);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('add_case/4'));
+      expect(jsonDecode(call.data as String), {'title': 'New case'});
+    });
+
+    test('returns empty map when the body is not an object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'add_case/4': '[1, 2]'}, o),
+      );
+      expect(await f.client.addCase(4, 'x'), isEmpty);
+    });
+  });
+}
+
+/// `testrail_update_case` — POST `update_case/{id}`.
+void updateCaseTests() {
+  group('TestRailClient.updateCase', () {
+    test('POSTs the fields map and returns the decoded case', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'update_case/9': _updatedCaseBody}, o),
+      );
+      final result = await f.client.updateCase(9, {'title': 'Updated'});
+      expect(result['id'], 9);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('update_case/9'));
+      expect(jsonDecode(call.data as String), {'title': 'Updated'});
+    });
+
+    test('returns empty map when the body is not an object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'update_case/9': '[1, 2]'}, o),
+      );
+      expect(await f.client.updateCase(9, {}), isEmpty);
+    });
+  });
+}
+
+/// Canned `get_runs` response body.
+const _runsBody = '[{"id":100},{"id":101}]';
+
+/// Canned `get_sections` response body.
+const _sectionsBody = '[{"id":10},{"id":11}]';
+
+/// Canned `add_case` response body.
+const _newCaseBody = '{"id":42,"title":"New case"}';
+
+/// Canned `update_case` response body.
+const _updatedCaseBody = '{"id":9,"title":"Updated"}';

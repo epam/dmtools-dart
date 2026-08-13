@@ -7,6 +7,8 @@ library;
 
 import 'dart:io';
 
+import 'instruction_processor.dart';
+
 /// Builds final CLI commands with aggregated prompt injection.
 class CliCommandBuilder {
   /// Creates a command builder.
@@ -47,6 +49,8 @@ class CliCommandBuilder {
   /// [cliPrompts] — array of prompt entries (may be null).
   /// [cliPromptsByTracker] — tracker-specific prompts (may be null).
   /// [trackerType] — current tracker type for prompt resolution.
+  /// [workingDirectory] — base dir for resolving file-path references in
+  /// the combined prompt (passed to [InstructionProcessor]).
   ///
   /// Returns commands with the combined prompt appended, or the original
   /// commands when no prompt is provided.
@@ -56,6 +60,7 @@ class CliCommandBuilder {
     List<String>? cliPrompts,
     Map<String, List<String>>? cliPromptsByTracker, {
     String? trackerType,
+    String? workingDirectory,
   }) {
     if (cliCommands.isEmpty) return cliCommands;
     final merged = resolveCliPrompts(
@@ -63,18 +68,28 @@ class CliCommandBuilder {
       cliPromptsByTracker,
       trackerType,
     );
-    final combined = _buildCombinedPrompt(cliPrompt, merged);
+    final combined = _buildCombinedPrompt(
+      cliPrompt,
+      merged,
+      workingDirectory,
+    );
     if (combined == null || combined.trim().isEmpty) return cliCommands;
     return _appendPromptToCommands(cliCommands, combined);
   }
 
   /// Combines [cliPrompt] and [cliPrompts] into a single prompt string.
   ///
-  /// Non-blank entries are joined with a double-newline separator. Returns
+  /// Non-blank entries are joined with a double-newline separator. The
+  /// combined prompt is then enriched by [InstructionProcessor] (embeds
+  /// file content, annotates GitHub PR and Jira references). Returns
   /// `null` when the result is empty.
   ///
   /// Mirrors `InstructionProcessor.buildCombinedPrompt()`.
-  String? _buildCombinedPrompt(String? cliPrompt, List<String>? cliPrompts) {
+  String? _buildCombinedPrompt(
+    String? cliPrompt,
+    List<String>? cliPrompts,
+    String? workingDirectory,
+  ) {
     final parts = <String>[];
     if (cliPrompt != null && cliPrompt.trim().isNotEmpty) {
       parts.add(cliPrompt.trim());
@@ -85,7 +100,9 @@ class CliCommandBuilder {
       }
     }
     if (parts.isEmpty) return null;
-    return parts.join('\n\n');
+    final combined = parts.join('\n\n');
+    return InstructionProcessor(workingDirectory: workingDirectory)
+        .process(combined);
   }
 
   /// Appends a prompt to each command via a temporary file.

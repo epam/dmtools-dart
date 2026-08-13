@@ -222,6 +222,7 @@ class CliAgent {
       params.cliPrompt,
       params.cliPromptsAsArray,
       params.cliPromptsByTracker,
+      workingDirectory: workDir,
     );
     _ensureOutputFolder(workDir);
     final env = _buildSubprocessEnvironment(workDir, true);

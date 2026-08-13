@@ -205,6 +205,25 @@ void buildCommandsTests() {
     test('returns original when cliCommands empty', () {
       expect(const CliCommandBuilder().buildCommands([], 'p', null, null), []);
     });
+
+    test('enriches file-path references via InstructionProcessor', () {
+      final tmp = Directory.systemTemp.createTempSync('ip_cmd_test_');
+      try {
+        File('${tmp.path}/ref.md').writeAsStringSync('embedded-content');
+        final result = const CliCommandBuilder().buildCommands(
+          ['echo'],
+          'See ./ref.md',
+          null,
+          null,
+          workingDirectory: tmp.path,
+        );
+        final match = RegExp(r'"(.+)"').firstMatch(result.first);
+        expect(File(match!.group(1)!).readAsStringSync(),
+            contains('embedded-content'));
+      } finally {
+        tmp.deleteSync(recursive: true);
+      }
+    });
   });
 }
 

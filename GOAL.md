@@ -275,8 +275,9 @@ Reference: `dmtools-core/.../cliagent/CliAgent.java`, `cliagent/CliAgentParams.j
       `contextId` fallback to `"cli-agent"`, `cleanupInputFolder` (default true),
       `cleanupOutputsFolder` (default false).
 - [ ] Timer/error/line JS actions (deferred — core lifecycle complete).
-- [ ] `InstructionProcessor` content extraction (deferred — plain prompt
-      concatenation works for the common case).
+- [x] `InstructionProcessor` content extraction — file paths embedded
+      inline; GitHub PR URLs and Jira keys annotated (network fetch
+      deferred until sync HTTP integration in Phase 5+).
 - [ ] `TicketInputContextBuilder` (deferred — empty input folder fallback works).
 
 **Done when:** a real CliAgent config JSON from the Java ecosystem runs under Dart

@@ -7,6 +7,7 @@ import 'jira_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogShapeTests();
+  jiraGetTicketShapeTests();
   toolCatalogParamTests();
   executorDispatchTests();
 }
@@ -15,12 +16,12 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     jiraTools().firstWhere((t) => t.name == name);
 
-/// Catalog shape: tool count, order, integration, get_ticket params.
+/// Catalog shape: tool count, declaration order, and integration ownership.
 void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the twenty-three tools in declaration order', () {
+    test('registers the thirty-three tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jira_test',
         'jira_get_ticket',
@@ -45,6 +46,16 @@ void toolCatalogShapeTests() {
         'jira_update_description',
         'jira_get_subtasks',
         'jira_create_ticket_with_parent',
+        'jira_post_comment_if_not_exists',
+        'jira_update_field_as_adf',
+        'jira_get_all_fields_with_name',
+        'jira_update_all_fields_with_name',
+        'jira_update_ticket',
+        'jira_link_issues',
+        'jira_get_issue_link_types',
+        'jira_execute_request',
+        'jira_get_project_details',
+        'jira_get_project_statuses',
       ]);
     });
 
@@ -52,7 +63,10 @@ void toolCatalogShapeTests() {
       expect(tools.every((t) => t.integration == 'jira'), isTrue);
     });
   });
+}
 
+/// `jira_get_ticket` tool shape: alias and parameter declaration.
+void jiraGetTicketShapeTests() {
   group('jira_get_ticket', () {
     final tool = toolNamed('jira_get_ticket');
 

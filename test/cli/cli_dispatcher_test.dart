@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/dmtools.dart';
@@ -154,14 +155,42 @@ void _testRun() {
 
 void _testList() {
   group('list', () {
-    test('stubs the MCP tool catalog', () {
-      expect(_dispatcher.dispatch(['list']), 1);
-      expect(_lines, ['MCP tool catalog requires Phase 3']);
+    test('prints the full MCP tool catalog as JSON', () {
+      expect(_dispatcher.dispatch(['list']), 0);
+      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
+      final tools = decoded['tools'] as List;
+      expect(tools.length, 85);
+      final names = tools
+          .map((t) => (t as Map<String, dynamic>)['name'] as String)
+          .toSet();
+      expect(names, contains('jira_get_ticket'));
+      expect(names, contains('github_create_pr'));
     });
 
-    test('accepts a filter argument (still stubbed)', () {
-      expect(_dispatcher.dispatch(['list', 'jira']), 1);
-      expect(_lines, ['MCP tool catalog requires Phase 3']);
+    test('filters the catalog by a case-insensitive substring', () {
+      expect(_dispatcher.dispatch(['list', 'COMMENT']), 0);
+      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
+      final tools = decoded['tools'] as List;
+      expect(tools, isNotEmpty);
+      for (final t in tools) {
+        final map = t as Map<String, dynamic>;
+        final matches = (map['name'] as String)
+                .toLowerCase()
+                .contains('comment') ||
+            (map['description'] as String).toLowerCase().contains('comment');
+        expect(matches, isTrue);
+      }
+    });
+
+    test('honors the DMTOOLS_INTEGRATIONS filter', () {
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira'});
+      expect(_dispatcher.dispatch(['list']), 0);
+      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
+      final tools = decoded['tools'] as List;
+      expect(tools, isNotEmpty);
+      for (final t in tools) {
+        expect((t as Map<String, dynamic>)['integration'], 'jira');
+      }
     });
   });
 }

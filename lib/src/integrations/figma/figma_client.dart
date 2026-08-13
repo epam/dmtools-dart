@@ -21,17 +21,18 @@ class FigmaClient {
   /// Returns the Figma user profile on success, or an error map on failure.
   Future<Map<String, dynamic>> testConnection() async {
     try {
-      final user = await _fetchMe();
-      return {
+      final profile = await _fetchMe();
+      final handle = profile['handle'] ?? profile['email'] ?? '';
+      return <String, dynamic>{
         'success': true,
         'message': 'Figma connection successful',
-        'user': user['handle'] ?? user['email'] ?? '',
+        'user': handle,
       };
-    } on Object catch (e) {
-      return {
+    } on Object catch (failure) {
+      return <String, dynamic>{
         'success': false,
         'message': 'Figma connection failed',
-        'error': e.toString(),
+        'error': failure.toString(),
       };
     }
   }

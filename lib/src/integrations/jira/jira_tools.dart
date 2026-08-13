@@ -62,6 +62,13 @@ List<ToolDefinition> jiraTools() => [
       ..._ticketWriteTools(),
       ..._subtaskTools(),
       ..._createWithParentTools(),
+      ..._commentIfExistsTools(),
+      ..._adfFieldTools(),
+      ..._batchFieldTools(),
+      ..._rawUpdateTools(),
+      ..._linkTools(),
+      ..._genericRequestTools(),
+      ..._projectDetailTools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -390,6 +397,166 @@ List<ToolDefinition> _createWithParentTools() => [
       ),
     ];
 
+// ── Batch 4 tool definitions ─────────────────────────────────────────────
+
+/// Comment-if-not-exists tool: `jira_post_comment_if_not_exists`.
+List<ToolDefinition> _commentIfExistsTools() => [
+      _jiraTool(
+        name: 'jira_post_comment_if_not_exists',
+        description: 'Post a comment only if it does not already exist',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'comment',
+            description: 'The comment text to post',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// ADF field update tool: `jira_update_field_as_adf`.
+List<ToolDefinition> _adfFieldTools() => [
+      _jiraTool(
+        name: 'jira_update_field_as_adf',
+        description: 'Update a Jira ticket field with an ADF document',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'field',
+            description: 'The field name to update',
+            required: true,
+          ),
+          ToolParam(
+            name: 'value',
+            description: 'The ADF document to set as the field value',
+            type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Batch field tools: search by name + update all matching.
+List<ToolDefinition> _batchFieldTools() => [
+      _jiraTool(
+        name: 'jira_get_all_fields_with_name',
+        description: 'Find all Jira field definitions matching a display name',
+        category: 'project_management',
+        params: [
+          _projectParam,
+          ToolParam(
+            name: 'fieldName',
+            description: 'The display name to search for',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_update_all_fields_with_name',
+        description: 'Update every field matching a display name on a ticket',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'fieldName',
+            description: 'The display name of the fields to update',
+            required: true,
+          ),
+          ToolParam(
+            name: 'value',
+            description: 'The new value for the fields',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Raw update tool: `jira_update_ticket`.
+List<ToolDefinition> _rawUpdateTools() => [
+      _jiraTool(
+        name: 'jira_update_ticket',
+        description: 'Update a Jira ticket with raw JSON parameters',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'jsonParams',
+            description: 'Raw JSON object to send as the update body',
+            type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Issue link tools: create link + list link types.
+List<ToolDefinition> _linkTools() => [
+      _jiraTool(
+        name: 'jira_link_issues',
+        description: 'Create a link between two Jira tickets',
+        params: [
+          ToolParam(
+            name: 'linkType',
+            description: 'The link type name (e.g. Blocks, Relates)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'inwardKey',
+            description: 'The key of the inward issue',
+            required: true,
+          ),
+          ToolParam(
+            name: 'outwardKey',
+            description: 'The key of the outward issue',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_get_issue_link_types',
+        description: 'Get all available Jira issue link types',
+        category: 'project_management',
+      ),
+    ];
+
+/// Generic request tool: `jira_execute_request`.
+List<ToolDefinition> _genericRequestTools() => [
+      _jiraTool(
+        name: 'jira_execute_request',
+        description:
+            'Execute a GET request against an arbitrary Jira REST path',
+        category: 'system',
+        params: [
+          ToolParam(
+            name: 'url',
+            description: 'The REST path relative to /rest/api/latest/',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Project detail tools: project info + statuses.
+List<ToolDefinition> _projectDetailTools() => [
+      _jiraTool(
+        name: 'jira_get_project_details',
+        description: 'Get details for a Jira project by key',
+        category: 'project_management',
+        params: [
+          ToolParam(
+            name: 'projectKey',
+            description: 'The project key (e.g. PROJ)',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_get_project_statuses',
+        description: 'Get all statuses for issue types in a Jira project',
+        category: 'project_management',
+        params: [_projectParam],
+      ),
+    ];
+
 /// Executes Jira MCP tools by dispatching to [JiraClient].
 class JiraToolExecutor {
   final JiraClient _client;
@@ -410,7 +577,11 @@ class JiraToolExecutor {
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _handlers = {..._coreHandlers(), ..._batch3Handlers()};
+      _handlers = {
+    ..._coreHandlers(),
+    ..._batch3Handlers(),
+    ..._batch4Handlers(),
+  };
 
   /// Dispatch entries for the batch-1/2 Jira tools.
   Map<String, Future<dynamic> Function(Map<String, dynamic>)> _coreHandlers() =>
@@ -495,5 +666,47 @@ class JiraToolExecutor {
                   a['summary'] as String,
                   a['parentKey'] as String,
                 ),
+          };
+
+  /// Dispatch entries for the batch-4 Jira tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _batch4Handlers() => {
+            'jira_post_comment_if_not_exists': (a) =>
+                _client.postCommentIfNotExists(
+                  a['key'] as String,
+                  a['comment'] as String,
+                ),
+            'jira_update_field_as_adf': (a) => _client.updateFieldAsAdf(
+                  a['key'] as String,
+                  a['field'] as String,
+                  a['value'] as Map<String, dynamic>,
+                ),
+            'jira_get_all_fields_with_name': (a) =>
+                _client.getAllFieldsWithName(
+                  a['project'] as String,
+                  a['fieldName'] as String,
+                ),
+            'jira_update_all_fields_with_name': (a) =>
+                _client.updateAllFieldsWithName(
+                  a['key'] as String,
+                  a['fieldName'] as String,
+                  a['value'],
+                ),
+            'jira_update_ticket': (a) => _client.updateTicket(
+                  a['key'] as String,
+                  a['jsonParams'] as Map<String, dynamic>,
+                ),
+            'jira_link_issues': (a) => _client.linkIssues(
+                  a['linkType'] as String,
+                  a['inwardKey'] as String,
+                  a['outwardKey'] as String,
+                ),
+            'jira_get_issue_link_types': (_) => _client.getIssueLinkTypes(),
+            'jira_execute_request': (a) =>
+                _client.executeRequest(a['url'] as String),
+            'jira_get_project_details': (a) =>
+                _client.getProjectDetails(a['projectKey'] as String),
+            'jira_get_project_statuses': (a) =>
+                _client.getProjectStatuses(a['project'] as String),
           };
 }

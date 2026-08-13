@@ -405,4 +405,135 @@ class JiraClient {
     if (decoded is Map<String, dynamic>) return decoded;
     return {};
   }
+
+  // ── Batch 4: remaining Java tools ──────────────────────────────────────
+
+  /// `jira_post_comment_if_not_exists` — POST comment only if absent.
+  ///
+  /// Fetches existing comments and compares each plain-text body to
+  /// [comment]; posts only when no match is found. Returns `true` when a
+  /// comment was posted, `false` when it already existed.
+  Future<bool> postCommentIfNotExists(String key, String comment) async {
+    final existing = await getComments(key);
+    for (final c in existing) {
+      final body = c['body'];
+      if (body is String && body == comment) return false;
+    }
+    await postComment(key, comment);
+    return true;
+  }
+
+  /// `jira_update_field_as_adf` — PUT `issue/{key}` via v3 API with ADF body.
+  ///
+  /// Sets [field] to the ADF document [value] using the `/rest/api/3`
+  /// endpoint, which expects Atlassian Document Format for rich-text fields.
+  Future<void> updateFieldAsAdf(
+    String key,
+    String field,
+    Map<String, dynamic> value,
+  ) async {
+    await _http.putV3(
+      'issue/$key',
+      body: jsonEncode({
+        'fields': {field: value}
+      }),
+    );
+  }
+
+  /// Returns every field id whose display name equals [fieldName].
+  Future<List<String>> _fieldIdsByName(String fieldName) async {
+    final body = await _http.get('field');
+    return _decodeList(body)
+        .where((f) => f['name'] == fieldName)
+        .map((f) => f['id'] as String)
+        .toList();
+  }
+
+  /// `jira_get_all_fields_with_name` — GET `field`, filter by display name.
+  ///
+  /// Returns all field definitions (system + custom) whose `name` matches
+  /// [fieldName]. The [project] argument is accepted for Java signature
+  /// parity.
+  Future<List<Map<String, dynamic>>> getAllFieldsWithName(
+    String project,
+    String fieldName,
+  ) async {
+    final body = await _http.get('field');
+    return _decodeList(body).where((f) => f['name'] == fieldName).toList();
+  }
+
+  /// `jira_update_all_fields_with_name` — PUT `issue/{key}`.
+  ///
+  /// Finds every field id whose display name equals [fieldName] and sets
+  /// each to [value] in a single PUT.
+  Future<void> updateAllFieldsWithName(
+    String key,
+    String fieldName,
+    Object value,
+  ) async {
+    final ids = await _fieldIdsByName(fieldName);
+    if (ids.isEmpty) return;
+    final fields = <String, dynamic>{for (final id in ids) id: value};
+    await _putFields(key, fields);
+  }
+
+  /// `jira_update_ticket` — PUT `issue/{key}` with raw JSON body.
+  ///
+  /// Sends [jsonParams] verbatim as the request body — the caller controls
+  /// the exact `fields` / `update` structure.
+  Future<void> updateTicket(String key, Map<String, dynamic> jsonParams) async {
+    await _http.put('issue/$key', body: jsonEncode(jsonParams));
+  }
+
+  /// `jira_link_issues` — POST `issue/link`.
+  ///
+  /// Creates an issue link of type [linkType] between [inwardKey] and
+  /// [outwardKey].
+  Future<void> linkIssues(
+    String linkType,
+    String inwardKey,
+    String outwardKey,
+  ) async {
+    await _http.post(
+      'issue/link',
+      body: jsonEncode({
+        'type': {'name': linkType},
+        'inwardIssue': {'key': inwardKey},
+        'outwardIssue': {'key': outwardKey},
+      }),
+    );
+  }
+
+  /// `jira_get_issue_link_types` — GET `issue/link/type`.
+  ///
+  /// Returns the `issueLinkTypes` array from the link-type listing.
+  Future<List<Map<String, dynamic>>> getIssueLinkTypes() async {
+    final body = await _http.get('issue/link/type');
+    return _extractArray(body, 'issueLinkTypes');
+  }
+
+  /// `jira_execute_request` — GET any Jira REST path.
+  ///
+  /// Performs a GET against [url] (relative to `/rest/api/latest/`) and
+  /// returns the decoded JSON object.
+  Future<Map<String, dynamic>> executeRequest(String url) async {
+    final body = await _http.get(url);
+    return _decodeMap(body);
+  }
+
+  /// `jira_get_project_details` — GET `project/{projectKey}`.
+  ///
+  /// Returns the project definition (key, name, lead, styles, …).
+  Future<Map<String, dynamic>> getProjectDetails(String projectKey) async {
+    final body = await _http.get('project/$projectKey');
+    return _decodeMap(body);
+  }
+
+  /// `jira_get_project_statuses` — GET `project/{project}/statuses`.
+  ///
+  /// Returns the per-issue-type status mappings for [project].
+  Future<List<Map<String, dynamic>>> getProjectStatuses(String project) async {
+    final body = await _http.get('project/$project/statuses');
+    return _decodeList(body);
+  }
 }

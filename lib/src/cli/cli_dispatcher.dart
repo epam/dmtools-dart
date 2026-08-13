@@ -1,14 +1,16 @@
 /// Command-line dispatcher — Dart port of the Java `JobRunner` CLI surface.
 ///
-/// Phase 2 scaffolding: version, help, job listing and `doctor` are live.
-/// Job execution, the MCP tool catalog, interactive mode and direct tool
-/// invocation print stub messages and exit non-zero until Phases 3–4.
+/// Phase 2 scaffolding: version, help, job listing and `doctor` are live, and
+/// `list` resolves the MCP tool catalog from the default registry. Job
+/// execution, interactive mode and direct tool invocation print stub messages
+/// and exit non-zero until Phases 3–4.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
 import '../config/property_reader.dart';
+import '../mcp/default_tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'run_command_processor.dart';
@@ -121,9 +123,32 @@ class CliDispatcher {
     return '<unnamed>';
   }
 
-  int _listTools(List<String> _) {
-    _writer('MCP tool catalog requires Phase 3');
-    return 1;
+  int _listTools(List<String> rest) {
+    final registry = createDefaultToolRegistry();
+    final integrations = _resolveIntegrations();
+    var response = registry.generateToolsListResponse(integrations);
+    if (rest.isNotEmpty) {
+      response = registry.filterToolsList(response, rest.first);
+    }
+    _writer(const JsonEncoder.withIndent('  ').convert(response));
+    return 0;
+  }
+
+  /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration
+  /// names.
+  ///
+  /// Returns `null` (meaning "all integrations") when the variable is unset
+  /// or empty; otherwise a lower-case set parsed from the comma-separated
+  /// value (e.g. `"jira,confluence"` → `{"jira", "confluence"}`).
+  Set<String>? _resolveIntegrations() {
+    final raw = _reader.getValue('DMTOOLS_INTEGRATIONS');
+    if (raw == null || raw.trim().isEmpty) return null;
+    final set = raw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    return set.isEmpty ? null : set;
   }
 
   int _interactiveStub() {

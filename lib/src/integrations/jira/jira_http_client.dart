@@ -74,4 +74,14 @@ class JiraHttpClient extends BaseHttpClient {
     );
     return response.data ?? '';
   }
+
+  /// Performs a PUT against `/rest/api/3/` and returns the response body.
+  Future<String> putV3(String path, {Object? body}) async {
+    final response = await dio.put<String>(
+      buildV3Url(path),
+      data: body,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
 }

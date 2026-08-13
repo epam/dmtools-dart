@@ -21,6 +21,31 @@ import 'quickjs_runtime.dart';
 import 'tool_bridge.dart';
 import 'tool_wrapper_generator.dart';
 
+/// Optional configuration for [JsJobRunner.runScript].
+///
+/// Bundles the less-commonly-used parameters so that [JsJobRunner.runScript]
+/// stays within the quality-gate param limit.
+class JsRunConfig {
+  /// Creates a run configuration.
+  const JsRunConfig({
+    this.integrationFilter,
+    this.registry,
+    this.extraGlobals,
+  });
+
+  /// Restricts generated wrappers to the named integrations.
+  ///
+  /// When null, wrappers for all integrations are generated.
+  final Set<String>? integrationFilter;
+
+  /// Tool registry to use; defaults to the full catalog when null.
+  final ToolRegistry? registry;
+
+  /// Additional top-level JS globals set after `params` but before the
+  /// script runs — mirrors Java's `JavaScriptExecutor.with()`.
+  final Map<String, dynamic>? extraGlobals;
+}
+
 /// Runs JavaScript agent/test scripts in a QuickJS runtime.
 class JsJobRunner {
   /// Creates a new job runner.
@@ -39,22 +64,20 @@ class JsJobRunner {
   /// - [jobParams] — injected as `params.jobParams` in the JS global scope.
   /// - [ticket] — injected as `params.ticket` when non-null.
   /// - [workingDirectory] — base for relative file paths in tool calls.
-  /// - [integrationFilter] — restricts generated wrappers to the named
-  ///   integrations; `null` means all integrations.
-  /// - [registry] — tool registry to use; defaults to the full catalog.
+  /// - [config] — optional [JsRunConfig] for integration filtering, custom
+  ///   registries, and extra JS globals.
   String? runScript({
     required String scriptPath,
     required Map<String, dynamic> jobParams,
     Map<String, dynamic>? ticket,
     String? workingDirectory,
-    Set<String>? integrationFilter,
-    ToolRegistry? registry,
+    JsRunConfig? config,
   }) {
+    final cfg = config ?? const JsRunConfig();
     final rt = QuickjsRuntime();
     try {
-      final reg = registry ?? createDefaultToolRegistry();
-      _wireRuntime(
-          rt, reg, jobParams, ticket, workingDirectory, integrationFilter);
+      final reg = cfg.registry ?? createDefaultToolRegistry();
+      _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
       final script = File(scriptPath).readAsStringSync();
       final scriptResult = rt.eval(script, filename: scriptPath);
       return _callAction(rt) ?? scriptResult;
@@ -93,10 +116,11 @@ class JsJobRunner {
     Map<String, dynamic> jobParams,
     Map<String, dynamic>? ticket,
     String? workingDirectory,
-    Set<String>? integrationFilter,
+    JsRunConfig config,
   ) {
     _injectContext(rt, jobParams, ticket);
-    final wrappers = _buildWrappers(registry, integrationFilter);
+    _injectExtraGlobals(rt, config.extraGlobals);
+    final wrappers = _buildWrappers(registry, config.integrationFilter);
     rt.eval(wrappers, filename: '<tool_wrappers>');
     ToolBridge(registry: registry, workingDirectory: workingDirectory)
         .registerOn(rt);
@@ -112,6 +136,17 @@ class JsJobRunner {
       'jobParams': jobParams,
       if (ticket != null) 'ticket': ticket,
     });
+  }
+
+  /// Sets each [extraGlobals] entry as a top-level JS global on [rt].
+  void _injectExtraGlobals(
+    QuickjsRuntime rt,
+    Map<String, dynamic>? extraGlobals,
+  ) {
+    if (extraGlobals == null) return;
+    for (final entry in extraGlobals.entries) {
+      rt.setGlobal(entry.key, entry.value);
+    }
   }
 
   /// Generates tool wrappers, optionally narrowed by integration.

@@ -206,7 +206,7 @@ void _testRegistryFiltering() {
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
-          registry: registry,
+          config: JsRunConfig(registry: registry),
         );
         expect(jsonDecode(result!), isTrue);
       } finally {
@@ -224,7 +224,7 @@ void _testRegistryFiltering() {
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
-          integrationFilter: {'file'},
+          config: const JsRunConfig(integrationFilter: {'file'}),
         );
         expect(jsonDecode(result!), isTrue);
       } finally {

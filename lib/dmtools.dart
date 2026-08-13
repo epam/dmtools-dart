@@ -3,6 +3,11 @@
 /// See GOAL.md for the mission, constraints and phases.
 library;
 
+export 'src/agents/agent_factory.dart';
+export 'src/agents/cli_agent.dart';
+export 'src/agents/cli_agent_params.dart';
+export 'src/agents/cli_command_builder.dart';
+export 'src/agents/cli_execution_helper.dart';
 export 'src/cli/cli_args.dart';
 export 'src/cli/cli_dispatcher.dart';
 export 'src/cli/config_merger.dart';

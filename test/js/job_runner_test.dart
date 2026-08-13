@@ -16,6 +16,8 @@ void main() {
   _testErrorDispatch();
   _testWrapperDispatch();
   _testRegistryFiltering();
+  _testFileDeleteDispatch();
+  _testCliExecuteDispatch();
 }
 
 File _writeScript(Directory dir, String name, String content) {
@@ -225,6 +227,91 @@ void _testRegistryFiltering() {
           integrationFilter: {'file'},
         );
         expect(jsonDecode(result!), isTrue);
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+void _testFileDeleteDispatch() {
+  group('file_delete dispatch', () {
+    test('removes an existing file via executeToolViaJava', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_delete');
+      try {
+        final target = File('${dir.path}/to_delete.txt')
+          ..writeAsStringSync('bye');
+        expect(target.existsSync(), isTrue);
+        final script = _writeScript(dir, 'test.js', '''
+          var res = executeToolViaJava('file_delete', {path: 'to_delete.txt'});
+          res.deleted
+        ''');
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          workingDirectory: dir.path,
+        );
+        expect(jsonDecode(result!), isTrue);
+        expect(target.existsSync(), isFalse);
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+
+    test('returns deleted=false for missing file', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_noop_del');
+      try {
+        final script = _writeScript(dir, 'test.js', '''
+          var res = executeToolViaJava('file_delete', {path: 'nope.txt'});
+          res.deleted
+        ''');
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          workingDirectory: dir.path,
+        );
+        expect(jsonDecode(result!), isFalse);
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+void _testCliExecuteDispatch() {
+  group('cli_execute_command dispatch', () {
+    test('runs echo via executeToolViaJava', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_cli');
+      try {
+        final script = _writeScript(dir, 'test.js', '''
+          var res = executeToolViaJava(
+            'cli_execute_command',
+            {command: 'echo', args: ['hello']}
+          );
+          res.exitCode + ':' + res.stdout.trim()
+        ''');
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+        );
+        expect(jsonDecode(result!), '0:hello');
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+
+    test('returns error when command is missing', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_nocmd');
+      try {
+        final script = _writeScript(dir, 'test.js', '''
+          var res = executeToolViaJava('cli_execute_command', {});
+          res.error
+        ''');
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+        );
+        expect(jsonDecode(result!) as String, contains('missing command'));
       } finally {
         dir.deleteSync(recursive: true);
       }

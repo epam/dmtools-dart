@@ -20,7 +20,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the fourteen tools in declaration order', () {
+    test('registers the twenty-three tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jira_test',
         'jira_get_ticket',
@@ -36,6 +36,15 @@ void toolCatalogShapeTests() {
         'jira_create_ticket',
         'jira_get_transitions',
         'jira_delete_ticket',
+        'jira_get_issue_types',
+        'jira_get_fields',
+        'jira_get_components',
+        'jira_get_fix_versions',
+        'jira_set_fix_version',
+        'jira_set_priority',
+        'jira_update_description',
+        'jira_get_subtasks',
+        'jira_create_ticket_with_parent',
       ]);
     });
 

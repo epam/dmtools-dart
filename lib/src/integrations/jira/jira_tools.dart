@@ -8,6 +8,40 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'jira_client.dart';
 
+/// Reusable parameter: Jira ticket key.
+const _keyParam = ToolParam(
+  name: 'key',
+  description: 'The Jira ticket key (e.g. PROJ-123)',
+  required: true,
+);
+
+/// Reusable parameter: Jira project key.
+const _projectParam = ToolParam(
+  name: 'project',
+  description: 'The project key (e.g. PROJ)',
+  required: true,
+);
+
+/// Builds a Jira tool definition with standard defaults.
+///
+/// [category] defaults to `'ticket_management'`; override for tools that
+/// belong to a different group.
+ToolDefinition _jiraTool({
+  required String name,
+  required String description,
+  String category = 'ticket_management',
+  List<String> aliases = const [],
+  List<ToolParam> params = const [],
+}) =>
+    ToolDefinition(
+      name: name,
+      description: description,
+      integration: 'jira',
+      category: category,
+      aliases: aliases,
+      params: params,
+    );
+
 /// Returns all Jira MCP tool definitions.
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
@@ -24,34 +58,30 @@ List<ToolDefinition> jiraTools() => [
       ..._createTools(),
       ..._transitionReadTools(),
       ..._deleteTools(),
+      ..._projectMetaTools(),
+      ..._ticketWriteTools(),
+      ..._subtaskTools(),
+      ..._createWithParentTools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
 List<ToolDefinition> _systemTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_test',
         description:
             'Test Jira connectivity by fetching the current user profile',
-        integration: 'jira',
         category: 'system',
-        params: [],
       ),
     ];
 
 /// Ticket-read tool: `jira_get_ticket`.
 List<ToolDefinition> _ticketTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_get_ticket',
         description: 'Get a Jira ticket by key',
-        integration: 'jira',
-        category: 'ticket_management',
         aliases: ['tracker_get_ticket'],
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'fields',
             description: 'Comma-separated field names to return',
@@ -64,10 +94,9 @@ List<ToolDefinition> _ticketTools() => [
 
 /// JQL search tool: `jira_search_by_jql`.
 List<ToolDefinition> _searchTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_search_by_jql',
         description: 'Search Jira issues by JQL query',
-        integration: 'jira',
         category: 'search',
         params: [
           ToolParam(
@@ -87,17 +116,11 @@ List<ToolDefinition> _searchTools() => [
 
 /// Comment tool: `jira_post_comment`.
 List<ToolDefinition> _commentTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_post_comment',
         description: 'Post a comment on a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'comment',
             description: 'The comment text to post',
@@ -109,17 +132,11 @@ List<ToolDefinition> _commentTools() => [
 
 /// Label-mutation tools: `jira_add_label` / `jira_remove_label`.
 List<ToolDefinition> _labelTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_add_label',
         description: 'Add a label to a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'label',
             description: 'The label to add',
@@ -127,17 +144,11 @@ List<ToolDefinition> _labelTools() => [
           ),
         ],
       ),
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_remove_label',
         description: 'Remove a label from a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'label',
             description: 'The label to remove',
@@ -149,17 +160,12 @@ List<ToolDefinition> _labelTools() => [
 
 /// Workflow-transition tool: `jira_move_to_status`.
 List<ToolDefinition> _statusTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_move_to_status',
         description: 'Transition a Jira ticket to a target status',
-        integration: 'jira',
         category: 'workflow',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'status',
             description: 'The target status or transition name',
@@ -179,34 +185,20 @@ List<String>? _optionalStringList(Map<String, dynamic> args, String key) {
 
 /// Comment-read tool: `jira_get_comments`.
 List<ToolDefinition> _commentReadTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_get_comments',
         description: 'Get all comments on a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
-        params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
-        ],
+        params: [_keyParam],
       ),
     ];
 
 /// Assignment tool: `jira_assign`.
 List<ToolDefinition> _assignTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_assign',
         description: 'Assign a Jira ticket to a user by account ID',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'accountId',
             description: 'The Atlassian account ID of the assignee',
@@ -218,17 +210,11 @@ List<ToolDefinition> _assignTools() => [
 
 /// Field-mutation tools: `jira_update_field` / `jira_clear_field`.
 List<ToolDefinition> _fieldTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_update_field',
         description: 'Update a single field on a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'field',
             description: 'The field name to update',
@@ -241,17 +227,11 @@ List<ToolDefinition> _fieldTools() => [
           ),
         ],
       ),
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_clear_field',
         description: 'Clear (set to null) a single field on a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
-            required: true,
-          ),
+          _keyParam,
           ToolParam(
             name: 'field',
             description: 'The field name to clear',
@@ -263,18 +243,12 @@ List<ToolDefinition> _fieldTools() => [
 
 /// Create tool: `jira_create_ticket`.
 List<ToolDefinition> _createTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_create_ticket',
         description:
             'Create a basic Jira ticket with summary and optional description',
-        integration: 'jira',
-        category: 'ticket_management',
         params: [
-          ToolParam(
-            name: 'project',
-            description: 'The project key (e.g. PROJ)',
-            required: true,
-          ),
+          _projectParam,
           ToolParam(
             name: 'issueType',
             description: 'The issue type name (e.g. Task, Bug)',
@@ -296,32 +270,120 @@ List<ToolDefinition> _createTools() => [
 
 /// Transition-read tool: `jira_get_transitions`.
 List<ToolDefinition> _transitionReadTools() => [
-      ToolDefinition(
+      _jiraTool(
         name: 'jira_get_transitions',
         description: 'Get available workflow transitions for a Jira ticket',
-        integration: 'jira',
         category: 'workflow',
+        params: [_keyParam],
+      ),
+    ];
+
+/// Delete tool: `jira_delete_ticket`.
+List<ToolDefinition> _deleteTools() => [
+      _jiraTool(
+        name: 'jira_delete_ticket',
+        description: 'Delete a Jira ticket',
+        params: [_keyParam],
+      ),
+    ];
+
+/// Project-metadata read tools: issue types, fields, components, versions.
+List<ToolDefinition> _projectMetaTools() => [
+      _jiraTool(
+        name: 'jira_get_issue_types',
+        description: 'Get available issue types for a Jira project',
+        category: 'project_management',
+        params: [_projectParam],
+      ),
+      _jiraTool(
+        name: 'jira_get_fields',
+        description: 'Get available fields for a Jira project',
+        category: 'project_management',
+        params: [_projectParam],
+      ),
+      _jiraTool(
+        name: 'jira_get_components',
+        description: 'Get all components for a Jira project',
+        category: 'project_management',
+        params: [_projectParam],
+      ),
+      _jiraTool(
+        name: 'jira_get_fix_versions',
+        description: 'Get all fix versions for a Jira project',
+        category: 'project_management',
+        params: [_projectParam],
+      ),
+    ];
+
+/// Ticket field-mutation tools: fix version, priority, description.
+List<ToolDefinition> _ticketWriteTools() => [
+      _jiraTool(
+        name: 'jira_set_fix_version',
+        description: 'Set the fix version on a Jira ticket',
         params: [
+          _keyParam,
           ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
+            name: 'fixVersion',
+            description: 'The fix version name to set',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_set_priority',
+        description: 'Set the priority on a Jira ticket',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'priority',
+            description: 'The priority name to set',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_update_description',
+        description: 'Update the description of a Jira ticket',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'description',
+            description: 'The new description text',
             required: true,
           ),
         ],
       ),
     ];
 
-/// Delete tool: `jira_delete_ticket`.
-List<ToolDefinition> _deleteTools() => [
-      ToolDefinition(
-        name: 'jira_delete_ticket',
-        description: 'Delete a Jira ticket',
-        integration: 'jira',
-        category: 'ticket_management',
+/// Subtask read tool: `jira_get_subtasks`.
+List<ToolDefinition> _subtaskTools() => [
+      _jiraTool(
+        name: 'jira_get_subtasks',
+        description: 'Get all subtasks of a Jira ticket',
+        params: [_keyParam],
+      ),
+    ];
+
+/// Create-with-parent tool: `jira_create_ticket_with_parent`.
+List<ToolDefinition> _createWithParentTools() => [
+      _jiraTool(
+        name: 'jira_create_ticket_with_parent',
+        description: 'Create a new Jira ticket linked to a parent ticket',
         params: [
+          _projectParam,
           ToolParam(
-            name: 'key',
-            description: 'The Jira ticket key (e.g. PROJ-123)',
+            name: 'issueType',
+            description: 'The issue type name (e.g. Task, Bug)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'summary',
+            description: 'The ticket summary / title',
+            required: true,
+          ),
+          ToolParam(
+            name: 'parentKey',
+            description: 'The key of the parent ticket',
             required: true,
           ),
         ],
@@ -348,53 +410,90 @@ class JiraToolExecutor {
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _handlers = {
-    'jira_test': (_) => _client.testConnection(),
-    'jira_get_ticket': (a) => _client.getTicket(
-          a['key'] as String,
-          _optionalStringList(a, 'fields'),
-        ),
-    'jira_search_by_jql': (a) => _client.searchByJql(
-          a['jql'] as String,
-          _optionalStringList(a, 'fields'),
-        ),
-    'jira_post_comment': (a) => _client.postComment(
-          a['key'] as String,
-          a['comment'] as String,
-        ),
-    'jira_add_label': (a) => _client.addLabel(
-          a['key'] as String,
-          a['label'] as String,
-        ),
-    'jira_remove_label': (a) => _client.removeLabel(
-          a['key'] as String,
-          a['label'] as String,
-        ),
-    'jira_move_to_status': (a) => _client.moveToStatus(
-          a['key'] as String,
-          a['status'] as String,
-        ),
-    'jira_get_comments': (a) => _client.getComments(a['key'] as String),
-    'jira_assign': (a) => _client.assignTo(
-          a['key'] as String,
-          a['accountId'] as String,
-        ),
-    'jira_update_field': (a) => _client.updateField(
-          a['key'] as String,
-          a['field'] as String,
-          a['value'],
-        ),
-    'jira_create_ticket': (a) => _client.createTicketBasic(
-          a['project'] as String,
-          a['issueType'] as String,
-          a['summary'] as String,
-          a['description'] as String?,
-        ),
-    'jira_get_transitions': (a) => _client.getTransitions(a['key'] as String),
-    'jira_delete_ticket': (a) => _client.deleteTicket(a['key'] as String),
-    'jira_clear_field': (a) => _client.clearField(
-          a['key'] as String,
-          a['field'] as String,
-        ),
-  };
+      _handlers = {..._coreHandlers(), ..._batch3Handlers()};
+
+  /// Dispatch entries for the batch-1/2 Jira tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)> _coreHandlers() =>
+      {
+        'jira_test': (_) => _client.testConnection(),
+        'jira_get_ticket': (a) => _client.getTicket(
+              a['key'] as String,
+              _optionalStringList(a, 'fields'),
+            ),
+        'jira_search_by_jql': (a) => _client.searchByJql(
+              a['jql'] as String,
+              _optionalStringList(a, 'fields'),
+            ),
+        'jira_post_comment': (a) => _client.postComment(
+              a['key'] as String,
+              a['comment'] as String,
+            ),
+        'jira_add_label': (a) => _client.addLabel(
+              a['key'] as String,
+              a['label'] as String,
+            ),
+        'jira_remove_label': (a) => _client.removeLabel(
+              a['key'] as String,
+              a['label'] as String,
+            ),
+        'jira_move_to_status': (a) => _client.moveToStatus(
+              a['key'] as String,
+              a['status'] as String,
+            ),
+        'jira_get_comments': (a) => _client.getComments(a['key'] as String),
+        'jira_assign': (a) => _client.assignTo(
+              a['key'] as String,
+              a['accountId'] as String,
+            ),
+        'jira_update_field': (a) => _client.updateField(
+              a['key'] as String,
+              a['field'] as String,
+              a['value'],
+            ),
+        'jira_create_ticket': (a) => _client.createTicketBasic(
+              a['project'] as String,
+              a['issueType'] as String,
+              a['summary'] as String,
+              a['description'] as String?,
+            ),
+        'jira_get_transitions': (a) =>
+            _client.getTransitions(a['key'] as String),
+        'jira_delete_ticket': (a) => _client.deleteTicket(a['key'] as String),
+        'jira_clear_field': (a) => _client.clearField(
+              a['key'] as String,
+              a['field'] as String,
+            ),
+      };
+
+  /// Dispatch entries for the batch-3 Jira tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _batch3Handlers() => {
+            'jira_get_issue_types': (a) =>
+                _client.getIssueTypes(a['project'] as String),
+            'jira_get_fields': (a) => _client.getFields(a['project'] as String),
+            'jira_get_components': (a) =>
+                _client.getComponents(a['project'] as String),
+            'jira_get_fix_versions': (a) =>
+                _client.getFixVersions(a['project'] as String),
+            'jira_set_fix_version': (a) => _client.setFixVersion(
+                  a['key'] as String,
+                  a['fixVersion'] as String,
+                ),
+            'jira_set_priority': (a) => _client.setPriority(
+                  a['key'] as String,
+                  a['priority'] as String,
+                ),
+            'jira_get_subtasks': (a) => _client.getSubtasks(a['key'] as String),
+            'jira_update_description': (a) => _client.updateDescription(
+                  a['key'] as String,
+                  a['description'] as String,
+                ),
+            'jira_create_ticket_with_parent': (a) =>
+                _client.createTicketWithParent(
+                  a['project'] as String,
+                  a['issueType'] as String,
+                  a['summary'] as String,
+                  a['parentKey'] as String,
+                ),
+          };
 }

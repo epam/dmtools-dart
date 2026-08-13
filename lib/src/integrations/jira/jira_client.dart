@@ -105,10 +105,7 @@ class JiraClient {
   List<Map<String, dynamic>> _extractIssues(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return const [];
-    final issues = decoded['issues'] as List? ?? [];
-    return List<Map<String, dynamic>>.from(
-      issues.map((i) => i as Map<String, dynamic>),
-    );
+    return _castObjectList(decoded['issues'] as List? ?? const []);
   }
 
   /// Extracts `nextPageToken` from a search body, or `null`.
@@ -228,12 +225,7 @@ class JiraClient {
   /// object or the array is absent.
   Future<List<Map<String, dynamic>>> getComments(String key) async {
     final body = await _http.get('issue/$key/comment');
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return const [];
-    final comments = decoded['comments'] as List? ?? [];
-    return List<Map<String, dynamic>>.from(
-      comments.map((c) => c as Map<String, dynamic>),
-    );
+    return _extractArray(body, 'comments');
   }
 
   /// `jira_assign` — PUT `/rest/api/latest/issue/{key}/assignee`.
@@ -247,14 +239,8 @@ class JiraClient {
   /// `jira_update_field` — PUT `/rest/api/latest/issue/{key}`.
   ///
   /// Sets a single [field] to [value] inside the `fields` object.
-  Future<void> updateField(String key, String field, Object value) async {
-    await _http.put(
-      'issue/$key',
-      body: jsonEncode({
-        'fields': {field: value},
-      }),
-    );
-  }
+  Future<void> updateField(String key, String field, Object value) =>
+      _putFields(key, {field: value});
 
   /// `jira_create_ticket` — POST `/rest/api/latest/issue`.
   ///
@@ -274,9 +260,7 @@ class JiraClient {
     if (description != null) fields['description'] = description;
     final body =
         await _http.post('issue', body: jsonEncode({'fields': fields}));
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    return {};
+    return _decodeMap(body);
   }
 
   /// `jira_get_transitions` — GET `/rest/api/latest/issue/{key}/transitions`.
@@ -285,12 +269,7 @@ class JiraClient {
   /// object or the array is absent.
   Future<List<Map<String, dynamic>>> getTransitions(String key) async {
     final body = await _http.get('issue/$key/transitions');
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return const [];
-    final transitions = decoded['transitions'] as List? ?? [];
-    return List<Map<String, dynamic>>.from(
-      transitions.map((t) => t as Map<String, dynamic>),
-    );
+    return _extractArray(body, 'transitions');
   }
 
   /// `jira_delete_ticket` — DELETE `/rest/api/latest/issue/{key}`.
@@ -301,12 +280,129 @@ class JiraClient {
   /// `jira_clear_field` — PUT `/rest/api/latest/issue/{key}`.
   ///
   /// Sets a single [field] to `null`, effectively clearing it.
-  Future<void> clearField(String key, String field) async {
-    await _http.put(
-      'issue/$key',
+  Future<void> clearField(String key, String field) =>
+      _putFields(key, {field: null});
+
+  /// `jira_get_issue_types` — GET `issue/createmeta/{project}/issuetypes`.
+  ///
+  /// Returns the `issueTypes` array from the create-metadata response.
+  Future<List<Map<String, dynamic>>> getIssueTypes(String project) async {
+    final body = await _http.get('issue/createmeta/$project/issuetypes');
+    return _extractArray(body, 'issueTypes');
+  }
+
+  /// `jira_get_fields` — GET `issue/createmeta/{project}/issuetypes`.
+  ///
+  /// Returns the full create-metadata body so callers can inspect the
+  /// available field definitions for [project].
+  Future<Map<String, dynamic>> getFields(String project) async {
+    final body = await _http.get('issue/createmeta/$project/issuetypes');
+    return _decodeMap(body);
+  }
+
+  /// `jira_get_components` — GET `project/{project}/components`.
+  Future<List<Map<String, dynamic>>> getComponents(String project) async {
+    final body = await _http.get('project/$project/components');
+    return _decodeList(body);
+  }
+
+  /// `jira_get_fix_versions` — GET `project/{project}/versions`.
+  Future<List<Map<String, dynamic>>> getFixVersions(String project) async {
+    final body = await _http.get('project/$project/versions');
+    return _decodeList(body);
+  }
+
+  /// `jira_set_fix_version` — PUT `issue/{key}`.
+  ///
+  /// Replaces the fix-version set with `[{name: versionName}]`.
+  Future<void> setFixVersion(String key, String versionName) => _putFields(
+        key,
+        {
+          'fixVersions': [
+            {'name': versionName}
+          ],
+        },
+      );
+
+  /// `jira_set_priority` — PUT `issue/{key}`.
+  ///
+  /// Sets the `priority` field to `{name: priorityName}`.
+  Future<void> setPriority(String key, String priorityName) => _putFields(
+        key,
+        {
+          'priority': {'name': priorityName},
+        },
+      );
+
+  /// `jira_get_subtasks` — parses `fields.subtasks` from the ticket.
+  Future<List<Map<String, dynamic>>> getSubtasks(String key) async {
+    final ticket = await getTicket(key);
+    if (ticket == null) return const [];
+    final fields = ticket['fields'] as Map<String, dynamic>? ?? {};
+    return _castObjectList(fields['subtasks'] as List? ?? const []);
+  }
+
+  /// `jira_update_description` — PUT `issue/{key}`.
+  ///
+  /// Sets the `description` field to [description].
+  Future<void> updateDescription(String key, String description) =>
+      _putFields(key, {'description': description});
+
+  /// `jira_create_ticket_with_parent` — POST `issue`.
+  ///
+  /// Creates a ticket in [project] with a parent link to [parentKey].
+  Future<Map<String, dynamic>> createTicketWithParent(
+    String project,
+    String issueType,
+    String summary,
+    String parentKey,
+  ) async {
+    final body = await _http.post(
+      'issue',
       body: jsonEncode({
-        'fields': {field: null},
+        'fields': {
+          'project': {'key': project},
+          'issuetype': {'name': issueType},
+          'summary': summary,
+          'parent': {'key': parentKey},
+        },
       }),
     );
+    return _decodeMap(body);
+  }
+
+  /// Casts every element of [list] to a `Map<String, dynamic>`.
+  List<Map<String, dynamic>> _castObjectList(List list) =>
+      List<Map<String, dynamic>>.from(
+        list.map((e) => e as Map<String, dynamic>),
+      );
+
+  /// Decodes a top-level JSON array body into a list of object maps.
+  List<Map<String, dynamic>> _decodeList(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! List) return const [];
+    return _castObjectList(decoded);
+  }
+
+  /// Extracts [key]'s array from a JSON object body, or an empty list.
+  List<Map<String, dynamic>> _extractArray(String body, String key) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    return _castObjectList(decoded[key] as List? ?? const []);
+  }
+
+  /// PUTs a `fields` object to `issue/{key}`.
+  Future<void> _putFields(String key, Map<String, dynamic> fields) async {
+    await _http.put(
+      'issue/$key',
+      body: jsonEncode({'fields': fields}),
+    );
+  }
+
+  /// Decodes a JSON body to a map, defaulting to an empty map.
+  Map<String, dynamic> _decodeMap(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {};
   }
 }

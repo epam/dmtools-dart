@@ -4,6 +4,7 @@
 /// executor routes a tool name + arguments to the matching [GithubClient] call.
 library;
 
+import '../../mcp/tool_args.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'github_client.dart';
@@ -141,15 +142,6 @@ ToolParam _numberParam(String description) => ToolParam(
       required: true,
     );
 
-/// Parses a required integer argument, accepting int/num/String forms.
-int _requiredInt(Map<String, dynamic> args, String key) {
-  final value = args[key];
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.parse(value);
-  throw ArgumentError('Missing required parameter: $key');
-}
-
 /// Executes GitHub MCP tools by dispatching to [GithubClient].
 class GithubToolExecutor {
   final GithubClient _client;
@@ -175,7 +167,7 @@ class GithubToolExecutor {
     'github_get_pr': (a) => _client.getPr(
           a['owner'] as String,
           a['repo'] as String,
-          _requiredInt(a, 'number'),
+          requiredInt(a, 'number'),
         ),
     'github_list_prs': (a) => _client.listPrs(
           a['owner'] as String,
@@ -185,13 +177,13 @@ class GithubToolExecutor {
     'github_create_comment': (a) => _client.createComment(
           a['owner'] as String,
           a['repo'] as String,
-          _requiredInt(a, 'number'),
+          requiredInt(a, 'number'),
           a['body'] as String,
         ),
     'github_get_issue': (a) => _client.getIssue(
           a['owner'] as String,
           a['repo'] as String,
-          _requiredInt(a, 'number'),
+          requiredInt(a, 'number'),
         ),
     'github_create_pr': (a) => _client.createPr(
           a['owner'] as String,

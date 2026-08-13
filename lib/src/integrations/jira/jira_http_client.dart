@@ -84,4 +84,49 @@ class JiraHttpClient extends BaseHttpClient {
     );
     return response.data ?? '';
   }
+
+  /// Performs a multipart file-upload POST against `/rest/api/latest/`.
+  ///
+  /// Uses [authHeaders] (no explicit content-type) so that dio can set the
+  /// `multipart/form-data` boundary automatically.
+  Future<String> postMultipart(
+    String path, {
+    required String fileName,
+    required List<int> bytes,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    final response = await dio.post<String>(
+      buildUrl(path),
+      data: formData,
+      options: Options(headers: authHeaders),
+    );
+    return response.data ?? '';
+  }
+
+  /// Downloads binary content from a full [url] (e.g. an attachment URL).
+  Future<List<int>> getBytes(String url) async {
+    final response = await dio.get<List<int>>(
+      url,
+      options: Options(
+        headers: authHeaders,
+        responseType: ResponseType.bytes,
+      ),
+    );
+    return response.data ?? <int>[];
+  }
+
+  /// Performs a GET against `/rest/agile/1.0/` and returns the body.
+  Future<String> getAgile(
+    String path, {
+    Map<String, dynamic>? queryParams,
+  }) async {
+    final response = await dio.get<String>(
+      '$basePath/rest/agile/1.0/$path',
+      queryParameters: queryParams,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
 }

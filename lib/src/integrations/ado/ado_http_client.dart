@@ -89,8 +89,16 @@ class AdoHttpClient extends BaseHttpClient {
 
   /// Performs a GET, merging `api-version` into the query parameters.
   @override
-  Future<String> get(String path, {Map<String, dynamic>? queryParams}) => super
-      .get(path, queryParams: {...?queryParams, 'api-version': apiVersion});
+  Future<String> get(
+    String path, {
+    Map<String, dynamic>? queryParams,
+    Map<String, String>? extra,
+  }) =>
+      super.get(
+        path,
+        queryParams: {...?queryParams, 'api-version': apiVersion},
+        extra: extra,
+      );
 
   /// POSTs a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item creation.

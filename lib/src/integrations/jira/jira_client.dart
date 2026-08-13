@@ -6,8 +6,11 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'jira_http_client.dart';
+
+part 'jira_client_batch5.dart';
 
 /// Jira API methods exposed to the MCP tool runtime.
 class JiraClient {
@@ -191,16 +194,26 @@ class JiraClient {
   /// Matches by transition name or destination status name (case-insensitive).
   /// Returns the POST response body, or an explanatory string when no
   /// matching transition exists.
-  Future<String> moveToStatus(String key, String statusName) async {
+  Future<String> moveToStatus(String key, String statusName) =>
+      _transitionIssue(key, statusName, null);
+
+  /// Posts a transition for [key] with optional [extraFields] (e.g. resolution).
+  Future<String> _transitionIssue(
+    String key,
+    String statusName,
+    Map<String, dynamic>? extraFields,
+  ) async {
     final transitionId = await _findTransition(key, statusName);
     if (transitionId == null) {
       return 'No transition found for status: $statusName';
     }
+    final body = <String, dynamic>{
+      'transition': {'id': transitionId}
+    };
+    if (extraFields != null) body['fields'] = extraFields;
     return _http.post(
       'issue/$key/transitions',
-      body: jsonEncode({
-        'transition': {'id': transitionId}
-      }),
+      body: jsonEncode(body),
     );
   }
 

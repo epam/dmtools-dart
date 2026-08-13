@@ -16,47 +16,69 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     jiraTools().firstWhere((t) => t.name == name);
 
+/// Expected tool names in declaration order (batches 1–5).
+const _expectedToolNames = [
+  'jira_test',
+  'jira_get_ticket',
+  'jira_search_by_jql',
+  'jira_post_comment',
+  'jira_add_label',
+  'jira_remove_label',
+  'jira_move_to_status',
+  'jira_get_comments',
+  'jira_assign',
+  'jira_update_field',
+  'jira_clear_field',
+  'jira_create_ticket',
+  'jira_get_transitions',
+  'jira_delete_ticket',
+  'jira_get_issue_types',
+  'jira_get_fields',
+  'jira_get_components',
+  'jira_get_fix_versions',
+  'jira_set_fix_version',
+  'jira_set_priority',
+  'jira_update_description',
+  'jira_get_subtasks',
+  'jira_create_ticket_with_parent',
+  'jira_post_comment_if_not_exists',
+  'jira_update_field_as_adf',
+  'jira_get_all_fields_with_name',
+  'jira_update_all_fields_with_name',
+  'jira_update_ticket',
+  'jira_link_issues',
+  'jira_get_issue_link_types',
+  'jira_execute_request',
+  'jira_get_project_details',
+  'jira_get_project_statuses',
+  'jira_move_to_status_with_resolution',
+  'jira_get_account_by_email',
+  'jira_get_user_profile',
+  'jira_attach_file_to_ticket',
+  'jira_download_attachment',
+  'jira_clone_project',
+  'jira_delete_project',
+  'jira_setup_project_workflow',
+  'jira_sync_project_workflow',
+  'jira_copy_project_structure',
+  'jira_get_project_board_config',
+  'jira_get_project_issue_type_scheme',
+  'jira_assign_issue_type_scheme',
+  'jira_get_project_workflow_scheme',
+  'jira_assign_workflow_scheme',
+  'jira_create_project_issue_type',
+  'jira_add_fix_version',
+  'jira_remove_fix_version',
+  'jira_get_my_profile',
+];
+
 /// Catalog shape: tool count, declaration order, and integration ownership.
 void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the thirty-three tools in declaration order', () {
-      expect(tools.map((t) => t.name), [
-        'jira_test',
-        'jira_get_ticket',
-        'jira_search_by_jql',
-        'jira_post_comment',
-        'jira_add_label',
-        'jira_remove_label',
-        'jira_move_to_status',
-        'jira_get_comments',
-        'jira_assign',
-        'jira_update_field',
-        'jira_clear_field',
-        'jira_create_ticket',
-        'jira_get_transitions',
-        'jira_delete_ticket',
-        'jira_get_issue_types',
-        'jira_get_fields',
-        'jira_get_components',
-        'jira_get_fix_versions',
-        'jira_set_fix_version',
-        'jira_set_priority',
-        'jira_update_description',
-        'jira_get_subtasks',
-        'jira_create_ticket_with_parent',
-        'jira_post_comment_if_not_exists',
-        'jira_update_field_as_adf',
-        'jira_get_all_fields_with_name',
-        'jira_update_all_fields_with_name',
-        'jira_update_ticket',
-        'jira_link_issues',
-        'jira_get_issue_link_types',
-        'jira_execute_request',
-        'jira_get_project_details',
-        'jira_get_project_statuses',
-      ]);
+    test('registers the fifty-two tools in declaration order', () {
+      expect(tools.map((t) => t.name), _expectedToolNames);
     });
 
     test('every tool belongs to the jira integration', () {

@@ -30,11 +30,18 @@ abstract class BaseHttpClient {
   String buildUrl(String path);
 
   /// Performs a GET request.
-  Future<String> get(String path, {Map<String, dynamic>? queryParams}) async {
+  ///
+  /// Pass [extra] to merge additional headers (e.g. a media-type `Accept`)
+  /// on top of the integration defaults.
+  Future<String> get(
+    String path, {
+    Map<String, dynamic>? queryParams,
+    Map<String, String>? extra,
+  }) async {
     final response = await dio.get<String>(
       buildUrl(path),
       queryParameters: queryParams,
-      options: Options(headers: headers),
+      options: Options(headers: {...headers, ...?extra}),
     );
     return response.data ?? '';
   }
@@ -52,6 +59,16 @@ abstract class BaseHttpClient {
   /// Performs a PUT request.
   Future<String> put(String path, {Object? body}) async {
     final response = await dio.put<String>(
+      buildUrl(path),
+      data: body,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
+  /// Performs a PATCH request.
+  Future<String> patch(String path, {Object? body}) async {
+    final response = await dio.patch<String>(
       buildUrl(path),
       data: body,
       options: Options(headers: headers),

@@ -8,6 +8,8 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'jira_client.dart';
 
+part 'jira_tools_batch5.dart';
+
 /// Reusable parameter: Jira ticket key.
 const _keyParam = ToolParam(
   name: 'key',
@@ -69,6 +71,7 @@ List<ToolDefinition> jiraTools() => [
       ..._linkTools(),
       ..._genericRequestTools(),
       ..._projectDetailTools(),
+      ..._batch5Tools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -535,28 +538,6 @@ List<ToolDefinition> _genericRequestTools() => [
       ),
     ];
 
-/// Project detail tools: project info + statuses.
-List<ToolDefinition> _projectDetailTools() => [
-      _jiraTool(
-        name: 'jira_get_project_details',
-        description: 'Get details for a Jira project by key',
-        category: 'project_management',
-        params: [
-          ToolParam(
-            name: 'projectKey',
-            description: 'The project key (e.g. PROJ)',
-            required: true,
-          ),
-        ],
-      ),
-      _jiraTool(
-        name: 'jira_get_project_statuses',
-        description: 'Get all statuses for issue types in a Jira project',
-        category: 'project_management',
-        params: [_projectParam],
-      ),
-    ];
-
 /// Executes Jira MCP tools by dispatching to [JiraClient].
 class JiraToolExecutor {
   final JiraClient _client;
@@ -581,6 +562,7 @@ class JiraToolExecutor {
     ..._coreHandlers(),
     ..._batch3Handlers(),
     ..._batch4Handlers(),
+    ..._batch5Handlers(),
   };
 
   /// Dispatch entries for the batch-1/2 Jira tools.
@@ -708,5 +690,96 @@ class JiraToolExecutor {
                 _client.getProjectDetails(a['projectKey'] as String),
             'jira_get_project_statuses': (a) =>
                 _client.getProjectStatuses(a['project'] as String),
+          };
+
+  /// Dispatch entries for the batch-5 Jira tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _batch5Handlers() => {
+            ..._batch5TicketHandlers(),
+            ..._batch5ProjectHandlers(),
+          };
+
+  /// Dispatch entries for batch-5 ticket-level tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _batch5TicketHandlers() => {
+            'jira_move_to_status_with_resolution': (a) =>
+                _client.moveToStatusWithResolution(
+                  a['key'] as String,
+                  a['status'] as String,
+                  a['resolution'] as String,
+                ),
+            'jira_get_account_by_email': (a) => _client.getAccountByEmail(
+                  a['email'] as String,
+                ),
+            'jira_get_user_profile': (a) => _client.getUserProfile(
+                  a['userId'] as String,
+                ),
+            'jira_attach_file_to_ticket': (a) => _client.attachFileToTicket(
+                  a['key'] as String,
+                  a['fileName'] as String,
+                  a['filePath'] as String,
+                ),
+            'jira_download_attachment': (a) => _client.downloadAttachment(
+                  a['url'] as String,
+                  a['filePath'] as String,
+                ),
+            'jira_add_fix_version': (a) => _client.addFixVersion(
+                  a['key'] as String,
+                  a['version'] as String,
+                ),
+            'jira_remove_fix_version': (a) => _client.removeFixVersion(
+                  a['key'] as String,
+                  a['version'] as String,
+                ),
+            'jira_get_my_profile': (_) => _client.getMyProfile(),
+          };
+
+  /// Dispatch entries for batch-5 project-level tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _batch5ProjectHandlers() => {
+            'jira_clone_project': (a) => _client.cloneProject(
+                  a['source'] as String,
+                  a['target'] as String,
+                  a['targetName'] as String,
+                  a['lead'] as String?,
+                ),
+            'jira_delete_project': (a) => _client.deleteProject(
+                  a['key'] as String,
+                  a['confirmDelete'] as bool,
+                ),
+            'jira_setup_project_workflow': (a) => _client.setupProjectWorkflow(
+                  a['target'] as String,
+                  a['statusesJson'] as Map<String, dynamic>,
+                ),
+            'jira_sync_project_workflow': (a) => _client.syncProjectWorkflow(
+                  a['source'] as String,
+                  a['target'] as String,
+                ),
+            'jira_copy_project_structure': (a) => _client.copyProjectStructure(
+                  a['source'] as String,
+                  a['target'] as String,
+                ),
+            'jira_get_project_board_config': (a) =>
+                _client.getProjectBoardConfig(a['project'] as String),
+            'jira_get_project_issue_type_scheme': (a) =>
+                _client.getProjectIssueTypeScheme(a['project'] as String),
+            'jira_assign_issue_type_scheme': (a) =>
+                _client.assignIssueTypeScheme(
+                  a['projectId'] as String,
+                  a['schemeId'] as String,
+                ),
+            'jira_get_project_workflow_scheme': (a) =>
+                _client.getProjectWorkflowScheme(a['project'] as String),
+            'jira_assign_workflow_scheme': (a) => _client.assignWorkflowScheme(
+                  a['projectId'] as String,
+                  a['schemeId'] as String,
+                ),
+            'jira_create_project_issue_type': (a) =>
+                _client.createProjectIssueType(
+                  a['project'] as String,
+                  a['name'] as String,
+                  a['type'] as String,
+                  a['description'] as String?,
+                ),
           };
 }

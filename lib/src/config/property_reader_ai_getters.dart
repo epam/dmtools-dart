@@ -145,6 +145,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Anthropic model name. Key: `ANTHROPIC_MODEL`.
   String? getAnthropicModel() => getValue('ANTHROPIC_MODEL');
 
+  /// Anthropic API key. Key: `ANTHROPIC_API_KEY`.
+  String? getAnthropicApiKey() => getValue('ANTHROPIC_API_KEY');
+
   /// Anthropic max output tokens.
   /// Key: `ANTHROPIC_MAX_TOKENS`, default: 4096.
   int getAnthropicMaxTokens() {

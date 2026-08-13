@@ -21,6 +21,7 @@ import '../integrations/mermaid/mermaid_tools.dart';
 import '../integrations/sharepoint/sharepoint_tools.dart';
 import '../integrations/teams/teams_tools.dart';
 import '../integrations/testrail/testrail_tools.dart';
+import '../integrations/xray/xray_tools.dart';
 import 'tool_definition.dart';
 import 'tool_registry.dart';
 
@@ -43,6 +44,7 @@ List<ToolDefinition> defaultToolCatalog() => [
       ...figmaTools(),
       ...teamsTools(),
       ...sharepointTools(),
+      ...xrayTools(),
       ...kbTools(),
       ...mermaidTools(),
     ];

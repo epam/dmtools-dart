@@ -14,19 +14,30 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     gitlabTools().firstWhere((t) => t.name == name);
 
+/// Expected tool names in declaration order.
+const _expectedToolOrder = [
+  'gitlab_test',
+  'gitlab_get_mr',
+  'gitlab_list_mrs',
+  'gitlab_create_mr_note',
+  'gitlab_merge_mr',
+  'gitlab_close_mr',
+  'gitlab_get_mr_diff',
+  'gitlab_get_issue',
+  'gitlab_create_issue',
+  'gitlab_list_issues',
+  'gitlab_create_branch',
+  'gitlab_get_file_content',
+  'gitlab_get_project_members',
+];
+
 /// Catalog shape: tool count, order, integration, params.
 void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the five tools in declaration order', () {
-      expect(tools.map((t) => t.name), [
-        'gitlab_test',
-        'gitlab_get_mr',
-        'gitlab_list_mrs',
-        'gitlab_create_mr_note',
-        'gitlab_get_issue',
-      ]);
+    test('registers the thirteen tools in declaration order', () {
+      expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 
     test('every tool belongs to the gitlab integration', () {

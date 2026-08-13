@@ -5,16 +5,16 @@
 /// text from the first choice's message content.
 library;
 
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 
 import '../../config/property_reader.dart';
 import '../../config/property_reader_ai_getters.dart';
 import 'ai_http.dart';
+import 'ai_messages.dart';
+import 'ai_request.dart';
 
-/// OpenAI API client for single-turn chat completions.
-class OpenAIClient {
+/// OpenAI API client for single-turn and multi-turn chat completions.
+class OpenAIClient implements AiChatClient {
   final Dio _dio;
   final String _basePath;
   final String _apiKey;
@@ -28,57 +28,41 @@ class OpenAIClient {
   /// omits it and gets a default [Dio] with 60-second timeouts.
   ///
   /// Throws [StateError] when `OPENAI_API_KEY` is missing or empty.
-  factory OpenAIClient(PropertyReader reader, {Dio? dio}) {
-    final apiKey = reader.getOpenAIApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw StateError('OPENAI_API_KEY is not configured');
-    }
-    return OpenAIClient._(
-      dio: dio ?? createDefaultAiDio(),
-      basePath: reader.getOpenAIBasePath(),
-      apiKey: apiKey,
-      maxTokens: reader.getOpenAIMaxTokens(),
-      temperature: reader.getOpenAITemperature(),
-      maxTokensParamName: reader.getOpenAIMaxTokensParamName(),
-    );
-  }
+  factory OpenAIClient(PropertyReader reader, {Dio? dio}) => OpenAIClient._(
+        dio ?? createDefaultAiDio(),
+        reader.getOpenAIBasePath(),
+        requiredConfig(reader.getOpenAIApiKey(), 'OPENAI_API_KEY'),
+        reader.getOpenAIMaxTokens(),
+        reader.getOpenAITemperature(),
+        reader.getOpenAIMaxTokensParamName(),
+      );
 
-  OpenAIClient._({
-    required Dio dio,
-    required String basePath,
-    required String apiKey,
-    required int maxTokens,
-    required double temperature,
-    required String maxTokensParamName,
-  })  : _dio = dio,
-        _basePath = basePath,
-        _apiKey = apiKey,
-        _maxTokens = maxTokens,
-        _temperature = temperature,
-        _maxTokensParamName = maxTokensParamName;
+  OpenAIClient._(
+    this._dio,
+    this._basePath,
+    this._apiKey,
+    this._maxTokens,
+    this._temperature,
+    this._maxTokensParamName,
+  );
 
-  /// Sends a single-turn chat request and returns the response text.
+  /// Sends a multi-turn chat request built from [messages] and returns the
+  /// response text.
   ///
-  /// Posts to [basePath] with a body containing `model`, `messages` (built
-  /// from [systemPrompt] and [prompt]), and max-tokens/temperature fields.
-  Future<String> chat(
+  /// When [systemPrompt] is non-empty it is prepended as a `system` message.
+  @override
+  Future<String> chatWithMessages(
     String model,
-    String prompt, [
+    ChatMessages messages, [
     String? systemPrompt,
-  ]) async {
-    final response = await _dio.post<String>(
-      _basePath,
-      data: jsonEncode(_buildBody(model, prompt, systemPrompt)),
-      options: Options(headers: _headers),
-    );
-    return _extractText(response.data ?? '');
-  }
-
-  /// Auth and content headers sent with every request.
-  Map<String, String> get _headers => {
-        'Authorization': 'Bearer $_apiKey',
-        'Content-Type': 'application/json',
-      };
+  ]) =>
+      postChat(
+        _dio,
+        _basePath,
+        _buildBody(model, messages, systemPrompt),
+        bearerHeaders(_apiKey),
+        extractChoiceContent,
+      );
 
   /// Builds the chat-completions request body.
   ///
@@ -87,35 +71,18 @@ class OpenAIClient {
   /// (default `max_completion_tokens`).
   Map<String, dynamic> _buildBody(
     String model,
-    String prompt,
+    List<Map<String, String>> messages,
     String? systemPrompt,
   ) {
-    final messages = <Map<String, String>>[];
-    if (systemPrompt != null && systemPrompt.isNotEmpty) {
-      messages.add({'role': 'system', 'content': systemPrompt});
-    }
-    messages.add({'role': 'user', 'content': prompt});
     final body = <String, dynamic>{
       'model': model,
-      'messages': messages,
+      'messages': withSystemMessage(messages, systemPrompt),
       _maxTokensParamName: _maxTokens,
     };
     if (_temperature >= 0) {
       body['temperature'] = _temperature;
     }
     return body;
-  }
-
-  /// Extracts text from `choices[0].message.content`.
-  ///
-  /// Returns an empty string when the response has no choices.
-  String _extractText(String body) {
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final choices = decoded['choices'] as List? ?? const [];
-    if (choices.isEmpty) return '';
-    final choice = choices.first as Map<String, dynamic>;
-    final message = choice['message'] as Map<String, dynamic>? ?? {};
-    return message['content'] as String? ?? '';
   }
 
   /// Closes the underlying HTTP client and frees its connections.

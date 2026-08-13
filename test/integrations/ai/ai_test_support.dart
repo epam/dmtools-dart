@@ -46,7 +46,7 @@ class RoutingAdapter implements HttpClientAdapter {
 
 /// The full AI config injected for every fixture built by [mockAi].
 ///
-/// Covers all three providers so any fixture client can be constructed from
+/// Covers all five providers so any fixture client can be constructed from
 /// the same [PropertyReader] overrides.
 const _testConfig = {
   'GEMINI_API_KEY': 'gem-key',
@@ -56,6 +56,11 @@ const _testConfig = {
   'OPENAI_MAX_TOKENS': '1024',
   'OPENAI_TEMPERATURE': '0.5',
   'OLLAMA_BASE_PATH': 'http://ollama.example.com:11434',
+  'DIAL_API_KEY': 'dial-key',
+  'DIAL_BASE_PATH': 'https://dial.example.com/openai/deployments',
+  'ANTHROPIC_API_KEY': 'ant-key',
+  'ANTHROPIC_BASE_PATH': 'https://anthropic.example.com/v1/messages',
+  'ANTHROPIC_MAX_TOKENS': '2048',
 };
 
 /// Builds a mocked AI client of type [T] routed by [router].
@@ -74,7 +79,7 @@ MockAiFixture<T> mockAi<T>(
 
 /// Builds a mocked [AiToolExecutor] routed by [router].
 ///
-/// All three provider clients share the same mocked [Dio] so one router
+/// All five provider clients share the same mocked [Dio] so one router
 /// serves every request regardless of which provider a call dispatches to.
 ({AiToolExecutor executor, RoutingAdapter adapter}) mockAiExecutor(
   String Function(RequestOptions options) router,
@@ -88,6 +93,8 @@ MockAiFixture<T> mockAi<T>(
       gemini: GeminiClient(reader, dio: dio),
       openai: OpenAIClient(reader, dio: dio),
       ollama: OllamaClient(reader, dio: dio),
+      dial: DialClient(reader, dio: dio),
+      anthropic: AnthropicClient(reader, dio: dio),
     ),
     adapter: adapter,
   );

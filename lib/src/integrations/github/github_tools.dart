@@ -15,8 +15,12 @@ import 'github_client.dart';
 List<ToolDefinition> githubTools() => [
       ..._systemTools(),
       ..._pullRequestTools(),
+      ..._prStateTools(),
+      ..._reviewTools(),
       ..._commentTools(),
       ..._issueTools(),
+      ..._branchTools(),
+      ..._fileTools(),
     ];
 
 /// Connectivity-check tool: `github_test`.
@@ -120,6 +124,180 @@ List<ToolDefinition> _issueTools() => [
       ),
     ];
 
+/// PR state/mutation tools: merge, close, reopen, diff, files.
+List<ToolDefinition> _prStateTools() => [
+      ToolDefinition(
+        name: 'github_merge_pr',
+        description: 'Merge a GitHub pull request',
+        integration: 'github',
+        category: 'pull_requests',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_close_pr',
+        description: 'Close a GitHub pull request',
+        integration: 'github',
+        category: 'pull_requests',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_reopen_pr',
+        description: 'Reopen a GitHub pull request',
+        integration: 'github',
+        category: 'pull_requests',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_get_pr_diff',
+        description: 'Get the raw diff of a GitHub pull request',
+        integration: 'github',
+        category: 'pull_requests',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_get_pr_files',
+        description: 'List the files changed in a GitHub pull request',
+        integration: 'github',
+        category: 'pull_requests',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+        ],
+      ),
+    ];
+
+/// Review tool: `github_create_review`.
+List<ToolDefinition> _reviewTools() => [
+      ToolDefinition(
+        name: 'github_create_review',
+        description: 'Create a review on a GitHub pull request',
+        integration: 'github',
+        category: 'reviews',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+          ToolParam(
+            name: 'body',
+            description: 'The review body text',
+            required: true,
+          ),
+          ToolParam(
+            name: 'event',
+            description: 'Review event: APPROVE, REQUEST_CHANGES, or COMMENT',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Branch tools: `github_list_branches`, `github_create_branch`.
+List<ToolDefinition> _branchTools() => [
+      ToolDefinition(
+        name: 'github_list_branches',
+        description: 'List branches in a GitHub repository',
+        integration: 'github',
+        category: 'branches',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_create_branch',
+        description: 'Create a new branch from an existing commit SHA',
+        integration: 'github',
+        category: 'branches',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'branch',
+            description: 'The name of the new branch',
+            required: true,
+          ),
+          ToolParam(
+            name: 'from_sha',
+            description: 'The commit SHA to branch from',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// File-content tools: `github_get_file_content`, `github_update_file`.
+List<ToolDefinition> _fileTools() => [
+      ToolDefinition(
+        name: 'github_get_file_content',
+        description: 'Get the contents of a file in a GitHub repository',
+        integration: 'github',
+        category: 'files',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'path',
+            description: 'The file path within the repository',
+            required: true,
+          ),
+          ToolParam(
+            name: 'ref',
+            description:
+                'Branch, tag, or commit SHA (defaults to default branch)',
+            required: false,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_update_file',
+        description: 'Create or update a file in a GitHub repository',
+        integration: 'github',
+        category: 'files',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'path',
+            description: 'The file path within the repository',
+            required: true,
+          ),
+          ToolParam(
+            name: 'content',
+            description: 'The new file content (plain text)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'message',
+            description: 'The commit message',
+            required: true,
+          ),
+          ToolParam(
+            name: 'sha',
+            description:
+                'The blob SHA of the existing file (required to update)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Shared `owner` parameter (repository owner / org).
 ToolParam _ownerParam() => ToolParam(
       name: 'owner',
@@ -191,6 +369,62 @@ class GithubToolExecutor {
           a['title'] as String,
           a['head'] as String,
           a['base'] as String,
+        ),
+    'github_merge_pr': (a) => _client.mergePr(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_close_pr': (a) => _client.closePr(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_reopen_pr': (a) => _client.reopenPr(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_get_pr_diff': (a) => _client.getPrDiff(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_get_pr_files': (a) => _client.getPrFiles(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_create_review': (a) => _client.createReview(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          a['body'] as String,
+          a['event'] as String,
+        ),
+    'github_list_branches': (a) => _client.listBranches(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_create_branch': (a) => _client.createBranch(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['branch'] as String,
+          a['from_sha'] as String,
+        ),
+    'github_get_file_content': (a) => _client.getFileContent(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['path'] as String,
+          a['ref'] as String?,
+        ),
+    'github_update_file': (a) => _client.updateFile(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['path'] as String,
+          a['content'] as String,
+          a['message'] as String,
+          a['sha'] as String,
         ),
   };
 }

@@ -64,10 +64,7 @@ class GithubClient {
       'repos/$owner/$repo/pulls',
       queryParams: {'state': state ?? 'open'},
     );
-    final decoded = jsonDecode(body) as List;
-    return List<Map<String, dynamic>>.from(
-      decoded.map((p) => p as Map<String, dynamic>),
-    );
+    return _decodeList(body);
   }
 
   /// `github_create_comment` — POST `/repos/{owner}/{repo}/issues/{number}/comments`.
@@ -114,5 +111,162 @@ class GithubClient {
       }),
     );
     return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_merge_pr` — PUT `/repos/{owner}/{repo}/pulls/{number}/merge`.
+  Future<Map<String, dynamic>> mergePr(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    final response = await _http.put('repos/$owner/$repo/pulls/$number/merge');
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_close_pr` — PATCH `/repos/{owner}/{repo}/pulls/{number}`.
+  Future<Map<String, dynamic>> closePr(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    return _setPrState(owner, repo, number, 'closed');
+  }
+
+  /// `github_reopen_pr` — PATCH `/repos/{owner}/{repo}/pulls/{number}`.
+  Future<Map<String, dynamic>> reopenPr(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    return _setPrState(owner, repo, number, 'open');
+  }
+
+  /// PATCHes the PR [state] via the pulls endpoint (shared by close/reopen).
+  Future<Map<String, dynamic>> _setPrState(
+    String owner,
+    String repo,
+    int number,
+    String state,
+  ) async {
+    final response = await _http.patch(
+      'repos/$owner/$repo/pulls/$number',
+      body: jsonEncode({'state': state}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_get_pr_diff` — GET `/repos/{owner}/{repo}/pulls/{number}`
+  /// requesting the `application/vnd.github.diff` media type.
+  ///
+  /// Returns the raw unified diff text (not JSON).
+  Future<String> getPrDiff(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    return _http.get(
+      'repos/$owner/$repo/pulls/$number',
+      extra: {'Accept': 'application/vnd.github.diff'},
+    );
+  }
+
+  /// `github_get_pr_files` — GET `/repos/{owner}/{repo}/pulls/{number}/files`.
+  Future<List<Map<String, dynamic>>> getPrFiles(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/pulls/$number/files');
+    return _decodeList(body);
+  }
+
+  /// `github_create_review` — POST `/repos/{owner}/{repo}/pulls/{number}/reviews`.
+  ///
+  /// [event] is the GitHub review action (`APPROVE`, `REQUEST_CHANGES`,
+  /// `COMMENT`).
+  Future<Map<String, dynamic>> createReview(
+    String owner,
+    String repo,
+    int number,
+    String body,
+    String event,
+  ) async {
+    final response = await _http.post(
+      'repos/$owner/$repo/pulls/$number/reviews',
+      body: jsonEncode({'body': body, 'event': event}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_list_branches` — GET `/repos/{owner}/{repo}/branches`.
+  Future<List<Map<String, dynamic>>> listBranches(
+    String owner,
+    String repo,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/branches');
+    return _decodeList(body);
+  }
+
+  /// `github_create_branch` — POST `/repos/{owner}/{repo}/git/refs`.
+  ///
+  /// Creates `refs/heads/{branch}` pointing at [fromSha].
+  Future<Map<String, dynamic>> createBranch(
+    String owner,
+    String repo,
+    String branch,
+    String fromSha,
+  ) async {
+    final response = await _http.post(
+      'repos/$owner/$repo/git/refs',
+      body: jsonEncode({'ref': 'refs/heads/$branch', 'sha': fromSha}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_get_file_content` — GET `/repos/{owner}/{repo}/contents/{path}`.
+  ///
+  /// [ref] optionally names a branch, tag, or commit SHA.
+  Future<Map<String, dynamic>> getFileContent(
+    String owner,
+    String repo,
+    String path, [
+    String? ref,
+  ]) async {
+    final body = await _http.get(
+      'repos/$owner/$repo/contents/$path',
+      queryParams: ref == null ? null : {'ref': ref},
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_update_file` — PUT `/repos/{owner}/{repo}/contents/{path}`.
+  ///
+  /// [content] is UTF-8 text, base64-encoded here as the Contents API requires.
+  /// [sha] is the blob SHA of the file being replaced.
+  Future<Map<String, dynamic>> updateFile(
+    String owner,
+    String repo,
+    String path,
+    String content,
+    String message,
+    String sha,
+  ) async {
+    final response = await _http.put(
+      'repos/$owner/$repo/contents/$path',
+      body: jsonEncode({
+        'message': message,
+        'content': base64Encode(utf8.encode(content)),
+        'sha': sha,
+      }),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// Decodes a JSON array [body] into a list of maps.
+  static List<Map<String, dynamic>> _decodeList(String body) {
+    final decoded = jsonDecode(body) as List;
+    return List<Map<String, dynamic>>.from(
+      decoded.map((e) => e as Map<String, dynamic>),
+    );
   }
 }

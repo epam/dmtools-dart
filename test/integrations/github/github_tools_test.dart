@@ -29,14 +29,24 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the six tools in declaration order', () {
+    test('registers the sixteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'github_test',
         'github_get_pr',
         'github_list_prs',
         'github_create_pr',
+        'github_merge_pr',
+        'github_close_pr',
+        'github_reopen_pr',
+        'github_get_pr_diff',
+        'github_get_pr_files',
+        'github_create_review',
         'github_create_comment',
         'github_get_issue',
+        'github_list_branches',
+        'github_create_branch',
+        'github_get_file_content',
+        'github_update_file',
       ]);
     });
 

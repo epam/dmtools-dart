@@ -42,24 +42,45 @@ class GitlabClient {
     }
   }
 
-  /// GETs [path] and returns the JSON object body, or `null` if not a map.
-  Future<Map<String, dynamic>?> _getObject(String path) async {
-    final body = await _http.get(path);
+  /// Decodes [body] as a JSON object, or `null` if it is not a map.
+  Map<String, dynamic>? _asMap(String body) {
     final decoded = jsonDecode(body);
     if (decoded is Map<String, dynamic>) return decoded;
     return null;
   }
 
+  /// Decodes [body] as a list of JSON objects, or empty if not an array.
+  List<Map<String, dynamic>> _asList(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! List) return const [];
+    return List<Map<String, dynamic>>.from(
+      decoded.map((i) => i as Map<String, dynamic>),
+    );
+  }
+
+  /// GETs [path] and returns the JSON object body, or `null` if not a map.
+  Future<Map<String, dynamic>?> _getObject(
+    String path, [
+    Map<String, dynamic>? queryParams,
+  ]) async =>
+      _asMap(await _http.get(path, queryParams: queryParams));
+
   /// POSTs [path] with [payload] and returns the JSON object body, or `null`.
   Future<Map<String, dynamic>?> _postObject(
-    String path,
-    Object? payload,
-  ) async {
-    final result = await _http.post(path, body: payload);
-    final decoded = jsonDecode(result);
-    if (decoded is Map<String, dynamic>) return decoded;
-    return null;
-  }
+          String path, Object? payload) async =>
+      _asMap(await _http.post(path, body: payload));
+
+  /// PUTs [path] with [payload] and returns the JSON object body, or `null`.
+  Future<Map<String, dynamic>?> _putObject(
+          String path, Object? payload) async =>
+      _asMap(await _http.put(path, body: payload));
+
+  /// GETs [path] and returns the JSON array body, or empty if not an array.
+  Future<List<Map<String, dynamic>>> _getList(
+    String path, {
+    Map<String, dynamic>? queryParams,
+  }) async =>
+      _asList(await _http.get(path, queryParams: queryParams));
 
   /// `gitlab_get_mr` — GET `/api/v4/projects/{id}/merge_requests/{iid}`.
   ///
@@ -76,17 +97,11 @@ class GitlabClient {
   Future<List<Map<String, dynamic>>> listMrs(
     String project, [
     String state = 'opened',
-  ]) async {
-    final body = await _http.get(
-      'projects/${_encodeProject(project)}/merge_requests',
-      queryParams: {'state': state, 'per_page': 20},
-    );
-    final decoded = jsonDecode(body);
-    if (decoded is! List) return const [];
-    return List<Map<String, dynamic>>.from(
-      decoded.map((i) => i as Map<String, dynamic>),
-    );
-  }
+  ]) =>
+      _getList(
+        'projects/${_encodeProject(project)}/merge_requests',
+        queryParams: {'state': state, 'per_page': 20},
+      );
 
   /// `gitlab_create_mr_note` — POST a note on a merge request.
   ///
@@ -101,9 +116,111 @@ class GitlabClient {
         jsonEncode({'body': body}),
       );
 
+  /// `gitlab_merge_mr` — PUT `/api/v4/projects/{id}/merge_requests/{iid}`
+  /// with `state_event=merge`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> mergeMr(String project, int iid) =>
+      _setMrState(project, iid, 'merge');
+
+  /// `gitlab_close_mr` — PUT `/api/v4/projects/{id}/merge_requests/{iid}`
+  /// with `state_event=close`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> closeMr(String project, int iid) =>
+      _setMrState(project, iid, 'close');
+
+  /// PUTs a `state_event` on a merge request — shared by merge/close.
+  Future<Map<String, dynamic>?> _setMrState(
+    String project,
+    int iid,
+    String event,
+  ) =>
+      _putObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid',
+        jsonEncode({'state_event': event}),
+      );
+
+  /// `gitlab_get_mr_diff` — GET
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/changes`.
+  ///
+  /// Returns the merge request with its `changes` array, or `null` for
+  /// non-object bodies.
+  Future<Map<String, dynamic>?> getMrDiff(String project, int iid) =>
+      _getObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/changes',
+      );
+
   /// `gitlab_get_issue` — GET `/api/v4/projects/{id}/issues/{iid}`.
   ///
   /// Returns `null` for non-object bodies.
   Future<Map<String, dynamic>?> getIssue(String project, int iid) =>
       _getObject('projects/${_encodeProject(project)}/issues/$iid');
+
+  /// `gitlab_create_issue` — POST `/api/v4/projects/{id}/issues`.
+  ///
+  /// [description] is optional; when omitted only [title] is sent. Returns
+  /// the created issue, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> createIssue(
+    String project,
+    String title, [
+    String? description,
+  ]) {
+    final payload = <String, dynamic>{'title': title};
+    if (description != null) payload['description'] = description;
+    return _postObject(
+      'projects/${_encodeProject(project)}/issues',
+      jsonEncode(payload),
+    );
+  }
+
+  /// `gitlab_list_issues` — GET `/api/v4/projects/{id}/issues`.
+  ///
+  /// [state] filters by issue state (`opened`, `closed`, `all`); defaults
+  /// to `opened`.
+  Future<List<Map<String, dynamic>>> listIssues(
+    String project, [
+    String state = 'opened',
+  ]) =>
+      _getList(
+        'projects/${_encodeProject(project)}/issues',
+        queryParams: {'state': state, 'per_page': 20},
+      );
+
+  /// `gitlab_create_branch` — POST
+  /// `/api/v4/projects/{id}/repository/branches`.
+  ///
+  /// [branch] is the new branch name; [ref] is the branch, tag, or commit
+  /// to create it from. Returns the created branch, or `null` for
+  /// non-object bodies.
+  Future<Map<String, dynamic>?> createBranch(
+    String project,
+    String branch,
+    String ref,
+  ) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/repository/branches',
+        jsonEncode({'branch': branch, 'ref': ref}),
+      );
+
+  /// `gitlab_get_file_content` — GET
+  /// `/api/v4/projects/{id}/repository/files/{encodedPath}`.
+  ///
+  /// [filePath] is URL-encoded for the path segment. [ref] is optional;
+  /// when provided it is sent as the `ref` query parameter. Returns `null`
+  /// for non-object bodies.
+  Future<Map<String, dynamic>?> getFileContent(
+    String project,
+    String filePath, [
+    String? ref,
+  ]) =>
+      _getObject(
+        'projects/${_encodeProject(project)}/repository/files/'
+        '${Uri.encodeComponent(filePath)}',
+        ref == null ? null : {'ref': ref},
+      );
+
+  /// `gitlab_get_project_members` — GET `/api/v4/projects/{id}/members`.
+  Future<List<Map<String, dynamic>>> getProjectMembers(String project) =>
+      _getList('projects/${_encodeProject(project)}/members');
 }

@@ -12,9 +12,11 @@ import 'package:dio/dio.dart';
 import '../../config/property_reader.dart';
 import '../../config/property_reader_ai_getters.dart';
 import 'ai_http.dart';
+import 'ai_messages.dart';
+import 'ai_request.dart';
 
-/// Gemini API client for single-turn chat completions.
-class GeminiClient {
+/// Gemini API client for single-turn and multi-turn chat completions.
+class GeminiClient implements AiChatClient {
   final Dio _dio;
   final String _basePath;
   final String _apiKey;
@@ -25,54 +27,39 @@ class GeminiClient {
   /// omits it and gets a default [Dio] with 60-second timeouts.
   ///
   /// Throws [StateError] when `GEMINI_API_KEY` is missing or empty.
-  factory GeminiClient(PropertyReader reader, {Dio? dio}) {
-    final apiKey = reader.getGeminiApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw StateError('GEMINI_API_KEY is not configured');
-    }
-    return GeminiClient._(
-      dio: dio ?? createDefaultAiDio(),
-      basePath: reader.getGeminiBasePath(),
-      apiKey: apiKey,
-    );
-  }
+  factory GeminiClient(PropertyReader reader, {Dio? dio}) => GeminiClient._(
+        dio ?? createDefaultAiDio(),
+        reader.getGeminiBasePath(),
+        requiredConfig(reader.getGeminiApiKey(), 'GEMINI_API_KEY'),
+      );
 
-  GeminiClient._({
-    required Dio dio,
-    required String basePath,
-    required String apiKey,
-  })  : _dio = dio,
-        _basePath = basePath,
-        _apiKey = apiKey;
+  GeminiClient._(this._dio, this._basePath, this._apiKey);
 
-  /// Sends a single-turn chat request and returns the response text.
+  /// Sends a multi-turn chat request built from [messages] and returns the
+  /// response text.
   ///
-  /// Targets `{basePath}/{model}:generateContent?key={apiKey}`. When
-  /// [systemPrompt] is provided it is sent as `systemInstruction`.
-  Future<String> chat(
+  /// When [systemPrompt] is non-empty it is sent as `systemInstruction`.
+  @override
+  Future<String> chatWithMessages(
     String model,
-    String prompt, [
+    ChatMessages messages, [
     String? systemPrompt,
-  ]) async {
-    final url = '$_basePath/$model:generateContent?key=$_apiKey';
-    final response = await _dio.post<String>(
-      url,
-      data: jsonEncode(_buildBody(prompt, systemPrompt)),
-      options: Options(headers: {'Content-Type': 'application/json'}),
-    );
-    return _extractText(response.data ?? '');
-  }
+  ]) =>
+      postChat(
+        _dio,
+        '$_basePath/$model:generateContent?key=$_apiKey',
+        _buildBody(messages, systemPrompt),
+        jsonHeaders(),
+        _extractText,
+      );
 
   /// Builds the `generateContent` request body.
-  Map<String, dynamic> _buildBody(String prompt, String? systemPrompt) {
+  Map<String, dynamic> _buildBody(
+    List<Map<String, String>> messages,
+    String? systemPrompt,
+  ) {
     final body = <String, dynamic>{
-      'contents': [
-        {
-          'parts': [
-            {'text': prompt},
-          ],
-        },
-      ],
+      'contents': messages.map(_toContent).toList(),
     };
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
       body['systemInstruction'] = {
@@ -84,18 +71,27 @@ class GeminiClient {
     return body;
   }
 
+  /// Maps a `{role, content}` pair to a Gemini `contents` entry.
+  ///
+  /// The `assistant`/`model` role maps to Gemini's `model`; anything else
+  /// maps to `user`.
+  static Map<String, dynamic> _toContent(Map<String, String> message) => {
+        'role': message['role'] == 'assistant' ? 'model' : 'user',
+        'parts': [
+          {'text': message['content'] ?? ''},
+        ],
+      };
+
   /// Extracts text from `candidates[0].content.parts[0].text`.
   ///
   /// Returns an empty string when the response has no candidates or parts.
-  String _extractText(String body) {
+  static String _extractText(String body) {
     final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final candidates = decoded['candidates'] as List? ?? const [];
-    if (candidates.isEmpty) return '';
-    final candidate = candidates.first as Map<String, dynamic>;
+    final candidate = firstBlock(decoded, 'candidates');
+    if (candidate == null) return '';
     final content = candidate['content'] as Map<String, dynamic>? ?? {};
-    final parts = content['parts'] as List? ?? const [];
-    if (parts.isEmpty) return '';
-    return (parts.first as Map<String, dynamic>)['text'] as String? ?? '';
+    final part = firstBlock(content, 'parts');
+    return part == null ? '' : part['text'] as String? ?? '';
   }
 
   /// Closes the underlying HTTP client and frees its connections.

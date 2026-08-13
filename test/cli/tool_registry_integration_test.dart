@@ -1,6 +1,6 @@
 /// Integration test: the default registry wires every tool catalog together.
 ///
-/// Guards the wiring contract of [createDefaultToolRegistry]: all 16
+/// Guards the wiring contract of [createDefaultToolRegistry]: all 17
 /// integration catalogs registered, no duplicate tool names, and a stable
 /// total count that changes only when a catalog deliberately grows.
 library;
@@ -36,6 +36,7 @@ void _testCatalogMembership() {
         'figma',
         'teams',
         'sharepoint',
+        'jira_xray',
         'kb',
         'mermaid',
       };
@@ -65,7 +66,7 @@ void _testCatalogMembership() {
 void _testCounts() {
   group('counts', () {
     test('has the expected total tool count', () {
-      expect(_registry.allTools.length, 85);
+      expect(_registry.allTools.length, 126);
     });
 
     test('per-integration counts sum to the total', () {

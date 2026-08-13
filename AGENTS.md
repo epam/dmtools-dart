@@ -37,9 +37,12 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
 | `test/` | `dart test` suite (L1 unit; L2 contract fixtures later) |
 
 Java reference implementation (read-only, the spec for behavior):
-`/Users/Uladzimir_Klyshevich/git/dm.ai/dm.ai` — key files are linked per phase in
-GOAL.md (e.g. `PropertyReader.java`, `JobRunner.java`, `JobJavaScriptBridge.java`,
-`cliagent/CliAgent.java`).
+**https://github.com/epam/dm.ai** — clone it fresh (always the latest upstream);
+key files are named per phase in GOAL.md (e.g. `PropertyReader.java`,
+`JobRunner.java`, `JobJavaScriptBridge.java`, `cliagent/CliAgent.java`).
+Agent scripts and the JS test suite: **https://github.com/IstiN/dmtools-agents**.
+JS runtime (`jsr`) extensions go to **https://github.com/IstiN/flutter_js_widget_runtime**
+via fork + PR — never vendored here (see GOAL.md).
 
 ## 3. Local dev loop
 

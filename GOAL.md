@@ -7,10 +7,22 @@ orchestrator runs cross-platform — CLI, desktop, and mobile — without a JVM.
 
 The JavaScript scripting layer moves from GraalJS (Truffle, JVM-only) to **QuickJS**
 (via `dart:ffi`), reusing the proven bridge pattern from
-`github.com/IstiN/flutter_js_widget_runtime` (`jsr.*` host-controlled I/O).
+https://github.com/IstiN/flutter_js_widget_runtime (`jsr.*` host-controlled I/O).
 
-Reference implementation (source of truth for behavior and signatures):
-`/Users/Uladzimir_Klyshevich/git/dm.ai/dm.ai`
+**JS runtime extension rule:** the `jsr` runtime lives in its own repo —
+https://github.com/IstiN/flutter_js_widget_runtime. If the port needs anything added
+or extended on the JS-runtime side (new bridge capabilities, engine fixes, renderer
+features), that work goes **to that repository, via fork + pull request** — never
+vendored or patched locally inside dmtools-dart.
+
+## Reference implementation (source of truth)
+
+**Java DMTools: https://github.com/epam/dm.ai** — always the latest upstream; clone
+it fresh and treat its source as the spec for behavior and signatures. Do not rely
+on any local checkout paths.
+
+Agent scripts, configs, and the JS test suite (the primary acceptance gate):
+https://github.com/IstiN/dmtools-agents — also cloned when needed.
 
 ---
 

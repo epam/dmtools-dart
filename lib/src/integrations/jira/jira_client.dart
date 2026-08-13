@@ -209,19 +209,104 @@ class JiraClient {
 
   /// Finds a transition id matching [statusName] for [key].
   Future<String?> _findTransition(String key, String statusName) async {
-    final body = await _http.get('issue/$key/transitions');
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final transitions = decoded['transitions'] as List? ?? [];
+    final transitions = await getTransitions(key);
     final target = statusName.toLowerCase();
     for (final t in transitions) {
-      final map = t as Map<String, dynamic>;
-      final name = (map['name'] as String?)?.toLowerCase() ?? '';
-      final toStatus = map['to'] as Map<String, dynamic>?;
+      final name = (t['name'] as String?)?.toLowerCase() ?? '';
+      final toStatus = t['to'] as Map<String, dynamic>?;
       final toName = (toStatus?['name'] as String?)?.toLowerCase() ?? '';
       if (name == target || toName == target) {
-        return map['id'] as String?;
+        return t['id'] as String?;
       }
     }
     return null;
+  }
+
+  /// `jira_get_comments` — GET `/rest/api/latest/issue/{key}/comment`.
+  ///
+  /// Returns the `comments` array; an empty list when the body is not an
+  /// object or the array is absent.
+  Future<List<Map<String, dynamic>>> getComments(String key) async {
+    final body = await _http.get('issue/$key/comment');
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final comments = decoded['comments'] as List? ?? [];
+    return List<Map<String, dynamic>>.from(
+      comments.map((c) => c as Map<String, dynamic>),
+    );
+  }
+
+  /// `jira_assign` — PUT `/rest/api/latest/issue/{key}/assignee`.
+  Future<void> assignTo(String key, String accountId) async {
+    await _http.put(
+      'issue/$key/assignee',
+      body: jsonEncode({'accountId': accountId}),
+    );
+  }
+
+  /// `jira_update_field` — PUT `/rest/api/latest/issue/{key}`.
+  ///
+  /// Sets a single [field] to [value] inside the `fields` object.
+  Future<void> updateField(String key, String field, Object value) async {
+    await _http.put(
+      'issue/$key',
+      body: jsonEncode({
+        'fields': {field: value},
+      }),
+    );
+  }
+
+  /// `jira_create_ticket` — POST `/rest/api/latest/issue`.
+  ///
+  /// Creates a ticket in [project] with the given [issueType] name and
+  /// [summary]; [description] is included only when provided.
+  Future<Map<String, dynamic>> createTicketBasic(
+    String project,
+    String issueType,
+    String summary, [
+    String? description,
+  ]) async {
+    final fields = <String, dynamic>{
+      'project': {'key': project},
+      'issuetype': {'name': issueType},
+      'summary': summary,
+    };
+    if (description != null) fields['description'] = description;
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {};
+  }
+
+  /// `jira_get_transitions` — GET `/rest/api/latest/issue/{key}/transitions`.
+  ///
+  /// Returns the `transitions` array; an empty list when the body is not an
+  /// object or the array is absent.
+  Future<List<Map<String, dynamic>>> getTransitions(String key) async {
+    final body = await _http.get('issue/$key/transitions');
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final transitions = decoded['transitions'] as List? ?? [];
+    return List<Map<String, dynamic>>.from(
+      transitions.map((t) => t as Map<String, dynamic>),
+    );
+  }
+
+  /// `jira_delete_ticket` — DELETE `/rest/api/latest/issue/{key}`.
+  Future<void> deleteTicket(String key) async {
+    await _http.delete('issue/$key');
+  }
+
+  /// `jira_clear_field` — PUT `/rest/api/latest/issue/{key}`.
+  ///
+  /// Sets a single [field] to `null`, effectively clearing it.
+  Future<void> clearField(String key, String field) async {
+    await _http.put(
+      'issue/$key',
+      body: jsonEncode({
+        'fields': {field: null},
+      }),
+    );
   }
 }

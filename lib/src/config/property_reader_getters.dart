@@ -37,6 +37,18 @@ extension PropertyReaderGetters on PropertyReader {
   String? getFileReadAllowedPaths() =>
       getValue('DMTOOLS_FILE_READ_ALLOWED_PATHS');
 
+  /// Extra allowed CLI commands (comma-separated, lowercased).
+  /// Key: `CLI_ALLOWED_COMMANDS`.
+  Set<String> getCliAllowedCommands() {
+    final v = getValue('CLI_ALLOWED_COMMANDS');
+    if (v == null || v.trim().isEmpty) return const {};
+    return v
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+  }
+
   /// Whether caching is enabled. Key: `DMTOOLS_CACHE_ENABLED`, default: false.
   bool isCacheEnabled() {
     final v = getValue('DMTOOLS_CACHE_ENABLED');

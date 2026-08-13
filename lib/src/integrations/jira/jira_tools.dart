@@ -18,6 +18,12 @@ List<ToolDefinition> jiraTools() => [
       ..._commentTools(),
       ..._labelTools(),
       ..._statusTools(),
+      ..._commentReadTools(),
+      ..._assignTools(),
+      ..._fieldTools(),
+      ..._createTools(),
+      ..._transitionReadTools(),
+      ..._deleteTools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -171,6 +177,157 @@ List<String>? _optionalStringList(Map<String, dynamic> args, String key) {
   return null;
 }
 
+/// Comment-read tool: `jira_get_comments`.
+List<ToolDefinition> _commentReadTools() => [
+      ToolDefinition(
+        name: 'jira_get_comments',
+        description: 'Get all comments on a Jira ticket',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Assignment tool: `jira_assign`.
+List<ToolDefinition> _assignTools() => [
+      ToolDefinition(
+        name: 'jira_assign',
+        description: 'Assign a Jira ticket to a user by account ID',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'accountId',
+            description: 'The Atlassian account ID of the assignee',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Field-mutation tools: `jira_update_field` / `jira_clear_field`.
+List<ToolDefinition> _fieldTools() => [
+      ToolDefinition(
+        name: 'jira_update_field',
+        description: 'Update a single field on a Jira ticket',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'field',
+            description: 'The field name to update',
+            required: true,
+          ),
+          ToolParam(
+            name: 'value',
+            description: 'The new value for the field',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'jira_clear_field',
+        description: 'Clear (set to null) a single field on a Jira ticket',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'field',
+            description: 'The field name to clear',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Create tool: `jira_create_ticket`.
+List<ToolDefinition> _createTools() => [
+      ToolDefinition(
+        name: 'jira_create_ticket',
+        description:
+            'Create a basic Jira ticket with summary and optional description',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'project',
+            description: 'The project key (e.g. PROJ)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'issueType',
+            description: 'The issue type name (e.g. Task, Bug)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'summary',
+            description: 'The ticket summary / title',
+            required: true,
+          ),
+          ToolParam(
+            name: 'description',
+            description: 'The ticket description',
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
+/// Transition-read tool: `jira_get_transitions`.
+List<ToolDefinition> _transitionReadTools() => [
+      ToolDefinition(
+        name: 'jira_get_transitions',
+        description: 'Get available workflow transitions for a Jira ticket',
+        integration: 'jira',
+        category: 'workflow',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Delete tool: `jira_delete_ticket`.
+List<ToolDefinition> _deleteTools() => [
+      ToolDefinition(
+        name: 'jira_delete_ticket',
+        description: 'Delete a Jira ticket',
+        integration: 'jira',
+        category: 'ticket_management',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Jira ticket key (e.g. PROJ-123)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes Jira MCP tools by dispatching to [JiraClient].
 class JiraToolExecutor {
   final JiraClient _client;
@@ -216,6 +373,28 @@ class JiraToolExecutor {
     'jira_move_to_status': (a) => _client.moveToStatus(
           a['key'] as String,
           a['status'] as String,
+        ),
+    'jira_get_comments': (a) => _client.getComments(a['key'] as String),
+    'jira_assign': (a) => _client.assignTo(
+          a['key'] as String,
+          a['accountId'] as String,
+        ),
+    'jira_update_field': (a) => _client.updateField(
+          a['key'] as String,
+          a['field'] as String,
+          a['value'],
+        ),
+    'jira_create_ticket': (a) => _client.createTicketBasic(
+          a['project'] as String,
+          a['issueType'] as String,
+          a['summary'] as String,
+          a['description'] as String?,
+        ),
+    'jira_get_transitions': (a) => _client.getTransitions(a['key'] as String),
+    'jira_delete_ticket': (a) => _client.deleteTicket(a['key'] as String),
+    'jira_clear_field': (a) => _client.clearField(
+          a['key'] as String,
+          a['field'] as String,
         ),
   };
 }

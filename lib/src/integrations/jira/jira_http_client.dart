@@ -14,13 +14,11 @@ import 'package:dio/dio.dart';
 
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
+import '../base_http_client.dart';
 
 /// Low-level Jira HTTP transport used by [JiraClient].
-class JiraHttpClient {
-  final Dio _dio;
-  final String _basePath;
-  final String _authorization;
-  final String _authType;
+class JiraHttpClient extends BaseHttpClient {
+  final String _authHeader;
 
   /// Creates a client from [reader]'s Jira configuration.
   ///
@@ -43,92 +41,37 @@ class JiraHttpClient {
       );
     }
     return JiraHttpClient._(
-      dio: dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 60),
-              sendTimeout: const Duration(seconds: 60),
-              receiveTimeout: const Duration(seconds: 60),
-            ),
-          ),
+      dio: dio ?? BaseHttpClient.createDefaultDio(),
       basePath: basePath,
-      authorization: token,
-      authType: authType,
+      authHeader: '$authType $token',
     );
   }
 
   JiraHttpClient._({
-    required Dio dio,
-    required String basePath,
-    required String authorization,
-    required String authType,
-  })  : _dio = dio,
-        _basePath = basePath,
-        _authorization = authorization,
-        _authType = authType;
+    required super.dio,
+    required super.basePath,
+    required String authHeader,
+  }) : _authHeader = authHeader;
 
-  /// Builds a `/rest/api/latest/` URL for [path].
-  String buildUrl(String path) => '$_basePath/rest/api/latest/$path';
-
-  /// Builds a `/rest/api/3/` URL for [path] (ADF field updates).
-  String buildV3Url(String path) => '$_basePath/rest/api/3/$path';
-
-  /// Returns the auth + content headers sent with every request.
-  Map<String, String> get headers => {
-        'Authorization': '$_authType $_authorization',
+  @override
+  Map<String, String> get authHeaders => {
+        'Authorization': _authHeader,
         'X-Atlassian-Token': 'nocheck',
-        'Content-Type': 'application/json',
       };
 
-  /// Performs a GET against `/rest/api/latest/` and returns the response body.
-  Future<String> get(String path, {Map<String, String>? queryParams}) async {
-    final response = await _dio.get<String>(
-      buildUrl(path),
-      queryParameters: queryParams,
-      options: Options(headers: headers),
-    );
-    return response.data ?? '';
-  }
+  @override
+  String buildUrl(String path) => '$basePath/rest/api/latest/$path';
+
+  /// Builds a `/rest/api/3/` URL for [path] (ADF field updates).
+  String buildV3Url(String path) => '$basePath/rest/api/3/$path';
 
   /// Performs a GET against `/rest/api/3/` and returns the response body.
   Future<String> getV3(String path, {Map<String, String>? queryParams}) async {
-    final response = await _dio.get<String>(
+    final response = await dio.get<String>(
       buildV3Url(path),
       queryParameters: queryParams,
       options: Options(headers: headers),
     );
     return response.data ?? '';
   }
-
-  /// Performs a POST against `/rest/api/latest/` and returns the response body.
-  Future<String> post(String path, {Object? body}) async {
-    final response = await _dio.post<String>(
-      buildUrl(path),
-      data: body,
-      options: Options(headers: headers),
-    );
-    return response.data ?? '';
-  }
-
-  /// Performs a PUT against `/rest/api/latest/` and returns the response body.
-  Future<String> put(String path, {Object? body}) async {
-    final response = await _dio.put<String>(
-      buildUrl(path),
-      data: body,
-      options: Options(headers: headers),
-    );
-    return response.data ?? '';
-  }
-
-  /// Performs a DELETE against `/rest/api/latest/` and returns the body.
-  Future<String> delete(String path) async {
-    final response = await _dio.delete<String>(
-      buildUrl(path),
-      options: Options(headers: headers),
-    );
-    return response.data ?? '';
-  }
-
-  /// Closes the underlying HTTP client and frees its connections.
-  void close() => _dio.close();
 }

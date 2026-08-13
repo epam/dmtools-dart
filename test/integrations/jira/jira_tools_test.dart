@@ -6,7 +6,8 @@ import 'jira_test_support.dart';
 /// Tests for the [jiraTools] catalog and [JiraToolExecutor] dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
-  toolCatalogTests();
+  toolCatalogShapeTests();
+  toolCatalogParamTests();
   executorDispatchTests();
 }
 
@@ -14,12 +15,12 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     jiraTools().firstWhere((t) => t.name == name);
 
-/// Catalog shape: tool count, order, integration, params, aliases.
-void toolCatalogTests() {
+/// Catalog shape: tool count, order, integration, get_ticket params.
+void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the seven tools in declaration order', () {
+    test('registers the fourteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jira_test',
         'jira_get_ticket',
@@ -28,6 +29,13 @@ void toolCatalogTests() {
         'jira_add_label',
         'jira_remove_label',
         'jira_move_to_status',
+        'jira_get_comments',
+        'jira_assign',
+        'jira_update_field',
+        'jira_clear_field',
+        'jira_create_ticket',
+        'jira_get_transitions',
+        'jira_delete_ticket',
       ]);
     });
 
@@ -50,7 +58,10 @@ void toolCatalogTests() {
       expect(tool.params.last.type, 'array');
     });
   });
+}
 
+/// Catalog params: search, comment, label, and status tool parameter shapes.
+void toolCatalogParamTests() {
   test('jira_search_by_jql requires jql with optional array fields', () {
     final tool = toolNamed('jira_search_by_jql');
     expect(tool.category, 'search');

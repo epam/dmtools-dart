@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/src/config/property_reader.dart';
 import 'package:dmtools/src/js/job_runner.dart';
 import 'package:dmtools/src/mcp/tool_definition.dart';
 import 'package:dmtools/src/mcp/tool_param.dart';
@@ -117,6 +118,12 @@ void _testErrorDispatch() {
   group('error dispatch', () {
     test('executeToolViaJava returns error for HTTP tools', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_http');
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': '',
+        'JIRA_EMAIL': '',
+        'JIRA_API_TOKEN': '',
+        'JIRA_LOGIN_PASS_TOKEN': '',
+      });
       try {
         final script = _writeScript(dir, 'test.js',
             "executeToolViaJava('jira_get_ticket', {key: 'T-1'}).error");
@@ -124,9 +131,12 @@ void _testErrorDispatch() {
           scriptPath: script.path,
           jobParams: {},
         );
-        expect(jsonDecode(result!) as String,
-            contains('not available in sync mode'));
+        expect(
+          jsonDecode(result!) as String,
+          contains('Jira not configured'),
+        );
       } finally {
+        PropertyReader.clearOverrides();
         dir.deleteSync(recursive: true);
       }
     });
@@ -152,6 +162,12 @@ void _testWrapperDispatch() {
   group('tool dispatch', () {
     test('generated wrapper dispatches to executeToolViaJava', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_wrap');
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': '',
+        'JIRA_EMAIL': '',
+        'JIRA_API_TOKEN': '',
+        'JIRA_LOGIN_PASS_TOKEN': '',
+      });
       try {
         final script = _writeScript(dir, 'test.js', '''
           var result = jira_get_ticket({key: 'TEST-1'});
@@ -161,9 +177,12 @@ void _testWrapperDispatch() {
           scriptPath: script.path,
           jobParams: {},
         );
-        expect(jsonDecode(result!) as String,
-            contains('not available in sync mode'));
+        expect(
+          jsonDecode(result!) as String,
+          contains('Jira not configured'),
+        );
       } finally {
+        PropertyReader.clearOverrides();
         dir.deleteSync(recursive: true);
       }
     });

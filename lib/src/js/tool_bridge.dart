@@ -10,16 +10,17 @@
 /// - `console.log/error/warn/info/debug` — prints to Dart's stdout/stderr.
 ///
 /// File-system and CLI tools execute synchronously via `dart:io`. HTTP tools
-/// (jira, github, …) return a placeholder error in sync mode — the agents
-/// test suite mocks them in JS, and real blocking HTTP dispatch arrives in a
-/// later phase.
+/// (jira, github, …) dispatch synchronously via curl subprocess — see
+/// [SyncToolDispatcher].
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+import '../config/property_reader.dart';
 import '../mcp/tool_registry.dart';
 import 'quickjs_runtime.dart';
+import 'sync_tool_dispatcher.dart';
 
 /// Registers JS host functions backed by the Dart MCP tool registry.
 class ToolBridge {
@@ -110,8 +111,15 @@ class ToolBridge {
       case 'cli':
         return _executeCliTool(args);
       default:
-        return _err('HTTP tool not available in sync mode: $toolName');
+        return _executeHttpTool(toolName, args);
     }
+  }
+
+  /// Dispatches HTTP-based tools (jira, github, …) via synchronous curl.
+  String _executeHttpTool(String toolName, Map<String, dynamic> args) {
+    final dispatcher = SyncToolDispatcher(PropertyReader());
+    return dispatcher.execute(toolName, args) ??
+        _err('Tool not available: $toolName');
   }
 
   /// Dispatches a file tool synchronously by name.

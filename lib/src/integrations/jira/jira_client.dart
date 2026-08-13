@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'jira_http_client.dart';
+import 'jira_utils.dart';
 
 part 'jira_client_batch5.dart';
 part 'jira_client_batch6.dart';
@@ -222,16 +223,7 @@ class JiraClient {
   /// Finds a transition id matching [statusName] for [key].
   Future<String?> _findTransition(String key, String statusName) async {
     final transitions = await getTransitions(key);
-    final target = statusName.toLowerCase();
-    for (final t in transitions) {
-      final name = (t['name'] as String?)?.toLowerCase() ?? '';
-      final toStatus = t['to'] as Map<String, dynamic>?;
-      final toName = (toStatus?['name'] as String?)?.toLowerCase() ?? '';
-      if (name == target || toName == target) {
-        return t['id'] as String?;
-      }
-    }
-    return null;
+    return matchTransitionId(transitions, statusName);
   }
 
   /// `jira_get_comments` — GET `/rest/api/latest/issue/{key}/comment`.

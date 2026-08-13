@@ -80,8 +80,13 @@ ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`
 all functional.
 
 **Remaining work** (diminishing returns, in priority order):
-1. Sync HTTP dispatch for real agent scripts (currently mocked tools work in
-   test suite; real HTTP calls need blocking I/O within NativeCallable callback)
+1. Sync HTTP dispatch landed — [SyncHttpClient] + [SyncToolDispatcher] route
+   `jira_*` and `github_*` tool calls via curl subprocess within
+   NativeCallable callbacks. Supports `jira_get_ticket`, `jira_post_comment`,
+   `jira_search_by_jql`, `jira_add_label`, `jira_remove_label`,
+   `jira_move_to_status`, `github_get_pr`, `github_create_comment`. Other
+   integrations can be added to `SyncToolDispatcher._jiraFns` /
+   `_githubFns` dispatch maps.
 2. CliAgent timer/error/line JS actions, InstructionProcessor
 3. CI: agents suite job wired (quality.yml updated, continues-on-error until
    sync HTTP dispatch lands)

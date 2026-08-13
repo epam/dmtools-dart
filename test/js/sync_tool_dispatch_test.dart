@@ -13,7 +13,9 @@ import 'echo_server_helper.dart';
 /// `Process.runSync('curl', …)`.
 void main() {
   _testRouting();
+  _testUnsupportedIntegrationTools();
   _testNoConfig();
+  _testPartialConfig();
   _testJiraAliases();
   _testNonHttpDelegation();
   if (hasPython3()) {
@@ -23,18 +25,29 @@ void main() {
   }
 }
 
+/// Overrides that blank out every integration's config keys, so routing and
+/// no-config tests are isolated from the host environment.
+Map<String, String> _blankIntegrationConfig() => {
+      'JIRA_BASE_PATH': '',
+      'JIRA_EMAIL': '',
+      'JIRA_API_TOKEN': '',
+      'JIRA_LOGIN_PASS_TOKEN': '',
+      'SOURCE_GITHUB_TOKEN': '',
+      'GITLAB_BASE_PATH': '',
+      'GITLAB_TOKEN': '',
+      'CONFLUENCE_BASE_PATH': '',
+      'CONFLUENCE_LOGIN_PASS_TOKEN': '',
+      'ADO_ORGANIZATION': '',
+      'ADO_PROJECT': '',
+      'ADO_PAT_TOKEN': '',
+    };
+
 void _testRouting() {
   group('SyncToolDispatcher routing', () {
     late SyncToolDispatcher dispatcher;
 
     setUp(() {
-      PropertyReader.setOverrides({
-        'JIRA_BASE_PATH': '',
-        'JIRA_EMAIL': '',
-        'JIRA_API_TOKEN': '',
-        'JIRA_LOGIN_PASS_TOKEN': '',
-        'SOURCE_GITHUB_TOKEN': '',
-      });
+      PropertyReader.setOverrides(_blankIntegrationConfig());
       dispatcher = SyncToolDispatcher(PropertyReader());
     });
 
@@ -45,18 +58,50 @@ void _testRouting() {
     });
 
     test('unsupported jira tool returns error JSON', () {
-      final result = dispatcher.execute('jira_mystery', {});
       expect(
-        jsonDecode(result!),
+        jsonDecode(dispatcher.execute('jira_mystery', {})!),
         {'error': 'Unsupported Jira tool: jira_mystery'},
       );
     });
 
     test('unsupported github tool returns error JSON', () {
-      final result = dispatcher.execute('github_mystery', {});
       expect(
-        jsonDecode(result!),
+        jsonDecode(dispatcher.execute('github_mystery', {})!),
         {'error': 'Unsupported GitHub tool: github_mystery'},
+      );
+    });
+  });
+}
+
+void _testUnsupportedIntegrationTools() {
+  group('SyncToolDispatcher unsupported integration tools', () {
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() {
+      PropertyReader.setOverrides(_blankIntegrationConfig());
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('unsupported gitlab tool returns error JSON', () {
+      expect(
+        jsonDecode(dispatcher.execute('gitlab_mystery', {})!),
+        {'error': 'Unsupported GitLab tool: gitlab_mystery'},
+      );
+    });
+
+    test('unsupported confluence tool returns error JSON', () {
+      expect(
+        jsonDecode(dispatcher.execute('confluence_mystery', {})!),
+        {'error': 'Unsupported Confluence tool: confluence_mystery'},
+      );
+    });
+
+    test('unsupported ado tool returns error JSON', () {
+      expect(
+        jsonDecode(dispatcher.execute('ado_mystery', {})!),
+        {'error': 'Unsupported ADO tool: ado_mystery'},
       );
     });
   });
@@ -64,30 +109,108 @@ void _testRouting() {
 
 void _testNoConfig() {
   group('SyncToolDispatcher without config', () {
-    setUp(() => PropertyReader.setOverrides({
-          'JIRA_BASE_PATH': '',
-          'JIRA_EMAIL': '',
-          'JIRA_API_TOKEN': '',
-          'JIRA_LOGIN_PASS_TOKEN': '',
-          'SOURCE_GITHUB_TOKEN': '',
-        }));
+    setUp(() => PropertyReader.setOverrides(_blankIntegrationConfig()));
 
     tearDown(() => PropertyReader.clearOverrides());
 
     test('jira_get_ticket returns config error', () {
       final d = SyncToolDispatcher(PropertyReader());
-      final result = d.execute('jira_get_ticket', {'key': 'T-1'});
-      expect(jsonDecode(result!), {'error': 'Jira not configured'});
+      expect(
+        jsonDecode(d.execute('jira_get_ticket', {'key': 'T-1'})!),
+        {'error': 'Jira not configured'},
+      );
     });
 
     test('github_get_pr returns config error', () {
       final d = SyncToolDispatcher(PropertyReader());
-      final result = d.execute('github_get_pr', {
-        'owner': 'o',
-        'repo': 'r',
-        'number': 1,
+      expect(
+        jsonDecode(d.execute('github_get_pr', {
+          'owner': 'o',
+          'repo': 'r',
+          'number': 1,
+        })!),
+        {'error': 'GitHub not configured'},
+      );
+    });
+
+    test('gitlab_get_mr returns config error', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('gitlab_get_mr', {'project': 'g/r', 'iid': 1})!),
+        {'error': 'GitLab not configured'},
+      );
+    });
+
+    test('confluence_search returns config error', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('confluence_search', {'cql': 'space = DEV'})!),
+        {'error': 'Confluence not configured'},
+      );
+    });
+
+    test('ado_get_work_item returns config error', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('ado_get_work_item', {'id': 1})!),
+        {'error': 'ADO not configured'},
+      );
+    });
+  });
+}
+
+void _testPartialConfig() {
+  group('SyncToolDispatcher partial config', () {
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('gitlab with base path but no token is unconfigured', () {
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'https://gitlab.example.com',
+        'GITLAB_TOKEN': '',
       });
-      expect(jsonDecode(result!), {'error': 'GitHub not configured'});
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('gitlab_get_mr', {'project': 'g/r', 'iid': 1})!),
+        {'error': 'GitLab not configured'},
+      );
+    });
+
+    test('confluence with base path but no token is unconfigured', () {
+      PropertyReader.setOverrides({
+        'CONFLUENCE_BASE_PATH': 'https://confluence.example.com',
+        'CONFLUENCE_LOGIN_PASS_TOKEN': '',
+      });
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('confluence_search', {'cql': 'a'})!),
+        {'error': 'Confluence not configured'},
+      );
+    });
+
+    test('ado with org/project but no PAT is unconfigured', () {
+      PropertyReader.setOverrides({
+        'ADO_ORGANIZATION': 'org',
+        'ADO_PROJECT': 'proj',
+        'ADO_PAT_TOKEN': '',
+      });
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('ado_get_work_item', {'id': 1})!),
+        {'error': 'ADO not configured'},
+      );
+    });
+
+    test('ado with org but no project is unconfigured', () {
+      PropertyReader.setOverrides({
+        'ADO_ORGANIZATION': 'org',
+        'ADO_PROJECT': '',
+        'ADO_PAT_TOKEN': 'pat',
+      });
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('ado_get_work_item', {'id': 1})!),
+        {'error': 'ADO not configured'},
+      );
     });
   });
 }

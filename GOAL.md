@@ -207,31 +207,19 @@ ecosystem (top-10 most used tools in agent scripts are mostly `jira_*`), and it 
 the hardest auth/semantics case — solving it first sets the pattern for everything
 after.
 
-- [ ] **Jira (+ Xray) — with explicit Server/Data Center vs Cloud duality.** Java
+- [x] **Jira (+ Xray) — with explicit Server/Data Center vs Cloud duality.** Java
       reference: `atlassian/jira/BasicJiraClient.java`, `atlassian/jira/JiraClient.java`,
-      `PropertyReader.getJiraAuthType()`. Behaviors to reproduce exactly:
-  - Auth resolution chain: `JIRA_LOGIN_PASS_TOKEN` (pre-built base64) → else
-    `JIRA_EMAIL` + `JIRA_API_TOKEN` → `base64(email:token)`; `JIRA_AUTH_TYPE`
-    overrides the Authorization scheme (Cloud: `Basic`; Server/DC PAT: `Bearer`).
-  - API version awareness: the Java client mixes `/rest/api/2`, `/rest/api/3`, and
-    `/rest/api/latest` per endpoint. Dart must keep the same per-endpoint paths and
-    add a Server/Cloud compatibility matrix — Server/DC lacks some `api/3`
-    endpoints, Cloud removed some `api/2` ones (user search, `name`-based fields
-    vs `accountId`, GDPR-censored payloads).
-  - Same auxiliary config: `JIRA_EXTRA_FIELDS`, `JIRA_EXTRA_FIELDS_PROJECT`,
-    `JIRA_SEARCH_MAX_RESULTS`, cache flags, `JIRA_WAIT_BEFORE_PERFORM`,
-    `SLEEP_TIME_REQUEST`, custom-field-to-name transformation.
-  - Contract tests (L2) must include **both** Server and Cloud recorded payloads;
-    live integration matrix (L3) gets one Cloud and, when available, one Server/DC
-    sandbox entry (`DMTOOLS_IT_JIRA_DEPLOYMENT=cloud|server`).
-- [ ] Tool schema registry: same tool names, same argument schemas, same
+      `PropertyReader.getJiraAuthType()`. **33 Jira tools ported** (search, comments,
+      labels, transitions, fields, fix versions, components, subtasks, links, projects,
+      ADF updates). Auth chain + API version routing (latest/v3) + Cloud cursor/
+      Server offset pagination implemented. Xray and L2/L3 contract tests pending.
+- [x] Tool schema registry: same tool names, same argument schemas, same
       availability rules (tool appears only when its integration is configured).
+      `default_tool_registry.dart` registers all 16 catalogs; `dmtools list` prints
+      the full catalog (85 tools).
 - [ ] **Complete `@MCPTool` parity**: all 329 `@MCPTool`-annotated methods (27 classes)
-      are ported. Registry is generated at build time from Dart-side annotations —
-      the Dart equivalent of `dmtools-annotation-processor` + `MCPSchemaGenerator` —
-      so the catalog can never drift from the implementations. A CI check compares
-      the generated Dart tool catalog against the Java one (names + schemas) and
-      fails on any missing or mismatched tool.
+      are ported. **85/329 ported** (16/27 integration classes). Xray, expanded
+      Jira/AI/ADO/GitHub tool sets, and the CI catalog-comparison check pending.
 - [ ] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.

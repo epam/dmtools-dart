@@ -16,13 +16,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_HOST_FNS 256
+#define MAX_HOST_FNS 65536
 
 /* Host callback: receives JSON args string, returns malloc'd JSON result
  * (or NULL for JS undefined). The bridge frees the returned string. */
 typedef char* (*HostCallback)(const char* args_json);
 
 static HostCallback g_callbacks[MAX_HOST_FNS];
+/* Monotonic, never reset. Each runtime registers ~6 host functions; dart
+ * test spawns parallel isolates that share this process-global table, so
+ * indices must remain unique for the lifetime of the process. Allocation
+ * is atomic to avoid a data race on concurrent registration. */
 static int g_callback_count = 0;
 
 /* ── Dispatch: the single C function all registered host fns call ──── */
@@ -30,7 +34,11 @@ static int g_callback_count = 0;
 static JSValue qjs_dispatch(JSContext* ctx, JSValueConst this_val,
                             int argc, JSValueConst* argv, int magic) {
     (void)this_val;
-    if (magic < 0 || magic >= g_callback_count || !g_callbacks[magic]) {
+    /* Atomic load: parallel isolates register concurrently. The caller's
+     * own registration completed earlier in program order, so the count
+     * seen here is at least magic+1; the acquire load keeps it sound. */
+    int count = __atomic_load_n(&g_callback_count, __ATOMIC_ACQUIRE);
+    if (magic < 0 || magic >= count || !g_callbacks[magic]) {
         return JS_ThrowTypeError(ctx, "invalid host callback index %d", magic);
     }
 
@@ -94,9 +102,11 @@ void qjs_destroy(JSRuntime* rt, JSContext* ctx) {
     if (rt) JS_FreeRuntime(rt);
 }
 
-/* Reset the callback registry (call before a fresh run). */
+/* No-op retained for ABI compatibility. Indices are now monotonic and never
+ * reset, so concurrent isolates sharing this process-global table do not
+ * clobber each other's registrations. */
 void qjs_reset_callbacks(void) {
-    g_callback_count = 0;
+    /* intentionally empty */
 }
 
 /* Register a host function as a global JS function.
@@ -105,7 +115,9 @@ int qjs_register_host_fn(JSContext* ctx, const char* name,
                          HostCallback callback) {
     if (g_callback_count >= MAX_HOST_FNS) return -1;
 
-    int idx = g_callback_count++;
+    /* Atomic fetch-and-add: parallel isolates register concurrently. */
+    int idx = __sync_fetch_and_add(&g_callback_count, 1);
+    if (idx >= MAX_HOST_FNS) return -1;
     g_callbacks[idx] = callback;
 
     JSValue fn = JS_NewCFunction2(ctx, (JSCFunction*)qjs_dispatch, name, 0,

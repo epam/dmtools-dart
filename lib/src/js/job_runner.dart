@@ -3,12 +3,14 @@
 /// Phase 4 orchestrator — mirrors the Java `JobJavaScriptBridge` /
 /// `JavaScriptExecutor` pipeline:
 /// 1. Create a QuickJS runtime.
-/// 2. Register host functions (`executeToolViaJava`, `file_read`,
-///    `set_env_variable`) via [ToolBridge].
-/// 3. Inject job context (`params.jobParams`, `params.ticket`).
-/// 4. Generate and eval snake_case tool wrapper JS for every tool.
+/// 2. Inject job context (`params.jobParams`, `params.ticket`).
+/// 3. Generate and eval snake_case tool wrapper JS for every tool.
+/// 4. Register host functions (`executeToolViaJava`, `file_read`,
+///    `set_env_variable`, `console`) via [ToolBridge] — last, so the direct
+///    `file_read` global wins over the generated wrapper.
 /// 5. Eval the agent/test script.
-/// 6. Return the JSON result.
+/// 6. Call the script's `action(params)` when defined (JSRunner contract)
+///    and return its JSON result.
 library;
 
 import 'dart:io';
@@ -26,8 +28,13 @@ class JsJobRunner {
 
   /// Runs [scriptPath] as a JS job with the given [jobParams].
   ///
-  /// Returns the script's return value as a JSON string, or `null` when the
-  /// result is JS `undefined`.
+  /// Mirrors the Java JSRunner contract: after evaluating the script, if it
+  /// defines a global `action(params)` function, that function is invoked
+  /// and its return value (JSON) becomes the result. Otherwise the script's
+  /// own eval result is returned.
+  ///
+  /// Returns the result as a JSON string, or `null` when the result is JS
+  /// `undefined`.
   ///
   /// - [jobParams] — injected as `params.jobParams` in the JS global scope.
   /// - [ticket] — injected as `params.ticket` when non-null.
@@ -49,13 +56,37 @@ class JsJobRunner {
       _wireRuntime(
           rt, reg, jobParams, ticket, workingDirectory, integrationFilter);
       final script = File(scriptPath).readAsStringSync();
-      return rt.eval(script, filename: scriptPath);
+      final scriptResult = rt.eval(script, filename: scriptPath);
+      return _callAction(rt) ?? scriptResult;
     } finally {
       rt.close();
     }
   }
 
-  /// Wires up host functions, job context, and tool wrappers on [rt].
+  /// Calls the script's `action(params)` when it is defined (JSRunner job
+  /// contract); returns `null` (JS `undefined`) when it is not.
+  ///
+  /// The raw return value flows to the C bridge, which serializes it to
+  /// JSON — pre-stringifying here would double-encode the result.
+  String? _callAction(QuickjsRuntime rt) {
+    return rt.eval(
+      '(function() {'
+      '  if (typeof action !== "function") return undefined;'
+      '  try { return action(params); }'
+      '  catch (e) {'
+      '    return {success: false, error: String(e && e.message || e)};'
+      '  }'
+      '})()',
+      filename: '<action_call>',
+    );
+  }
+
+  /// Wires up job context, tool wrappers, and host functions on [rt].
+  ///
+  /// Host functions are registered **after** the generated tool wrappers so
+  /// that the direct `file_read` global (returning the raw content string,
+  /// as testRunner.js requires) takes precedence over the wrapper that
+  /// dispatches through `executeToolViaJava` with an `{content: …}` shape.
   void _wireRuntime(
     QuickjsRuntime rt,
     ToolRegistry registry,
@@ -64,11 +95,11 @@ class JsJobRunner {
     String? workingDirectory,
     Set<String>? integrationFilter,
   ) {
-    ToolBridge(registry: registry, workingDirectory: workingDirectory)
-        .registerOn(rt);
     _injectContext(rt, jobParams, ticket);
     final wrappers = _buildWrappers(registry, integrationFilter);
     rt.eval(wrappers, filename: '<tool_wrappers>');
+    ToolBridge(registry: registry, workingDirectory: workingDirectory)
+        .registerOn(rt);
   }
 
   /// Injects `params` into the JS global scope.

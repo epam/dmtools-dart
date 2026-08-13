@@ -1,10 +1,13 @@
 /// Bridge between JS host functions and the Dart MCP tool registry.
 ///
-/// Registers three global JS functions on a [QuickjsRuntime]:
+/// Registers global JS functions on a [QuickjsRuntime]:
 /// - `executeToolViaJava(toolName, args)` — generic tool dispatch, the
 ///   equivalent of the Java `JobJavaScriptBridge.executeToolViaJava`.
-/// - `file_read({path})` — synchronous file reader (used by testRunner.js).
+/// - `file_read({path})` — synchronous file reader returning the raw file
+///   content as a plain JS string (mirrors the Java bridge contract that
+///   testRunner.js and configLoader.js rely on: `content.trim()`).
 /// - `set_env_variable(name, value)` — no-op (Phase 1 handles overrides).
+/// - `console.log/error/warn/info/debug` — prints to Dart's stdout/stderr.
 ///
 /// File-system and CLI tools execute synchronously via `dart:io`. HTTP tools
 /// (jira, github, …) return a placeholder error in sync mode — the agents
@@ -31,12 +34,18 @@ class ToolBridge {
       : _registry = registry,
         _workingDirectory = workingDirectory;
 
-  /// Registers `executeToolViaJava`, `file_read`, and `set_env_variable`
-  /// as global JS functions on [runtime].
+  /// Registers `executeToolViaJava`, `file_read`, `set_env_variable`, and
+  /// the `console` object as globals on [runtime].
+  ///
+  /// Must be called **after** tool wrappers are generated so that the direct
+  /// `file_read` host function (returning the raw content string) takes
+  /// precedence over any generated wrapper that dispatches via
+  /// `executeToolViaJava`.
   void registerOn(QuickjsRuntime runtime) {
     runtime.registerHostFunction('executeToolViaJava', _dispatchToolCall);
     runtime.registerHostFunction('file_read', _fileReadHost);
     runtime.registerHostFunction('set_env_variable', _setEnvVariable);
+    _registerConsole(runtime);
   }
 
   /// Dispatch table for synchronous file tool execution.
@@ -71,12 +80,21 @@ class ToolBridge {
   }
 
   /// Handles direct `file_read({path})` calls from JS test scripts.
+  ///
+  /// Returns the file content as a plain JSON string (the C bridge
+  /// unmarshals it back to a JS string), or JS `null` when the file cannot
+  /// be read — the Java bridge contract testRunner.js and configLoader.js
+  /// depend on (`content && content.trim()`).
   String _fileReadHost(String argsJson) {
     final parsed = jsonDecode(argsJson);
-    if (parsed is Map && parsed['path'] is String) {
-      return _readFile(parsed['path'] as String);
+    String? path;
+    if (parsed is Map) path = parsed['path'] as String?;
+    if (path == null) return 'null';
+    try {
+      return jsonEncode(File(_resolve(path)).readAsStringSync());
+    } catch (_) {
+      return 'null';
     }
-    return _err('file_read requires a path argument');
   }
 
   /// No-op: runtime env overrides are handled by the Phase 1 property layer.
@@ -239,6 +257,68 @@ class ToolBridge {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+
+  /// JS bootstrap that builds the `console` object over the private host
+  /// functions registered by [_registerConsole].
+  ///
+  /// Arguments are formatted in JS (strings as-is, other values via
+  /// `JSON.stringify`) and joined with spaces, matching the console
+  /// convention used by testRunner.js and agent scripts.
+  static const String _consoleBootstrap = '''
+(function() {
+    function __joinArgs(args) {
+        var parts = [];
+        for (var i = 0; i < args.length; i++) {
+            var a = args[i];
+            if (typeof a === 'string') {
+                parts.push(a);
+            } else {
+                var s;
+                try { s = JSON.stringify(a); } catch (e) { s = null; }
+                parts.push(s === undefined || s === null ? String(a) : s);
+            }
+        }
+        return parts.join(' ');
+    }
+    globalThis.console = {
+        log:   function() { return __consoleLog(__joinArgs(arguments)); },
+        info:  function() { return __consoleLog(__joinArgs(arguments)); },
+        debug: function() { return __consoleLog(__joinArgs(arguments)); },
+        warn:  function() { return __consoleWarn(__joinArgs(arguments)); },
+        error: function() { return __consoleError(__joinArgs(arguments)); }
+    };
+})();
+''';
+
+  /// Registers the `console` object on [runtime].
+  ///
+  /// Host functions print synchronously to Dart's stdout/stderr and return
+  /// JS `undefined`, so `console.log(...)` calls chain as no-ops.
+  void _registerConsole(QuickjsRuntime runtime) {
+    runtime.registerHostFunction(
+        '__consoleLog', (argsJson) => _printTo(stdout, argsJson));
+    runtime.registerHostFunction(
+        '__consoleWarn', (argsJson) => _printTo(stderr, argsJson));
+    runtime.registerHostFunction(
+        '__consoleError', (argsJson) => _printTo(stderr, argsJson));
+    runtime.eval(_consoleBootstrap, filename: '<console>');
+  }
+
+  /// Prints one console line and signals JS `undefined` (Dart `null`).
+  String? _printTo(IOSink sink, String argsJson) {
+    sink.writeln(_consoleArg(argsJson));
+    return null;
+  }
+
+  /// Decodes the JSON-marshaled console argument back to a display string.
+  String _consoleArg(String argsJson) {
+    try {
+      final decoded = jsonDecode(argsJson);
+      return decoded is String ? decoded : argsJson;
+    } catch (_) {
+      return argsJson;
+    }
+  }
 
   /// Resolves [path] against the working directory when relative.
   String _resolve(String path) {

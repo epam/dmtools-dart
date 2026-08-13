@@ -77,12 +77,12 @@ void _testContextInjection() {
 
 void _testHostFunctions() {
   group('host functions', () {
-    test('file_read reads files from disk', () {
+    test('file_read returns file content as a string', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_fread');
       try {
         File('${dir.path}/data.txt').writeAsStringSync('hello world');
-        final script = _writeScript(
-            dir, 'test.js', "file_read({path: 'data.txt'}).content");
+        final script =
+            _writeScript(dir, 'test.js', "file_read({path: 'data.txt'})");
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},

@@ -6,8 +6,10 @@ import 'package:test/test.dart';
 /// Tests for the [kbTools] catalog and [KbToolExecutor] dispatch.
 void main() {
   readCatalogTests();
+  batch4CatalogParamTests();
   mutationCatalogTests();
   readDispatchTests();
+  batch4DispatchTests();
   writeDispatchTests();
   unknownToolTests();
 }
@@ -24,11 +26,13 @@ void readCatalogTests() {
   group('kbTools read catalog', () {
     final tools = kbTools();
 
-    test('registers six tools in declaration order', () {
+    test('registers eight tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'kb_search_docs',
+        'kb_search_docs_full',
         'kb_get_doc',
         'kb_index_docs',
+        'kb_list_dirs',
         'kb_create_doc',
         'kb_delete_doc',
         'kb_update_doc',
@@ -59,6 +63,30 @@ void readCatalogTests() {
       final tool = kbTools().firstWhere((t) => t.name == 'kb_index_docs');
       final dir = tool.params.singleWhere((p) => p.name == 'dir');
       expect(dir.required, isFalse);
+    });
+  });
+}
+
+/// Batch-4 catalog param shape for the new search/list tools.
+void batch4CatalogParamTests() {
+  group('kb_search_docs_full', () {
+    final tool = kbTools().firstWhere((t) => t.name == 'kb_search_docs_full');
+
+    test('requires query and max_results params', () {
+      final query = tool.params.singleWhere((p) => p.name == 'query');
+      final max = tool.params.singleWhere((p) => p.name == 'max_results');
+      expect(query.required, isTrue);
+      expect(max.required, isTrue);
+      expect(max.type, 'number');
+    });
+  });
+
+  group('kb_list_dirs', () {
+    final tool = kbTools().firstWhere((t) => t.name == 'kb_list_dirs');
+
+    test('has an optional base_path param', () {
+      final base = tool.params.singleWhere((p) => p.name == 'base_path');
+      expect(base.required, isFalse);
     });
   });
 }
@@ -128,6 +156,54 @@ void readDispatchTests() {
           as List<String>;
       expect(files, hasLength(1));
       expect(files.single, endsWith('nested/deep.md'));
+    });
+  });
+}
+
+/// Batch-4 executor dispatch for the new search/list tools.
+void batch4DispatchTests() {
+  late KbToolExecutor executor;
+  late Directory kb;
+
+  setUp(() {
+    kb = _tempKb();
+    executor = KbToolExecutor(KbClient(kb.path));
+  });
+
+  tearDown(() => kb.deleteSync(recursive: true));
+
+  group('KbToolExecutor.execute (batch 4)', () {
+    test('routes kb_search_docs_full and caps the result count', () async {
+      final results = await executor.execute(
+        'kb_search_docs_full',
+        {'query': 'factory', 'max_results': 5},
+      ) as List<KbSearchResult>;
+      expect(results, hasLength(1));
+      expect(results.single.snippet, contains('dark factory'));
+    });
+
+    test('kb_search_docs_full caps to zero when max_results is 0', () async {
+      final results = await executor.execute(
+        'kb_search_docs_full',
+        {'query': 'factory', 'max_results': 0},
+      ) as List<KbSearchResult>;
+      expect(results, isEmpty);
+    });
+
+    test('routes kb_list_dirs to immediate subdirectories only', () async {
+      Directory('${kb.path}/notes').createSync();
+      File('${kb.path}/notes/x.md').writeAsStringSync('x');
+      final dirs = await executor.execute('kb_list_dirs', {}) as List<String>;
+      expect(dirs, hasLength(1));
+      expect(dirs.single, endsWith('notes'));
+    });
+
+    test('kb_list_dirs returns empty for a missing directory', () async {
+      final dirs = await executor.execute(
+        'kb_list_dirs',
+        {'base_path': 'no_such'},
+      ) as List<String>;
+      expect(dirs, isEmpty);
     });
   });
 }

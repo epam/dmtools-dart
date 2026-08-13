@@ -27,6 +27,9 @@ List<ToolDefinition> confluenceTools() => [
       ..._pageLifecycleTools(),
       ..._permissionTools(),
       ..._propertyTools(),
+      ..._groupTools(),
+      ..._userTools(),
+      ..._watcherTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -407,6 +410,19 @@ List<ToolDefinition> _pageLifecycleTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'confluence_restore_page',
+        description: 'Restore an archived Confluence page to current',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
     ];
 
 /// Permission tools: `confluence_get_permissions` /
@@ -480,6 +496,57 @@ List<ToolDefinition> _propertyTools() => [
           ToolParam(
             name: 'value',
             description: 'The property value as a JSON object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Group tools: `confluence_get_group_members`.
+List<ToolDefinition> _groupTools() => [
+      ToolDefinition(
+        name: 'confluence_get_group_members',
+        description: 'List the members of a Confluence group by name',
+        integration: 'confluence',
+        category: 'groups',
+        params: [
+          ToolParam(
+            name: 'groupname',
+            description: 'The Confluence group name',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// User tools: `confluence_get_user_by_key`.
+List<ToolDefinition> _userTools() => [
+      ToolDefinition(
+        name: 'confluence_get_user_by_key',
+        description: 'Get a Confluence user by key',
+        integration: 'confluence',
+        category: 'users',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The Confluence user key',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Watcher tools: `confluence_get_watchers`.
+List<ToolDefinition> _watcherTools() => [
+      ToolDefinition(
+        name: 'confluence_get_watchers',
+        description: 'List the watchers of a Confluence content item',
+        integration: 'confluence',
+        category: 'watchers',
+        params: [
+          ToolParam(
+            name: 'contentId',
+            description: 'The Confluence content id',
             required: true,
           ),
         ],
@@ -570,6 +637,7 @@ class ConfluenceToolExecutor {
           a['name'] as String,
         ),
     'confluence_archive_page': (a) => _client.archivePage(a['id'] as String),
+    'confluence_restore_page': (a) => _client.restorePage(a['id'] as String),
     'confluence_get_page_properties': (a) =>
         _client.getPageProperties(a['id'] as String),
     'confluence_set_page_property': (a) => _client.setPageProperty(
@@ -577,5 +645,11 @@ class ConfluenceToolExecutor {
           a['key'] as String,
           a['value'] as Map<String, dynamic>,
         ),
+    'confluence_get_group_members': (a) =>
+        _client.getGroupMembers(a['groupname'] as String),
+    'confluence_get_user_by_key': (a) =>
+        _client.getUserByKey(a['key'] as String),
+    'confluence_get_watchers': (a) =>
+        _client.getWatchers(a['contentId'] as String),
   };
 }

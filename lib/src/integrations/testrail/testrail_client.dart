@@ -97,6 +97,12 @@ class TestRailClient {
   ) =>
       _postForMap('update_case/$id', fields);
 
+  /// `testrail_delete_case` — POST `delete_case/{id}`.
+  ///
+  /// Deletes test case [id]. Returns the decoded response, or an empty map.
+  Future<Map<String, dynamic>> deleteCase(int id) =>
+      _postForMap('delete_case/$id', const {});
+
   /// `testrail_get_milestones` — GET `get_milestones/{projectId}`.
   ///
   /// Returns an empty list when the response body is not a JSON array.
@@ -138,6 +144,18 @@ class TestRailClient {
   /// Returns an empty list when the response body is not a JSON array.
   Future<List<Map<String, dynamic>>> getStatuses() async =>
       _getList('get_statuses');
+
+  /// `testrail_get_references` — GET `get_references/{projectId}`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getReferences(int projectId) async =>
+      _getList('get_references/$projectId');
+
+  /// `testrail_get_templates` — GET `get_templates`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getTemplates() async =>
+      _getList('get_templates');
 
   /// GETs [path] and decodes the JSON array response.
   Future<List<Map<String, dynamic>>> _getList(String path) async =>

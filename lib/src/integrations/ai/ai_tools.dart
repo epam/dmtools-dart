@@ -6,6 +6,8 @@
 /// [AnthropicClient]).
 library;
 
+import 'dart:convert';
+
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'ai_request.dart';
@@ -18,6 +20,18 @@ import 'openai_client.dart';
 /// Supported AI provider identifiers.
 const aiProviders = {'gemini', 'openai', 'ollama', 'dial', 'anthropic'};
 
+/// Static model catalog per provider, served by `ai_list_models`.
+///
+/// Intentionally static (no API call): it mirrors the well-known model names
+/// each provider exposes so agents can pick a model without probing.
+const Map<String, List<String>> aiModels = {
+  'gemini': ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+  'openai': ['gpt-3.5-turbo', 'gpt-4', 'gpt-4o', 'gpt-4o-mini'],
+  'ollama': ['llama2', 'llama3', 'mistral'],
+  'dial': ['gpt-3.5-turbo', 'gpt-4'],
+  'anthropic': ['claude-3-haiku', 'claude-3-opus', 'claude-3-sonnet'],
+};
+
 /// Returns all AI MCP tool definitions.
 List<ToolDefinition> aiTools() => [
       _aiChatTool(),
@@ -26,6 +40,8 @@ List<ToolDefinition> aiTools() => [
       _aiCompleteTool(),
       _aiEmbedTool(),
       _aiSummarizeTool(),
+      _aiListModelsTool(),
+      _aiGenerateImageTool(),
     ];
 
 /// Single-turn chat tool: `ai_chat`.
@@ -209,6 +225,40 @@ ToolDefinition _aiSummarizeTool() => ToolDefinition(
       ],
     );
 
+/// Model-catalog tool: `ai_list_models`.
+ToolDefinition _aiListModelsTool() => ToolDefinition(
+      name: 'ai_list_models',
+      description: 'List available models for an AI provider (gemini, openai, '
+          'ollama, dial, or anthropic) from a static catalog; no API call',
+      integration: 'ai',
+      category: 'models',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, dial, or anthropic',
+        ),
+      ],
+    );
+
+/// Image-generation stub tool: `ai_generate_image`.
+ToolDefinition _aiGenerateImageTool() => ToolDefinition(
+      name: 'ai_generate_image',
+      description: 'Generate an image from a text prompt using an AI provider '
+          '(stub — returns a placeholder descriptor, no image is produced)',
+      integration: 'ai',
+      category: 'image',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, dial, or anthropic',
+        ),
+        ToolParam(name: 'model', description: 'The image model name to use'),
+        ToolParam(name: 'prompt', description: 'The text prompt for the image'),
+      ],
+    );
+
 /// Executes AI MCP tools by dispatching to the appropriate provider client.
 class AiToolExecutor {
   final GeminiClient _gemini;
@@ -232,25 +282,27 @@ class AiToolExecutor {
 
   /// Executes [toolName] with [args], returning the tool's result.
   ///
-  /// Throws [ArgumentError] for an unknown AI tool name or provider.
-  Future<String> execute(String toolName, Map<String, dynamic> args) async {
-    switch (toolName) {
-      case 'ai_chat':
-        return _executeSingleTurn(args, systemAlwaysApplied: false);
-      case 'ai_chat_with_history':
-        return _executeChatWithHistory(args);
-      case 'ai_chat_with_system_prompt':
-        return _executeSingleTurn(args, systemAlwaysApplied: true);
-      case 'ai_complete':
-        return _executeComplete(args);
-      case 'ai_embed':
-        return _executeEmbed(args);
-      case 'ai_summarize':
-        return _executeSummarize(args);
-      default:
-        throw ArgumentError('Unknown AI tool: $toolName');
+  /// Throws [ArgumentError] for an unknown AI tool name.
+  Future<String> execute(String toolName, Map<String, dynamic> args) {
+    final handler = _handlers[toolName];
+    if (handler == null) {
+      throw ArgumentError('Unknown AI tool: $toolName');
     }
+    return handler(args);
   }
+
+  late final Map<String, Future<String> Function(Map<String, dynamic>)>
+      _handlers = {
+    'ai_chat': (a) => _executeSingleTurn(a, systemAlwaysApplied: false),
+    'ai_chat_with_history': _executeChatWithHistory,
+    'ai_chat_with_system_prompt': (a) =>
+        _executeSingleTurn(a, systemAlwaysApplied: true),
+    'ai_complete': _executeComplete,
+    'ai_embed': _executeEmbed,
+    'ai_summarize': _executeSummarize,
+    'ai_list_models': _executeListModels,
+    'ai_generate_image': _executeGenerateImage,
+  };
 
   /// Resolves a provider name to its client, throwing for unknown providers.
   AiChatClient _clientFor(String provider) {
@@ -332,6 +384,37 @@ class AiToolExecutor {
     final messages = _parseMessages(args['messages']);
     final systemPrompt = args['system_prompt'] as String?;
     return _clientFor(provider).chatWithMessages(model, messages, systemPrompt);
+  }
+
+  /// Dispatches an `ai_list_models` call, returning the static model list for
+  /// the provider as a JSON array string (no network call).
+  ///
+  /// Throws [ArgumentError] for an unknown provider.
+  Future<String> _executeListModels(Map<String, dynamic> args) {
+    final provider = (args['provider'] as String).toLowerCase();
+    final models = aiModels[provider];
+    if (models == null) {
+      throw ArgumentError('Unknown AI provider: $provider');
+    }
+    return Future.value(jsonEncode(models));
+  }
+
+  /// Image-generation stub: validates the provider and returns a placeholder
+  /// descriptor as a JSON string (no image is produced).
+  ///
+  /// Throws [ArgumentError] for an unknown provider.
+  Future<String> _executeGenerateImage(Map<String, dynamic> args) {
+    final provider = (args['provider'] as String).toLowerCase();
+    if (!aiProviders.contains(provider)) {
+      throw ArgumentError('Unknown AI provider: $provider');
+    }
+    return Future.value(jsonEncode({
+      'status': 'stub',
+      'provider': provider,
+      'model': args['model'],
+      'prompt': args['prompt'],
+      'message': 'Image generation is not yet implemented',
+    }));
   }
 
   /// Coerces a raw `messages` argument into typed `{role, content}` pairs.

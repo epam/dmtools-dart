@@ -24,6 +24,9 @@ void main() {
   getCaseTypesTests();
   getPrioritiesTests();
   getStatusesTests();
+  getReferencesTests();
+  getTemplatesTests();
+  deleteCaseTests();
 }
 
 /// The expected `Authorization` value produced by the fixture's config.
@@ -481,3 +484,80 @@ const _prioritiesBody = '[{"id":1,"name":"Low"},{"id":2,"name":"High"}]';
 
 /// Canned `get_statuses` response body.
 const _statusesBody = '[{"id":1,"name":"Passed"},{"id":5,"name":"Failed"}]';
+
+/// `testrail_get_references` — GET `get_references/{projectId}`.
+void getReferencesTests() {
+  group('TestRailClient.getReferences', () {
+    test('returns the decoded list of references', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_references/5': _referencesBody}, o),
+      );
+      final references = await f.client.getReferences(5);
+      expect(references.map((r) => r['id']).toList(), [1, 2]);
+      expect(references.first['name'], 'JIRA');
+      expect(f.adapter.calls.single.path, contains('get_references/5'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_references/5': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getReferences(5), isEmpty);
+    });
+  });
+}
+
+/// `testrail_get_templates` — GET `get_templates`.
+void getTemplatesTests() {
+  group('TestRailClient.getTemplates', () {
+    test('returns the decoded list of templates', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_templates': _templatesBody}, o),
+      );
+      final templates = await f.client.getTemplates();
+      expect(templates.map((t) => t['id']).toList(), [1, 2]);
+      expect(templates.first['name'], 'Test Case (Text)');
+      expect(f.adapter.calls.single.path, contains('get_templates'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_templates': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getTemplates(), isEmpty);
+    });
+  });
+}
+
+/// `testrail_delete_case` — POST `delete_case/{id}`.
+void deleteCaseTests() {
+  group('TestRailClient.deleteCase', () {
+    test('POSTs the delete and returns the decoded object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'delete_case/9': _deletedCaseBody}, o),
+      );
+      final result = await f.client.deleteCase(9);
+      expect(result['deleted'], isTrue);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, contains('delete_case/9'));
+    });
+
+    test('returns empty map when the body is not an object', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'delete_case/9': '[1, 2]'}, o),
+      );
+      expect(await f.client.deleteCase(9), isEmpty);
+    });
+  });
+}
+
+/// Canned `get_references` response body.
+const _referencesBody = '[{"id":1,"name":"JIRA"},{"id":2,"name":"URL"}]';
+
+/// Canned `get_templates` response body.
+const _templatesBody =
+    '[{"id":1,"name":"Test Case (Text)"},{"id":2,"name":"Test Case (Steps)"}]';
+
+/// Canned `delete_case` response body.
+const _deletedCaseBody = '{"deleted":true}';

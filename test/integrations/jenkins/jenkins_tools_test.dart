@@ -9,10 +9,12 @@ void main() {
   toolCatalogTests();
   toolCatalogBatch3ParamTests();
   toolCatalogBatch4ParamTests();
+  toolCatalogBatch5ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
   executorBatch4DispatchTests();
+  executorBatch5DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -24,14 +26,16 @@ void toolCatalogTests() {
   group('jenkinsTools catalog', () {
     final tools = jenkinsTools();
 
-    test('registers the eleven tools in declaration order', () {
+    test('registers the thirteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jenkins_test',
         'jenkins_get_jobs',
         'jenkins_trigger_job',
         'jenkins_get_job_details',
+        'jenkins_get_job_builds',
         'jenkins_get_build',
         'jenkins_get_build_log',
+        'jenkins_get_console_output',
         'jenkins_get_last_build',
         'jenkins_get_build_artifacts',
         'jenkins_get_queue',
@@ -246,6 +250,33 @@ void toolCatalogBatch4ParamTests() {
   });
 }
 
+/// Batch-5 catalog params: job builds and console output.
+void toolCatalogBatch5ParamTests() {
+  group('jenkins_get_job_builds', () {
+    final tool = toolNamed('jenkins_get_job_builds');
+
+    test('declares required name and numeric limit', () {
+      expect(tool.params.map((p) => p.name), ['name', 'limit']);
+      expect(tool.params[1].type, 'number');
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('jenkins_get_console_output', () {
+    final tool = toolNamed('jenkins_get_console_output');
+
+    test('declares required name, numeric buildNumber and startByte', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['name', 'buildNumber', 'startByte'],
+      );
+      expect(tool.params[1].type, 'number');
+      expect(tool.params[2].type, 'number');
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
 /// Batch-4 dispatch tests for build artifacts and job config.
 void executorBatch4DispatchTests() {
   group('JenkinsToolExecutor.execute (batch 4)', () {
@@ -269,6 +300,45 @@ void executorBatch4DispatchTests() {
     test('routes jenkins_get_job_config with name', () async {
       await executor.execute('jenkins_get_job_config', {'name': 'job-a'});
       expect(spy.calls, ['getJobConfig:job-a']);
+    });
+  });
+}
+
+/// Batch-5 dispatch tests for job builds and console output.
+void executorBatch5DispatchTests() {
+  group('JenkinsToolExecutor.execute (batch 5)', () {
+    late _SpyJenkinsClient spy;
+    late JenkinsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJenkinsClient(mockHttp((o) => '{}').http);
+      executor = JenkinsToolExecutor(spy);
+    });
+
+    test('routes jenkins_get_job_builds with name and limit', () async {
+      await executor.execute('jenkins_get_job_builds', {
+        'name': 'job-a',
+        'limit': 3,
+      });
+      expect(spy.calls, ['getJobBuilds:job-a:3']);
+    });
+
+    test('accepts string limit from the MCP protocol', () async {
+      await executor.execute('jenkins_get_job_builds', {
+        'name': 'job-a',
+        'limit': '3',
+      });
+      expect(spy.calls, ['getJobBuilds:job-a:3']);
+    });
+
+    test('routes jenkins_get_console_output with name, build, startByte',
+        () async {
+      await executor.execute('jenkins_get_console_output', {
+        'name': 'job-a',
+        'buildNumber': 5,
+        'startByte': 1024,
+      });
+      expect(spy.calls, ['getConsoleOutput:job-a:5:1024']);
     });
   });
 }
@@ -319,6 +389,22 @@ class _SpyJenkinsClient extends JenkinsClient {
   Future<Map<String, dynamic>?> getJobDetails(String name) {
     calls.add('getJobDetails:$name');
     return super.getJobDetails(name);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getJobBuilds(String name, int limit) {
+    calls.add('getJobBuilds:$name:$limit');
+    return super.getJobBuilds(name, limit);
+  }
+
+  @override
+  Future<String> getConsoleOutput(
+    String name,
+    int buildNumber,
+    int startByte,
+  ) {
+    calls.add('getConsoleOutput:$name:$buildNumber:$startByte');
+    return super.getConsoleOutput(name, buildNumber, startByte);
   }
 
   @override

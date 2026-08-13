@@ -21,6 +21,9 @@ List<ToolDefinition> gitlabTools() => [
       ..._memberTools(),
       ..._groupTools(),
       ..._projectTools(),
+      ..._mrPipelineTools(),
+      ..._mrBlockTools(),
+      ..._projectHookTools(),
     ];
 
 /// Shared `project` param — numeric id or `group/project` path.
@@ -456,6 +459,60 @@ ToolDefinition _getProjectVariablesTool() => ToolDefinition(
       params: [_projectParam],
     );
 
+/// MR-pipelines tool: `gitlab_get_mr_pipelines`.
+List<ToolDefinition> _mrPipelineTools() => [
+      ToolDefinition(
+        name: 'gitlab_get_mr_pipelines',
+        description: 'List pipelines for a GitLab merge request',
+        integration: 'gitlab',
+        category: 'merge_requests',
+        params: [_projectParam, _iidParam('merge request')],
+      ),
+    ];
+
+/// MR-block tools: `gitlab_block_mr`, `gitlab_unblock_mr`.
+List<ToolDefinition> _mrBlockTools() => [
+      ToolDefinition(
+        name: 'gitlab_block_mr',
+        description: 'Block a GitLab merge request',
+        integration: 'gitlab',
+        category: 'merge_requests',
+        params: [_projectParam, _iidParam('merge request')],
+      ),
+      ToolDefinition(
+        name: 'gitlab_unblock_mr',
+        description: 'Unblock a GitLab merge request',
+        integration: 'gitlab',
+        category: 'merge_requests',
+        params: [_projectParam, _iidParam('merge request')],
+      ),
+    ];
+
+/// Project-hook tools: `gitlab_get_project_hooks`, `gitlab_add_project_hook`.
+List<ToolDefinition> _projectHookTools() => [
+      ToolDefinition(
+        name: 'gitlab_get_project_hooks',
+        description: 'List webhooks of a GitLab project',
+        integration: 'gitlab',
+        category: 'projects',
+        params: [_projectParam],
+      ),
+      ToolDefinition(
+        name: 'gitlab_add_project_hook',
+        description: 'Add a webhook to a GitLab project',
+        integration: 'gitlab',
+        category: 'projects',
+        params: [
+          _projectParam,
+          ToolParam(
+            name: 'url',
+            description: 'The webhook callback URL',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Parses a JSON `iid` argument into an int (accepts int or numeric string).
 int _toInt(Object? value) {
   if (value is int) return value;
@@ -497,6 +554,9 @@ class GitlabToolExecutor {
     ..._pipelineHandlers(),
     ..._memberHandlers(),
     ..._projectHandlers(),
+    ..._mrPipelineHandlers(),
+    ..._mrBlockHandlers(),
+    ..._projectHookHandlers(),
   };
 
   /// Connectivity-check handler.
@@ -634,5 +694,38 @@ class GitlabToolExecutor {
                 _client.getProjectDetails(a['project'] as String),
             'gitlab_get_project_variables': (a) =>
                 _client.getProjectVariables(a['project'] as String),
+          };
+
+  /// Merge-request pipeline handler.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _mrPipelineHandlers() => {
+            'gitlab_get_mr_pipelines': (a) => _client.getMrPipelines(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+          };
+
+  /// Merge-request block/unblock handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _mrBlockHandlers() => {
+            'gitlab_block_mr': (a) => _client.blockMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_unblock_mr': (a) => _client.unblockMr(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+          };
+
+  /// Project webhook handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _projectHookHandlers() => {
+            'gitlab_get_project_hooks': (a) =>
+                _client.getProjectHooks(a['project'] as String),
+            'gitlab_add_project_hook': (a) => _client.addProjectHook(
+                  a['project'] as String,
+                  a['url'] as String,
+                ),
           };
 }

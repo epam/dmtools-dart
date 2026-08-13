@@ -31,7 +31,7 @@ void toolCatalogTests() {
   group('aiTools', () {
     final tools = aiTools();
 
-    test('defines the six AI tools in catalog order', () {
+    test('defines the eight AI tools in catalog order', () {
       expect(tools.map((t) => t.name).toList(), [
         'ai_chat',
         'ai_chat_with_history',
@@ -39,6 +39,8 @@ void toolCatalogTests() {
         'ai_complete',
         'ai_embed',
         'ai_summarize',
+        'ai_list_models',
+        'ai_generate_image',
       ]);
       expect(tools.every((t) => t.integration == 'ai'), isTrue);
     });

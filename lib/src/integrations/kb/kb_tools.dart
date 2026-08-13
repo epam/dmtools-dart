@@ -13,8 +13,10 @@ import 'kb_client.dart';
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> kbTools() => [
       _searchTool(),
+      _searchFullTool(),
       _getDocTool(),
       _indexTool(),
+      _listDirsTool(),
       _createDocTool(),
       _deleteDocTool(),
       _updateDocTool(),
@@ -28,6 +30,22 @@ ToolDefinition _searchTool() => ToolDefinition(
       category: 'docs',
       params: [
         ToolParam(name: 'query', description: 'The text to search for'),
+      ],
+    );
+
+/// `kb_search_docs_full` — full-text search with a result cap.
+ToolDefinition _searchFullTool() => ToolDefinition(
+      name: 'kb_search_docs_full',
+      description: 'Search knowledge-base documents and cap the result count',
+      integration: 'kb',
+      category: 'docs',
+      params: [
+        ToolParam(name: 'query', description: 'The text to search for'),
+        ToolParam(
+          name: 'max_results',
+          description: 'Maximum number of matches to return',
+          type: 'number',
+        ),
       ],
     );
 
@@ -52,6 +70,21 @@ ToolDefinition _indexTool() => ToolDefinition(
         ToolParam(
           name: 'dir',
           description: 'Directory to index (defaults to the KB root)',
+          required: false,
+        ),
+      ],
+    );
+
+/// `kb_list_dirs` — list immediate subdirectories of a KB path.
+ToolDefinition _listDirsTool() => ToolDefinition(
+      name: 'kb_list_dirs',
+      description: 'List immediate subdirectories of a knowledge-base path',
+      integration: 'kb',
+      category: 'docs',
+      params: [
+        ToolParam(
+          name: 'base_path',
+          description: 'Directory to list (defaults to the KB root)',
           required: false,
         ),
       ],
@@ -125,8 +158,11 @@ class KbToolExecutor {
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
     'kb_search_docs': (a) => _client.searchDocs(a['query'] as String),
+    'kb_search_docs_full': (a) => _client.searchDocsFull(
+        a['query'] as String, (a['max_results'] as num).toInt()),
     'kb_get_doc': (a) => _client.getDoc(a['path'] as String),
     'kb_index_docs': (a) => _client.indexDocs((a['dir'] as String?) ?? '.'),
+    'kb_list_dirs': (a) => _client.listDirs((a['base_path'] as String?) ?? '.'),
     'kb_create_doc': (a) =>
         _client.createDoc(a['path'] as String, a['content'] as String),
     'kb_delete_doc': (a) => _client.deleteDoc(a['path'] as String),

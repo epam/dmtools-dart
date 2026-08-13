@@ -18,6 +18,7 @@ void main() {
   abortBuildTests();
   getWorkflowsTests();
   getArtifactsTests();
+  getArtifactDetailTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -287,3 +288,37 @@ const _workflowsBody =
 const _artifactsBody =
     '{"data":[{"slug":"a1","title":"app.apk"},{"slug":"a2","title":"log.txt"}],'
     '"paging":{}}';
+
+/// `bitrise_get_artifact_detail` — GET
+/// `apps/{appSlug}/builds/{buildSlug}/artifacts/{artifactSlug}`.
+void getArtifactDetailTests() {
+  group('BitriseClient.getArtifactDetail', () {
+    test('returns the decoded artifact object', () async {
+      final f = mockBitrise(
+        (o) => routeByPath({'/artifacts/art-1': _artifactDetailBody}, o),
+      );
+      final detail =
+          await f.client.getArtifactDetail('app-1', 'build-2', 'art-1');
+      expect(detail?['slug'], 'art-1');
+      expect(detail?['title'], 'app.apk');
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v0.1/apps/app-1/builds/build-2/artifacts/art-1'),
+      );
+    });
+
+    test('returns null when the response is not an object', () async {
+      final f = mockBitrise(
+        (o) => routeByPath({'/artifacts/art-1': '[1]'}, o),
+      );
+      expect(
+        await f.client.getArtifactDetail('app-1', 'build-2', 'art-1'),
+        isNull,
+      );
+    });
+  });
+}
+
+/// Canned artifact-detail response body.
+const _artifactDetailBody =
+    '{"slug":"art-1","title":"app.apk","expiring":true}';

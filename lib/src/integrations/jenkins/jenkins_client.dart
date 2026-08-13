@@ -100,6 +100,22 @@ class JenkinsClient {
     return _http.get('job/${_encodeJob(name)}/$buildNumber/consoleText');
   }
 
+  /// `jenkins_get_console_output` — GET
+  /// `job/{name}/{buildNumber}/consoleText` with a `Range` header.
+  ///
+  /// Streams the console text starting at byte offset [startByte] via the
+  /// `Range: bytes={startByte}-` request header. Returns the raw text.
+  Future<String> getConsoleOutput(
+    String name,
+    int buildNumber,
+    int startByte,
+  ) async {
+    return _http.get(
+      'job/${_encodeJob(name)}/$buildNumber/consoleText',
+      extra: {'Range': 'bytes=$startByte-'},
+    );
+  }
+
   /// `jenkins_get_last_build` — GET `job/{name}/lastBuild/api/json`.
   ///
   /// Returns `null` when the response body is not a JSON object.
@@ -116,6 +132,19 @@ class JenkinsClient {
     final body = await _http.get(
       'job/${_encodeJob(name)}/api/json',
       queryParams: {'tree': 'builds[number,result]'},
+    );
+    return _decodeMap(body);
+  }
+
+  /// `jenkins_get_job_builds` — GET
+  /// `job/{name}/api/json?tree=builds[number,result,timestamp]{0,N}`.
+  ///
+  /// Requests the last [limit] builds with their number, result, and
+  /// timestamp. Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getJobBuilds(String name, int limit) async {
+    final body = await _http.get(
+      'job/${_encodeJob(name)}/api/json',
+      queryParams: {'tree': 'builds[number,result,timestamp]{0,$limit}'},
     );
     return _decodeMap(body);
   }

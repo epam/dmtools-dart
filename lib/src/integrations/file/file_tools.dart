@@ -30,6 +30,9 @@ List<ToolDefinition> fileTools() => [
       _writeJsonTool(),
       _existsInPathTool(),
       _getSizeTool(),
+      _watchTool(),
+      _renameTool(),
+      _searchTool(),
     ];
 
 /// `file_read` — read the contents of a text file.
@@ -219,6 +222,42 @@ ToolDefinition _getSizeTool() => ToolDefinition(
       ],
     );
 
+/// `file_watch` — return a file's last-modified time and size.
+ToolDefinition _watchTool() => ToolDefinition(
+      name: 'file_watch',
+      description: 'Return a file\'s last-modified time and size as a map',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to watch'),
+      ],
+    );
+
+/// `file_rename` — rename a file (alias of move).
+ToolDefinition _renameTool() => ToolDefinition(
+      name: 'file_rename',
+      description: 'Rename (move) a file from source to destination',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'source', description: 'Source file path'),
+        ToolParam(name: 'dest', description: 'Destination file path'),
+      ],
+    );
+
+/// `file_search` — recursively search for files matching a glob pattern.
+ToolDefinition _searchTool() => ToolDefinition(
+      name: 'file_search',
+      description: 'Recursively search a directory for files matching a glob '
+          'pattern (supports * and ?)',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'dir', description: 'Root directory to search'),
+        ToolParam(name: 'pattern', description: 'Glob pattern, e.g. *.dart'),
+      ],
+    );
+
 /// Executes file MCP tools using `dart:io`.
 ///
 /// Each method performs a single file-system operation; [execute] dispatches
@@ -331,6 +370,31 @@ class FileToolExecutor {
   /// Returns the size of the file at [path] in bytes.
   Future<int> getSize(String path) => File(path).length();
 
+  /// Returns the last-modified time and size of [path] as a map.
+  Future<Map<String, dynamic>> watch(String path) async {
+    final stat = await File(path).stat();
+    return {'size': stat.size, 'modified': stat.modified};
+  }
+
+  /// Renames (moves) the file at [source] to [dest].
+  ///
+  /// Equivalent to [move]; provided as an explicit rename entry point.
+  Future<void> rename(String source, String dest) => move(source, dest);
+
+  /// Recursively searches [dir] for files whose name matches glob [pattern].
+  Future<List<String>> search(String dir, String pattern) async {
+    final matcher = _globToRegex(pattern);
+    final result = <String>[];
+    final root = Directory(dir);
+    if (!root.existsSync()) return result;
+    await for (final entry in root.list(recursive: true)) {
+      if (entry is File && matcher.hasMatch(entry.uri.pathSegments.last)) {
+        result.add(entry.path);
+      }
+    }
+    return result;
+  }
+
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
@@ -359,5 +423,16 @@ class FileToolExecutor {
           a['filename'] as String,
         ),
     'file_get_size': (a) => getSize(a['path'] as String),
+    'file_watch': (a) => watch(a['path'] as String),
+    'file_rename': (a) => rename(a['source'] as String, a['dest'] as String),
+    'file_search': (a) => search(a['dir'] as String, a['pattern'] as String),
   };
+}
+
+/// Converts a glob [pattern] (`*` and `?`) into a matching [RegExp].
+RegExp _globToRegex(String pattern) {
+  final escaped = RegExp.escape(pattern);
+  final star = escaped.replaceAll('\\*', '.*');
+  final question = star.replaceAll('\\?', '.');
+  return RegExp('^$question\$');
 }

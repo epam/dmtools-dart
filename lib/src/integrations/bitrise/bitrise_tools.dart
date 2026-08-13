@@ -42,7 +42,7 @@ List<ToolDefinition> _appTools() => [
 
 /// Build tools: `bitrise_get_builds`, `bitrise_get_build_detail`,
 /// `bitrise_trigger_build`, `bitrise_trigger_build_with_params`,
-/// `bitrise_get_workflows`, `bitrise_get_artifacts`.
+/// `bitrise_get_artifacts`, `bitrise_get_artifact_detail`.
 List<ToolDefinition> _buildTools() => [
       _getBuildsTool(),
       _getBuildDetailTool(),
@@ -51,6 +51,7 @@ List<ToolDefinition> _buildTools() => [
       _abortBuildTool(),
       _getWorkflowsTool(),
       _getArtifactsTool(),
+      _getArtifactDetailTool(),
     ];
 
 /// Build-list tool: `bitrise_get_builds`.
@@ -184,6 +185,31 @@ ToolDefinition _getArtifactsTool() => ToolDefinition(
       ],
     );
 
+/// Artifact-detail tool: `bitrise_get_artifact_detail`.
+ToolDefinition _getArtifactDetailTool() => ToolDefinition(
+      name: 'bitrise_get_artifact_detail',
+      description: 'Get details of a single Bitrise build artifact',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'build_slug',
+          description: 'The Bitrise build slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'artifact_slug',
+          description: 'The Bitrise artifact slug',
+          required: true,
+        ),
+      ],
+    );
+
 /// Executes Bitrise MCP tools by dispatching to [BitriseClient].
 class BitriseToolExecutor {
   final BitriseClient _client;
@@ -228,6 +254,11 @@ class BitriseToolExecutor {
     'bitrise_get_artifacts': (a) => _client.getArtifacts(
           a['app_slug'] as String,
           a['build_slug'] as String,
+        ),
+    'bitrise_get_artifact_detail': (a) => _client.getArtifactDetail(
+          a['app_slug'] as String,
+          a['build_slug'] as String,
+          a['artifact_slug'] as String,
         ),
   };
 }

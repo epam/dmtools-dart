@@ -10,6 +10,7 @@ void main() {
   toolCatalogParamTests();
   executorDispatchTests();
   batch2ExecutorDispatchTests();
+  batch3ExecutorDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -21,14 +22,16 @@ void toolCatalogShapeTests() {
   group('xrayTools catalog', () {
     final tools = xrayTools();
 
-    test('registers the six tools in declaration order', () {
+    test('registers the eight tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jira_xray_test',
         'jira_xray_get_tests',
         'jira_xray_get_test_executions',
         'jira_xray_get_test_steps',
+        'jira_xray_get_test_runs',
         'jira_xray_get_test_plan',
         'jira_xray_create_test_execution',
+        'jira_xray_update_test_execution',
       ]);
     });
 
@@ -80,6 +83,22 @@ void toolCatalogParamTests() {
     expect(tool.category, 'test_management');
     expect(tool.params.map((p) => p.name), ['testPlanKey']);
     expect(tool.params.single.required, isTrue);
+  });
+
+  test('jira_xray_get_test_runs requires a testKey', () {
+    final tool = toolNamed('jira_xray_get_test_runs');
+    expect(tool.category, 'test_management');
+    expect(tool.params.map((p) => p.name), ['testKey']);
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('jira_xray_update_test_execution requires executionId and status', () {
+    final tool = toolNamed('jira_xray_update_test_execution');
+    expect(tool.category, 'test_management');
+    expect(tool.params.map((p) => p.name), ['executionId', 'status']);
+    expect(tool.params[0].type, 'string');
+    expect(tool.params[1].type, 'string');
+    expect(tool.params.every((p) => p.required), isTrue);
   });
 }
 
@@ -162,6 +181,32 @@ void batch2ExecutorDispatchTests() {
   });
 }
 
+/// Batch-3 executor dispatch tests for the new Xray write/read tools.
+void batch3ExecutorDispatchTests() {
+  group('XrayToolExecutor.execute batch-3', () {
+    late _SpyXrayClient spy;
+    late XrayToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyXrayClient(mockXrayHttp((o) => '{}').http);
+      executor = XrayToolExecutor(spy);
+    });
+
+    test('routes jira_xray_update_test_execution', () async {
+      await executor.execute('jira_xray_update_test_execution', {
+        'executionId': '100',
+        'status': 'PASS',
+      });
+      expect(spy.calls, ['updateTestExecution:100:PASS']);
+    });
+
+    test('routes jira_xray_get_test_runs with a testKey', () async {
+      await executor.execute('jira_xray_get_test_runs', {'testKey': 'PROJ-1'});
+      expect(spy.calls, ['getTestRuns:PROJ-1']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyXrayClient extends XrayClient {
   _SpyXrayClient(super.http);
@@ -205,5 +250,20 @@ class _SpyXrayClient extends XrayClient {
   Future<Map<String, dynamic>> getTestPlan(String testPlanKey) {
     calls.add('getTestPlan:$testPlanKey');
     return super.getTestPlan(testPlanKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateTestExecution(
+    String executionId,
+    String status,
+  ) {
+    calls.add('updateTestExecution:$executionId:$status');
+    return super.updateTestExecution(executionId, status);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTestRuns(String testKey) {
+    calls.add('getTestRuns:$testKey');
+    return super.getTestRuns(testKey);
   }
 }

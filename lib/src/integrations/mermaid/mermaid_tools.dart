@@ -39,6 +39,7 @@ List<ToolDefinition> mermaidTools() => [
       _renderTool(),
       _validateTool(),
       _exportTool(),
+      _listTypesTool(),
     ];
 
 /// `mermaid_render` — validate and wrap a diagram in a code block.
@@ -87,6 +88,15 @@ ToolDefinition _exportTool() => ToolDefinition(
       ],
     );
 
+/// `mermaid_list_types` — list the supported Mermaid diagram types.
+ToolDefinition _listTypesTool() => ToolDefinition(
+      name: 'mermaid_list_types',
+      description: 'List the supported Mermaid diagram types',
+      integration: 'mermaid',
+      category: 'diagrams',
+      params: [],
+    );
+
 /// Executes the Mermaid MCP tools.
 ///
 /// [render] validates the diagram and wraps it in a fenced `mermaid`
@@ -117,7 +127,11 @@ class MermaidToolExecutor {
     'mermaid_validate': (a) => validate(a['diagram'] as String),
     'mermaid_export': (a) =>
         export(a['diagram'] as String, a['format'] as String?),
+    'mermaid_list_types': (_) => listTypes(),
   };
+
+  /// Lists the supported Mermaid diagram-type keywords in declaration order.
+  Future<List<String>> listTypes() async => mermaidDiagramKeywords.toList();
 
   /// Validates [diagram] and returns it in the requested [format].
   ///

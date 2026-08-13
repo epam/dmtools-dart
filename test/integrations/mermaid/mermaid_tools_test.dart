@@ -8,6 +8,7 @@ void main() {
   exportTests();
   validateTests();
   validationTests();
+  listTypesTests();
   unknownToolTests();
 }
 
@@ -19,11 +20,12 @@ void toolCatalogTests() {
   group('mermaidTools catalog', () {
     final tools = mermaidTools();
 
-    test('registers render, validate, and export tools', () {
+    test('registers render, validate, export, and list_types tools', () {
       expect(tools.map((t) => t.name), [
         'mermaid_render',
         'mermaid_validate',
         'mermaid_export',
+        'mermaid_list_types',
       ]);
     });
 
@@ -60,6 +62,11 @@ void toolCatalogTests() {
         tool.params.singleWhere((p) => p.name == 'format').required,
         isFalse,
       );
+    });
+
+    test('list_types takes no parameters', () {
+      final tool = tools.firstWhere((t) => t.name == 'mermaid_list_types');
+      expect(tool.params, isEmpty);
     });
   });
 }
@@ -206,6 +213,24 @@ void validationTests() {
   });
 }
 
+/// [MermaidToolExecutor.listTypes] diagram-type enumeration.
+void listTypesTests() {
+  final executor = MermaidToolExecutor();
+
+  group('MermaidToolExecutor.listTypes', () {
+    test('returns every supported diagram keyword', () async {
+      final types = await executor.listTypes();
+      expect(types, containsAll(mermaidDiagramKeywords));
+      expect(types.length, mermaidDiagramKeywords.length);
+    });
+
+    test('includes flowchart and sequencediagram', () async {
+      final types = await executor.listTypes();
+      expect(types, containsAll(['flowchart', 'sequencediagram']));
+    });
+  });
+}
+
 /// Unknown-tool rejection and execute dispatch.
 void unknownToolTests() {
   final executor = MermaidToolExecutor();
@@ -239,5 +264,10 @@ void unknownToolTests() {
       {'diagram': _flowchart, 'format': 'svg'},
     ) as String;
     expect(result, contains('<svg'));
+  });
+
+  test('execute routes mermaid_list_types to listTypes', () async {
+    final result = await executor.execute('mermaid_list_types', {}) as List;
+    expect(result, containsAll(['flowchart', 'gantt']));
   });
 }

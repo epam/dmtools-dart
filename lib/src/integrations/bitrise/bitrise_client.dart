@@ -133,6 +133,22 @@ class BitriseClient {
     return _decodeObject(body) ?? const {};
   }
 
+  /// `bitrise_get_artifact_detail` — GET
+  /// `apps/{appSlug}/builds/{buildSlug}/artifacts/{artifactSlug}`.
+  ///
+  /// Returns `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getArtifactDetail(
+    String appSlug,
+    String buildSlug,
+    String artifactSlug,
+  ) async {
+    final body = await _http.get(
+      'apps/${_encodeSlug(appSlug)}/builds/${_encodeSlug(buildSlug)}'
+      '/artifacts/${_encodeSlug(artifactSlug)}',
+    );
+    return _decodeObject(body);
+  }
+
   /// POSTs [buildParams] to `apps/{appSlug}/builds` and decodes the object.
   Future<Map<String, dynamic>?> _postBuild(
     String appSlug,

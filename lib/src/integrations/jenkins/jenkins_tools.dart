@@ -51,18 +51,21 @@ List<ToolDefinition> _systemTools() => [
     ];
 
 /// Job tools: `jenkins_get_jobs`, `jenkins_trigger_job`,
-/// `jenkins_get_job_details`.
+/// `jenkins_get_job_details`, `jenkins_get_job_builds`.
 List<ToolDefinition> _jobTools() => [
       _getJobsTool(),
       _triggerJobTool(),
       _getJobDetailsTool(),
+      _getJobBuildsTool(),
     ];
 
 /// Build tools: `jenkins_get_build`, `jenkins_get_build_log`,
-/// `jenkins_get_last_build`, `jenkins_get_build_artifacts`.
+/// `jenkins_get_console_output`, `jenkins_get_last_build`,
+/// `jenkins_get_build_artifacts`.
 List<ToolDefinition> _buildTools() => [
       _getBuildTool(),
       _getBuildLogTool(),
+      _getConsoleOutputTool(),
       _getLastBuildTool(),
       _getBuildArtifactsTool(),
     ];
@@ -103,6 +106,29 @@ ToolDefinition _getBuildLogTool() => ToolDefinition(
       params: _nameAndBuildParams,
     );
 
+/// Console-output tool: `jenkins_get_console_output`.
+ToolDefinition _getConsoleOutputTool() => ToolDefinition(
+      name: 'jenkins_get_console_output',
+      description: 'Stream Jenkins console output from a byte offset',
+      integration: 'jenkins',
+      category: 'builds',
+      params: [
+        _nameParam,
+        const ToolParam(
+          name: 'buildNumber',
+          description: 'The build number',
+          type: 'number',
+          required: true,
+        ),
+        ToolParam(
+          name: 'startByte',
+          description: 'The byte offset to stream console output from',
+          type: 'number',
+          required: true,
+        ),
+      ],
+    );
+
 /// Last-build tool: `jenkins_get_last_build`.
 ToolDefinition _getLastBuildTool() => ToolDefinition(
       name: 'jenkins_get_last_build',
@@ -128,6 +154,23 @@ ToolDefinition _getJobDetailsTool() => ToolDefinition(
       integration: 'jenkins',
       category: 'jobs',
       params: [_nameParam],
+    );
+
+/// Job-builds tool: `jenkins_get_job_builds`.
+ToolDefinition _getJobBuildsTool() => ToolDefinition(
+      name: 'jenkins_get_job_builds',
+      description: 'List the last N Jenkins builds of a job',
+      integration: 'jenkins',
+      category: 'jobs',
+      params: [
+        _nameParam,
+        ToolParam(
+          name: 'limit',
+          description: 'The maximum number of builds to return',
+          type: 'number',
+          required: true,
+        ),
+      ],
     );
 
 /// Queue tools: `jenkins_get_queue`, `jenkins_cancel_build`.
@@ -198,9 +241,18 @@ class JenkinsToolExecutor {
           a['name'] as String,
           requiredInt(a, 'buildNumber'),
         ),
+    'jenkins_get_console_output': (a) => _client.getConsoleOutput(
+          a['name'] as String,
+          requiredInt(a, 'buildNumber'),
+          requiredInt(a, 'startByte'),
+        ),
     'jenkins_get_last_build': (a) => _client.getLastBuild(a['name'] as String),
     'jenkins_get_job_details': (a) =>
         _client.getJobDetails(a['name'] as String),
+    'jenkins_get_job_builds': (a) => _client.getJobBuilds(
+          a['name'] as String,
+          requiredInt(a, 'limit'),
+        ),
     'jenkins_get_queue': (_) => _client.getQueue(),
     'jenkins_cancel_build': (a) =>
         _client.cancelBuild(requiredInt(a, 'queueId')),

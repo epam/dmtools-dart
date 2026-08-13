@@ -16,8 +16,8 @@ void toolCatalogTests() {
   group('cliTools catalog', () {
     final tools = cliTools();
 
-    test('registers two tools', () {
-      expect(tools, hasLength(2));
+    test('registers three tools', () {
+      expect(tools, hasLength(3));
     });
 
     test('cli_execute_command has correct metadata', () {

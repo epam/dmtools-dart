@@ -7,21 +7,24 @@ import 'teams_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
+  toolCatalogParamTests();
   batch3CatalogParamTests();
+  batch4CatalogParamTests();
   executorDispatchTests();
   batch3ToolDispatchTests();
+  batch4ToolDispatchTests();
 }
 
 /// Looks up a registered tool by name.
 ToolDefinition toolNamed(String name) =>
     teamsTools().firstWhere((t) => t.name == name);
 
-/// Catalog shape: tool count, order, integration, params.
+/// Catalog shape: tool count, order, integration.
 void toolCatalogTests() {
   group('teamsTools catalog', () {
     final tools = teamsTools();
 
-    test('registers the eleven tools in declaration order', () {
+    test('registers the twelve tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'teams_test',
         'teams_send_message',
@@ -34,6 +37,7 @@ void toolCatalogTests() {
         'teams_get_team_channels',
         'teams_send_channel_message',
         'teams_get_channel_messages',
+        'teams_reply_to_message',
       ]);
     });
 
@@ -41,7 +45,10 @@ void toolCatalogTests() {
       expect(tools.every((t) => t.integration == 'teams'), isTrue);
     });
   });
+}
 
+/// Per-tool parameter declarations for the original batch-1 tools.
+void toolCatalogParamTests() {
   group('teams_send_message', () {
     final tool = toolNamed('teams_send_message');
 
@@ -134,6 +141,18 @@ void batch3CatalogParamTests() {
 
     test('declares required team_id and channel_id', () {
       expect(tool.params.map((p) => p.name), ['team_id', 'channel_id']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Per-tool parameter declarations for the batch-4 reply tool.
+void batch4CatalogParamTests() {
+  group('teams_reply_to_message', () {
+    final tool = toolNamed('teams_reply_to_message');
+
+    test('declares required chat_id, message_id, and body', () {
+      expect(tool.params.map((p) => p.name), ['chat_id', 'message_id', 'body']);
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
@@ -245,6 +264,27 @@ void batch3ToolDispatchTests() {
   });
 }
 
+/// Dispatch tests for the batch-4 reply tool.
+void batch4ToolDispatchTests() {
+  group('TeamsToolExecutor.execute batch-4 tools', () {
+    late _SpyTeamsClient spy;
+    late TeamsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTeamsClient(mockHttp((o) => '{}').http);
+      executor = TeamsToolExecutor(spy);
+    });
+
+    test('routes teams_reply_to_message with chat, message, body', () async {
+      await executor.execute(
+        'teams_reply_to_message',
+        {'chat_id': 'c1', 'message_id': 'm1', 'body': 'hi'},
+      );
+      expect(spy.calls, ['replyToMessage:c1:m1:hi']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyTeamsClient extends TeamsClient {
   _SpyTeamsClient(super.http);
@@ -326,5 +366,15 @@ class _SpyTeamsClient extends TeamsClient {
   ) {
     calls.add('getChannelMessages:$teamId:$channelId');
     return super.getChannelMessages(teamId, channelId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> replyToMessage(
+    String chatId,
+    String messageId,
+    String body,
+  ) {
+    calls.add('replyToMessage:$chatId:$messageId:$body');
+    return super.replyToMessage(chatId, messageId, body);
   }
 }

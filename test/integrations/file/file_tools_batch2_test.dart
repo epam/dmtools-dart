@@ -31,8 +31,8 @@ void catalogTests() {
   final tools = fileTools();
 
   group('fileTools catalog (batch 2)', () {
-    test('registers sixteen tools total', () {
-      expect(tools, hasLength(16));
+    test('registers nineteen tools total', () {
+      expect(tools, hasLength(19));
     });
 
     test('includes the seven new tool names', () {

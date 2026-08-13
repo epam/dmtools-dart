@@ -62,6 +62,10 @@ class FigmaClient {
   Future<Map<String, dynamic>> getFileNodes(String key, String nodeIds) =>
       _getJson('files/$key/nodes', queryParams: {'ids': nodeIds});
 
+  /// `figma_get_node` — GET `/files/{key}/nodes?ids={nodeId}` (singular).
+  Future<Map<String, dynamic>> getNode(String key, String nodeId) =>
+      _getJson('files/$key/nodes', queryParams: {'ids': nodeId});
+
   /// `figma_get_image` — GET `/images/{key}?ids={nodeId}`.
   Future<Map<String, dynamic>> getImage(String key, String nodeId) =>
       _getJson('images/$key', queryParams: {'ids': nodeId});
@@ -92,6 +96,10 @@ class FigmaClient {
 
   /// `figma_get_styles` — GET `/files/{key}/styles`.
   Future<Map<String, dynamic>> getStyles(String key) =>
+      _getJson('files/$key/styles');
+
+  /// `figma_get_style` — GET `/files/{key}/styles` (singular alias).
+  Future<Map<String, dynamic>> getStyle(String key) =>
       _getJson('files/$key/styles');
 
   /// `figma_export_image` — GET `/images/{key}` with optional format/scale.

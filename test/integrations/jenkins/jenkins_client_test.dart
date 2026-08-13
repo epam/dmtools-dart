@@ -16,6 +16,8 @@ void main() {
   getBuildLogTests();
   getLastBuildTests();
   getJobDetailsTests();
+  getJobBuildsTests();
+  getConsoleOutputTests();
   getQueueTests();
   cancelBuildTests();
   getBuildArtifactsTests();
@@ -290,6 +292,52 @@ void cancelBuildTests() {
 const _jobDetailsBody =
     '{"name":"job-a","builds":[{"number":1,"result":"SUCCESS"},'
     '{"number":2,"result":"FAILURE"}]}';
+
+/// `jenkins_get_job_builds` — GET
+/// `job/{name}/api/json?tree=builds[number,result,timestamp]{0,N}`.
+void getJobBuildsTests() {
+  group('JenkinsClient.getJobBuilds', () {
+    test('returns the decoded job object with the tree range query', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/api/json': _jobBuildsBody}, o),
+      );
+      final result = await f.client.getJobBuilds('job-a', 3);
+      expect(result?['builds'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.path, endsWith('/job/job-a/api/json'));
+      expect(
+          call.queryParameters['tree'], 'builds[number,result,timestamp]{0,3}');
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/api/json': '[1]'}, o),
+      );
+      expect(await f.client.getJobBuilds('job-a', 3), isNull);
+    });
+  });
+}
+
+/// `jenkins_get_console_output` — GET `job/{name}/{build}/consoleText`.
+void getConsoleOutputTests() {
+  group('JenkinsClient.getConsoleOutput', () {
+    test('sends a Range header and returns the raw console text', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/job/job-a/5/consoleText': _logBody}, o),
+      );
+      final log = await f.client.getConsoleOutput('job-a', 5, 1024);
+      expect(log, _logBody);
+      final call = f.adapter.calls.single;
+      expect(call.path, endsWith('/job/job-a/5/consoleText'));
+      expect(call.headers['Range'], 'bytes=1024-');
+    });
+  });
+}
+
+/// Canned job-builds response body.
+const _jobBuildsBody =
+    '{"builds":[{"number":1,"result":"SUCCESS","timestamp":1700000000000},'
+    '{"number":2,"result":"FAILURE","timestamp":1700000001000}]}';
 
 /// Canned queue response body.
 const _queueBody = '{"items":[{"id":42},{"id":43}]}';

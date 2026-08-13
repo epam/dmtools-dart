@@ -54,6 +54,12 @@ const _githubToolNames = [
   'github_get_workflow_runs',
   'github_rerun_workflow',
   'github_get_check_runs',
+  'github_get_workflows',
+  'github_enable_workflow',
+  'github_disable_workflow',
+  'github_get_codeowners',
+  'github_add_collaborator',
+  'github_remove_collaborator',
 ];
 
 /// Serves `[]` for the PR-list GET (expects a JSON array), `{}` otherwise.
@@ -67,7 +73,7 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the thirty-four tools in declaration order', () {
+    test('registers the forty tools in declaration order', () {
       expect(tools.map((t) => t.name), _githubToolNames);
     });
 

@@ -349,4 +349,49 @@ class GitlabClient {
   /// `gitlab_get_project_variables` — GET `/api/v4/projects/{id}/variables`.
   Future<List<Map<String, dynamic>>> getProjectVariables(String project) =>
       _getList('projects/${_encodeProject(project)}/variables');
+
+  /// `gitlab_get_mr_pipelines` — GET
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/pipelines`.
+  ///
+  /// Lists pipelines triggered for the merge request's head SHA.
+  Future<List<Map<String, dynamic>>> getMrPipelines(String project, int iid) =>
+      _getList(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/pipelines',
+      );
+
+  /// `gitlab_block_mr` — POST
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/block`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> blockMr(String project, int iid) => _postObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/block',
+        null,
+      );
+
+  /// `gitlab_unblock_mr` — POST
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/unblock`.
+  ///
+  /// Returns the updated merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> unblockMr(String project, int iid) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/unblock',
+        null,
+      );
+
+  /// `gitlab_get_project_hooks` — GET `/api/v4/projects/{id}/hooks`.
+  Future<List<Map<String, dynamic>>> getProjectHooks(String project) =>
+      _getList('projects/${_encodeProject(project)}/hooks');
+
+  /// `gitlab_add_project_hook` — POST `/api/v4/projects/{id}/hooks`.
+  ///
+  /// [url] is the webhook callback URL. Returns the created hook, or `null`
+  /// for non-object bodies.
+  Future<Map<String, dynamic>?> addProjectHook(
+    String project,
+    String url,
+  ) =>
+      _postObject(
+        'projects/${_encodeProject(project)}/hooks',
+        jsonEncode({'url': url}),
+      );
 }

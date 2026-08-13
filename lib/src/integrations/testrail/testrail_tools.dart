@@ -67,7 +67,8 @@ List<ToolDefinition> _caseTools() => [
       ),
     ];
 
-/// Case-write tools: `testrail_add_case`, `testrail_update_case`.
+/// Case-write tools: `testrail_add_case`, `testrail_update_case`,
+/// `testrail_delete_case`.
 List<ToolDefinition> _caseWriteTools() => [
       ToolDefinition(
         name: 'testrail_add_case',
@@ -104,6 +105,20 @@ List<ToolDefinition> _caseWriteTools() => [
             name: 'fields',
             description: 'Case fields to update as key-value pairs',
             type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_delete_case',
+        description: 'Delete a TestRail test case by ID',
+        integration: 'testrail',
+        category: 'test_cases',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The test case ID to delete',
+            type: 'number',
             required: true,
           ),
         ],
@@ -246,7 +261,7 @@ List<ToolDefinition> _runWriteTools() => [
     ];
 
 /// Metadata tools: `testrail_get_case_types`, `testrail_get_priorities`,
-/// `testrail_get_statuses`.
+/// `testrail_get_statuses`, `testrail_get_references`, `testrail_get_templates`.
 List<ToolDefinition> _metadataTools() => [
       ToolDefinition(
         name: 'testrail_get_case_types',
@@ -272,6 +287,27 @@ List<ToolDefinition> _metadataTools() => [
       ToolDefinition(
         name: 'testrail_get_statuses',
         description: 'Get TestRail case statuses',
+        integration: 'testrail',
+        category: 'metadata',
+        params: [],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_references',
+        description: 'Get TestRail references for a project',
+        integration: 'testrail',
+        category: 'metadata',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_templates',
+        description: 'Get TestRail templates',
         integration: 'testrail',
         category: 'metadata',
         params: [],
@@ -318,6 +354,7 @@ class TestRailToolExecutor {
           requiredInt(a, 'id'),
           a['fields'] as Map<String, dynamic>,
         ),
+    'testrail_delete_case': (a) => _client.deleteCase(requiredInt(a, 'id')),
     'testrail_get_milestones': (a) =>
         _client.getMilestones(requiredInt(a, 'projectId')),
     'testrail_get_plans': (a) => _client.getPlans(requiredInt(a, 'projectId')),
@@ -333,5 +370,8 @@ class TestRailToolExecutor {
         _client.getCaseTypes(requiredInt(a, 'projectId')),
     'testrail_get_priorities': (_) => _client.getPriorities(),
     'testrail_get_statuses': (_) => _client.getStatuses(),
+    'testrail_get_references': (a) =>
+        _client.getReferences(requiredInt(a, 'projectId')),
+    'testrail_get_templates': (_) => _client.getTemplates(),
   };
 }

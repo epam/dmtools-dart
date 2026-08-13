@@ -46,7 +46,7 @@ List<ToolDefinition> _systemTools() => [
     ];
 
 /// Test-read tools: `jira_xray_get_tests`, `jira_xray_get_test_executions`,
-/// `jira_xray_get_test_steps`.
+/// `jira_xray_get_test_steps`, `jira_xray_get_test_runs`.
 List<ToolDefinition> _testReadTools() => [
       _xrayTool(
         name: 'jira_xray_get_tests',
@@ -82,6 +82,17 @@ List<ToolDefinition> _testReadTools() => [
           ),
         ],
       ),
+      _xrayTool(
+        name: 'jira_xray_get_test_runs',
+        description: 'Get the test runs for a given Xray test',
+        params: [
+          ToolParam(
+            name: 'testKey',
+            description: 'The test issue key (e.g. PROJ-1)',
+            required: true,
+          ),
+        ],
+      ),
     ];
 
 /// Test-plan tool: `jira_xray_get_test_plan`.
@@ -99,7 +110,8 @@ List<ToolDefinition> _testPlanTools() => [
       ),
     ];
 
-/// Test-execution tool: `jira_xray_create_test_execution`.
+/// Test-execution tools: `jira_xray_create_test_execution`,
+/// `jira_xray_update_test_execution`.
 List<ToolDefinition> _executionTools() => [
       _xrayTool(
         name: 'jira_xray_create_test_execution',
@@ -115,6 +127,22 @@ List<ToolDefinition> _executionTools() => [
             name: 'testExecJson',
             description: 'The Xray test execution JSON body',
             type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+      _xrayTool(
+        name: 'jira_xray_update_test_execution',
+        description: 'Update the status of an Xray test execution',
+        params: [
+          ToolParam(
+            name: 'executionId',
+            description: 'The test execution ID (e.g. 100)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'status',
+            description: 'The new execution status (e.g. PASS, FAIL)',
             required: true,
           ),
         ],
@@ -168,5 +196,11 @@ class XrayToolExecutor {
           a['projectKey'] as String,
           a['testExecJson'] as Map<String, dynamic>,
         ),
+    'jira_xray_update_test_execution': (a) => _client.updateTestExecution(
+          a['executionId'] as String,
+          a['status'] as String,
+        ),
+    'jira_xray_get_test_runs': (a) =>
+        _client.getTestRuns(a['testKey'] as String),
   };
 }

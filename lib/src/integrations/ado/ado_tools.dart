@@ -14,6 +14,7 @@ import 'ado_client.dart';
 List<ToolDefinition> adoTools() => [
       ..._systemTools(),
       ..._workItemTools(),
+      ..._workItemLinkTools(),
       ..._workItemQueryTools(),
       ..._commentTools(),
       ..._teamTools(),
@@ -22,6 +23,7 @@ List<ToolDefinition> adoTools() => [
       ..._pullRequestUpdateTools(),
       ..._pullRequestStatusTools(),
       ..._repoTools(),
+      ..._repoDetailTools(),
       ..._buildTools(),
     ];
 
@@ -85,6 +87,29 @@ List<ToolDefinition> _workItemTools() => [
         integration: 'ado',
         category: 'work_item_management',
         params: [_idParam('The work item ID')],
+      ),
+    ];
+
+/// Work-item link tool: `ado_create_work_item_link`.
+///
+/// Split out from [_workItemTools] to keep each grouping under the 60-line
+/// method-size gate.
+List<ToolDefinition> _workItemLinkTools() => [
+      ToolDefinition(
+        name: 'ado_create_work_item_link',
+        description: 'Link two Azure DevOps work items (source → target) with '
+            'a relation type',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          _numberParam('sourceId', 'The source work item ID'),
+          _numberParam('targetId', 'The target work item ID'),
+          ToolParam(
+            name: 'linkType',
+            description: 'The relation type, e.g. '
+                'System.LinkTypes.Hierarchy-Forward',
+          ),
+        ],
       ),
     ];
 
@@ -164,8 +189,18 @@ List<ToolDefinition> _teamTools() => [
       ),
     ];
 
-/// Project tools: `ado_get_project_properties`.
+/// Project tools: `ado_get_project_details`, `ado_get_project_properties`.
 List<ToolDefinition> _projectTools() => [
+      ToolDefinition(
+        name: 'ado_get_project_details',
+        description: 'Get an Azure DevOps project by ID (name, state, '
+            'description)',
+        integration: 'ado',
+        category: 'projects',
+        params: [
+          ToolParam(name: 'projectId', description: 'The project ID'),
+        ],
+      ),
       ToolDefinition(
         name: 'ado_get_project_properties',
         description: 'Get the properties of an Azure DevOps project by ID',
@@ -341,6 +376,40 @@ List<ToolDefinition> _repoTools() => [
       ),
     ];
 
+/// Repository detail/file tools: `ado_get_repo_details`, `ado_get_repo_file`.
+///
+/// Split out from [_repoTools] to keep each grouping under the 60-line
+/// method-size gate.
+List<ToolDefinition> _repoDetailTools() => [
+      ToolDefinition(
+        name: 'ado_get_repo_details',
+        description: 'Get details of a Git repository in an Azure DevOps '
+            'project',
+        integration: 'ado',
+        category: 'repositories',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'repoId', description: 'The repository ID'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_get_repo_file',
+        description: 'Fetch the raw content of a file in an Azure DevOps '
+            'repository at a given branch',
+        integration: 'ado',
+        category: 'repositories',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'repoId', description: 'The repository ID'),
+          ToolParam(name: 'path', description: 'The file path in the repo'),
+          ToolParam(
+            name: 'branch',
+            description: 'The branch name to read the file from',
+          ),
+        ],
+      ),
+    ];
+
 /// Build tools: `ado_get_builds`, `ado_trigger_build`.
 List<ToolDefinition> _buildTools() => [
       ToolDefinition(
@@ -447,6 +516,13 @@ class AdoToolExecutor {
         ),
     'ado_get_project_properties': (a) =>
         _client.getProjectProperties(a['projectId'] as String),
+    'ado_get_project_details': (a) =>
+        _client.getProjectDetails(a['projectId'] as String),
+    'ado_create_work_item_link': (a) => _client.createWorkItemLink(
+          _num(a, 'sourceId'),
+          _num(a, 'targetId'),
+          a['linkType'] as String,
+        ),
     'ado_list_prs': (a) => _client.listPrs(a['status'] as String?),
     'ado_get_pr': (a) => _client.getPr(_id(a)),
     'ado_get_pull_request_reviewers': (a) => _client.getPullRequestReviewers(
@@ -489,6 +565,16 @@ class AdoToolExecutor {
           a['name'] as String,
         ),
     'ado_get_repos': (a) => _client.getRepos(a['project'] as String),
+    'ado_get_repo_details': (a) => _client.getRepoDetails(
+          a['project'] as String,
+          a['repoId'] as String,
+        ),
+    'ado_get_repo_file': (a) => _client.getRepoFile(
+          a['project'] as String,
+          a['repoId'] as String,
+          a['path'] as String,
+          a['branch'] as String,
+        ),
     'ado_get_repo_branches': (a) => _client.getRepoBranches(
           a['project'] as String,
           a['repoId'] as String,

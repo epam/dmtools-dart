@@ -498,6 +498,84 @@ class GithubClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// `github_get_workflows` — GET
+  /// `/repos/{owner}/{repo}/actions/workflows`.
+  Future<Map<String, dynamic>> getWorkflows(String owner, String repo) async {
+    final body = await _http.get('repos/$owner/$repo/actions/workflows');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_enable_workflow` — PUT
+  /// `/repos/{owner}/{repo}/actions/workflows/{workflowId}/enable`.
+  ///
+  /// Returns an empty map on GitHub's 204 response.
+  Future<Map<String, dynamic>> enableWorkflow(
+    String owner,
+    String repo,
+    int workflowId,
+  ) async {
+    final body = await _http.put(
+      'repos/$owner/$repo/actions/workflows/$workflowId/enable',
+    );
+    return _decodeEmptyOk(body);
+  }
+
+  /// `github_disable_workflow` — PUT
+  /// `/repos/{owner}/{repo}/actions/workflows/{workflowId}/disable`.
+  ///
+  /// Returns an empty map on GitHub's 204 response.
+  Future<Map<String, dynamic>> disableWorkflow(
+    String owner,
+    String repo,
+    int workflowId,
+  ) async {
+    final body = await _http.put(
+      'repos/$owner/$repo/actions/workflows/$workflowId/disable',
+    );
+    return _decodeEmptyOk(body);
+  }
+
+  /// `github_get_codeowners` — GET
+  /// `/repos/{owner}/{repo}/contents/.github/CODEOWNERS`.
+  Future<Map<String, dynamic>> getCodeowners(String owner, String repo) async {
+    final body =
+        await _http.get('repos/$owner/$repo/contents/.github/CODEOWNERS');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_add_collaborator` — PUT
+  /// `/repos/{owner}/{repo}/collaborators/{username}`.
+  ///
+  /// [permission] sets the collaboration level (`push`, `pull`, `admin`,
+  /// `maintain`, `triage`). Returns the invitation or an empty map on a 204.
+  Future<Map<String, dynamic>> addCollaborator(
+    String owner,
+    String repo,
+    String username,
+    String permission,
+  ) async {
+    final response = await _http.put(
+      'repos/$owner/$repo/collaborators/$username',
+      body: jsonEncode({'permission': permission}),
+    );
+    return _decodeEmptyOk(response);
+  }
+
+  /// `github_remove_collaborator` — DELETE
+  /// `/repos/{owner}/{repo}/collaborators/{username}`.
+  ///
+  /// Returns an empty map on GitHub's 204 response.
+  Future<Map<String, dynamic>> removeCollaborator(
+    String owner,
+    String repo,
+    String username,
+  ) async {
+    final body = await _http.delete(
+      'repos/$owner/$repo/collaborators/$username',
+    );
+    return _decodeEmptyOk(body);
+  }
+
   /// POSTs [endpoint] with [base] merged with an optional `body` field.
   Future<Map<String, dynamic>> _postWithOptionalBody(
     String endpoint,

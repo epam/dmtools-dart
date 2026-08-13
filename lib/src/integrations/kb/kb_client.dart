@@ -70,6 +70,21 @@ class KbClient {
     return results;
   }
 
+  /// Full-text searches like [searchDocs], capped at [maxResults] matches.
+  ///
+  /// Throws [ArgumentError] when [query] is empty or [maxResults] is
+  /// negative.
+  Future<List<KbSearchResult>> searchDocsFull(
+    String query,
+    int maxResults,
+  ) async {
+    if (maxResults < 0) {
+      throw ArgumentError('maxResults must not be negative');
+    }
+    final results = await searchDocs(query);
+    return results.take(maxResults).toList();
+  }
+
   /// Reads and returns the Markdown content of the document at [path].
   ///
   /// Throws [FileSystemException] when the document does not exist.
@@ -89,6 +104,21 @@ class KbClient {
     }
     files.sort();
     return files;
+  }
+
+  /// Lists the immediate subdirectories of [basePath], sorted by path.
+  ///
+  /// Only direct children are returned (non-recursive). Returns an empty
+  /// list when [basePath] does not exist.
+  Future<List<String>> listDirs(String basePath) async {
+    final directory = Directory(_resolve(basePath));
+    if (!await directory.exists()) return const [];
+    final dirs = <String>[];
+    await for (final entity in directory.list()) {
+      if (entity is Directory) dirs.add(entity.path);
+    }
+    dirs.sort();
+    return dirs;
   }
 
   /// Writes [content] to the document at [path], creating any missing parent

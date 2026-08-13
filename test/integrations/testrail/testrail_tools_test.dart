@@ -15,6 +15,7 @@ void main() {
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
   executorBatch4DispatchTests();
+  executorBatch5DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -26,13 +27,14 @@ void toolCatalogShapeTests() {
   group('testrailTools catalog', () {
     final tools = testrailTools();
 
-    test('registers the fifteen tools in declaration order', () {
+    test('registers the eighteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'testrail_test',
         'testrail_get_case',
         'testrail_get_cases',
         'testrail_add_case',
         'testrail_update_case',
+        'testrail_delete_case',
         'testrail_add_result',
         'testrail_get_runs',
         'testrail_get_sections',
@@ -43,6 +45,8 @@ void toolCatalogShapeTests() {
         'testrail_get_case_types',
         'testrail_get_priorities',
         'testrail_get_statuses',
+        'testrail_get_references',
+        'testrail_get_templates',
       ]);
     });
 
@@ -103,6 +107,14 @@ void toolCatalogBatch2ParamTests() {
     expect(tool.params[0].type, 'number');
     expect(tool.params[1].type, 'object');
     expect(tool.params.every((p) => p.required), isTrue);
+  });
+
+  test('testrail_delete_case requires a numeric id', () {
+    final tool = toolNamed('testrail_delete_case');
+    expect(tool.category, 'test_cases');
+    expect(tool.params.single.name, 'id');
+    expect(tool.params.single.type, 'number');
+    expect(tool.params.single.required, isTrue);
   });
 
   test('testrail_get_runs requires a numeric projectId', () {
@@ -305,6 +317,20 @@ void toolCatalogBatch4ParamTests() {
     expect(tool.category, 'metadata');
     expect(tool.params, isEmpty);
   });
+
+  test('testrail_get_references requires a numeric projectId', () {
+    final tool = toolNamed('testrail_get_references');
+    expect(tool.category, 'metadata');
+    expect(tool.params.single.name, 'projectId');
+    expect(tool.params.single.type, 'number');
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('testrail_get_templates takes no parameters', () {
+    final tool = toolNamed('testrail_get_templates');
+    expect(tool.category, 'metadata');
+    expect(tool.params, isEmpty);
+  });
 }
 
 /// Batch-4 dispatch tests for case types, priorities, and statuses.
@@ -331,6 +357,39 @@ void executorBatch4DispatchTests() {
     test('routes testrail_get_statuses', () async {
       await executor.execute('testrail_get_statuses', {});
       expect(spy.calls, ['getStatuses']);
+    });
+  });
+}
+
+/// Batch-5 dispatch tests for the delete-case, references, templates tools.
+void executorBatch5DispatchTests() {
+  group('TestRailToolExecutor.execute (batch 5)', () {
+    late _SpyTestRailClient spy;
+    late TestRailToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTestRailClient(mockTestRailHttp((o) => '{}').http);
+      executor = TestRailToolExecutor(spy);
+    });
+
+    test('routes testrail_delete_case with id', () async {
+      await executor.execute('testrail_delete_case', {'id': 9});
+      expect(spy.calls, ['deleteCase:9']);
+    });
+
+    test('accepts string ids for delete_case from the MCP protocol', () async {
+      await executor.execute('testrail_delete_case', {'id': '9'});
+      expect(spy.calls, ['deleteCase:9']);
+    });
+
+    test('routes testrail_get_references with projectId', () async {
+      await executor.execute('testrail_get_references', {'projectId': 5});
+      expect(spy.calls, ['getReferences:5']);
+    });
+
+    test('routes testrail_get_templates', () async {
+      await executor.execute('testrail_get_templates', {});
+      expect(spy.calls, ['getTemplates']);
     });
   });
 }
@@ -436,5 +495,23 @@ class _SpyTestRailClient extends TestRailClient {
   Future<List<Map<String, dynamic>>> getStatuses() {
     calls.add('getStatuses');
     return super.getStatuses();
+  }
+
+  @override
+  Future<Map<String, dynamic>> deleteCase(int id) {
+    calls.add('deleteCase:$id');
+    return super.deleteCase(id);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getReferences(int projectId) {
+    calls.add('getReferences:$projectId');
+    return super.getReferences(projectId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTemplates() {
+    calls.add('getTemplates');
+    return super.getTemplates();
   }
 }

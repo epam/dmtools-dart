@@ -152,6 +152,16 @@ class XrayClient {
     return _decodeList(body);
   }
 
+  /// `jira_xray_get_test_runs` — GET `/api/v2/testrun?testKey={testKey}`.
+  ///
+  /// Returns the decoded list of test-run objects for [testKey], or an empty
+  /// list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getTestRuns(String testKey) async {
+    await _ensureAuthenticated();
+    final body = await _http.get('testrun', queryParams: {'testKey': testKey});
+    return _decodeList(body);
+  }
+
   /// `jira_xray_get_test_steps` — GET `/api/v2/test/{testKey}/steps`.
   ///
   /// Returns the decoded list of test-step objects, or an empty list when
@@ -186,6 +196,22 @@ class XrayClient {
     final body = await _http.post(
       'import/execution',
       body: jsonEncode(payload),
+    );
+    return _decodeMap(body) ?? {};
+  }
+
+  /// `jira_xray_update_test_execution` — POST `/api/v2/testexec/{executionId}`.
+  ///
+  /// Updates the status of test execution [executionId]. Returns the decoded
+  /// response object, or an empty map when the body is not a JSON object.
+  Future<Map<String, dynamic>> updateTestExecution(
+    String executionId,
+    String status,
+  ) async {
+    await _ensureAuthenticated();
+    final body = await _http.post(
+      'testexec/$executionId',
+      body: jsonEncode({'status': status}),
     );
     return _decodeMap(body) ?? {};
   }

@@ -6,8 +6,10 @@ import 'package:test/test.dart';
 /// Tests for [KbClient] Markdown operations (search/get/index/write/delete/update).
 void main() {
   searchDocsTests();
+  searchDocsFullTests();
   getDocTests();
   indexDocsTests();
+  listDirsTests();
   createDocTests();
   deleteDocTests();
   updateDocTests();
@@ -82,6 +84,44 @@ void searchDocsTests() {
   });
 }
 
+/// [KbClient.searchDocsFull] full-text search with a result cap.
+void searchDocsFullTests() {
+  late KbClient client;
+  late Directory kb;
+
+  setUp(() {
+    kb = _tempKb();
+    client = KbClient(kb.path);
+  });
+
+  tearDown(() => kb.deleteSync(recursive: true));
+
+  group('KbClient.searchDocsFull', () {
+    test('returns at most maxResults matches', () async {
+      final results = await client.searchDocsFull('the', 1);
+      expect(results, hasLength(1));
+    });
+
+    test('returns all matches when maxResults exceeds the count', () async {
+      final results = await client.searchDocsFull('the', 10);
+      expect(results, hasLength(2));
+    });
+
+    test('returns an empty list when maxResults is zero', () async {
+      final results = await client.searchDocsFull('the', 0);
+      expect(results, isEmpty);
+    });
+
+    test('throws ArgumentError on empty query', () {
+      expect(() => client.searchDocsFull('', 5), throwsArgumentError);
+    });
+
+    test('throws ArgumentError on negative maxResults', () {
+      expect(() => client.searchDocsFull('the', -1), throwsArgumentError);
+    });
+  });
+}
+
 /// [KbClient.getDoc] document reads.
 void getDocTests() {
   late KbClient client;
@@ -143,6 +183,43 @@ void indexDocsTests() {
 
     test('returns an empty list for a missing directory', () async {
       expect(await client.indexDocs('no_such_dir'), isEmpty);
+    });
+  });
+}
+
+/// [KbClient.listDirs] immediate subdirectory listing.
+void listDirsTests() {
+  late KbClient client;
+  late Directory kb;
+
+  setUp(() {
+    kb = _tempKb();
+    client = KbClient(kb.path);
+  });
+
+  tearDown(() => kb.deleteSync(recursive: true));
+
+  group('KbClient.listDirs', () {
+    test('lists immediate subdirectories sorted by path', () async {
+      final dirs = await client.listDirs('.');
+      expect(dirs, hasLength(1));
+      expect(dirs.single, endsWith('guides'));
+    });
+
+    test('does not recurse into subdirectories', () async {
+      Directory('${kb.path}/guides/inner').createSync(recursive: true);
+      final dirs = await client.listDirs('guides');
+      expect(dirs, hasLength(1));
+      expect(dirs.single, endsWith('guides/inner'));
+    });
+
+    test('does not list files, only directories', () async {
+      final dirs = await client.listDirs('.');
+      expect(dirs.every((d) => !d.endsWith('.md')), isTrue);
+    });
+
+    test('returns an empty list for a missing directory', () async {
+      expect(await client.listDirs('no_such_dir'), isEmpty);
     });
   });
 }

@@ -10,12 +10,14 @@ void main() {
   testConnectionTests();
   getFileTests();
   getFileNodesTests();
+  getNodeTests();
   getImageTests();
   getCommentsTests();
   postCommentTests();
   getComponentsTests();
   getComponentSetsTests();
   getStylesTests();
+  getStyleTests();
   exportImageTests();
   getVariableCollectionsTests();
   getLibraryComponentsTests();
@@ -112,6 +114,23 @@ void getFileNodesTests() {
   });
 }
 
+/// `figma_get_node` — GET `/files/{key}/nodes?ids={nodeId}` (singular).
+void getNodeTests() {
+  group('FigmaClient.getNode', () {
+    test('returns the decoded node map with the single ids query', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/nodes': _nodesBody}, o),
+      );
+      final nodes = await f.client.getNode('aBc123', '1:2');
+      expect(nodes['nodes'], isNotNull);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/nodes'));
+      expect(call.queryParameters['ids'], '1:2');
+    });
+  });
+}
+
 /// `figma_get_image` — GET `/images/{key}?ids={nodeId}`.
 void getImageTests() {
   group('FigmaClient.getImage', () {
@@ -203,6 +222,22 @@ void getStylesTests() {
       );
       final styles = await f.client.getStyles('aBc123');
       expect(styles['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/styles'));
+    });
+  });
+}
+
+/// `figma_get_style` — GET `/files/{key}/styles` (singular alias).
+void getStyleTests() {
+  group('FigmaClient.getStyle', () {
+    test('returns the decoded style map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/styles': _stylesBody}, o),
+      );
+      final style = await f.client.getStyle('aBc123');
+      expect(style['meta'], isA<Map>());
       final call = f.adapter.calls.single;
       expect(call.method, 'GET');
       expect(call.path, endsWith('/files/aBc123/styles'));

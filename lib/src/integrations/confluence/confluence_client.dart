@@ -289,7 +289,19 @@ class ConfluenceClient {
   Future<Map<String, dynamic>> archivePage(String id) async {
     final body = await _http.put(
       'content/$id',
-      body: jsonEncode(_archivePayload(id)),
+      body: jsonEncode(_statusPayload(id, 'archived')),
+    );
+    return body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_restore_page` — PUT `content/{id}` with status `current`.
+  ///
+  /// Restores a previously archived page with [id] back to current; returns
+  /// the response object from the API.
+  Future<Map<String, dynamic>> restorePage(String id) async {
+    final body = await _http.put(
+      'content/$id',
+      body: jsonEncode(_statusPayload(id, 'current')),
     );
     return body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
   }
@@ -315,6 +327,26 @@ class ConfluenceClient {
     );
     return jsonDecode(body) as Map<String, dynamic>;
   }
+
+  /// `confluence_get_group_members` — GET `group/{groupname}/member`.
+  ///
+  /// Returns the members of the group identified by [groupname].
+  Future<List<Map<String, dynamic>>> getGroupMembers(String groupname) =>
+      _getList('group/$groupname/member');
+
+  /// `confluence_get_user_by_key` — GET `user?key={key}`.
+  ///
+  /// Returns the user identified by [key] (the Confluence user key).
+  Future<Map<String, dynamic>> getUserByKey(String key) async {
+    final body = await _http.get('user', queryParams: {'key': key});
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_watchers` — GET `content/{contentId}/notification`.
+  ///
+  /// Returns the watchers (notifications) on the content with [contentId].
+  Future<List<Map<String, dynamic>>> getWatchers(String contentId) =>
+      _getList('content/$contentId/notification');
 
   /// GET helper: fetches [path] and returns its `results` array as typed maps.
   Future<List<Map<String, dynamic>>> _getList(
@@ -354,9 +386,10 @@ class ConfluenceClient {
   Map<String, dynamic> _createSpacePayload(String key, String name) =>
       {'key': key, 'name': name};
 
-  /// Builds the archive payload setting the page status to `archived`.
-  Map<String, dynamic> _archivePayload(String id) =>
-      {'id': id, 'type': 'page', 'status': 'archived'};
+  /// Builds the status-change payload setting the page [status]
+  /// (`archived` or `current`), shared by [archivePage] and [restorePage].
+  Map<String, dynamic> _statusPayload(String id, String status) =>
+      {'id': id, 'type': 'page', 'status': status};
 
   /// Builds the content-property payload for POST `content/{id}/property`.
   Map<String, dynamic> _propertyPayload(

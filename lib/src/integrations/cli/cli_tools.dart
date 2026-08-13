@@ -66,6 +66,12 @@ List<ToolDefinition> cliTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'cli_list_allowed_commands',
+        description: 'List all whitelisted CLI commands as a sorted array',
+        integration: 'cli',
+        category: 'system',
+      ),
     ];
 
 /// Executes CLI MCP tools via [Process.run], enforcing the command whitelist.
@@ -94,6 +100,9 @@ class CliToolExecutor {
 
   /// Returns `true` if [command] is in the whitelist.
   bool isAllowed(String command) => allowedCommands.contains(command);
+
+  /// Returns the full whitelist as a sorted array.
+  List<String> getAllowedCommands() => (allowedCommands.toList()..sort());
 
   /// Executes [command] with optional [args] via [Process.run].
   ///
@@ -172,5 +181,7 @@ class CliToolExecutor {
           _parseArgs(a['args']),
           _parseEnv(a['env_vars']),
         ),
+    'cli_list_allowed_commands': (a) async =>
+        {'commands': getAllowedCommands()},
   };
 }

@@ -9,10 +9,12 @@ void main() {
   toolCatalogShapeTests();
   toolCatalogParamTests();
   toolCatalogBatch4ParamTests();
+  toolCatalogBatch5ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
   executorBatch4DispatchTests();
+  executorBatch5DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -24,7 +26,7 @@ void toolCatalogShapeTests() {
   group('bitriseTools catalog', () {
     final tools = bitriseTools();
 
-    test('registers the nine tools in declaration order', () {
+    test('registers the ten tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'bitrise_test',
         'bitrise_get_apps',
@@ -35,6 +37,7 @@ void toolCatalogShapeTests() {
         'bitrise_abort_build',
         'bitrise_get_workflows',
         'bitrise_get_artifacts',
+        'bitrise_get_artifact_detail',
       ]);
     });
 
@@ -235,6 +238,43 @@ void executorBatch4DispatchTests() {
   });
 }
 
+/// Batch-5 catalog params: artifact detail.
+void toolCatalogBatch5ParamTests() {
+  group('bitrise_get_artifact_detail', () {
+    final tool = toolNamed('bitrise_get_artifact_detail');
+
+    test('declares required app_slug, build_slug, and artifact_slug', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['app_slug', 'build_slug', 'artifact_slug'],
+      );
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Batch-5 dispatch tests for artifact detail.
+void executorBatch5DispatchTests() {
+  group('BitriseToolExecutor.execute (batch 5)', () {
+    late _SpyBitriseClient spy;
+    late BitriseToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
+      executor = BitriseToolExecutor(spy);
+    });
+
+    test('routes bitrise_get_artifact_detail with the three slugs', () async {
+      await executor.execute('bitrise_get_artifact_detail', {
+        'app_slug': 'app-1',
+        'build_slug': 'build-2',
+        'artifact_slug': 'art-1',
+      });
+      expect(spy.calls, ['getArtifactDetail:app-1:build-2:art-1']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyBitriseClient extends BitriseClient {
   _SpyBitriseClient(super.http);
@@ -307,5 +347,15 @@ class _SpyBitriseClient extends BitriseClient {
   ) {
     calls.add('getArtifacts:$appSlug:$buildSlug');
     return super.getArtifacts(appSlug, buildSlug);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getArtifactDetail(
+    String appSlug,
+    String buildSlug,
+    String artifactSlug,
+  ) {
+    calls.add('getArtifactDetail:$appSlug:$buildSlug:$artifactSlug');
+    return super.getArtifactDetail(appSlug, buildSlug, artifactSlug);
   }
 }

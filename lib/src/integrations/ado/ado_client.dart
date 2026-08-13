@@ -324,6 +324,76 @@ class AdoClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// `ado_get_project_details` — GET `projects/{projectId}` (org-scoped).
+  ///
+  /// Returns the full project object (name, description, state, …). Distinct
+  /// from [getProjectProperties], which returns only the key/value property bag.
+  Future<Map<String, dynamic>> getProjectDetails(String projectId) async {
+    final body = await _http.getOrg('projects/$projectId');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_repo_details` — GET `git/repositories/{repoId}`.
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<Map<String, dynamic>> getRepoDetails(
+    String project,
+    String repoId,
+  ) async {
+    final body = await _http.get('git/repositories/$repoId');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_repo_file` — GET
+  /// `git/repositories/{repoId}/items?path={path}&versionDescriptor.version={branch}`.
+  ///
+  /// Returns the raw file content at [path] on [branch]. ADO resolves a branch
+  /// name only when `versionDescriptor.versionType` is `branch`, so that is sent
+  /// alongside the version. The [project] argument mirrors the Java tool
+  /// surface; the request is scoped to the project configured on this client.
+  Future<String> getRepoFile(
+    String project,
+    String repoId,
+    String path,
+    String branch,
+  ) =>
+      _http.get(
+        'git/repositories/$repoId/items',
+        queryParams: {
+          'path': path,
+          'versionDescriptor.versionType': 'branch',
+          'versionDescriptor.version': branch,
+        },
+      );
+
+  /// `ado_create_work_item_link` — POST `wit/workitems/{sourceId}/links`.
+  ///
+  /// Adds a relation of [linkType] (e.g. `System.LinkTypes.Hierarchy-Forward`)
+  /// from [sourceId] to [targetId], using ADO's JSON-Patch wire format on the
+  /// work-item relations collection. The target relation URL is built from the
+  /// project-scoped work-item endpoint.
+  Future<Map<String, dynamic>> createWorkItemLink(
+    int sourceId,
+    int targetId,
+    String linkType,
+  ) async {
+    final body = await _http.postPatch(
+      'wit/workitems/$sourceId/links',
+      body: jsonEncode([
+        {
+          'op': 'add',
+          'path': '/relations/-',
+          'value': {
+            'rel': linkType,
+            'url': _http.buildUrl('wit/workitems/$targetId'),
+          },
+        },
+      ]),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// Decodes a JSON array body into a list of typed maps.
   List<Map<String, dynamic>> _decodeList(String body) =>
       (jsonDecode(body) as List)

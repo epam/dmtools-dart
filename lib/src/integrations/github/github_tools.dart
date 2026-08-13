@@ -10,6 +10,7 @@ import '../../mcp/tool_param.dart';
 import 'github_client.dart';
 
 part 'github_tools_batch4.dart';
+part 'github_tools_batch5.dart';
 
 /// Returns all GitHub MCP tool definitions.
 ///
@@ -28,10 +29,16 @@ List<ToolDefinition> githubTools() => [
       ..._releaseTools(),
       ..._commitTools(),
       ..._actionsTools(),
+      ..._workflowCatalogTools(),
+      ..._codeownersTools(),
+      ..._collaboratorTools(),
     ];
 
 /// Repository, PR-update, and Actions catalog functions live in
 /// `github_tools_batch4.dart` (split for file-size).
+///
+/// Workflow-catalog, CODEOWNERS, and collaborator tool functions live in
+/// `github_tools_batch5.dart`.
 
 /// Connectivity-check tool: `github_test`.
 List<ToolDefinition> _systemTools() => [
@@ -728,6 +735,35 @@ class GithubToolExecutor {
           a['owner'] as String,
           a['repo'] as String,
           a['ref'] as String,
+        ),
+    'github_get_workflows': (a) => _client.getWorkflows(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_enable_workflow': (a) => _client.enableWorkflow(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'workflow_id'),
+        ),
+    'github_disable_workflow': (a) => _client.disableWorkflow(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'workflow_id'),
+        ),
+    'github_get_codeowners': (a) => _client.getCodeowners(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_add_collaborator': (a) => _client.addCollaborator(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['username'] as String,
+          a['permission'] as String,
+        ),
+    'github_remove_collaborator': (a) => _client.removeCollaborator(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['username'] as String,
         ),
   };
 }

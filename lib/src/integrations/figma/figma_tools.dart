@@ -56,6 +56,20 @@ List<ToolDefinition> _fileTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'figma_get_node',
+        description: 'Get a single node from a Figma file',
+        integration: 'figma',
+        category: 'files',
+        params: [
+          _keyParam(),
+          ToolParam(
+            name: 'node_id',
+            description: 'The node ID to fetch',
+            required: true,
+          ),
+        ],
+      ),
     ];
 
 /// Image tools: `figma_get_image`, `figma_export_image`.
@@ -141,11 +155,18 @@ List<ToolDefinition> _componentTools() => [
       ),
     ];
 
-/// Style tool: `figma_get_styles`.
+/// Style tool: `figma_get_styles`, `figma_get_style`.
 List<ToolDefinition> _styleTools() => [
       ToolDefinition(
         name: 'figma_get_styles',
         description: 'Get styles from a Figma file',
+        integration: 'figma',
+        category: 'styles',
+        params: [_keyParam()],
+      ),
+      ToolDefinition(
+        name: 'figma_get_style',
+        description: 'Get a style from a Figma file',
         integration: 'figma',
         category: 'styles',
         params: [_keyParam()],
@@ -222,6 +243,10 @@ class FigmaToolExecutor {
           a['key'] as String,
           a['node_ids'] as String,
         ),
+    'figma_get_node': (a) => _client.getNode(
+          a['key'] as String,
+          a['node_id'] as String,
+        ),
     'figma_get_image': (a) => _client.getImage(
           a['key'] as String,
           a['node_id'] as String,
@@ -237,6 +262,7 @@ class FigmaToolExecutor {
     'figma_get_component_sets': (a) =>
         _client.getComponentSets(a['key'] as String),
     'figma_get_styles': (a) => _client.getStyles(a['key'] as String),
+    'figma_get_style': (a) => _client.getStyle(a['key'] as String),
     'figma_get_variable_collections': (a) =>
         _client.getVariableCollections(a['key'] as String),
     'figma_get_library_components': (a) =>

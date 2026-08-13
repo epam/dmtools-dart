@@ -16,6 +16,8 @@ void main() {
   getTestStepsTests();
   getTestPlanTests();
   createTestExecutionTests();
+  updateTestExecutionTests();
+  getTestRunsTests();
 }
 
 /// [XrayHttpClient]: URL building, auth headers, token state, config errors.
@@ -296,3 +298,69 @@ const _planBody = '{"key":"PROJ-100"}';
 
 /// Canned import/execution result body.
 const _execResultBody = '{"id":"EXEC-100"}';
+
+/// `jira_xray_update_test_execution` — POST `/api/v2/testexec/{executionId}`.
+void updateTestExecutionTests() {
+  group('XrayClient.updateTestExecution', () {
+    test('auto-authenticates then POSTs the status', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testexec/100': _updateResultBody,
+        }, o),
+      );
+      final result = await f.client.updateTestExecution('100', 'PASS');
+      expect(result['id'], '100');
+      final postCall = f.adapter.calls
+          .where((c) => c.method == 'POST' && c.path.contains('testexec'))
+          .single;
+      expect(postCall.path, contains('testexec/100'));
+      expect(jsonDecode(postCall.data as String), {'status': 'PASS'});
+    });
+
+    test('returns empty map for non-object body', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testexec/100': '[1, 2]',
+        }, o),
+      );
+      expect(await f.client.updateTestExecution('100', 'PASS'), isEmpty);
+    });
+  });
+}
+
+/// `jira_xray_get_test_runs` — GET `/api/v2/testrun?testKey={testKey}`.
+void getTestRunsTests() {
+  group('XrayClient.getTestRuns', () {
+    test('auto-authenticates then GETs test runs', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testrun': _runsBody,
+        }, o),
+      );
+      final result = await f.client.getTestRuns('PROJ-1');
+      expect(result.map((r) => r['id']).toList(), [1, 2]);
+      final getCall = f.adapter.calls.where((c) => c.method == 'GET').single;
+      expect(getCall.path, contains('testrun'));
+      expect(getCall.queryParameters['testKey'], 'PROJ-1');
+    });
+
+    test('returns empty list for non-array body', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testrun': '{"error":"x"}',
+        }, o),
+      );
+      expect(await f.client.getTestRuns('PROJ-1'), isEmpty);
+    });
+  });
+}
+
+/// Canned update-test-execution result body.
+const _updateResultBody = '{"id":"100","status":"PASS"}';
+
+/// Canned test-run response body.
+const _runsBody = '[{"id":1,"status":"PASS"},{"id":2,"status":"FAIL"}]';

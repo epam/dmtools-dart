@@ -211,8 +211,12 @@ const _expectedToolOrder = [
   'confluence_move_page',
   'confluence_get_page_history',
   'confluence_archive_page',
+  'confluence_restore_page',
   'confluence_get_permissions',
   'confluence_add_permission',
   'confluence_get_page_properties',
   'confluence_set_page_property',
+  'confluence_get_group_members',
+  'confluence_get_user_by_key',
+  'confluence_get_watchers',
 ];

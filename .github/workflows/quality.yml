@@ -16,13 +16,41 @@ jobs:
       - run: dart test --coverage=coverage
       - run: dart pub global activate coverage
       - name: Format coverage
-        run: >-
-          dart pub global run coverage:format_coverage
-          --lcov --in coverage --out coverage/lcov.info --report-on lib
+        id: coverage
+        run: |
+          dart pub global run coverage:format_coverage \
+            --lcov --in coverage --out coverage/lcov.info --report-on lib
+          COV=$(grep -o 'end_of_record' coverage/lcov.info | wc -l)
+          echo "lines=$(wc -l < coverage/lcov.info)" >> $GITHUB_OUTPUT
       - name: Install crap4dart
         run: dart pub global activate crap4dart
       - run: crap4dart check --all
       - run: crap4dart analyze
+      - name: Generate badges
+        run: |
+          mkdir -p .badges
+          TEST_COUNT=$(dart test --concurrency=1 2>&1 | grep -oE '\+[0-9]+' | tail -1 | tr -d '+')
+          COV_PCT=$(grep -o 'LH:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
+          COV_TOTAL=$(grep -o 'LF:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
+          COV_FINAL=$(echo "scale=1; $COV_PCT * 100 / $COV_TOTAL" | bc 2>/dev/null || echo "0")
+          CRAP="8.0"
+
+          # Tests badge
+          wget -q -O .badges/tests.svg \
+            "https://img.shields.io/badge/tests-${TEST_COUNT}%20passing-brightgreen"
+          # Coverage badge
+          wget -q -O .badges/coverage.svg \
+            "https://img.shields.io/badge/coverage-${COV_FINAL}%25-brightgreen"
+          # crap4dart badge
+          wget -q -O .badges/crap4dart.svg \
+            "https://img.shields.io/badge/crap4dart-${CRAP}%20threshold-green"
+      - name: Commit badges
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .badges/*.svg || true
+          git diff --staged --quiet || git commit -m 'chore: update CI badges [skip ci]'
+          git push || true
 
   agents-suite:
     runs-on: ubuntu-latest

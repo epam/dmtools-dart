@@ -1,8 +1,8 @@
 # dmtools-dart
 
-[![crap4dart](https://img.shields.io/badge/crap4dart-8.0%20threshold-green)](crap4dart.yaml)
-[![tests](https://img.shields.io/badge/tests-1799%20passing-brightgreen)](.github/workflows/quality.yml)
-[![coverage](https://img.shields.io/badge/coverage-97.8%25-brightgreen)](.github/workflows/quality.yml)
+![tests](.badges/tests.svg)
+![coverage](.badges/coverage.svg)
+![crap4dart](.badges/crap4dart.svg)
 
 Pure Dart port of [DMTools](https://github.com/epam/dm.ai) — the enterprise
 dark-factory orchestrator (Jira, ADO, GitHub, GitLab, Confluence, TestRail,

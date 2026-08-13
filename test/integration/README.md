@@ -69,7 +69,77 @@ dart test -P integration
 
 - **Coverage** — the crap4dart coverage gate measures L1+L2 only, never L3.
 
+## Required credentials per integration
+
+The CI job (`.github/workflows/integration.yml`) injects every variable below
+from a same-named GitHub **repository secret**; locally the same names go into a
+git-ignored `dmtools.env` (the Phase 1 resolution chain). `DMTOOLS_IT_*`
+variables select the **sandbox target** — *where* to test — and a missing one
+skips (or, under `DMTOOLS_IT_REQUIRE_CREDS`, fails) the suite. The rest are
+**authentication** — *how* to test. Sandbox-only tokens with minimal scopes;
+never reuse production credentials here.
+
+| Integration | Secret (env var) | Purpose |
+|---|---|---|
+| **Jira** | `JIRA_BASE_PATH` | REST API base URL (e.g. `https://<site>.atlassian.net`) |
+| | `JIRA_EMAIL` | Account email — Basic auth username |
+| | `JIRA_API_TOKEN` | API token — Basic auth password |
+| | `DMTOOLS_IT_JIRA_PROJECT` | Sandbox project key the tests target (gate var) |
+| | `DMTOOLS_IT_JIRA_ISSUE_TYPE` | Issue type for the throwaway `it-*` ticket (default `Task`) |
+| **GitHub** | `SOURCE_GITHUB_TOKEN` | Access token (Bearer) |
+| | `DMTOOLS_IT_GITHUB_REPO` | Sandbox repo `owner/name` the tests target |
+| **GitLab** | `GITLAB_TOKEN` | Access token (`PRIVATE-TOKEN` header) |
+| | `DMTOOLS_IT_GITLAB_PROJECT` | Sandbox project id/path the tests target |
+| **Confluence** | `CONFLUENCE_BASE_PATH` | REST API base URL |
+| | `CONFLUENCE_EMAIL` | Account email — Basic auth username |
+| | `CONFLUENCE_API_TOKEN` | API token — Basic auth password |
+| | `DMTOOLS_IT_CONFLUENCE_SPACE` | Sandbox space key the tests target |
+| **Azure DevOps** | `ADO_ORGANIZATION` | DevOps organization name |
+| | `ADO_PROJECT` | Project (doubles as the test target) |
+| | `ADO_PAT_TOKEN` | Personal access token (`Basic :PAT`) |
+| **Figma** | `FIGMA_TOKEN` | Personal access token (`FIGMA_OAUTH_ACCESS_TOKEN` also accepted) |
+| | `DMTOOLS_IT_FIGMA_FILE` | Sandbox file key the tests target |
+| **TestRail** | `TESTRAIL_BASE_PATH` | REST API base URL |
+| | `TESTRAIL_USERNAME` | Username (Basic auth `username:apikey`) |
+| | `TESTRAIL_API_KEY` | API key |
+| | `DMTOOLS_IT_TESTRAIL_PROJECT` | Sandbox project the tests target |
+| **Bitrise** | `BITRISE_TOKEN` | Personal access token (Bearer) |
+| | `BITRISE_APP_SLUG` | App slug the tests target |
+| **Jenkins** | `JENKINS_BASE_PATH` | Base URL (default `http://localhost:8080`) |
+| | `JENKINS_USER` | Username — Basic auth |
+| | `JENKINS_API_TOKEN` | API token — Basic auth |
+| **Microsoft Teams** | `TEAMS_CLIENT_ID` | Entra ID app (client) registration ID |
+| | `TEAMS_TENANT_ID` | Entra ID tenant ID |
+| | `TEAMS_REFRESH_TOKEN` | Refresh token for the Entra app (OAuth) |
+| **SharePoint** | — | Matrix slot reserved; the live test and its Microsoft Graph credentials land with the Phase 3 SharePoint port. |
+
+Non-secret runtime control:
+
+- `DMTOOLS_IT_REQUIRE_CREDS` — set to `true` in the CI job so a missing gate
+  variable fails the suite instead of silently skipping it (see Mechanics →
+  Skip-or-fail). Not a secret; set as a plain env var.
+
 ## Current contents
 
-- `jira_integration_test.dart` — Jira smoke-path skeleton (auth → read →
-  search → write), gated on `DMTOOLS_IT_JIRA_PROJECT`.
+- `jira_integration_test.dart` — Jira smoke path via CLI tool dispatch
+  (`ToolBridge.execute` → `SyncToolDispatcher`): creates a throwaway
+  `it-<runId>-smoke` ticket, then auth (`jira_get_ticket`) → search
+  (`jira_search_by_jql`) → labels (`jira_add_label`/`jira_remove_label`) →
+  comment (`jira_post_comment`) → transition (`jira_move_to_status`) →
+  delete in `tearDownAll`. Gated on `DMTOOLS_IT_JIRA_PROJECT`; the throwaway
+  ticket's issue type is `DMTOOLS_IT_JIRA_ISSUE_TYPE` (default `Task`).
+- `ado_integration_test.dart` — Azure DevOps smoke path (auth → list work items
+  WIQL → get work item), gated on `DMTOOLS_IT_ADO_PROJECT`.
+- `figma_integration_test.dart` — Figma smoke path (auth → get file → get
+  components), gated on `DMTOOLS_IT_FIGMA_FILE`.
+- `testrail_integration_test.dart` — TestRail smoke path (auth → get cases →
+  get case), gated on `DMTOOLS_IT_TESTRAIL_PROJECT`; the suite under test is
+  selected by `DMTOOLS_IT_TESTRAIL_SUITE`.
+- `gitlab_integration_test.dart` — GitLab smoke-path skeleton (auth → get MR
+  → list MRs → note → cleanup), gated on `DMTOOLS_IT_GITLAB_PROJECT`.
+- `confluence_integration_test.dart` — Confluence smoke-path skeleton (auth →
+  search CQL → get page → create page → cleanup), gated on
+  `DMTOOLS_IT_CONFLUENCE_SPACE`.
+- `github_integration_test.dart` — GitHub smoke path (auth → list PRs → get
+  PR → create comment → get issue → cleanup comment), gated on
+  `DMTOOLS_IT_GITHUB_REPO` (`owner/repo`); auth via `SOURCE_GITHUB_TOKEN`.

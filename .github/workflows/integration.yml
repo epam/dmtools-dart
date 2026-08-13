@@ -1,0 +1,101 @@
+name: Integration
+
+# L3 live integration tests — see GOAL.md → Integration testing strategy and
+# test/integration/README.md. Excluded from the per-PR quality loop; runs nightly
+# and on demand. One red integration never blocks the others (fail-fast: false),
+# and a per-integration concurrency group prevents parallel writes to the same
+# sandbox.
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        integration:
+          - jira
+          - github
+          - gitlab
+          - confluence
+          - ado
+          - figma
+          - testrail
+          - bitrise
+          - jenkins
+          - teams
+          - sharepoint
+    # Serialize per integration so two runs never write to the same sandbox at
+    # once; a manual dispatch queues behind (does not cancel) a running nightly.
+    concurrency:
+      group: integration-${{ matrix.integration }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+
+      - name: Run ${{ matrix.integration }} live integration tests
+        run: >-
+          dart test -P integration -t integration
+          test/integration/${{ matrix.integration }}_integration_test.dart
+        env:
+          # Fail loud when a required secret is missing instead of silently
+          # skipping — see test/integration/README.md → Skip-or-fail.
+          DMTOOLS_IT_REQUIRE_CREDS: 'true'
+
+          # Jira
+          JIRA_BASE_PATH: ${{ secrets.JIRA_BASE_PATH }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          DMTOOLS_IT_JIRA_PROJECT: ${{ secrets.DMTOOLS_IT_JIRA_PROJECT }}
+
+          # GitHub
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          DMTOOLS_IT_GITHUB_REPO: ${{ secrets.DMTOOLS_IT_GITHUB_REPO }}
+
+          # GitLab
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          DMTOOLS_IT_GITLAB_PROJECT: ${{ secrets.DMTOOLS_IT_GITLAB_PROJECT }}
+
+          # Confluence
+          CONFLUENCE_BASE_PATH: ${{ secrets.CONFLUENCE_BASE_PATH }}
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          DMTOOLS_IT_CONFLUENCE_SPACE: ${{ secrets.DMTOOLS_IT_CONFLUENCE_SPACE }}
+
+          # Azure DevOps
+          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
+          ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
+          ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
+
+          # Figma
+          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
+          DMTOOLS_IT_FIGMA_FILE: ${{ secrets.DMTOOLS_IT_FIGMA_FILE }}
+
+          # TestRail
+          TESTRAIL_BASE_PATH: ${{ secrets.TESTRAIL_BASE_PATH }}
+          TESTRAIL_USERNAME: ${{ secrets.TESTRAIL_USERNAME }}
+          TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
+          DMTOOLS_IT_TESTRAIL_PROJECT: ${{ secrets.DMTOOLS_IT_TESTRAIL_PROJECT }}
+
+          # Bitrise
+          BITRISE_TOKEN: ${{ secrets.BITRISE_TOKEN }}
+          BITRISE_APP_SLUG: ${{ secrets.BITRISE_APP_SLUG }}
+
+          # Jenkins
+          JENKINS_BASE_PATH: ${{ secrets.JENKINS_BASE_PATH }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+
+          # Microsoft Teams
+          TEAMS_CLIENT_ID: ${{ secrets.TEAMS_CLIENT_ID }}
+          TEAMS_TENANT_ID: ${{ secrets.TEAMS_TENANT_ID }}
+          TEAMS_REFRESH_TOKEN: ${{ secrets.TEAMS_REFRESH_TOKEN }}

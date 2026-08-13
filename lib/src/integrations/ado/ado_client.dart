@@ -169,6 +169,89 @@ class AdoClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// `ado_get_work_item_revisions` — GET `wit/workitems/{id}/revisions`.
+  Future<List<Map<String, dynamic>>> getWorkItemRevisions(int id) async {
+    final body = await _http.get('wit/workitems/$id/revisions');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_teams` — GET `projects/{project}/teams` (org-scoped).
+  ///
+  /// The path carries the project explicitly, so the request targets the
+  /// organization-scoped URL rather than the configured project scope.
+  Future<List<Map<String, dynamic>>> getTeams(String project) async {
+    final body = await _http.getOrg('projects/$project/teams');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_team_members` — GET
+  /// `projects/{project}/teams/{teamId}/members` (org-scoped).
+  Future<List<Map<String, dynamic>>> getTeamMembers(
+    String project,
+    String teamId,
+  ) async {
+    final body = await _http.getOrg('projects/$project/teams/$teamId/members');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_project_properties` — GET `projects/{projectId}/properties`
+  /// (org-scoped).
+  Future<List<Map<String, dynamic>>> getProjectProperties(
+    String projectId,
+  ) async {
+    final body = await _http.getOrg('projects/$projectId/properties');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_repo_branches` — GET `git/repositories/{repoId}/stats/branches`.
+  Future<List<Map<String, dynamic>>> getRepoBranches(
+    String project,
+    String repoId,
+  ) async {
+    final body = await _http.get('git/repositories/$repoId/stats/branches');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_commits` — POST `git/repositories/{repoId}/commitsbatch` with
+  /// [searchCriteria] as the JSON body when criteria are supplied, otherwise
+  /// GET `git/repositories/{repoId}/commits`.
+  Future<List<Map<String, dynamic>>> getCommits(
+    String project,
+    String repoId, [
+    Map<String, dynamic>? searchCriteria,
+  ]) async {
+    if (searchCriteria == null) {
+      return _decodeList(await _http.get('git/repositories/$repoId/commits'));
+    }
+    return _decodeList(await _http.post(
+      'git/repositories/$repoId/commitsbatch',
+      body: jsonEncode(searchCriteria),
+    ));
+  }
+
+  /// `ado_get_pull_request_reviewers` — GET
+  /// `git/pullrequests/{prId}/reviewers`.
+  Future<List<Map<String, dynamic>>> getPullRequestReviewers(
+    String project,
+    int prId,
+  ) async {
+    final body = await _http.get('git/pullrequests/$prId/reviewers');
+    return _decodeList(body);
+  }
+
+  /// `ado_add_pull_request_reviewer` — PUT
+  /// `git/pullrequests/{prId}/reviewers/{reviewerId}`.
+  Future<Map<String, dynamic>> addPullRequestReviewer(
+    String project,
+    int prId,
+    String reviewerId,
+  ) async {
+    final body = await _http.put(
+      'git/pullrequests/$prId/reviewers/$reviewerId',
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// Decodes a JSON array body into a list of typed maps.
   List<Map<String, dynamic>> _decodeList(String body) =>
       (jsonDecode(body) as List)

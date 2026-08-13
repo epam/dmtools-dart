@@ -15,6 +15,8 @@ List<ToolDefinition> adoTools() => [
       ..._systemTools(),
       ..._workItemTools(),
       ..._workItemQueryTools(),
+      ..._teamTools(),
+      ..._projectTools(),
       ..._pullRequestTools(),
       ..._repoTools(),
       ..._buildTools(),
@@ -32,7 +34,7 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Work-item tools: get/create/update work items.
+/// Work-item tools: get/create/update work items and revisions.
 List<ToolDefinition> _workItemTools() => [
       ToolDefinition(
         name: 'ado_get_work_item',
@@ -74,6 +76,13 @@ List<ToolDefinition> _workItemTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'ado_get_work_item_revisions',
+        description: 'List the revision history of an Azure DevOps work item',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [_idParam('The work item ID')],
+      ),
     ];
 
 /// Work-item query tools: batch fetch, WIQL queries, and work-item types.
@@ -109,7 +118,41 @@ List<ToolDefinition> _workItemQueryTools() => [
       ),
     ];
 
-/// Pull-request tools: `ado_list_prs`, `ado_get_pr`.
+/// Team tools: `ado_get_teams`, `ado_get_team_members`.
+List<ToolDefinition> _teamTools() => [
+      ToolDefinition(
+        name: 'ado_get_teams',
+        description: 'List the teams defined in an Azure DevOps project',
+        integration: 'ado',
+        category: 'teams',
+        params: [_projectParam()],
+      ),
+      ToolDefinition(
+        name: 'ado_get_team_members',
+        description: 'List the members of an Azure DevOps team',
+        integration: 'ado',
+        category: 'teams',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'teamId', description: 'The team ID'),
+        ],
+      ),
+    ];
+
+/// Project tools: `ado_get_project_properties`.
+List<ToolDefinition> _projectTools() => [
+      ToolDefinition(
+        name: 'ado_get_project_properties',
+        description: 'Get the properties of an Azure DevOps project by ID',
+        integration: 'ado',
+        category: 'projects',
+        params: [
+          ToolParam(name: 'projectId', description: 'The project ID'),
+        ],
+      ),
+    ];
+
+/// Pull-request tools: `ado_list_prs`, `ado_get_pr`, and reviewer tools.
 List<ToolDefinition> _pullRequestTools() => [
       ToolDefinition(
         name: 'ado_list_prs',
@@ -132,6 +175,27 @@ List<ToolDefinition> _pullRequestTools() => [
         category: 'pull_requests',
         params: [_idParam('The pull request ID')],
       ),
+      ToolDefinition(
+        name: 'ado_get_pull_request_reviewers',
+        description: 'List the reviewers of an Azure DevOps pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_add_pull_request_reviewer',
+        description: 'Add a reviewer to an Azure DevOps pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+          ToolParam(name: 'reviewerId', description: 'The reviewer user ID'),
+        ],
+      ),
     ];
 
 /// Repository tools: `ado_create_repo`, `ado_get_repos`.
@@ -152,6 +216,34 @@ List<ToolDefinition> _repoTools() => [
         integration: 'ado',
         category: 'repositories',
         params: [_projectParam()],
+      ),
+      ToolDefinition(
+        name: 'ado_get_repo_branches',
+        description: 'List branch statistics for an Azure DevOps repository',
+        integration: 'ado',
+        category: 'repositories',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'repoId', description: 'The repository ID'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_get_commits',
+        description: 'List commits in an Azure DevOps repository, optionally '
+            'filtered by search criteria',
+        integration: 'ado',
+        category: 'repositories',
+        params: [
+          _projectParam(),
+          ToolParam(name: 'repoId', description: 'The repository ID'),
+          ToolParam(
+            name: 'searchCriteria',
+            description: 'Optional commit search criteria, e.g. '
+                '{"fromDate": "2024-01-01"}',
+            type: 'object',
+            required: false,
+          ),
+        ],
       ),
     ];
 
@@ -188,8 +280,11 @@ List<ToolDefinition> _buildTools() => [
     ];
 
 /// Shared numeric `id` parameter with a tool-specific [description].
-ToolParam _idParam(String description) => ToolParam(
-      name: 'id',
+ToolParam _idParam(String description) => _numberParam('id', description);
+
+/// Shared numeric parameter named [name] with a tool-specific [description].
+ToolParam _numberParam(String name, String description) => ToolParam(
+      name: name,
       description: description,
       type: 'number',
       required: true,
@@ -246,17 +341,43 @@ class AdoToolExecutor {
           _id(a),
           a['fields'] as Map<String, dynamic>,
         ),
+    'ado_get_work_item_revisions': (a) => _client.getWorkItemRevisions(_id(a)),
     'ado_get_work_items': (a) => _client.getWorkItems(_intList(a, 'ids')),
     'ado_list_work_items': (a) => _client.listWorkItems(a['wiql'] as String),
     'ado_get_work_item_types': (a) =>
         _client.getWorkItemTypes(a['project'] as String),
+    'ado_get_teams': (a) => _client.getTeams(a['project'] as String),
+    'ado_get_team_members': (a) => _client.getTeamMembers(
+          a['project'] as String,
+          a['teamId'] as String,
+        ),
+    'ado_get_project_properties': (a) =>
+        _client.getProjectProperties(a['projectId'] as String),
     'ado_list_prs': (a) => _client.listPrs(a['status'] as String?),
     'ado_get_pr': (a) => _client.getPr(_id(a)),
+    'ado_get_pull_request_reviewers': (a) => _client.getPullRequestReviewers(
+          a['project'] as String,
+          _num(a, 'prId'),
+        ),
+    'ado_add_pull_request_reviewer': (a) => _client.addPullRequestReviewer(
+          a['project'] as String,
+          _num(a, 'prId'),
+          a['reviewerId'] as String,
+        ),
     'ado_create_repo': (a) => _client.createRepo(
           a['project'] as String,
           a['name'] as String,
         ),
     'ado_get_repos': (a) => _client.getRepos(a['project'] as String),
+    'ado_get_repo_branches': (a) => _client.getRepoBranches(
+          a['project'] as String,
+          a['repoId'] as String,
+        ),
+    'ado_get_commits': (a) => _client.getCommits(
+          a['project'] as String,
+          a['repoId'] as String,
+          a['searchCriteria'] as Map<String, dynamic>?,
+        ),
     'ado_get_builds': (a) => _client.getBuilds(
           a['project'] as String,
           a['definitions'] == null ? null : _intList(a, 'definitions'),

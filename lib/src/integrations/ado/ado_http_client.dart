@@ -100,25 +100,14 @@ class AdoHttpClient extends BaseHttpClient {
         extra: extra,
       );
 
-  /// POSTs a JSON body, attaching the API version as a query parameter.
-  @override
-  Future<String> post(String path, {Object? body}) async {
-    final response = await dio.post<String>(
-      buildUrl(path),
-      data: body,
-      queryParameters: {'api-version': apiVersion},
-      options: Options(headers: headers),
-    );
-    return response.data ?? '';
-  }
-
-  /// Sends a JSON Patch document with ADO's `application/json-patch+json`
-  /// content type via [method], attaching the API version. Backs the
-  /// work-item create (POST) and update (PATCH) operations.
-  Future<String> _jsonPatchDoc(
+  /// Sends [method] against a project-scoped path, attaching the API version
+  /// and Basic auth. [contentType] overrides the default JSON content type
+  /// (used for ADO's `application/json-patch+json` work-item operations).
+  Future<String> _request(
     String method,
     String path, {
     Object? body,
+    String contentType = 'application/json',
   }) async {
     final response = await dio.request<String>(
       buildUrl(path),
@@ -126,22 +115,38 @@ class AdoHttpClient extends BaseHttpClient {
       queryParameters: {'api-version': apiVersion},
       options: Options(
         method: method,
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json-patch+json',
-        },
+        headers: {...authHeaders, 'Content-Type': contentType},
       ),
     );
     return response.data ?? '';
   }
 
+  /// POSTs a JSON body, attaching the API version as a query parameter.
+  @override
+  Future<String> post(String path, {Object? body}) =>
+      _request('POST', path, body: body);
+
+  /// PUTs a JSON body, attaching the API version as a query parameter. Used
+  /// to add pull-request reviewers.
+  @override
+  Future<String> put(String path, {Object? body}) =>
+      _request('PUT', path, body: body);
+
   /// POSTs a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item creation.
-  Future<String> postPatch(String path, {Object? body}) =>
-      _jsonPatchDoc('POST', path, body: body);
+  Future<String> postPatch(String path, {Object? body}) => _request(
+        'POST',
+        path,
+        body: body,
+        contentType: 'application/json-patch+json',
+      );
 
   /// PATCHes a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item updates.
-  Future<String> patchPatch(String path, {Object? body}) =>
-      _jsonPatchDoc('PATCH', path, body: body);
+  Future<String> patchPatch(String path, {Object? body}) => _request(
+        'PATCH',
+        path,
+        body: body,
+        contentType: 'application/json-patch+json',
+      );
 }

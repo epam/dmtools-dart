@@ -39,17 +39,46 @@ class OllamaClient implements AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]) =>
-      postChat(
+      _post(_chatBody(model, withSystemMessage(messages, systemPrompt)));
+
+  /// Sends a low-level completion with an explicit token cap and temperature,
+  /// serialized under Ollama's `options` object.
+  @override
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]) =>
+      _post(_chatBody(model, userMessages(prompt))
+        ..['options'] = _options(maxTokens, temperature));
+
+  /// Posts an `/api/chat` [body] with the client's headers.
+  Future<String> _post(Map<String, dynamic> body) => postChat(
         _dio,
         '$_basePath/api/chat',
-        {
-          'model': model,
-          'messages': withSystemMessage(messages, systemPrompt),
-          'stream': false,
-        },
+        body,
         jsonHeaders(),
         extractMessageContent,
       );
+
+  /// Builds the base `/api/chat` body: model, messages, and `stream: false`.
+  Map<String, dynamic> _chatBody(
+    String model,
+    List<Map<String, String>> messages,
+  ) =>
+      {'model': model, 'messages': messages, 'stream': false};
+
+  /// Builds the Ollama `options` object for an explicit token cap.
+  ///
+  /// `num_predict` caps the generated length; a null [temperature] is omitted.
+  Map<String, dynamic> _options(int maxTokens, double? temperature) {
+    final options = <String, dynamic>{'num_predict': maxTokens};
+    if (temperature != null) {
+      options['temperature'] = temperature;
+    }
+    return options;
+  }
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

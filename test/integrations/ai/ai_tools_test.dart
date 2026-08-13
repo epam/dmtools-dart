@@ -10,21 +10,30 @@ import 'ai_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
+  newToolCatalogTests();
   chatDispatchTests();
   newProviderChatTests();
   historyDispatchTests();
   newProviderHistoryTests();
+  systemPromptDispatchTests();
+  completeDispatchTests();
+  newProviderCompleteTests();
   executorErrorTests();
+  newToolErrorTests();
 }
 
-/// Tool-definition tests for the `ai_chat` and `ai_chat_with_history` tools.
+/// Tool-definition tests for the AI tools.
 void toolCatalogTests() {
   group('aiTools', () {
     final tools = aiTools();
 
-    test('defines ai_chat and ai_chat_with_history', () {
-      expect(tools.map((t) => t.name).toList(),
-          ['ai_chat', 'ai_chat_with_history']);
+    test('defines the four AI tools in catalog order', () {
+      expect(tools.map((t) => t.name).toList(), [
+        'ai_chat',
+        'ai_chat_with_history',
+        'ai_chat_with_system_prompt',
+        'ai_complete',
+      ]);
       expect(tools.every((t) => t.integration == 'ai'), isTrue);
     });
 
@@ -53,6 +62,36 @@ void toolCatalogTests() {
       expect(props['provider'], isNotNull);
       expect(props['system_prompt'], isNotNull);
       expect(schema['required'], ['provider', 'model', 'prompt']);
+    });
+  });
+}
+
+/// Tool-definition tests for the two new AI tools.
+void newToolCatalogTests() {
+  group('aiTools (new tools)', () {
+    final tools = aiTools();
+
+    test('ai_chat_with_system_prompt requires system_prompt', () {
+      final tool =
+          tools.firstWhere((t) => t.name == 'ai_chat_with_system_prompt');
+      expect(tool.params.map((p) => p.name).toList(),
+          ['provider', 'model', 'prompt', 'system_prompt']);
+      expect(tool.requiredParams,
+          ['provider', 'model', 'prompt', 'system_prompt']);
+    });
+
+    test('ai_complete has required max_tokens and optional temperature', () {
+      final tool = tools.firstWhere((t) => t.name == 'ai_complete');
+      expect(tool.params.map((p) => p.name).toList(),
+          ['provider', 'model', 'prompt', 'max_tokens', 'temperature']);
+      expect(
+          tool.requiredParams, ['provider', 'model', 'prompt', 'max_tokens']);
+      final maxTokens = tool.params.singleWhere((p) => p.name == 'max_tokens');
+      expect(maxTokens.type, 'number');
+      final temperature =
+          tool.params.singleWhere((p) => p.name == 'temperature');
+      expect(temperature.type, 'number');
+      expect(temperature.required, isFalse);
     });
   });
 }
@@ -240,6 +279,159 @@ void newProviderHistoryTests() {
   });
 }
 
+/// Dispatch tests for `ai_chat_with_system_prompt`.
+///
+/// Unlike `ai_chat`, the system prompt must reach every provider, including
+/// ollama, dial, and anthropic (which ignore it in plain `ai_chat`).
+void systemPromptDispatchTests() {
+  group('AiToolExecutor ai_chat_with_system_prompt', () {
+    test('ollama applies the system prompt (unlike ai_chat)', () async {
+      final f = mockAiExecutor(_routerFor('/api/chat'));
+      await f.executor.execute('ai_chat_with_system_prompt', {
+        'provider': 'ollama',
+        'model': 'llama3',
+        'prompt': 'hi',
+        'system_prompt': 'be nice',
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['messages'].first, {'role': 'system', 'content': 'be nice'});
+    });
+
+    test('dial applies the system prompt', () async {
+      final f = mockAiExecutor(_routerFor('dial.example.com'));
+      await f.executor.execute('ai_chat_with_system_prompt', {
+        'provider': 'dial',
+        'model': 'gpt-4',
+        'prompt': 'hi',
+        'system_prompt': 'be nice',
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['messages'].first, {'role': 'system', 'content': 'be nice'});
+    });
+
+    test('anthropic sends system as top-level field', () async {
+      final f = mockAiExecutor(_routerFor('anthropic.example.com'));
+      await f.executor.execute('ai_chat_with_system_prompt', {
+        'provider': 'anthropic',
+        'model': 'claude-3',
+        'prompt': 'hi',
+        'system_prompt': 'be nice',
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['system'], 'be nice');
+    });
+
+    test('gemini still uses systemInstruction', () async {
+      final f = mockAiExecutor(_routerFor('/gemini'));
+      await f.executor.execute('ai_chat_with_system_prompt', {
+        'provider': 'gemini',
+        'model': 'gemini-1.5-flash',
+        'prompt': 'hi',
+        'system_prompt': 'be concise',
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['systemInstruction']['parts'][0]['text'], 'be concise');
+    });
+  });
+}
+
+/// Dispatch tests for the low-level `ai_complete` tool.
+void completeDispatchTests() {
+  group('AiToolExecutor ai_complete', () {
+    test('openai: explicit max_tokens and temperature', () async {
+      final f = mockAiExecutor(_routerFor('openai.example.com'));
+      final result = await f.executor.execute('ai_complete', {
+        'provider': 'openai',
+        'model': 'gpt-4',
+        'prompt': 'hi',
+        'max_tokens': 256,
+        'temperature': 0.7,
+      });
+      expect(result, 'OpenAI response');
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['max_completion_tokens'], 256);
+      expect(body['temperature'], 0.7);
+      expect(body['messages'], [
+        {'role': 'user', 'content': 'hi'},
+      ]);
+    });
+
+    test('openai: omits temperature when not provided', () async {
+      final f = mockAiExecutor(_routerFor('openai.example.com'));
+      await f.executor.execute('ai_complete', {
+        'provider': 'openai',
+        'model': 'gpt-4',
+        'prompt': 'hi',
+        'max_tokens': 128,
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body.containsKey('temperature'), isFalse);
+      expect(body['max_completion_tokens'], 128);
+    });
+
+    test('anthropic: max_tokens and temperature', () async {
+      final f = mockAiExecutor(_routerFor('anthropic.example.com'));
+      await f.executor.execute('ai_complete', {
+        'provider': 'anthropic',
+        'model': 'claude-3',
+        'prompt': 'hi',
+        'max_tokens': 512,
+        'temperature': 0.2,
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['max_tokens'], 512);
+      expect(body['temperature'], 0.2);
+    });
+  });
+}
+
+/// Completion-dispatch tests for the gemini, ollama, and dial providers.
+void newProviderCompleteTests() {
+  group('AiToolExecutor ai_complete (gemini, ollama, dial)', () {
+    test('gemini: generationConfig with maxOutputTokens', () async {
+      final f = mockAiExecutor(_routerFor('/gemini'));
+      await f.executor.execute('ai_complete', {
+        'provider': 'gemini',
+        'model': 'gemini-1.5-flash',
+        'prompt': 'hi',
+        'max_tokens': 64,
+        'temperature': 0.1,
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['generationConfig']['maxOutputTokens'], 64);
+      expect(body['generationConfig']['temperature'], 0.1);
+      expect(body['contents'][0]['parts'][0]['text'], 'hi');
+    });
+
+    test('ollama: options.num_predict with token cap', () async {
+      final f = mockAiExecutor(_routerFor('/api/chat'));
+      await f.executor.execute('ai_complete', {
+        'provider': 'ollama',
+        'model': 'llama3',
+        'prompt': 'hi',
+        'max_tokens': 100,
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['options']['num_predict'], 100);
+      expect(body.containsKey('temperature'), isFalse);
+    });
+
+    test('dial: max_tokens and optional temperature', () async {
+      final f = mockAiExecutor(_routerFor('dial.example.com'));
+      await f.executor.execute('ai_complete', {
+        'provider': 'dial',
+        'model': 'gpt-4',
+        'prompt': 'hi',
+        'max_tokens': 200,
+        'temperature': 0.9,
+      });
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['max_tokens'], 200);
+      expect(body['temperature'], 0.9);
+    });
+  });
+}
+
 /// Error-path tests for [AiToolExecutor].
 void executorErrorTests() {
   group('AiToolExecutor errors', () {
@@ -270,6 +462,38 @@ void executorErrorTests() {
           'provider': 'unknown',
           'model': 'm',
           'messages': const [],
+        }),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+/// Error-path tests for the new AI tools.
+void newToolErrorTests() {
+  group('AiToolExecutor errors (new tools)', () {
+    test('throws ArgumentError for unknown provider on system-prompt tool',
+        () async {
+      final f = mockAiExecutor((o) => '{}');
+      expect(
+        () => f.executor.execute('ai_chat_with_system_prompt', {
+          'provider': 'unknown',
+          'model': 'm',
+          'prompt': 'p',
+          'system_prompt': 's',
+        }),
+        throwsArgumentError,
+      );
+    });
+
+    test('throws ArgumentError for unknown provider on ai_complete', () async {
+      final f = mockAiExecutor((o) => '{}');
+      expect(
+        () => f.executor.execute('ai_complete', {
+          'provider': 'unknown',
+          'model': 'm',
+          'prompt': 'p',
+          'max_tokens': 64,
         }),
         throwsArgumentError,
       );

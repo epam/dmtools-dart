@@ -23,6 +23,8 @@ List<ToolDefinition> confluenceTools() => [
       ..._attachmentTools(),
       ..._blogTools(),
       ..._contentTools(),
+      ..._pageLifecycleTools(),
+      ..._permissionTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -162,7 +164,8 @@ List<ToolDefinition> _searchTools() => [
       ),
     ];
 
-/// Space tool: `confluence_get_spaces`.
+/// Space tools: `confluence_get_spaces` / `confluence_get_space_by_key` /
+/// `confluence_update_space`.
 List<ToolDefinition> _spaceTools() => [
       ToolDefinition(
         name: 'confluence_get_spaces',
@@ -170,6 +173,42 @@ List<ToolDefinition> _spaceTools() => [
         integration: 'confluence',
         category: 'space',
         params: [],
+      ),
+      ToolDefinition(
+        name: 'confluence_get_space_by_key',
+        description: 'Get a Confluence space by its key',
+        integration: 'confluence',
+        category: 'space',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_update_space',
+        description: 'Update the name and description of a Confluence space',
+        integration: 'confluence',
+        category: 'space',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'name',
+            description: 'The new space name',
+            required: true,
+          ),
+          ToolParam(
+            name: 'description',
+            description: 'The new space description (plain text)',
+            required: true,
+          ),
+        ],
       ),
     ];
 
@@ -259,6 +298,78 @@ List<ToolDefinition> _contentTools() => [
       ),
     ];
 
+/// Page-lifecycle tools: `confluence_move_page` /
+/// `confluence_get_page_history`.
+List<ToolDefinition> _pageLifecycleTools() => [
+      ToolDefinition(
+        name: 'confluence_move_page',
+        description: 'Move a Confluence page under a new parent page',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The id of the page to move',
+            required: true,
+          ),
+          ToolParam(
+            name: 'targetId',
+            description: 'The id of the new parent page',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_get_page_history',
+        description: 'List the version history of a Confluence page',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Permission tools: `confluence_get_permissions` /
+/// `confluence_add_permission`.
+List<ToolDefinition> _permissionTools() => [
+      ToolDefinition(
+        name: 'confluence_get_permissions',
+        description: 'List content permissions for a Confluence space',
+        integration: 'confluence',
+        category: 'permissions',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_add_permission',
+        description: 'Add a content permission to a Confluence space',
+        integration: 'confluence',
+        category: 'permissions',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'permission',
+            description: 'The permission entry as a JSON object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes Confluence MCP tools by dispatching to [ConfluenceClient].
 class ConfluenceToolExecutor {
   final ConfluenceClient _client;
@@ -311,5 +422,24 @@ class ConfluenceToolExecutor {
         _client.getBlogPosts(a['spaceKey'] as String),
     'confluence_get_content_children': (a) =>
         _client.getContentChildren(a['id'] as String),
+    'confluence_get_space_by_key': (a) =>
+        _client.getSpaceByKey(a['spaceKey'] as String),
+    'confluence_update_space': (a) => _client.updateSpace(
+          a['spaceKey'] as String,
+          a['name'] as String,
+          a['description'] as String,
+        ),
+    'confluence_move_page': (a) => _client.movePage(
+          a['pageId'] as String,
+          a['targetId'] as String,
+        ),
+    'confluence_get_page_history': (a) =>
+        _client.getPageHistory(a['pageId'] as String),
+    'confluence_get_permissions': (a) =>
+        _client.getPermissions(a['spaceKey'] as String),
+    'confluence_add_permission': (a) => _client.addPermission(
+          a['spaceKey'] as String,
+          a['permission'] as Map<String, dynamic>,
+        ),
   };
 }

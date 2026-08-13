@@ -43,13 +43,35 @@ class DialClient implements AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]) =>
-      postChat(
-        _dio,
-        _basePath,
-        {'model': model, 'messages': withSystemMessage(messages, systemPrompt)},
-        bearerHeaders(_apiKey),
-        extractChoiceContent,
-      );
+      _post({
+        'model': model,
+        'messages': withSystemMessage(messages, systemPrompt),
+      });
+
+  /// Sends a low-level completion with an explicit token cap and temperature.
+  ///
+  /// DIAL is OpenAI-compatible, so the token cap uses `max_tokens`.
+  @override
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]) {
+    final body = {
+      'model': model,
+      'messages': userMessages(prompt),
+      'max_tokens': maxTokens,
+    };
+    if (temperature != null) {
+      body['temperature'] = temperature;
+    }
+    return _post(body);
+  }
+
+  /// Posts a chat-completions [body] with the client's Bearer auth.
+  Future<String> _post(Map<String, dynamic> body) => postChat(
+      _dio, _basePath, body, bearerHeaders(_apiKey), extractChoiceContent);
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

@@ -30,11 +30,17 @@ void toolCatalogTests() {
         'confluence_delete_page',
         'confluence_search',
         'confluence_get_spaces',
+        'confluence_get_space_by_key',
+        'confluence_update_space',
         'confluence_add_label',
         'confluence_get_labels',
         'confluence_get_page_attachments',
         'confluence_get_blog_posts',
         'confluence_get_content_children',
+        'confluence_move_page',
+        'confluence_get_page_history',
+        'confluence_get_permissions',
+        'confluence_add_permission',
       ]);
     });
 

@@ -21,6 +21,8 @@ List<ToolDefinition> githubTools() => [
       ..._issueTools(),
       ..._branchTools(),
       ..._fileTools(),
+      ..._releaseTools(),
+      ..._commitTools(),
     ];
 
 /// Connectivity-check tool: `github_test`.
@@ -109,8 +111,14 @@ List<ToolDefinition> _commentTools() => [
       ),
     ];
 
-/// Issue tool: `github_get_issue`.
+/// Issue tools: get, create, close, add labels, remove label.
 List<ToolDefinition> _issueTools() => [
+      ..._issueReadTools(),
+      ..._issueMutationTools(),
+    ];
+
+/// Issue read/create tools: `github_get_issue`, `github_create_issue`.
+List<ToolDefinition> _issueReadTools() => [
       ToolDefinition(
         name: 'github_get_issue',
         description: 'Get a GitHub issue by number',
@@ -120,6 +128,74 @@ List<ToolDefinition> _issueTools() => [
           _ownerParam(),
           _repoParam(),
           _numberParam('The issue number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_create_issue',
+        description: 'Create a GitHub issue',
+        integration: 'github',
+        category: 'issues',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'title',
+            description: 'The title of the new issue',
+            required: true,
+          ),
+          ToolParam(
+            name: 'body',
+            description: 'The issue description (markdown)',
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
+/// Issue mutation tools: close, add labels, remove label.
+List<ToolDefinition> _issueMutationTools() => [
+      ToolDefinition(
+        name: 'github_close_issue',
+        description: 'Close a GitHub issue',
+        integration: 'github',
+        category: 'issues',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The issue number'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_add_labels',
+        description: 'Add labels to a GitHub issue',
+        integration: 'github',
+        category: 'issues',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The issue number'),
+          ToolParam(
+            name: 'labels',
+            description: 'The label names to add',
+            type: 'array',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_remove_label',
+        description: 'Remove a label from a GitHub issue',
+        integration: 'github',
+        category: 'issues',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The issue number'),
+          ToolParam(
+            name: 'label',
+            description: 'The name of the label to remove',
+            required: true,
+          ),
         ],
       ),
     ];
@@ -208,7 +284,8 @@ List<ToolDefinition> _reviewTools() => [
       ),
     ];
 
-/// Branch tools: `github_list_branches`, `github_create_branch`.
+/// Branch tools: `github_list_branches`, `github_create_branch`,
+/// `github_delete_branch`.
 List<ToolDefinition> _branchTools() => [
       ToolDefinition(
         name: 'github_list_branches',
@@ -236,6 +313,21 @@ List<ToolDefinition> _branchTools() => [
           ToolParam(
             name: 'from_sha',
             description: 'The commit SHA to branch from',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_delete_branch',
+        description: 'Delete a branch in a GitHub repository',
+        integration: 'github',
+        category: 'branches',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'branch',
+            description: 'The name of the branch to delete',
             required: true,
           ),
         ],
@@ -293,6 +385,91 @@ List<ToolDefinition> _fileTools() => [
             description:
                 'The blob SHA of the existing file (required to update)',
             required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Release tools: `github_list_releases`, `github_get_release`,
+/// `github_create_release`.
+List<ToolDefinition> _releaseTools() => [
+      ToolDefinition(
+        name: 'github_list_releases',
+        description: 'List GitHub releases for a repository',
+        integration: 'github',
+        category: 'releases',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_get_release',
+        description: 'Get a GitHub release by tag name',
+        integration: 'github',
+        category: 'releases',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'tag',
+            description: 'The tag name of the release',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_create_release',
+        description: 'Create a GitHub release for a tag',
+        integration: 'github',
+        category: 'releases',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'tag_name',
+            description: 'The name of the tag the release targets',
+            required: true,
+          ),
+          ToolParam(
+            name: 'body',
+            description: 'The release description (markdown)',
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
+/// Commit tools: `github_get_commit`, `github_list_commits`.
+List<ToolDefinition> _commitTools() => [
+      ToolDefinition(
+        name: 'github_get_commit',
+        description: 'Get a GitHub commit by SHA',
+        integration: 'github',
+        category: 'commits',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'sha',
+            description: 'The commit SHA (or ref) to fetch',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_list_commits',
+        description: 'List commits in a GitHub repository',
+        integration: 'github',
+        category: 'commits',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          ToolParam(
+            name: 'sha',
+            description:
+                'Branch or commit SHA to list from (defaults to default branch)',
+            required: false,
           ),
         ],
       ),
@@ -425,6 +602,59 @@ class GithubToolExecutor {
           a['content'] as String,
           a['message'] as String,
           a['sha'] as String,
+        ),
+    'github_create_issue': (a) => _client.createIssue(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['title'] as String,
+          a['body'] as String?,
+        ),
+    'github_close_issue': (a) => _client.closeIssue(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+        ),
+    'github_add_labels': (a) => _client.addLabels(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          (a['labels'] as List).cast<String>(),
+        ),
+    'github_remove_label': (a) => _client.removeLabel(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          a['label'] as String,
+        ),
+    'github_delete_branch': (a) => _client.deleteBranch(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['branch'] as String,
+        ),
+    'github_list_releases': (a) => _client.listReleases(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_get_release': (a) => _client.getRelease(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['tag'] as String,
+        ),
+    'github_create_release': (a) => _client.createRelease(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['tag_name'] as String,
+          a['body'] as String?,
+        ),
+    'github_get_commit': (a) => _client.getCommit(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['sha'] as String,
+        ),
+    'github_list_commits': (a) => _client.listCommits(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['sha'] as String?,
         ),
   };
 }

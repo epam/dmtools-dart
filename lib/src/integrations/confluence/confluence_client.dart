@@ -130,6 +130,30 @@ class ConfluenceClient {
   /// Returns all spaces visible to the authenticated user.
   Future<List<Map<String, dynamic>>> getSpaces() => _getList('space');
 
+  /// `confluence_get_space_by_key` — GET `space/{spaceKey}`.
+  ///
+  /// Returns the single space identified by [spaceKey].
+  Future<Map<String, dynamic>> getSpaceByKey(String spaceKey) async {
+    final body = await _http.get('space/$spaceKey');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_update_space` — PUT `space/{spaceKey}`.
+  ///
+  /// Updates the [name] and [description] of the space with [spaceKey];
+  /// returns the updated space object from the API.
+  Future<Map<String, dynamic>> updateSpace(
+    String spaceKey,
+    String name,
+    String description,
+  ) async {
+    final body = await _http.put(
+      'space/$spaceKey',
+      body: jsonEncode(_spacePayload(name, description)),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// `confluence_get_page_by_id` — GET `content/{id}?expand=body.storage,version`.
   ///
   /// Returns the page with [id] including its storage body and version.
@@ -187,6 +211,45 @@ class ConfluenceClient {
   Future<List<Map<String, dynamic>>> getContentChildren(String id) =>
       _getList('content/$id/child/page');
 
+  /// `confluence_move_page` — PUT `content/{pageId}/move`.
+  ///
+  /// Moves the page with [pageId] to become a child of [targetId]; returns
+  /// `{}` on an empty response body or the decoded body otherwise.
+  Future<Map<String, dynamic>> movePage(String pageId, String targetId) async {
+    final body = await _http.put(
+      'content/$pageId/move',
+      body: jsonEncode(_movePayload(targetId)),
+    );
+    return body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_page_history` — GET `content/{pageId}/version`.
+  ///
+  /// Returns the version history of the page with [pageId].
+  Future<List<Map<String, dynamic>>> getPageHistory(String pageId) =>
+      _getList('content/$pageId/version');
+
+  /// `confluence_get_permissions` — GET `space/{spaceKey}/content/permission`.
+  ///
+  /// Returns the content permissions for the space with [spaceKey].
+  Future<List<Map<String, dynamic>>> getPermissions(String spaceKey) =>
+      _getList('space/$spaceKey/content/permission');
+
+  /// `confluence_add_permission` — POST `space/{spaceKey}/permission`.
+  ///
+  /// Adds [permission] to the space with [spaceKey]; returns the created
+  /// permission entry from the API.
+  Future<Map<String, dynamic>> addPermission(
+    String spaceKey,
+    Map<String, dynamic> permission,
+  ) async {
+    final body = await _http.post(
+      'space/$spaceKey/permission',
+      body: jsonEncode(permission),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// GET helper: fetches [path] and returns its `results` array as typed maps.
   Future<List<Map<String, dynamic>>> _getList(
     String path, {
@@ -207,4 +270,17 @@ class ConfluenceClient {
   /// Builds a single global-prefix label entry for POST `content/{id}/label`.
   Map<String, dynamic> _labelPayload(String label) =>
       {'prefix': 'global', 'name': label};
+
+  /// Builds the space-update payload with a plain-text description.
+  Map<String, dynamic> _spacePayload(String name, String description) => {
+        'name': name,
+        'description': {
+          'plain': {'value': description, 'representation': 'plain'},
+        },
+      };
+
+  /// Builds the move payload referencing the target page id.
+  Map<String, dynamic> _movePayload(String targetId) => {
+        'target': {'id': targetId}
+      };
 }

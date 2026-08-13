@@ -45,13 +45,42 @@ class GeminiClient implements AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]) =>
-      postChat(
+      _post(model, _buildBody(messages, systemPrompt));
+
+  /// Sends a low-level completion with an explicit token cap and temperature,
+  /// serialized as a Gemini `generationConfig`.
+  @override
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]) =>
+      _post(
+        model,
+        _buildBody(userMessages(prompt), null)
+          ..['generationConfig'] = _generationConfig(maxTokens, temperature),
+      );
+
+  /// Posts a `generateContent` [body] for [model] with the client's headers.
+  Future<String> _post(String model, Map<String, dynamic> body) => postChat(
         _dio,
         '$_basePath/$model:generateContent?key=$_apiKey',
-        _buildBody(messages, systemPrompt),
+        body,
         jsonHeaders(),
         _extractText,
       );
+
+  /// Builds the `generationConfig` object for an explicit token cap.
+  ///
+  /// A null [temperature] is omitted; otherwise it is included verbatim.
+  Map<String, dynamic> _generationConfig(int maxTokens, double? temperature) {
+    final config = <String, dynamic>{'maxOutputTokens': maxTokens};
+    if (temperature != null) {
+      config['temperature'] = temperature;
+    }
+    return config;
+  }
 
   /// Builds the `generateContent` request body.
   Map<String, dynamic> _buildBody(

@@ -19,7 +19,12 @@ import 'openai_client.dart';
 const aiProviders = {'gemini', 'openai', 'ollama', 'dial', 'anthropic'};
 
 /// Returns all AI MCP tool definitions.
-List<ToolDefinition> aiTools() => [_aiChatTool(), _aiChatWithHistoryTool()];
+List<ToolDefinition> aiTools() => [
+      _aiChatTool(),
+      _aiChatWithHistoryTool(),
+      _aiChatWithSystemPromptTool(),
+      _aiCompleteTool(),
+    ];
 
 /// Single-turn chat tool: `ai_chat`.
 ToolDefinition _aiChatTool() => ToolDefinition(
@@ -82,6 +87,76 @@ ToolDefinition _aiChatWithHistoryTool() => ToolDefinition(
       ],
     );
 
+/// Single-turn chat tool that always separates the system prompt:
+/// `ai_chat_with_system_prompt`.
+///
+/// Unlike [ai_chat], where the system prompt applies only to gemini and
+/// openai, this tool forwards the system prompt to every provider.
+ToolDefinition _aiChatWithSystemPromptTool() => ToolDefinition(
+      name: 'ai_chat_with_system_prompt',
+      description: 'Send a single-turn chat prompt with an explicit system '
+          'prompt to an AI provider (gemini, openai, ollama, dial, or '
+          'anthropic); the system prompt is always separated and applied '
+          'for every provider',
+      integration: 'ai',
+      category: 'chat',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, dial, or anthropic',
+        ),
+        ToolParam(
+          name: 'model',
+          description: 'The model name to use (e.g. gpt-4)',
+        ),
+        ToolParam(
+          name: 'prompt',
+          description: 'The user prompt text',
+        ),
+        ToolParam(
+          name: 'system_prompt',
+          description: 'The system prompt; always separated and applied',
+        ),
+      ],
+    );
+
+/// Low-level completion tool: `ai_complete`.
+ToolDefinition _aiCompleteTool() => ToolDefinition(
+      name: 'ai_complete',
+      description: 'Send a low-level single-turn completion to an AI provider '
+          '(gemini, openai, ollama, dial, or anthropic) with explicit control '
+          'over the response token limit and temperature',
+      integration: 'ai',
+      category: 'completion',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, dial, or anthropic',
+        ),
+        ToolParam(
+          name: 'model',
+          description: 'The model name to use',
+        ),
+        ToolParam(
+          name: 'prompt',
+          description: 'The prompt text',
+        ),
+        ToolParam(
+          name: 'max_tokens',
+          description: 'Maximum number of tokens to generate',
+          type: 'number',
+        ),
+        ToolParam(
+          name: 'temperature',
+          description: 'Optional sampling temperature (0.0-2.0)',
+          required: false,
+          type: 'number',
+        ),
+      ],
+    );
+
 /// Executes AI MCP tools by dispatching to the appropriate provider client.
 class AiToolExecutor {
   final GeminiClient _gemini;
@@ -109,37 +184,67 @@ class AiToolExecutor {
   Future<String> execute(String toolName, Map<String, dynamic> args) async {
     switch (toolName) {
       case 'ai_chat':
-        return _executeChat(args);
+        return _executeSingleTurn(args, systemAlwaysApplied: false);
       case 'ai_chat_with_history':
         return _executeChatWithHistory(args);
+      case 'ai_chat_with_system_prompt':
+        return _executeSingleTurn(args, systemAlwaysApplied: true);
+      case 'ai_complete':
+        return _executeComplete(args);
       default:
         throw ArgumentError('Unknown AI tool: $toolName');
     }
   }
 
-  /// Dispatches a single-turn `ai_chat` call.
-  ///
-  /// The system prompt only applies to gemini and openai; ollama, dial, and
-  /// anthropic ignore it in single-turn mode.
-  Future<String> _executeChat(Map<String, dynamic> args) {
-    final provider = (args['provider'] as String).toLowerCase();
-    final model = args['model'] as String;
-    final prompt = args['prompt'] as String;
-    final systemPrompt = args['system_prompt'] as String?;
+  /// Resolves a provider name to its client, throwing for unknown providers.
+  AiChatClient _clientFor(String provider) {
     switch (provider) {
       case 'gemini':
-        return _gemini.chat(model, prompt, systemPrompt);
+        return _gemini;
       case 'openai':
-        return _openai.chat(model, prompt, systemPrompt);
+        return _openai;
       case 'ollama':
-        return _ollama.chat(model, prompt);
+        return _ollama;
       case 'dial':
-        return _dial.chat(model, prompt);
+        return _dial;
       case 'anthropic':
-        return _anthropic.chat(model, prompt);
+        return _anthropic;
       default:
         throw ArgumentError('Unknown AI provider: $provider');
     }
+  }
+
+  /// Providers whose single-turn `ai_chat` honors the optional system prompt.
+  static const Set<String> _singleTurnSystemProviders = {'gemini', 'openai'};
+
+  /// Dispatches a single-turn chat call (`ai_chat` and
+  /// `ai_chat_with_system_prompt`).
+  ///
+  /// When [systemAlwaysApplied] is false (plain `ai_chat`) the system prompt
+  /// only applies to gemini and openai; when true it is forwarded to every
+  /// provider.
+  Future<String> _executeSingleTurn(
+    Map<String, dynamic> args, {
+    required bool systemAlwaysApplied,
+  }) {
+    final provider = (args['provider'] as String).toLowerCase();
+    final applies =
+        systemAlwaysApplied || _singleTurnSystemProviders.contains(provider);
+    return _clientFor(provider).chat(
+      args['model'] as String,
+      args['prompt'] as String,
+      applies ? args['system_prompt'] as String? : null,
+    );
+  }
+
+  /// Dispatches a low-level `ai_complete` call with explicit token control.
+  Future<String> _executeComplete(Map<String, dynamic> args) {
+    final provider = (args['provider'] as String).toLowerCase();
+    final model = args['model'] as String;
+    final prompt = args['prompt'] as String;
+    final maxTokens = (args['max_tokens'] as num).toInt();
+    final temperature = (args['temperature'] as num?)?.toDouble();
+    return _clientFor(provider).complete(model, prompt, maxTokens, temperature);
   }
 
   /// Dispatches a multi-turn `ai_chat_with_history` call.
@@ -151,20 +256,7 @@ class AiToolExecutor {
     final model = args['model'] as String;
     final messages = _parseMessages(args['messages']);
     final systemPrompt = args['system_prompt'] as String?;
-    switch (provider) {
-      case 'gemini':
-        return _gemini.chatWithMessages(model, messages, systemPrompt);
-      case 'openai':
-        return _openai.chatWithMessages(model, messages, systemPrompt);
-      case 'ollama':
-        return _ollama.chatWithMessages(model, messages, systemPrompt);
-      case 'dial':
-        return _dial.chatWithMessages(model, messages, systemPrompt);
-      case 'anthropic':
-        return _anthropic.chatWithMessages(model, messages, systemPrompt);
-      default:
-        throw ArgumentError('Unknown AI provider: $provider');
-    }
+    return _clientFor(provider).chatWithMessages(model, messages, systemPrompt);
   }
 
   /// Coerces a raw `messages` argument into typed `{role, content}` pairs.

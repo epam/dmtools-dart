@@ -262,6 +262,151 @@ class GithubClient {
     return jsonDecode(response) as Map<String, dynamic>;
   }
 
+  /// `github_list_releases` — GET `/repos/{owner}/{repo}/releases`.
+  Future<List<Map<String, dynamic>>> listReleases(
+    String owner,
+    String repo,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/releases');
+    return _decodeList(body);
+  }
+
+  /// `github_get_release` — GET `/repos/{owner}/{repo}/releases/tags/{tag}`.
+  Future<Map<String, dynamic>> getRelease(
+    String owner,
+    String repo,
+    String tag,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/releases/tags/$tag');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_create_release` — POST `/repos/{owner}/{repo}/releases`.
+  ///
+  /// [body] optionally sets the release description (markdown).
+  Future<Map<String, dynamic>> createRelease(
+    String owner,
+    String repo,
+    String tagName, [
+    String? body,
+  ]) =>
+      _postWithOptionalBody(
+        'repos/$owner/$repo/releases',
+        {'tag_name': tagName},
+        body,
+      );
+
+  /// `github_delete_branch` — DELETE
+  /// `/repos/{owner}/{repo}/git/refs/heads/{branch}`.
+  Future<Map<String, dynamic>> deleteBranch(
+    String owner,
+    String repo,
+    String branch,
+  ) async {
+    final body = await _http.delete(
+      'repos/$owner/$repo/git/refs/heads/$branch',
+    );
+    return _decodeEmptyOk(body);
+  }
+
+  /// `github_get_commit` — GET `/repos/{owner}/{repo}/commits/{sha}`.
+  Future<Map<String, dynamic>> getCommit(
+    String owner,
+    String repo,
+    String sha,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/commits/$sha');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_list_commits` — GET `/repos/{owner}/{repo}/commits`.
+  ///
+  /// [sha] optionally scopes the list to a branch or commit SHA.
+  Future<List<Map<String, dynamic>>> listCommits(
+    String owner,
+    String repo, [
+    String? sha,
+  ]) async {
+    final body = await _http.get(
+      'repos/$owner/$repo/commits',
+      queryParams: sha == null ? null : {'sha': sha},
+    );
+    return _decodeList(body);
+  }
+
+  /// `github_create_issue` — POST `/repos/{owner}/{repo}/issues`.
+  ///
+  /// [body] optionally sets the issue description (markdown).
+  Future<Map<String, dynamic>> createIssue(
+    String owner,
+    String repo,
+    String title, [
+    String? body,
+  ]) =>
+      _postWithOptionalBody(
+        'repos/$owner/$repo/issues',
+        {'title': title},
+        body,
+      );
+
+  /// `github_close_issue` — PATCH `/repos/{owner}/{repo}/issues/{number}`.
+  Future<Map<String, dynamic>> closeIssue(
+    String owner,
+    String repo,
+    int number,
+  ) async {
+    final response = await _http.patch(
+      'repos/$owner/$repo/issues/$number',
+      body: jsonEncode({'state': 'closed'}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_add_labels` — POST
+  /// `/repos/{owner}/{repo}/issues/{number}/labels`.
+  Future<List<Map<String, dynamic>>> addLabels(
+    String owner,
+    String repo,
+    int number,
+    List<String> labels,
+  ) async {
+    final response = await _http.post(
+      'repos/$owner/$repo/issues/$number/labels',
+      body: jsonEncode({'labels': labels}),
+    );
+    return _decodeList(response);
+  }
+
+  /// `github_remove_label` — DELETE
+  /// `/repos/{owner}/{repo}/issues/{number}/labels/{label}`.
+  Future<Map<String, dynamic>> removeLabel(
+    String owner,
+    String repo,
+    int number,
+    String label,
+  ) async {
+    final body = await _http.delete(
+      'repos/$owner/$repo/issues/$number/labels/$label',
+    );
+    return _decodeEmptyOk(body);
+  }
+
+  /// POSTs [endpoint] with [base] merged with an optional `body` field.
+  Future<Map<String, dynamic>> _postWithOptionalBody(
+    String endpoint,
+    Map<String, dynamic> base,
+    String? body,
+  ) async {
+    final payload = Map<String, dynamic>.from(base);
+    if (body != null) payload['body'] = body;
+    final response = await _http.post(endpoint, body: jsonEncode(payload));
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// Decodes a DELETE response body, tolerating GitHub's empty 204 body.
+  Map<String, dynamic> _decodeEmptyOk(String body) =>
+      body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
+
   /// Decodes a JSON array [body] into a list of maps.
   static List<Map<String, dynamic>> _decodeList(String body) {
     final decoded = jsonDecode(body) as List;

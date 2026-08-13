@@ -11,6 +11,12 @@ void main() {
   getFileTests();
   getFileNodesTests();
   getImageTests();
+  getCommentsTests();
+  postCommentTests();
+  getComponentsTests();
+  getComponentSetsTests();
+  getStylesTests();
+  exportImageTests();
 }
 
 /// The base path injected by the fixture's config.
@@ -121,6 +127,119 @@ void getImageTests() {
   });
 }
 
+/// `figma_get_comments` — GET `/files/{key}/comments`.
+void getCommentsTests() {
+  group('FigmaClient.getComments', () {
+    test('returns the decoded comments map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/comments': _commentsBody}, o),
+      );
+      final comments = await f.client.getComments('aBc123');
+      expect(comments['comments'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/comments'));
+    });
+  });
+}
+
+/// `figma_post_comment` — POST `/files/{key}/comments`.
+void postCommentTests() {
+  group('FigmaClient.postComment', () {
+    test('posts the message and returns the created comment', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/comments': _commentCreatedBody}, o),
+      );
+      final result = await f.client.postComment('aBc123', 'Nice work!');
+      expect(result['id'], 'c1');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/files/aBc123/comments'));
+      expect(call.data, '{"message":"Nice work!"}');
+    });
+  });
+}
+
+/// `figma_get_components` — GET `/files/{key}/components`.
+void getComponentsTests() {
+  group('FigmaClient.getComponents', () {
+    test('returns the decoded components map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/components': _componentsBody}, o),
+      );
+      final components = await f.client.getComponents('aBc123');
+      expect(components['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/components'));
+    });
+  });
+}
+
+/// `figma_get_component_sets` — GET `/files/{key}/component_sets`.
+void getComponentSetsTests() {
+  group('FigmaClient.getComponentSets', () {
+    test('returns the decoded component-sets map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/component_sets': _componentSetsBody}, o),
+      );
+      final sets = await f.client.getComponentSets('aBc123');
+      expect(sets['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/component_sets'));
+    });
+  });
+}
+
+/// `figma_get_styles` — GET `/files/{key}/styles`.
+void getStylesTests() {
+  group('FigmaClient.getStyles', () {
+    test('returns the decoded styles map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/styles': _stylesBody}, o),
+      );
+      final styles = await f.client.getStyles('aBc123');
+      expect(styles['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/styles'));
+    });
+  });
+}
+
+/// `figma_export_image` — GET `/images/{key}` with optional format/scale.
+void exportImageTests() {
+  group('FigmaClient.exportImage', () {
+    test('sends format and scale when provided', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/images/aBc123': _imageBody}, o),
+      );
+      final image = await f.client.exportImage(
+        'aBc123',
+        format: 'svg',
+        scale: 2,
+      );
+      expect(image['images'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/images/aBc123'));
+      expect(call.queryParameters['format'], 'svg');
+      expect(call.queryParameters['scale'], 2);
+    });
+
+    test('omits format and scale when not provided', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/images/aBc123': _imageBody}, o),
+      );
+      await f.client.exportImage('aBc123');
+      final call = f.adapter.calls.single;
+      expect(call.queryParameters['format'], isNull);
+      expect(call.queryParameters['scale'], isNull);
+    });
+  });
+}
+
 /// Canned `/me` response body.
 const _meBody = '{"handle":"designer-1","email":"d@example.com"}';
 
@@ -133,3 +252,20 @@ const _nodesBody =
 
 /// Canned `/images/{key}` response body.
 const _imageBody = '{"images":{"1:2":"https://cdn.example.com/img.png"}}';
+
+/// Canned `/files/{key}/comments` response body.
+const _commentsBody = '{"comments":[{"id":"c1","message":"hello"}]}';
+
+/// Canned POST `/files/{key}/comments` response body.
+const _commentCreatedBody = '{"id":"c1","message":"Nice work!"}';
+
+/// Canned `/files/{key}/components` response body.
+const _componentsBody =
+    '{"meta":{"components":[{"key":"btn","name":"Button"}]}}';
+
+/// Canned `/files/{key}/component_sets` response body.
+const _componentSetsBody =
+    '{"meta":{"component_sets":[{"key":"btn-set","name":"Button/Set"}]}}';
+
+/// Canned `/files/{key}/styles` response body.
+const _stylesBody = '{"meta":{"styles":[{"key":"red","name":"Red"}]}}';

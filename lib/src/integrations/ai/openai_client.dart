@@ -56,31 +56,51 @@ class OpenAIClient implements AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]) =>
-      postChat(
-        _dio,
-        _basePath,
-        _buildBody(model, messages, systemPrompt),
-        bearerHeaders(_apiKey),
-        extractChoiceContent,
-      );
+      _post(
+          _buildBody(model, messages, systemPrompt, _maxTokens, _temperature));
+
+  /// Sends a low-level completion with an explicit token cap and temperature.
+  ///
+  /// A null [temperature] suppresses the field; otherwise it overrides the
+  /// configured sampling value.
+  @override
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]) =>
+      _post(_buildBody(
+        model,
+        userMessages(prompt),
+        null,
+        maxTokens,
+        temperature ?? -1,
+      ));
+
+  /// Posts a chat-completions [body] with the client's auth and headers.
+  Future<String> _post(Map<String, dynamic> body) => postChat(
+      _dio, _basePath, body, bearerHeaders(_apiKey), extractChoiceContent);
 
   /// Builds the chat-completions request body.
   ///
-  /// A negative [_temperature] (the default `-1`) suppresses the field, and
+  /// A negative [temperature] (the default `-1`) suppresses the field, and
   /// the max-tokens key uses the configured param name
   /// (default `max_completion_tokens`).
   Map<String, dynamic> _buildBody(
     String model,
     List<Map<String, String>> messages,
     String? systemPrompt,
+    int maxTokens,
+    double temperature,
   ) {
     final body = <String, dynamic>{
       'model': model,
       'messages': withSystemMessage(messages, systemPrompt),
-      _maxTokensParamName: _maxTokens,
+      _maxTokensParamName: maxTokens,
     };
-    if (_temperature >= 0) {
-      body['temperature'] = _temperature;
+    if (temperature >= 0) {
+      body['temperature'] = temperature;
     }
     return body;
   }

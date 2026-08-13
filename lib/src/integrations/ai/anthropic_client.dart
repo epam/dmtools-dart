@@ -47,10 +47,32 @@ class AnthropicClient implements AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]) =>
-      postChat(
+      _post(_buildBody(model, messages, systemPrompt, _maxTokens));
+
+  /// Sends a low-level completion with an explicit token cap and temperature.
+  ///
+  /// A null [temperature] suppresses the field; otherwise it overrides the
+  /// configured sampling value.
+  @override
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]) =>
+      _post(_buildBody(
+        model,
+        userMessages(prompt),
+        null,
+        maxTokens,
+        temperature: temperature,
+      ));
+
+  /// Posts a messages request [body] with the client's auth and headers.
+  Future<String> _post(Map<String, dynamic> body) => postChat(
         _dio,
         _basePath,
-        _buildBody(model, messages, systemPrompt),
+        body,
         _headers,
         extractContentBlockText,
       );
@@ -66,14 +88,19 @@ class AnthropicClient implements AiChatClient {
     String model,
     List<Map<String, String>> messages,
     String? systemPrompt,
-  ) {
+    int maxTokens, {
+    double? temperature,
+  }) {
     final body = <String, dynamic>{
       'model': model,
-      'max_tokens': _maxTokens,
+      'max_tokens': maxTokens,
       'messages': messages,
     };
     if (systemPrompt != null && systemPrompt.isNotEmpty) {
       body['system'] = systemPrompt;
+    }
+    if (temperature != null) {
+      body['temperature'] = temperature;
     }
     return body;
   }

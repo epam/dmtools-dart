@@ -29,7 +29,7 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the sixteen tools in declaration order', () {
+    test('registers the twenty-six tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'github_test',
         'github_get_pr',
@@ -43,10 +43,20 @@ void catalogOrderTests() {
         'github_create_review',
         'github_create_comment',
         'github_get_issue',
+        'github_create_issue',
+        'github_close_issue',
+        'github_add_labels',
+        'github_remove_label',
         'github_list_branches',
         'github_create_branch',
+        'github_delete_branch',
         'github_get_file_content',
         'github_update_file',
+        'github_list_releases',
+        'github_get_release',
+        'github_create_release',
+        'github_get_commit',
+        'github_list_commits',
       ]);
     });
 

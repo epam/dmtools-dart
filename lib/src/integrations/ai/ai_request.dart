@@ -20,6 +20,16 @@ abstract interface class AiChatClient {
     ChatMessages messages, [
     String? systemPrompt,
   ]);
+
+  /// Sends a low-level single-turn completion of [prompt] with explicit
+  /// generation limits: [maxTokens] caps the response length and the optional
+  /// [temperature] overrides sampling.
+  Future<String> complete(
+    String model,
+    String prompt,
+    int maxTokens, [
+    double? temperature,
+  ]);
 }
 
 /// Single-turn chat support for every [AiChatClient].

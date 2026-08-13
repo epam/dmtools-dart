@@ -3,3 +3,9 @@ dmtools-local.env
 .dart_tool/
 build/
 coverage/
+dmtools.env
+dmtools-local.env
+.dart_tool/
+build/
+coverage/
+.idea/

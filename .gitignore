@@ -9,3 +9,5 @@ dmtools-local.env
 build/
 coverage/
 .idea/
+native/quickjs/*.o
+native/quickjs/*.so

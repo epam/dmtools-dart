@@ -262,14 +262,55 @@ void _testInteractive() {
 
 void _testDirectTool() {
   group('direct tool invocation', () {
-    test('stubs MCP tool execution', () async {
-      expect(await _dispatcher.dispatch(['jira_get_ticket', 'DMC-479']), 1);
-      expect(_lines, ['Tool execution requires Phase 3 MCP registry']);
+    test('executes a file tool with JSON args', () async {
+      final testFile = File('${_tmp.path}/hello.txt')
+        ..writeAsStringSync('hello world');
+      expect(
+        await _dispatcher.dispatch([
+          'file_read',
+          jsonEncode({'path': testFile.path}),
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'hello world');
     });
 
-    test('unknown commands fall through to the tool stub', () async {
+    test('executes a file tool with --data flag', () async {
+      final testFile = File('${_tmp.path}/data.txt')
+        ..writeAsStringSync('data content');
+      expect(
+        await _dispatcher.dispatch([
+          'file_read',
+          '--data',
+          jsonEncode({'path': testFile.path}),
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'data content');
+    });
+
+    test('rejects an unknown tool name', () async {
       expect(await _dispatcher.dispatch(['frobnicate']), 1);
-      expect(_lines, ['Tool execution requires Phase 3 MCP registry']);
+      expect(_lines.first, contains('unknown tool'));
+      expect(_lines.last, contains('dmtools list'));
+    });
+
+    test('reports invalid JSON arguments', () async {
+      expect(await _dispatcher.dispatch(['file_read', 'not-json']), 1);
+      expect(_lines.first, contains('invalid JSON arguments'));
+    });
+
+    test('returns an error for an unconfigured integration tool', () async {
+      expect(
+        await _dispatcher.dispatch(
+          ['jira_get_ticket', '{"key": "DMC-479"}'],
+        ),
+        1,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['error'], contains('not configured'));
     });
   });
 }

@@ -102,6 +102,15 @@ class ToolBridge {
   /// No-op: runtime env overrides are handled by the Phase 1 property layer.
   String _setEnvVariable(String argsJson) => '{"success":true}';
 
+  /// Executes [toolName] with [args], returning the JSON result string.
+  ///
+  /// This is the same dispatch path used by `executeToolViaJava` from JS,
+  /// exposed for direct CLI invocation (`dmtools <tool> '<json>'`). Returns
+  /// an `{"error": ...}` JSON object when the tool is unknown or dispatch
+  /// fails.
+  String execute(String toolName, Map<String, dynamic> args) =>
+      _execute(toolName, args);
+
   /// Routes [toolName] through [SyncToolDispatcher], the single entry point.
   ///
   /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI

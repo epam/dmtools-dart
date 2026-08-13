@@ -1,10 +1,11 @@
 /// Command-line dispatcher — Dart port of the Java `JobRunner` CLI surface.
 ///
-/// Version, help, job listing, `doctor`, and `run` are live. `run` resolves a
-/// job config via [RunCommandProcessor], then dispatches to [AgentFactory]
-/// (for `cliagent`) or [JsJobRunner] (for `jsrunner`/`.js` scripts) and prints
-/// the result. Interactive mode and direct tool invocation are stubs pending
-/// later phases.
+/// Version, help, job listing, `doctor`, `run`, `list`, and direct tool
+/// invocation are live. `run` resolves a job config via
+/// [RunCommandProcessor], then dispatches to [AgentFactory] (for `cliagent`)
+/// or [JsJobRunner] (for `jsrunner`/`.js` scripts) and prints the result.
+/// Direct tool invocation (`dmtools <tool> '<json>'`) dispatches through
+/// [ToolBridge]. Interactive mode remains a stub pending Phase 4.
 library;
 
 import 'dart:async';
@@ -15,6 +16,7 @@ import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../config/property_reader.dart';
 import '../js/job_runner.dart';
+import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
@@ -53,7 +55,8 @@ class CliDispatcher {
       return _isTty() ? _interactiveStub() : _printHelp();
     }
     final handler = _handlers[args.first];
-    if (handler == null) return _toolStub();
+    if (handler == null)
+      return _toolDispatch(args.first, args.skip(1).toList());
     return handler(args.skip(1).toList());
   }
 
@@ -195,9 +198,68 @@ class CliDispatcher {
     return 1;
   }
 
-  int _toolStub() {
-    _writer('Tool execution requires Phase 3 MCP registry');
-    return 1;
+  /// Dispatches a direct tool invocation: `dmtools <tool> '<json>'`.
+  ///
+  /// Resolves the tool name through the default registry, parses args from a
+  /// positional JSON string, `--data`, or STDIN, then executes via
+  /// [ToolBridge] and prints the JSON result. Returns `0` on success, `1`
+  /// when the tool is unknown, args are invalid, or the result is an error.
+  Future<int> _toolDispatch(String toolName, List<String> rest) async {
+    final registry = createDefaultToolRegistry();
+    if (!registry.hasTool(toolName)) {
+      _writer('Error: unknown tool: $toolName');
+      _writer('Run "dmtools list" for available tools');
+      return 1;
+    }
+    try {
+      final argsJson = await _resolveToolArgs(rest);
+      final args = _parseToolArgs(argsJson);
+      final result = ToolBridge(registry: registry).execute(toolName, args);
+      _writer(result);
+      return _isToolError(result) ? 1 : 0;
+    } on FormatException catch (e) {
+      _writer('Error: invalid JSON arguments — ${e.message}');
+      return 1;
+    } catch (e) {
+      _writer('Error: $e');
+      return 1;
+    }
+  }
+
+  /// Resolves tool arguments from `--data`, a positional JSON string, or
+  /// STDIN (non-TTY only). Returns `null` when no args are available.
+  Future<String?> _resolveToolArgs(List<String> rest) async {
+    final dataIdx = rest.indexOf('--data');
+    if (dataIdx != -1 && dataIdx + 1 < rest.length) {
+      return rest[dataIdx + 1];
+    }
+    final positional = rest.where((a) => !a.startsWith('--')).toList();
+    if (positional.isNotEmpty) return positional.first;
+    if (!stdin.hasTerminal) {
+      final data = await stdin.transform(utf8.decoder).join();
+      if (data.isNotEmpty) return data;
+    }
+    return null;
+  }
+
+  /// Parses [argsJson] into a tool arguments map; empty when `null`/blank.
+  static Map<String, dynamic> _parseToolArgs(String? argsJson) {
+    if (argsJson == null || argsJson.trim().isEmpty) {
+      return <String, dynamic>{};
+    }
+    final decoded = jsonDecode(argsJson);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw FormatException('expected a JSON object');
+  }
+
+  /// Returns `true` when [result] is a JSON object containing an `error` key.
+  static bool _isToolError(String result) {
+    try {
+      final decoded = jsonDecode(result);
+      return decoded is Map && decoded.containsKey('error');
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Help text, byte-identical to the Java `JobRunner.printHelp()` output.

@@ -121,6 +121,24 @@ class TestRailClient {
   Future<Map<String, dynamic>> updateRun(int runId, String name) =>
       _postForMap('update_run/$runId', {'name': name});
 
+  /// `testrail_get_case_types` — GET `get_case_types/{projectId}`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getCaseTypes(int projectId) async =>
+      _getList('get_case_types/$projectId');
+
+  /// `testrail_get_priorities` — GET `get_priorities`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getPriorities() async =>
+      _getList('get_priorities');
+
+  /// `testrail_get_statuses` — GET `get_statuses`.
+  ///
+  /// Returns an empty list when the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getStatuses() async =>
+      _getList('get_statuses');
+
   /// GETs [path] and decodes the JSON array response.
   Future<List<Map<String, dynamic>>> _getList(String path) async =>
       _decodeList(await _http.get(path));

@@ -71,6 +71,22 @@ class GeminiClient implements AiChatClient {
         _extractText,
       );
 
+  /// Generates an embedding via Gemini's `embedContent` endpoint.
+  @override
+  Future<String> embed(String model, String text) => postChat(
+        _dio,
+        '$_basePath/$model:embedContent?key=$_apiKey',
+        {
+          'content': {
+            'parts': [
+              {'text': text}
+            ]
+          }
+        },
+        jsonHeaders(),
+        extractValuesEmbedding,
+      );
+
   /// Builds the `generationConfig` object for an explicit token cap.
   ///
   /// A null [temperature] is omitted; otherwise it is included verbatim.

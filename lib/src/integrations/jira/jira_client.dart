@@ -12,6 +12,7 @@ import 'jira_http_client.dart';
 
 part 'jira_client_batch5.dart';
 part 'jira_client_batch6.dart';
+part 'jira_client_batch7.dart';
 
 /// Jira API methods exposed to the MCP tool runtime.
 class JiraClient {

@@ -110,6 +110,29 @@ class BitriseClient {
     return _postBuild(appSlug, buildParams);
   }
 
+  /// `bitrise_get_workflows` — GET `apps/{appSlug}/build-slots`.
+  ///
+  /// Returns the decoded response object (contains workflow slots), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getWorkflows(String appSlug) async {
+    final body = await _http.get('apps/${_encodeSlug(appSlug)}/build-slots');
+    return _decodeObject(body) ?? const {};
+  }
+
+  /// `bitrise_get_artifacts` — GET `apps/{appSlug}/builds/{buildSlug}/artifacts`.
+  ///
+  /// Returns the decoded response object (contains `data` + `paging`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getArtifacts(
+    String appSlug,
+    String buildSlug,
+  ) async {
+    final body = await _http.get(
+      'apps/${_encodeSlug(appSlug)}/builds/${_encodeSlug(buildSlug)}/artifacts',
+    );
+    return _decodeObject(body) ?? const {};
+  }
+
   /// POSTs [buildParams] to `apps/{appSlug}/builds` and decodes the object.
   Future<Map<String, dynamic>?> _postBuild(
     String appSlug,

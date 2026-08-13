@@ -8,9 +8,11 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   toolCatalogBatch3ParamTests();
+  toolCatalogBatch4ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
+  executorBatch4DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -22,7 +24,7 @@ void toolCatalogTests() {
   group('jenkinsTools catalog', () {
     final tools = jenkinsTools();
 
-    test('registers the nine tools in declaration order', () {
+    test('registers the eleven tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jenkins_test',
         'jenkins_get_jobs',
@@ -31,8 +33,10 @@ void toolCatalogTests() {
         'jenkins_get_build',
         'jenkins_get_build_log',
         'jenkins_get_last_build',
+        'jenkins_get_build_artifacts',
         'jenkins_get_queue',
         'jenkins_cancel_build',
+        'jenkins_get_job_config',
       ]);
     });
 
@@ -220,6 +224,55 @@ void executorBatch3DispatchTests() {
   });
 }
 
+/// Batch-4 catalog params: build artifacts and job config.
+void toolCatalogBatch4ParamTests() {
+  group('jenkins_get_build_artifacts', () {
+    final tool = toolNamed('jenkins_get_build_artifacts');
+
+    test('declares required name and numeric buildNumber', () {
+      expect(tool.params.map((p) => p.name), ['name', 'buildNumber']);
+      expect(tool.params[1].type, 'number');
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('jenkins_get_job_config', () {
+    final tool = toolNamed('jenkins_get_job_config');
+
+    test('declares a required name', () {
+      expect(tool.params.single.name, 'name');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+}
+
+/// Batch-4 dispatch tests for build artifacts and job config.
+void executorBatch4DispatchTests() {
+  group('JenkinsToolExecutor.execute (batch 4)', () {
+    late _SpyJenkinsClient spy;
+    late JenkinsToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJenkinsClient(mockHttp((o) => '{}').http);
+      executor = JenkinsToolExecutor(spy);
+    });
+
+    test('routes jenkins_get_build_artifacts with name and buildNumber',
+        () async {
+      await executor.execute('jenkins_get_build_artifacts', {
+        'name': 'job-a',
+        'buildNumber': 5,
+      });
+      expect(spy.calls, ['getBuildArtifacts:job-a:5']);
+    });
+
+    test('routes jenkins_get_job_config with name', () async {
+      await executor.execute('jenkins_get_job_config', {'name': 'job-a'});
+      expect(spy.calls, ['getJobConfig:job-a']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyJenkinsClient extends JenkinsClient {
   _SpyJenkinsClient(super.http);
@@ -278,5 +331,20 @@ class _SpyJenkinsClient extends JenkinsClient {
   Future<Map<String, dynamic>> cancelBuild(int queueId) {
     calls.add('cancelBuild:$queueId');
     return super.cancelBuild(queueId);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getBuildArtifacts(
+    String name,
+    int buildNumber,
+  ) {
+    calls.add('getBuildArtifacts:$name:$buildNumber');
+    return super.getBuildArtifacts(name, buildNumber);
+  }
+
+  @override
+  Future<String> getJobConfig(String name) {
+    calls.add('getJobConfig:$name');
+    return super.getJobConfig(name);
   }
 }

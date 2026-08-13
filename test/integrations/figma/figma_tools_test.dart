@@ -11,6 +11,7 @@ void main() {
   catalogParamTests();
   executorRoutingTests();
   executorNewToolRoutingTests();
+  executorBatch3RoutingTests();
   executorEdgeCaseTests();
 }
 
@@ -26,7 +27,7 @@ void catalogTests() {
   group('figmaTools catalog', () {
     final tools = figmaTools();
 
-    test('registers the ten tools in declaration order', () {
+    test('registers the thirteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'figma_test',
         'figma_get_file',
@@ -36,8 +37,11 @@ void catalogTests() {
         'figma_get_comments',
         'figma_post_comment',
         'figma_get_components',
+        'figma_get_file_components',
         'figma_get_component_sets',
         'figma_get_styles',
+        'figma_get_variable_collections',
+        'figma_get_library_components',
       ]);
     });
 
@@ -55,8 +59,11 @@ const _requiredParamTools = <(String, List<String>)>[
   ('figma_get_comments', ['key']),
   ('figma_post_comment', ['key', 'message']),
   ('figma_get_components', ['key']),
+  ('figma_get_file_components', ['key']),
   ('figma_get_component_sets', ['key']),
   ('figma_get_styles', ['key']),
+  ('figma_get_variable_collections', ['key']),
+  ('figma_get_library_components', ['library_key']),
 ];
 
 /// Param-shape checks for every tool.
@@ -170,6 +177,37 @@ void executorNewToolRoutingTests() {
   });
 }
 
+/// [FigmaToolExecutor.execute] routes batch-3 tool names to client calls.
+void executorBatch3RoutingTests() {
+  late _ExecutorFixture f;
+
+  group('FigmaToolExecutor.execute (batch 3)', () {
+    setUp(() => f = _executorFixture());
+
+    test('routes figma_get_file_components as alias to getComponents',
+        () async {
+      await f.executor.execute('figma_get_file_components', {'key': 'aBc123'});
+      expect(f.spy.calls, ['getComponents:aBc123']);
+    });
+
+    test('routes figma_get_variable_collections with key', () async {
+      await f.executor.execute(
+        'figma_get_variable_collections',
+        {'key': 'aBc123'},
+      );
+      expect(f.spy.calls, ['getVariableCollections:aBc123']);
+    });
+
+    test('routes figma_get_library_components with library_key', () async {
+      await f.executor.execute(
+        'figma_get_library_components',
+        {'library_key': 'lib1'},
+      );
+      expect(f.spy.calls, ['getLibraryComponents:lib1']);
+    });
+  });
+}
+
 /// [FigmaToolExecutor.execute] error cases.
 void executorEdgeCaseTests() {
   late _ExecutorFixture f;
@@ -263,5 +301,17 @@ class _SpyFigmaClient extends FigmaClient {
   }) {
     calls.add('exportImage:$key:$format:$scale');
     return super.exportImage(key, format: format, scale: scale);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getVariableCollections(String key) {
+    calls.add('getVariableCollections:$key');
+    return super.getVariableCollections(key);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getLibraryComponents(String libraryKey) {
+    calls.add('getLibraryComponents:$libraryKey');
+    return super.getLibraryComponents(libraryKey);
   }
 }

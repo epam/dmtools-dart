@@ -10,6 +10,7 @@ import 'jira_client.dart';
 
 part 'jira_tools_batch5.dart';
 part 'jira_tools_batch6.dart';
+part 'jira_tools_batch7.dart';
 
 /// Reusable parameter: Jira ticket key.
 const _keyParam = ToolParam(
@@ -24,6 +25,21 @@ const _projectParam = ToolParam(
   description: 'The project key (e.g. PROJ)',
   required: true,
 );
+
+/// Reusable parameters: JQL query string plus optional field list.
+const _jqlSearchParams = [
+  ToolParam(
+    name: 'jql',
+    description: 'The JQL query string',
+    required: true,
+  ),
+  ToolParam(
+    name: 'fields',
+    description: 'Comma-separated field names to return',
+    type: 'array',
+    required: false,
+  ),
+];
 
 /// Builds a Jira tool definition with standard defaults.
 ///
@@ -74,6 +90,7 @@ List<ToolDefinition> jiraTools() => [
       ..._projectDetailTools(),
       ..._batch5Tools(),
       ..._batch6Tools(),
+      ..._batch7Tools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -110,19 +127,7 @@ List<ToolDefinition> _searchTools() => [
         name: 'jira_search_by_jql',
         description: 'Search Jira issues by JQL query',
         category: 'search',
-        params: [
-          ToolParam(
-            name: 'jql',
-            description: 'The JQL query string',
-            required: true,
-          ),
-          ToolParam(
-            name: 'fields',
-            description: 'Comma-separated field names to return',
-            type: 'array',
-            required: false,
-          ),
-        ],
+        params: _jqlSearchParams,
       ),
     ];
 
@@ -566,6 +571,7 @@ class JiraToolExecutor {
     ..._batch4Handlers(),
     ..._batch5Handlers(),
     ...batch6Handlers(),
+    ...batch7Handlers(),
   };
 
   /// Dispatch entries for the batch-1/2 Jira tools.

@@ -21,6 +21,7 @@ List<ToolDefinition> testrailTools() => [
       ..._runTools(),
       ..._milestoneTools(),
       ..._runWriteTools(),
+      ..._metadataTools(),
     ];
 
 /// Connectivity-check tool: `testrail_test`.
@@ -244,6 +245,39 @@ List<ToolDefinition> _runWriteTools() => [
       ),
     ];
 
+/// Metadata tools: `testrail_get_case_types`, `testrail_get_priorities`,
+/// `testrail_get_statuses`.
+List<ToolDefinition> _metadataTools() => [
+      ToolDefinition(
+        name: 'testrail_get_case_types',
+        description: 'Get TestRail case types for a project',
+        integration: 'testrail',
+        category: 'metadata',
+        params: [
+          ToolParam(
+            name: 'projectId',
+            description: 'The project ID',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_priorities',
+        description: 'Get TestRail case priorities',
+        integration: 'testrail',
+        category: 'metadata',
+        params: [],
+      ),
+      ToolDefinition(
+        name: 'testrail_get_statuses',
+        description: 'Get TestRail case statuses',
+        integration: 'testrail',
+        category: 'metadata',
+        params: [],
+      ),
+    ];
+
 /// Executes TestRail MCP tools by dispatching to [TestRailClient].
 class TestRailToolExecutor {
   final TestRailClient _client;
@@ -295,5 +329,9 @@ class TestRailToolExecutor {
           requiredInt(a, 'runId'),
           a['name'] as String,
         ),
+    'testrail_get_case_types': (a) =>
+        _client.getCaseTypes(requiredInt(a, 'projectId')),
+    'testrail_get_priorities': (_) => _client.getPriorities(),
+    'testrail_get_statuses': (_) => _client.getStatuses(),
   };
 }

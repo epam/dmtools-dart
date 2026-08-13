@@ -154,6 +154,49 @@ class TeamsClient {
     return _decodeObject(body);
   }
 
+  /// `teams_get_team_channels` — GET `teams/{teamId}/channels`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getTeamChannels(String teamId) async {
+    final body = await _http.get('teams/${_encodeId(teamId)}/channels');
+    return _decodeObject(body);
+  }
+
+  /// `teams_send_channel_message` — POST
+  /// `teams/{teamId}/channels/{channelId}/messages`.
+  ///
+  /// Sends [message] as the channel-message body content. Returns the
+  /// decoded Graph response object, or an empty map for non-object bodies.
+  Future<Map<String, dynamic>> sendChannelMessage(
+    String teamId,
+    String channelId,
+    String message,
+  ) async {
+    final result = await _http.post(
+      'teams/${_encodeId(teamId)}/channels/${_encodeId(channelId)}/messages',
+      body: jsonEncode({
+        'body': {'content': message},
+      }),
+    );
+    return _decodeObject(result);
+  }
+
+  /// `teams_get_channel_messages` — GET
+  /// `teams/{teamId}/channels/{channelId}/messages`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> getChannelMessages(
+    String teamId,
+    String channelId,
+  ) async {
+    final body = await _http.get(
+      'teams/${_encodeId(teamId)}/channels/${_encodeId(channelId)}/messages',
+    );
+    return _decodeObject(body);
+  }
+
   /// Decodes a Graph JSON body into a map, or returns empty for non-objects.
   Map<String, dynamic> _decodeObject(String body) {
     final decoded = jsonDecode(body);

@@ -9,9 +9,13 @@ void main() {
   toolCatalogTests();
   toolCatalogParamTests();
   batch3CatalogParamTests();
+  siteCatalogParamTests();
+  copyItemCatalogTests();
   executorDispatchTests();
   fileToolDispatchTests();
   batch3ToolDispatchTests();
+  siteDispatchTests();
+  copyItemDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -23,10 +27,12 @@ void toolCatalogTests() {
   group('sharepointTools catalog', () {
     final tools = sharepointTools();
 
-    test('registers the nine tools in declaration order', () {
+    test('registers the twelve tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'sharepoint_test',
         'sharepoint_get_drive',
+        'sharepoint_get_site',
+        'sharepoint_list_sites',
         'sharepoint_list_files',
         'sharepoint_get_file',
         'sharepoint_upload_file',
@@ -34,6 +40,7 @@ void toolCatalogTests() {
         'sharepoint_get_drive_items',
         'sharepoint_search_drive',
         'sharepoint_delete_drive_item',
+        'sharepoint_copy_item',
       ]);
     });
 
@@ -240,6 +247,92 @@ void batch3ToolDispatchTests() {
   });
 }
 
+/// Per-tool parameter declarations for the site tools.
+void siteCatalogParamTests() {
+  group('sharepoint_get_site', () {
+    final tool = toolNamed('sharepoint_get_site');
+
+    test('takes no parameters', () {
+      expect(tool.params, isEmpty);
+      expect(tool.category, 'sites');
+    });
+  });
+
+  group('sharepoint_list_sites', () {
+    final tool = toolNamed('sharepoint_list_sites');
+
+    test('declares a required query', () {
+      expect(tool.params.single.name, 'query');
+      expect(tool.params.single.required, isTrue);
+      expect(tool.category, 'sites');
+    });
+  });
+}
+
+/// Per-tool parameter declarations for the copy-item tool.
+void copyItemCatalogTests() {
+  group('sharepoint_copy_item', () {
+    final tool = toolNamed('sharepoint_copy_item');
+
+    test('declares required src/dst drive and item ids', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['src_drive_id', 'src_item_id', 'dst_drive_id', 'dst_folder_id'],
+      );
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Dispatch tests for the site tools.
+void siteDispatchTests() {
+  group('SharepointToolExecutor.execute site tools', () {
+    late _SpySharepointClient spy;
+    late SharepointToolExecutor executor;
+
+    setUp(() {
+      spy = _SpySharepointClient(mockSharepointHttp((o) => '{}').http);
+      executor = SharepointToolExecutor(spy);
+    });
+
+    test('routes sharepoint_get_site with no params', () async {
+      await executor.execute('sharepoint_get_site', {});
+      expect(spy.calls, ['getSite']);
+    });
+
+    test('routes sharepoint_list_sites with query', () async {
+      await executor.execute('sharepoint_list_sites', {'query': 'project'});
+      expect(spy.calls, ['listSites:project']);
+    });
+  });
+}
+
+/// Dispatch tests for the copy-item tool.
+void copyItemDispatchTests() {
+  group('SharepointToolExecutor.execute copy item', () {
+    late _SpySharepointClient spy;
+    late SharepointToolExecutor executor;
+
+    setUp(() {
+      spy = _SpySharepointClient(mockSharepointHttp((o) => '{}').http);
+      executor = SharepointToolExecutor(spy);
+    });
+
+    test('routes sharepoint_copy_item with all four params', () async {
+      await executor.execute(
+        'sharepoint_copy_item',
+        {
+          'src_drive_id': 'sd',
+          'src_item_id': 'si',
+          'dst_drive_id': 'dd',
+          'dst_folder_id': 'df',
+        },
+      );
+      expect(spy.calls, ['copyItem:sd:si:dd:df']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpySharepointClient extends SharepointClient {
   _SpySharepointClient(super.http);
@@ -307,5 +400,28 @@ class _SpySharepointClient extends SharepointClient {
   Future<Map<String, dynamic>> deleteDriveItem(String driveId, String itemId) {
     calls.add('deleteDriveItem:$driveId:$itemId');
     return super.deleteDriveItem(driveId, itemId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getSite() {
+    calls.add('getSite');
+    return super.getSite();
+  }
+
+  @override
+  Future<Map<String, dynamic>> listSites(String query) {
+    calls.add('listSites:$query');
+    return super.listSites(query);
+  }
+
+  @override
+  Future<Map<String, dynamic>> copyItem(
+    String srcDriveId,
+    String srcItemId,
+    String dstDriveId,
+    String dstFolderId,
+  ) {
+    calls.add('copyItem:$srcDriveId:$srcItemId:$dstDriveId:$dstFolderId');
+    return super.copyItem(srcDriveId, srcItemId, dstDriveId, dstFolderId);
   }
 }

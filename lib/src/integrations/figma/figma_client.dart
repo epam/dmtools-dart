@@ -82,6 +82,14 @@ class FigmaClient {
   Future<Map<String, dynamic>> getComponentSets(String key) =>
       _getJson('files/$key/component_sets');
 
+  /// `figma_get_variable_collections` — GET `/files/{key}/variables/local`.
+  Future<Map<String, dynamic>> getVariableCollections(String key) =>
+      _getJson('files/$key/variables/local');
+
+  /// `figma_get_library_components` — GET `/libraries/{libraryKey}/components`.
+  Future<Map<String, dynamic>> getLibraryComponents(String libraryKey) =>
+      _getJson('libraries/$libraryKey/components');
+
   /// `figma_get_styles` — GET `/files/{key}/styles`.
   Future<Map<String, dynamic>> getStyles(String key) =>
       _getJson('files/$key/styles');

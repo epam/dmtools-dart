@@ -68,6 +68,11 @@ class AnthropicClient implements AiChatClient {
         temperature: temperature,
       ));
 
+  /// Anthropic does not provide an embeddings API.
+  @override
+  Future<String> embed(String model, String text) =>
+      throw UnsupportedError('Anthropic does not provide an embeddings API');
+
   /// Posts a messages request [body] with the client's auth and headers.
   Future<String> _post(Map<String, dynamic> body) => postChat(
         _dio,

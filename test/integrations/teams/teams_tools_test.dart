@@ -21,7 +21,7 @@ void toolCatalogTests() {
   group('teamsTools catalog', () {
     final tools = teamsTools();
 
-    test('registers the eight tools in declaration order', () {
+    test('registers the eleven tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'teams_test',
         'teams_send_message',
@@ -31,6 +31,9 @@ void toolCatalogTests() {
         'teams_get_chat_members',
         'teams_create_chat',
         'teams_get_teams',
+        'teams_get_team_channels',
+        'teams_send_channel_message',
+        'teams_get_channel_messages',
       ]);
     });
 
@@ -101,6 +104,37 @@ void batch3CatalogParamTests() {
 
     test('takes no parameters', () {
       expect(tool.params, isEmpty);
+    });
+  });
+
+  group('teams_get_team_channels', () {
+    final tool = toolNamed('teams_get_team_channels');
+
+    test('declares a required team_id', () {
+      expect(tool.params.single.name, 'team_id');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('teams_send_channel_message', () {
+    final tool = toolNamed('teams_send_channel_message');
+
+    test('declares required team_id, channel_id, and message', () {
+      expect(tool.params.map((p) => p.name), [
+        'team_id',
+        'channel_id',
+        'message',
+      ]);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+
+  group('teams_get_channel_messages', () {
+    final tool = toolNamed('teams_get_channel_messages');
+
+    test('declares required team_id and channel_id', () {
+      expect(tool.params.map((p) => p.name), ['team_id', 'channel_id']);
+      expect(tool.params.every((p) => p.required), isTrue);
     });
   });
 }
@@ -186,6 +220,28 @@ void batch3ToolDispatchTests() {
       await executor.execute('teams_get_teams', {});
       expect(spy.calls, ['getTeams']);
     });
+
+    test('routes teams_get_team_channels with team_id', () async {
+      await executor.execute('teams_get_team_channels', {'team_id': 't1'});
+      expect(spy.calls, ['getTeamChannels:t1']);
+    });
+
+    test('routes teams_send_channel_message with team, channel, message',
+        () async {
+      await executor.execute(
+        'teams_send_channel_message',
+        {'team_id': 't1', 'channel_id': 'ch1', 'message': 'hi'},
+      );
+      expect(spy.calls, ['sendChannelMessage:t1:ch1:hi']);
+    });
+
+    test('routes teams_get_channel_messages with team and channel', () async {
+      await executor.execute(
+        'teams_get_channel_messages',
+        {'team_id': 't1', 'channel_id': 'ch1'},
+      );
+      expect(spy.calls, ['getChannelMessages:t1:ch1']);
+    });
   });
 }
 
@@ -245,5 +301,30 @@ class _SpyTeamsClient extends TeamsClient {
   Future<Map<String, dynamic>> getTeams() {
     calls.add('getTeams');
     return super.getTeams();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTeamChannels(String teamId) {
+    calls.add('getTeamChannels:$teamId');
+    return super.getTeamChannels(teamId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> sendChannelMessage(
+    String teamId,
+    String channelId,
+    String message,
+  ) {
+    calls.add('sendChannelMessage:$teamId:$channelId:$message');
+    return super.sendChannelMessage(teamId, channelId, message);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getChannelMessages(
+    String teamId,
+    String channelId,
+  ) {
+    calls.add('getChannelMessages:$teamId:$channelId');
+    return super.getChannelMessages(teamId, channelId);
   }
 }

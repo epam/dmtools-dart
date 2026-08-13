@@ -8,9 +8,11 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogShapeTests();
   toolCatalogParamTests();
+  toolCatalogBatch4ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
+  executorBatch4DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -22,7 +24,7 @@ void toolCatalogShapeTests() {
   group('bitriseTools catalog', () {
     final tools = bitriseTools();
 
-    test('registers the seven tools in declaration order', () {
+    test('registers the nine tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'bitrise_test',
         'bitrise_get_apps',
@@ -31,6 +33,8 @@ void toolCatalogShapeTests() {
         'bitrise_trigger_build',
         'bitrise_trigger_build_with_params',
         'bitrise_abort_build',
+        'bitrise_get_workflows',
+        'bitrise_get_artifacts',
       ]);
     });
 
@@ -184,6 +188,53 @@ void executorBatch3DispatchTests() {
   });
 }
 
+/// Batch-4 catalog params: workflows and artifacts.
+void toolCatalogBatch4ParamTests() {
+  group('bitrise_get_workflows', () {
+    final tool = toolNamed('bitrise_get_workflows');
+
+    test('declares a required app_slug', () {
+      expect(tool.params.single.name, 'app_slug');
+      expect(tool.params.single.required, isTrue);
+    });
+  });
+
+  group('bitrise_get_artifacts', () {
+    final tool = toolNamed('bitrise_get_artifacts');
+
+    test('declares required app_slug and build_slug', () {
+      expect(tool.params.map((p) => p.name), ['app_slug', 'build_slug']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+  });
+}
+
+/// Batch-4 dispatch tests for workflows and artifacts.
+void executorBatch4DispatchTests() {
+  group('BitriseToolExecutor.execute (batch 4)', () {
+    late _SpyBitriseClient spy;
+    late BitriseToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
+      executor = BitriseToolExecutor(spy);
+    });
+
+    test('routes bitrise_get_workflows with app_slug', () async {
+      await executor.execute('bitrise_get_workflows', {'app_slug': 'app-1'});
+      expect(spy.calls, ['getWorkflows:app-1']);
+    });
+
+    test('routes bitrise_get_artifacts with app_slug and build_slug', () async {
+      await executor.execute('bitrise_get_artifacts', {
+        'app_slug': 'app-1',
+        'build_slug': 'build-2',
+      });
+      expect(spy.calls, ['getArtifacts:app-1:build-2']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyBitriseClient extends BitriseClient {
   _SpyBitriseClient(super.http);
@@ -241,5 +292,20 @@ class _SpyBitriseClient extends BitriseClient {
   ) {
     calls.add('abortBuild:$appSlug:$buildSlug');
     return super.abortBuild(appSlug, buildSlug);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getWorkflows(String appSlug) {
+    calls.add('getWorkflows:$appSlug');
+    return super.getWorkflows(appSlug);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getArtifacts(
+    String appSlug,
+    String buildSlug,
+  ) {
+    calls.add('getArtifacts:$appSlug:$buildSlug');
+    return super.getArtifacts(appSlug, buildSlug);
   }
 }

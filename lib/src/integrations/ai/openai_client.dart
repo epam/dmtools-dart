@@ -78,6 +78,20 @@ class OpenAIClient implements AiChatClient {
         temperature ?? -1,
       ));
 
+  /// Generates an embedding via the OpenAI embeddings endpoint.
+  @override
+  Future<String> embed(String model, String text) => postChat(
+        _dio,
+        _embeddingsUrl(),
+        {'model': model, 'input': text},
+        bearerHeaders(_apiKey),
+        extractEmbeddingArray,
+      );
+
+  /// Derives the embeddings endpoint from the configured chat-completions path.
+  String _embeddingsUrl() =>
+      _basePath.replaceAll('chat/completions', 'embeddings');
+
   /// Posts a chat-completions [body] with the client's auth and headers.
   Future<String> _post(Map<String, dynamic> body) => postChat(
       _dio, _basePath, body, bearerHeaders(_apiKey), extractChoiceContent);

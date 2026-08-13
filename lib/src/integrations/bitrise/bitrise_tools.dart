@@ -41,13 +41,16 @@ List<ToolDefinition> _appTools() => [
     ];
 
 /// Build tools: `bitrise_get_builds`, `bitrise_get_build_detail`,
-/// `bitrise_trigger_build`, `bitrise_trigger_build_with_params`.
+/// `bitrise_trigger_build`, `bitrise_trigger_build_with_params`,
+/// `bitrise_get_workflows`, `bitrise_get_artifacts`.
 List<ToolDefinition> _buildTools() => [
       _getBuildsTool(),
       _getBuildDetailTool(),
       _triggerBuildTool(),
       _triggerBuildWithParamsTool(),
       _abortBuildTool(),
+      _getWorkflowsTool(),
+      _getArtifactsTool(),
     ];
 
 /// Build-list tool: `bitrise_get_builds`.
@@ -146,6 +149,41 @@ ToolDefinition _abortBuildTool() => ToolDefinition(
       ],
     );
 
+/// Workflows tool: `bitrise_get_workflows`.
+ToolDefinition _getWorkflowsTool() => ToolDefinition(
+      name: 'bitrise_get_workflows',
+      description: 'List the workflow build slots for a Bitrise app',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+      ],
+    );
+
+/// Artifacts tool: `bitrise_get_artifacts`.
+ToolDefinition _getArtifactsTool() => ToolDefinition(
+      name: 'bitrise_get_artifacts',
+      description: 'List artifacts produced by a Bitrise build',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'app_slug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'build_slug',
+          description: 'The Bitrise build slug',
+          required: true,
+        ),
+      ],
+    );
+
 /// Executes Bitrise MCP tools by dispatching to [BitriseClient].
 class BitriseToolExecutor {
   final BitriseClient _client;
@@ -182,6 +220,12 @@ class BitriseToolExecutor {
           _optionalEnvList(a, 'environments'),
         ),
     'bitrise_abort_build': (a) => _client.abortBuild(
+          a['app_slug'] as String,
+          a['build_slug'] as String,
+        ),
+    'bitrise_get_workflows': (a) =>
+        _client.getWorkflows(a['app_slug'] as String),
+    'bitrise_get_artifacts': (a) => _client.getArtifacts(
           a['app_slug'] as String,
           a['build_slug'] as String,
         ),

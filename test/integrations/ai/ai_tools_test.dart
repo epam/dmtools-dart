@@ -11,6 +11,8 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   newToolCatalogTests();
+  embedCatalogTests();
+  summarizeCatalogTests();
   chatDispatchTests();
   newProviderChatTests();
   historyDispatchTests();
@@ -18,6 +20,8 @@ void main() {
   systemPromptDispatchTests();
   completeDispatchTests();
   newProviderCompleteTests();
+  embedDispatchTests();
+  summarizeDispatchTests();
   executorErrorTests();
   newToolErrorTests();
 }
@@ -27,12 +31,14 @@ void toolCatalogTests() {
   group('aiTools', () {
     final tools = aiTools();
 
-    test('defines the four AI tools in catalog order', () {
+    test('defines the six AI tools in catalog order', () {
       expect(tools.map((t) => t.name).toList(), [
         'ai_chat',
         'ai_chat_with_history',
         'ai_chat_with_system_prompt',
         'ai_complete',
+        'ai_embed',
+        'ai_summarize',
       ]);
       expect(tools.every((t) => t.integration == 'ai'), isTrue);
     });
@@ -497,6 +503,173 @@ void newToolErrorTests() {
         }),
         throwsArgumentError,
       );
+    });
+  });
+}
+
+/// Tool-definition test for `ai_embed`.
+void embedCatalogTests() {
+  group('ai_embed definition', () {
+    final tool = aiTools().firstWhere((t) => t.name == 'ai_embed');
+
+    test('declares provider, model, text', () {
+      expect(tool.params.map((p) => p.name), ['provider', 'model', 'text']);
+      expect(tool.requiredParams, ['provider', 'model', 'text']);
+      expect(tool.category, 'embedding');
+    });
+  });
+}
+
+/// Tool-definition test for `ai_summarize`.
+void summarizeCatalogTests() {
+  group('ai_summarize definition', () {
+    final tool = aiTools().firstWhere((t) => t.name == 'ai_summarize');
+
+    test('declares provider, model, text', () {
+      expect(tool.params.map((p) => p.name), ['provider', 'model', 'text']);
+      expect(tool.requiredParams, ['provider', 'model', 'text']);
+      expect(tool.category, 'summarize');
+    });
+  });
+}
+
+/// Canned OpenAI / DIAL embedding response body.
+const embedDataBody = '{"data":[{"embedding":[0.1,0.2,0.3]}]}';
+
+/// Canned Gemini embedding response body.
+const embedValuesBody = '{"embedding":{"values":[0.4,0.5]}}';
+
+/// Canned Ollama embedding response body.
+const embedPlainBody = '{"embedding":[0.6,0.7]}';
+
+/// Dispatch tests for the `ai_embed` tool.
+void embedDispatchTests() {
+  _embedProviderTests();
+  _embedEdgeCaseTests();
+}
+
+void _embedProviderTests() {
+  group('AiToolExecutor ai_embed', () {
+    test('openai: posts to /embeddings and returns vector', () async {
+      final f = mockAiExecutor((_) => embedDataBody);
+      final result = await f.executor.execute('ai_embed', {
+        'provider': 'openai',
+        'model': 'text-embedding-3-small',
+        'text': 'hello',
+      });
+      expect(jsonDecode(result), [0.1, 0.2, 0.3]);
+      final call = f.adapter.calls.single;
+      expect(call.path, 'https://openai.example.com/v1/embeddings');
+      final body = jsonDecode(call.data as String);
+      expect(body['model'], 'text-embedding-3-small');
+      expect(body['input'], 'hello');
+    });
+
+    test('dial: posts to base path with Bearer auth', () async {
+      final f = mockAiExecutor((_) => embedDataBody);
+      final result = await f.executor.execute('ai_embed', {
+        'provider': 'dial',
+        'model': 'emb-ada',
+        'text': 'hello',
+      });
+      expect(jsonDecode(result), [0.1, 0.2, 0.3]);
+      final call = f.adapter.calls.single;
+      expect(call.path, 'https://dial.example.com/openai/deployments');
+      expect(call.headers['authorization'], 'Bearer dial-key');
+    });
+  });
+}
+
+void _embedEdgeCaseTests() {
+  group('AiToolExecutor ai_embed (edge cases)', () {
+    test('gemini: posts to embedContent and returns values', () async {
+      final f = mockAiExecutor((_) => embedValuesBody);
+      final result = await f.executor.execute('ai_embed', {
+        'provider': 'gemini',
+        'model': 'embedding-001',
+        'text': 'hello',
+      });
+      expect(jsonDecode(result), [0.4, 0.5]);
+      final call = f.adapter.calls.single;
+      expect(call.path, contains('embedding-001:embedContent'));
+      final body = jsonDecode(call.data as String);
+      expect(body['content']['parts'][0]['text'], 'hello');
+    });
+
+    test('ollama: posts to /api/embeddings and returns vector', () async {
+      final f = mockAiExecutor((_) => embedPlainBody);
+      final result = await f.executor.execute('ai_embed', {
+        'provider': 'ollama',
+        'model': 'llama3',
+        'text': 'hello',
+      });
+      expect(jsonDecode(result), [0.6, 0.7]);
+      final call = f.adapter.calls.single;
+      expect(call.path, 'http://ollama.example.com:11434/api/embeddings');
+      final body = jsonDecode(call.data as String);
+      expect(body['model'], 'llama3');
+      expect(body['prompt'], 'hello');
+    });
+
+    test('anthropic throws UnsupportedError', () {
+      final f = mockAiExecutor((_) => '{}');
+      expect(
+        () => f.executor.execute('ai_embed', {
+          'provider': 'anthropic',
+          'model': 'claude-3',
+          'text': 'hello',
+        }),
+        throwsUnsupportedError,
+      );
+    });
+  });
+}
+
+/// Dispatch tests for the `ai_summarize` tool.
+void summarizeDispatchTests() {
+  group('AiToolExecutor ai_summarize', () {
+    test('openai: sends summarization system prompt and text', () async {
+      final f = mockAiExecutor(_routerFor('openai.example.com'));
+      final result = await f.executor.execute('ai_summarize', {
+        'provider': 'openai',
+        'model': 'gpt-4',
+        'text': 'Long article text.',
+      });
+      expect(result, 'OpenAI response');
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['model'], 'gpt-4');
+      expect(body['messages'][0]['role'], 'system');
+      expect(body['messages'][0]['content'], contains('Summarize'));
+      expect(body['messages'][1],
+          {'role': 'user', 'content': 'Long article text.'});
+    });
+
+    test('anthropic: sends system as top-level field', () async {
+      final f = mockAiExecutor(_routerFor('anthropic.example.com'));
+      final result = await f.executor.execute('ai_summarize', {
+        'provider': 'anthropic',
+        'model': 'claude-3',
+        'text': 'Long article text.',
+      });
+      expect(result, 'Anthropic response');
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(body['system'], contains('Summarize'));
+      expect(body['messages'], [
+        {'role': 'user', 'content': 'Long article text.'},
+      ]);
+    });
+
+    test('gemini: uses systemInstruction with summarize prompt', () async {
+      final f = mockAiExecutor(_routerFor('/gemini'));
+      final result = await f.executor.execute('ai_summarize', {
+        'provider': 'gemini',
+        'model': 'gemini-1.5-flash',
+        'text': 'Long article text.',
+      });
+      expect(result, 'Gemini response');
+      final body = jsonDecode(f.adapter.calls.single.data as String);
+      expect(
+          body['systemInstruction']['parts'][0]['text'], contains('Summarize'));
     });
   });
 }

@@ -80,6 +80,16 @@ class OllamaClient implements AiChatClient {
     return options;
   }
 
+  /// Generates an embedding via Ollama's `/api/embeddings` endpoint.
+  @override
+  Future<String> embed(String model, String text) => postChat(
+        _dio,
+        '$_basePath/api/embeddings',
+        {'model': model, 'prompt': text},
+        jsonHeaders(),
+        extractPlainEmbedding,
+      );
+
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();
 }

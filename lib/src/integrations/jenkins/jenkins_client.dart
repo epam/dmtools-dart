@@ -149,6 +149,31 @@ class JenkinsClient {
     }
   }
 
+  /// `jenkins_get_build_artifacts` — GET
+  /// `job/{name}/{buildNumber}/api/json?tree=artifacts[fileName,relativePath]`.
+  ///
+  /// Returns the decoded build object (containing an `artifacts` array), or
+  /// `null` when the response body is not a JSON object.
+  Future<Map<String, dynamic>?> getBuildArtifacts(
+    String name,
+    int buildNumber,
+  ) async {
+    final body = await _http.get(
+      'job/${_encodeJob(name)}/$buildNumber/api/json',
+      queryParams: {
+        'tree': 'artifacts[fileName,relativePath]',
+      },
+    );
+    return _decodeMap(body);
+  }
+
+  /// `jenkins_get_job_config` — GET `job/{name}/config.xml`.
+  ///
+  /// Returns the raw job configuration XML.
+  Future<String> getJobConfig(String name) async {
+    return _http.get('job/${_encodeJob(name)}/config.xml');
+  }
+
   /// Decodes a JSON body to a map, or `null` when not an object.
   Map<String, dynamic>? _decodeMap(String body) {
     final decoded = jsonDecode(body);

@@ -51,6 +51,24 @@ class SharepointClient {
     return const {};
   }
 
+  /// `sharepoint_get_site` — GET `sites/root`.
+  ///
+  /// Returns the decoded root site object, or an empty map for non-object
+  /// bodies.
+  Future<Map<String, dynamic>> getSite() async {
+    final body = await _http.get('sites/root');
+    return _decodeObject(body);
+  }
+
+  /// `sharepoint_list_sites` — GET `sites?search={query}`.
+  ///
+  /// Returns the decoded Graph response object (contains `value`), or an
+  /// empty map for non-object bodies.
+  Future<Map<String, dynamic>> listSites(String query) async {
+    final body = await _http.get('sites', queryParams: {'search': query});
+    return _decodeObject(body);
+  }
+
   /// `sharepoint_list_files` — GET `drives/{driveId}/root/children`.
   ///
   /// Returns the decoded Graph response object (contains `value`), or an
@@ -158,6 +176,28 @@ class SharepointClient {
       'drives/${_encodeId(driveId)}/items/${_encodeId(itemId)}',
     );
     return {'success': true, 'message': 'Item $itemId deleted'};
+  }
+
+  /// `sharepoint_copy_item` — POST
+  /// `drives/{srcDriveId}/items/{srcItemId}/copy`.
+  ///
+  /// Requests an asynchronous copy of the source item into the destination
+  /// folder identified by [dstDriveId] / [dstFolderId]. Graph responds 202
+  /// with a monitoring URL in the `Location` header; a success map is
+  /// returned rather than a decoded body.
+  Future<Map<String, dynamic>> copyItem(
+    String srcDriveId,
+    String srcItemId,
+    String dstDriveId,
+    String dstFolderId,
+  ) async {
+    await _http.post(
+      'drives/${_encodeId(srcDriveId)}/items/${_encodeId(srcItemId)}/copy',
+      body: jsonEncode({
+        'parentReference': {'driveId': dstDriveId, 'id': dstFolderId},
+      }),
+    );
+    return {'success': true, 'message': 'Item $srcItemId copy requested'};
   }
 
   /// Decodes a Graph JSON body into a map, or returns empty for non-objects.

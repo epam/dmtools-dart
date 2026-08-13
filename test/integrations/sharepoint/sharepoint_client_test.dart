@@ -10,6 +10,8 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   testConnectionTests();
   getDriveTests();
+  getSiteTests();
+  listSitesTests();
   listFilesTests();
   getFileTests();
   uploadFileTests();
@@ -17,6 +19,7 @@ void main() {
   getDriveItemsTests();
   searchDriveTests();
   deleteDriveItemTests();
+  copyItemTests();
 }
 
 /// `sharepoint_test` — connectivity check via GET `me/drive`.
@@ -54,6 +57,44 @@ void getDriveTests() {
     test('returns an empty map when the body is not an object', () async {
       final f = mockSharepoint((o) => routeByPath({'/drive': '[1]'}, o));
       expect(await f.client.getDrive(), isEmpty);
+    });
+  });
+}
+
+/// `sharepoint_get_site` — GET `sites/root`.
+void getSiteTests() {
+  group('SharepointClient.getSite', () {
+    test('returns the decoded root site object', () async {
+      final f =
+          mockSharepoint((o) => routeByPath({'sites/root': _siteBody}, o));
+      final site = await f.client.getSite();
+      expect(site['id'], 'site-1');
+      expect(site['displayName'], 'Root Site');
+      expect(f.adapter.calls.single.path, endsWith('/v1.0/sites/root'));
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockSharepoint((o) => routeByPath({'sites/root': '[1]'}, o));
+      expect(await f.client.getSite(), isEmpty);
+    });
+  });
+}
+
+/// `sharepoint_list_sites` — GET `sites?search={query}`.
+void listSitesTests() {
+  group('SharepointClient.listSites', () {
+    test('returns the decoded search results', () async {
+      final f = mockSharepoint((o) => routeByPath({'sites': _sitesBody}, o));
+      final result = await f.client.listSites('project');
+      expect(result['value'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.path, endsWith('/v1.0/sites'));
+      expect(call.queryParameters['search'], 'project');
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockSharepoint((o) => routeByPath({'sites': '[1]'}, o));
+      expect(await f.client.listSites('project'), isEmpty);
     });
   });
 }
@@ -223,6 +264,35 @@ void deleteDriveItemTests() {
   });
 }
 
+/// `sharepoint_copy_item` — POST `drives/{srcDriveId}/items/{srcItemId}/copy`.
+void copyItemTests() {
+  group('SharepointClient.copyItem', () {
+    test('POSTs the copy payload and returns success', () async {
+      final f = mockSharepoint((o) => '');
+      final result = await f.client.copyItem(
+        'drive-1',
+        'item-1',
+        'drive-2',
+        'folder-2',
+      );
+      expect(result['success'], isTrue);
+      expect(result['message'], contains('item-1'));
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(
+        call.path,
+        endsWith('/v1.0/drives/drive-1/items/item-1/copy'),
+      );
+      expect(
+        jsonDecode(call.data as String),
+        {
+          'parentReference': {'driveId': 'drive-2', 'id': 'folder-2'},
+        },
+      );
+    });
+  });
+}
+
 /// Canned `me/drive` response body (the default drive object).
 const _driveBody = '{"id":"drive-1","name":"MyDrive","driveType":"personal"}';
 
@@ -243,3 +313,10 @@ const _uploadedBody = '{"id":"item-9","name":"file.txt"}';
 
 /// Canned create-folder response body.
 const _folderBody = '{"id":"item-10","name":"New Folder","folder":{}}';
+
+/// Canned `sites/root` response body.
+const _siteBody = '{"id":"site-1","displayName":"Root Site","name":"root"}';
+
+/// Canned sites search response body.
+const _sitesBody = '{"value":[{"id":"s1","displayName":"Project A"},'
+    '{"id":"s2","displayName":"Project B"}]}';

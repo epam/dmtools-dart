@@ -255,7 +255,8 @@ List<ToolDefinition> _spaceContentTools() => [
       ),
     ];
 
-/// Attachment tool: `confluence_get_page_attachments`.
+/// Attachment tools: `confluence_get_page_attachments`,
+/// `confluence_download_attachment`.
 List<ToolDefinition> _attachmentTools() => [
       ToolDefinition(
         name: 'confluence_get_page_attachments',
@@ -266,6 +267,24 @@ List<ToolDefinition> _attachmentTools() => [
           ToolParam(
             name: 'pageId',
             description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_download_attachment',
+        description: 'Download the raw content of a Confluence attachment',
+        integration: 'confluence',
+        category: 'attachments',
+        params: [
+          ToolParam(
+            name: 'pageId',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+          ToolParam(
+            name: 'attachmentId',
+            description: 'The attachment id',
             required: true,
           ),
         ],
@@ -510,6 +529,10 @@ class ConfluenceToolExecutor {
     'confluence_get_spaces': (_) => _client.getSpaces(),
     'confluence_get_page_attachments': (a) =>
         _client.getPageAttachments(a['pageId'] as String),
+    'confluence_download_attachment': (a) => _client.downloadAttachment(
+          a['pageId'] as String,
+          a['attachmentId'] as String,
+        ),
     'confluence_add_label': (a) => _client.addLabel(
           a['pageId'] as String,
           a['label'] as String,

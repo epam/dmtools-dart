@@ -21,6 +21,9 @@ void main() {
   getPlansTests();
   addRunTests();
   updateRunTests();
+  getCaseTypesTests();
+  getPrioritiesTests();
+  getStatusesTests();
 }
 
 /// The expected `Authorization` value produced by the fixture's config.
@@ -403,3 +406,78 @@ const _newRunBody = '{"id":500,"name":"Sprint 42"}';
 
 /// Canned `update_run` response body.
 const _updatedRunBody = '{"id":500,"name":"Sprint 43"}';
+
+/// `testrail_get_case_types` — GET `get_case_types/{projectId}`.
+void getCaseTypesTests() {
+  group('TestRailClient.getCaseTypes', () {
+    test('returns the decoded list of case types', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_case_types/5': _caseTypesBody}, o),
+      );
+      final caseTypes = await f.client.getCaseTypes(5);
+      expect(caseTypes.map((t) => t['id']).toList(), [3, 4]);
+      expect(caseTypes.first['name'], 'Automated');
+      expect(f.adapter.calls.single.path, contains('get_case_types/5'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_case_types/5': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getCaseTypes(5), isEmpty);
+    });
+  });
+}
+
+/// `testrail_get_priorities` — GET `get_priorities`.
+void getPrioritiesTests() {
+  group('TestRailClient.getPriorities', () {
+    test('returns the decoded list of priorities', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_priorities': _prioritiesBody}, o),
+      );
+      final priorities = await f.client.getPriorities();
+      expect(priorities.map((p) => p['id']).toList(), [1, 2]);
+      expect(priorities.first['name'], 'Low');
+      expect(f.adapter.calls.single.path, contains('get_priorities'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_priorities': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getPriorities(), isEmpty);
+    });
+  });
+}
+
+/// `testrail_get_statuses` — GET `get_statuses`.
+void getStatusesTests() {
+  group('TestRailClient.getStatuses', () {
+    test('returns the decoded list of statuses', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_statuses': _statusesBody}, o),
+      );
+      final statuses = await f.client.getStatuses();
+      expect(statuses.map((s) => s['id']).toList(), [1, 5]);
+      expect(statuses.first['name'], 'Passed');
+      expect(f.adapter.calls.single.path, contains('get_statuses'));
+    });
+
+    test('returns empty list when the body is not an array', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_statuses': '{"error": "x"}'}, o),
+      );
+      expect(await f.client.getStatuses(), isEmpty);
+    });
+  });
+}
+
+/// Canned `get_case_types` response body.
+const _caseTypesBody = '[{"id":3,"name":"Automated"},{"id":4,"name":"Other"}]';
+
+/// Canned `get_priorities` response body.
+const _prioritiesBody = '[{"id":1,"name":"Low"},{"id":2,"name":"High"}]';
+
+/// Canned `get_statuses` response body.
+const _statusesBody = '[{"id":1,"name":"Passed"},{"id":5,"name":"Failed"}]';

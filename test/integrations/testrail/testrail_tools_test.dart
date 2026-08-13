@@ -10,9 +10,11 @@ void main() {
   toolCatalogParamTests();
   toolCatalogBatch2ParamTests();
   toolCatalogBatch3ParamTests();
+  toolCatalogBatch4ParamTests();
   executorDispatchTests();
   executorBatch2DispatchTests();
   executorBatch3DispatchTests();
+  executorBatch4DispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -24,7 +26,7 @@ void toolCatalogShapeTests() {
   group('testrailTools catalog', () {
     final tools = testrailTools();
 
-    test('registers the twelve tools in declaration order', () {
+    test('registers the fifteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'testrail_test',
         'testrail_get_case',
@@ -38,6 +40,9 @@ void toolCatalogShapeTests() {
         'testrail_get_plans',
         'testrail_add_run',
         'testrail_update_run',
+        'testrail_get_case_types',
+        'testrail_get_priorities',
+        'testrail_get_statuses',
       ]);
     });
 
@@ -279,6 +284,57 @@ void executorBatch3DispatchTests() {
   });
 }
 
+/// Batch-4 catalog params: case types, priorities, statuses.
+void toolCatalogBatch4ParamTests() {
+  test('testrail_get_case_types requires a numeric projectId', () {
+    final tool = toolNamed('testrail_get_case_types');
+    expect(tool.category, 'metadata');
+    expect(tool.params.single.name, 'projectId');
+    expect(tool.params.single.type, 'number');
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('testrail_get_priorities takes no parameters', () {
+    final tool = toolNamed('testrail_get_priorities');
+    expect(tool.category, 'metadata');
+    expect(tool.params, isEmpty);
+  });
+
+  test('testrail_get_statuses takes no parameters', () {
+    final tool = toolNamed('testrail_get_statuses');
+    expect(tool.category, 'metadata');
+    expect(tool.params, isEmpty);
+  });
+}
+
+/// Batch-4 dispatch tests for case types, priorities, and statuses.
+void executorBatch4DispatchTests() {
+  group('TestRailToolExecutor.execute (batch 4)', () {
+    late _SpyTestRailClient spy;
+    late TestRailToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTestRailClient(mockTestRailHttp((o) => '{}').http);
+      executor = TestRailToolExecutor(spy);
+    });
+
+    test('routes testrail_get_case_types with projectId', () async {
+      await executor.execute('testrail_get_case_types', {'projectId': 5});
+      expect(spy.calls, ['getCaseTypes:5']);
+    });
+
+    test('routes testrail_get_priorities', () async {
+      await executor.execute('testrail_get_priorities', {});
+      expect(spy.calls, ['getPriorities']);
+    });
+
+    test('routes testrail_get_statuses', () async {
+      await executor.execute('testrail_get_statuses', {});
+      expect(spy.calls, ['getStatuses']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyTestRailClient extends TestRailClient {
   _SpyTestRailClient(super.http);
@@ -362,5 +418,23 @@ class _SpyTestRailClient extends TestRailClient {
   Future<Map<String, dynamic>> updateRun(int runId, String name) {
     calls.add('updateRun:$runId:$name');
     return super.updateRun(runId, name);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getCaseTypes(int projectId) {
+    calls.add('getCaseTypes:$projectId');
+    return super.getCaseTypes(projectId);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getPriorities() {
+    calls.add('getPriorities');
+    return super.getPriorities();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getStatuses() {
+    calls.add('getStatuses');
+    return super.getStatuses();
   }
 }

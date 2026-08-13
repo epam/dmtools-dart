@@ -180,6 +180,16 @@ class ConfluenceClient {
   Future<List<Map<String, dynamic>>> getPageAttachments(String pageId) =>
       _getList('content/$pageId/child/attachment');
 
+  /// `confluence_download_attachment` — GET
+  /// `content/{pageId}/child/attachment/{attachmentId}/download`.
+  ///
+  /// Downloads the raw content of [attachmentId] attached to [pageId].
+  Future<String> downloadAttachment(String pageId, String attachmentId) {
+    return _http.get(
+      'content/$pageId/child/attachment/$attachmentId/download',
+    );
+  }
+
   /// `confluence_add_label` — POST `content/{id}/label`.
   ///
   /// Adds [label] (global prefix) to the page with [pageId]; returns the

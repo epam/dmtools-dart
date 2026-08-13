@@ -18,8 +18,10 @@ void main() {
   archivePageTests();
   getPagePropertiesTests();
   setPagePropertyTests();
+  downloadAttachmentTests();
   batch4ToolDefinitionTests();
   batch4ExecutorTests();
+  batch4ExecutorExtraTests();
 }
 
 /// Looks up a registered tool by name.
@@ -122,6 +124,24 @@ void setPagePropertyTests() {
   });
 }
 
+/// `confluence_download_attachment` — GET
+/// `content/{pageId}/child/attachment/{attachmentId}/download`.
+void downloadAttachmentTests() {
+  group('ConfluenceClient.downloadAttachment', () {
+    test('returns the raw download content', () async {
+      final f = mockConfluence(
+        (o) => routeByPath({'/download': _downloadBody}, o),
+      );
+      final content = await f.client.downloadAttachment('42', 'att-1');
+      expect(content, _downloadBody);
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/content/42/child/attachment/att-1/download'),
+      );
+    });
+  });
+}
+
 /// Tool-definition shape for the batch-4 tools.
 void batch4ToolDefinitionTests() {
   group('batch4 tool definitions', () {
@@ -156,6 +176,13 @@ void batch4ToolDefinitionTests() {
       final tool = toolNamed('confluence_set_page_property');
       expect(tool.category, 'properties');
       expect(tool.params.map((p) => p.name), ['id', 'key', 'value']);
+      expect(tool.params.every((p) => p.required), isTrue);
+    });
+
+    test('confluence_download_attachment requires pageId and attachmentId', () {
+      final tool = toolNamed('confluence_download_attachment');
+      expect(tool.category, 'attachments');
+      expect(tool.params.map((p) => p.name), ['pageId', 'attachmentId']);
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
@@ -199,7 +226,12 @@ void batch4ExecutorTests() {
       );
       expect(f.client.calls, ['getPageProperties:42']);
     });
+  });
+}
 
+/// Extra batch-4 dispatch: setPageProperty, downloadAttachment.
+void batch4ExecutorExtraTests() {
+  group('ConfluenceToolExecutor batch4 dispatch (extra)', () {
     test('routes confluence_set_page_property', () async {
       final f = _makeExecutor();
       await f.executor.execute(
@@ -211,6 +243,15 @@ void batch4ExecutorTests() {
         },
       );
       expect(f.client.calls, ['setPageProperty:42:status']);
+    });
+
+    test('routes confluence_download_attachment', () async {
+      final f = _makeExecutor();
+      await f.executor.execute(
+        'confluence_download_attachment',
+        {'pageId': '42', 'attachmentId': 'att-1'},
+      );
+      expect(f.client.calls, ['downloadAttachment:42:att-1']);
     });
   });
 }
@@ -251,6 +292,9 @@ final _propertySetBody = jsonEncode({
   'key': 'status',
   'value': {'state': 'draft'},
 });
+
+/// Canned download-attachment raw content.
+const _downloadBody = 'binary-content-here';
 
 /// Spy that records every batch-4 call then delegates to the real client.
 class _Batch4Spy extends ConfluenceClient {
@@ -293,5 +337,11 @@ class _Batch4Spy extends ConfluenceClient {
   ) {
     calls.add('setPageProperty:$id:$key');
     return super.setPageProperty(id, key, value);
+  }
+
+  @override
+  Future<String> downloadAttachment(String pageId, String attachmentId) {
+    calls.add('downloadAttachment:$pageId:$attachmentId');
+    return super.downloadAttachment(pageId, attachmentId);
   }
 }

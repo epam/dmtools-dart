@@ -24,6 +24,8 @@ List<ToolDefinition> aiTools() => [
       _aiChatWithHistoryTool(),
       _aiChatWithSystemPromptTool(),
       _aiCompleteTool(),
+      _aiEmbedTool(),
+      _aiSummarizeTool(),
     ];
 
 /// Single-turn chat tool: `ai_chat`.
@@ -157,6 +159,56 @@ ToolDefinition _aiCompleteTool() => ToolDefinition(
       ],
     );
 
+/// Embedding tool: `ai_embed`.
+ToolDefinition _aiEmbedTool() => ToolDefinition(
+      name: 'ai_embed',
+      description: 'Generate an embedding vector for text using an AI provider '
+          '(gemini, openai, ollama, or dial) and return the vector as a JSON '
+          'array of numbers',
+      integration: 'ai',
+      category: 'embedding',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, or dial (anthropic is '
+              'not supported)',
+        ),
+        ToolParam(
+          name: 'model',
+          description: 'The embedding model name (e.g. text-embedding-3-small)',
+        ),
+        ToolParam(
+          name: 'text',
+          description: 'The text to embed',
+        ),
+      ],
+    );
+
+/// Summarization tool: `ai_summarize`.
+ToolDefinition _aiSummarizeTool() => ToolDefinition(
+      name: 'ai_summarize',
+      description: 'Summarize text using an AI provider (gemini, openai, '
+          'ollama, dial, or anthropic) and return the summary',
+      integration: 'ai',
+      category: 'summarize',
+      params: [
+        ToolParam(
+          name: 'provider',
+          description:
+              'AI provider: gemini, openai, ollama, dial, or anthropic',
+        ),
+        ToolParam(
+          name: 'model',
+          description: 'The model name to use',
+        ),
+        ToolParam(
+          name: 'text',
+          description: 'The text to summarize',
+        ),
+      ],
+    );
+
 /// Executes AI MCP tools by dispatching to the appropriate provider client.
 class AiToolExecutor {
   final GeminiClient _gemini;
@@ -191,6 +243,10 @@ class AiToolExecutor {
         return _executeSingleTurn(args, systemAlwaysApplied: true);
       case 'ai_complete':
         return _executeComplete(args);
+      case 'ai_embed':
+        return _executeEmbed(args);
+      case 'ai_summarize':
+        return _executeSummarize(args);
       default:
         throw ArgumentError('Unknown AI tool: $toolName');
     }
@@ -245,6 +301,25 @@ class AiToolExecutor {
     final maxTokens = (args['max_tokens'] as num).toInt();
     final temperature = (args['temperature'] as num?)?.toDouble();
     return _clientFor(provider).complete(model, prompt, maxTokens, temperature);
+  }
+
+  /// Dispatches an `ai_embed` call, returning the embedding JSON array.
+  Future<String> _executeEmbed(Map<String, dynamic> args) {
+    final provider = (args['provider'] as String).toLowerCase();
+    return _clientFor(provider)
+        .embed(args['model'] as String, args['text'] as String);
+  }
+
+  /// System prompt prepended to every `ai_summarize` request.
+  static const String summarizePrompt =
+      'Summarize the following text concisely, capturing the key points.';
+
+  /// Dispatches an `ai_summarize` call as a single-turn chat with a fixed
+  /// summarization system prompt.
+  Future<String> _executeSummarize(Map<String, dynamic> args) {
+    final provider = (args['provider'] as String).toLowerCase();
+    return _clientFor(provider)
+        .chat(args['model'] as String, args['text'] as String, summarizePrompt);
   }
 
   /// Dispatches a multi-turn `ai_chat_with_history` call.

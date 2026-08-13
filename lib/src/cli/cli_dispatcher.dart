@@ -1,15 +1,20 @@
 /// Command-line dispatcher — Dart port of the Java `JobRunner` CLI surface.
 ///
-/// Phase 2 scaffolding: version, help, job listing and `doctor` are live, and
-/// `list` resolves the MCP tool catalog from the default registry. Job
-/// execution, interactive mode and direct tool invocation print stub messages
-/// and exit non-zero until Phases 3–4.
+/// Version, help, job listing, `doctor`, and `run` are live. `run` resolves a
+/// job config via [RunCommandProcessor], then dispatches to [AgentFactory]
+/// (for `cliagent`) or [JsJobRunner] (for `jsrunner`/`.js` scripts) and prints
+/// the result. Interactive mode and direct tool invocation are stubs pending
+/// later phases.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../agents/agent_factory.dart';
+import '../agents/cli_agent.dart';
 import '../config/property_reader.dart';
+import '../js/job_runner.dart';
 import '../mcp/default_tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
@@ -39,7 +44,11 @@ class CliDispatcher {
 
   /// Dispatches [args], writing command output, and returns the exit code
   /// (`0` on success, `1` on error or an as-yet-unimplemented command).
-  int dispatch(List<String> args) {
+  ///
+  /// Async because `run` may execute a [CliAgent] whose lifecycle uses
+  /// `Process.run` (await-based). All other handlers are synchronous and
+  /// complete immediately.
+  Future<int> dispatch(List<String> args) async {
     if (args.isEmpty) {
       return _isTty() ? _interactiveStub() : _printHelp();
     }
@@ -48,7 +57,8 @@ class CliDispatcher {
     return handler(args.skip(1).toList());
   }
 
-  late final Map<String, int Function(List<String> rest)> _handlers = {
+  late final Map<String, FutureOr<int> Function(List<String> rest)> _handlers =
+      {
     '--version': (_) => _printVersion(),
     '-v': (_) => _printVersion(),
     '--help': (_) => _printHelp(),
@@ -88,7 +98,12 @@ class CliDispatcher {
     return 0;
   }
 
-  int _runJob(List<String> rest) {
+  /// Runs a job: resolve config → parse name/params → execute → print result.
+  ///
+  /// Returns `0` on success, `1` on any error (bad config, unknown job,
+  /// execution failure). The jsrunner branch calls [JsJobRunner] directly;
+  /// everything else goes through [AgentFactory].
+  Future<int> _runJob(List<String> rest) async {
     if (rest.isEmpty) {
       _writer('Error: run requires a job name or a JSON config file.');
       _writer('Usage: dmtools run <json-file> [encoded] [--key value ...]');
@@ -96,12 +111,10 @@ class CliDispatcher {
     }
     try {
       final resolved = RunCommandProcessor().process(['run', ...rest]);
-      final name = _extractJobName(resolved);
-      _writer(
-        'Config resolved for job: $name (execution requires Phase 3+ '
-        'integrations)',
-      );
-      return 1;
+      final config = jsonDecode(resolved) as Map<String, dynamic>;
+      final name = (config['name'] as String?) ?? '<unnamed>';
+      final params = (config['params'] as Map<String, dynamic>?) ?? const {};
+      return await _executeJob(name, params);
     } on ArgumentError catch (e) {
       _writer('Error: ${e.message}');
       return 1;
@@ -111,16 +124,42 @@ class CliDispatcher {
     } on FileSystemException catch (e) {
       _writer('Error: ${e.message}');
       return 1;
+    } catch (e) {
+      _writer('Error: $e');
+      return 1;
     }
   }
 
-  /// Extracts the job name from a resolved config JSON string.
-  String _extractJobName(String configJson) {
-    final decoded = jsonDecode(configJson);
-    if (decoded is Map<String, dynamic> && decoded['name'] is String) {
-      return decoded['name'] as String;
+  /// Executes the resolved job config: jsrunner → [JsJobRunner], otherwise
+  /// create the agent via [AgentFactory] and run it.
+  Future<int> _executeJob(String name, Map<String, dynamic> params) async {
+    if (name.toLowerCase() == 'jsrunner') {
+      return _executeJsRunner(params);
     }
-    return '<unnamed>';
+    final agent = AgentFactory.create(name, params);
+    if (agent is CliAgent) {
+      final result = await agent.run();
+      _writer(jsonEncode(result));
+      return result['success'] == true ? 0 : 1;
+    }
+    _writer('Error: job "$name" is not executable (unsupported agent type)');
+    return 1;
+  }
+
+  /// Runs a jsrunner job via [JsJobRunner] with `jsPath` and `jobParams`.
+  int _executeJsRunner(Map<String, dynamic> params) {
+    final jsPath = params['jsPath'] as String?;
+    if (jsPath == null) {
+      _writer('Error: jsrunner requires a jsPath in params');
+      return 1;
+    }
+    final jobParams = params['jobParams'] as Map<String, dynamic>? ?? const {};
+    final result = const JsJobRunner().runScript(
+      scriptPath: jsPath,
+      jobParams: jobParams,
+    );
+    _writer(result ?? 'undefined');
+    return 0;
   }
 
   int _listTools(List<String> rest) {

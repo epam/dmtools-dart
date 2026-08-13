@@ -16,7 +16,7 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     jiraTools().firstWhere((t) => t.name == name);
 
-/// Expected tool names in declaration order (batches 1–5).
+/// Expected tool names in declaration order (batches 1–7).
 const _expectedToolNames = [
   'jira_test',
   'jira_get_ticket',
@@ -78,6 +78,11 @@ const _expectedToolNames = [
   'jira_add_watcher',
   'jira_remove_watcher',
   'jira_get_resolutions',
+  'jira_get_priorities',
+  'jira_get_security_levels',
+  'jira_export_data',
+  'jira_get_board_issues',
+  'jira_get_sprints',
 ];
 
 /// Catalog shape: tool count, declaration order, and integration ownership.
@@ -85,7 +90,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the sixty tools in declaration order', () {
+    test('registers the sixty-five tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 

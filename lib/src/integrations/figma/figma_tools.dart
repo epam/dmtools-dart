@@ -18,6 +18,8 @@ List<ToolDefinition> figmaTools() => [
       ..._commentTools(),
       ..._componentTools(),
       ..._styleTools(),
+      ..._variableTools(),
+      ..._libraryTools(),
     ];
 
 /// Connectivity-check tool: `figma_test`.
@@ -112,11 +114,20 @@ List<ToolDefinition> _commentTools() => [
       ),
     ];
 
-/// Component tools: `figma_get_components`, `figma_get_component_sets`.
+/// Component tools: `figma_get_components`, `figma_get_file_components`,
+/// `figma_get_component_sets`.
 List<ToolDefinition> _componentTools() => [
       ToolDefinition(
         name: 'figma_get_components',
         description: 'Get components from a Figma file',
+        integration: 'figma',
+        category: 'components',
+        params: [_keyParam()],
+      ),
+      ToolDefinition(
+        name: 'figma_get_file_components',
+        description:
+            'Get components from a Figma file (alias of get_components)',
         integration: 'figma',
         category: 'components',
         params: [_keyParam()],
@@ -141,10 +152,39 @@ List<ToolDefinition> _styleTools() => [
       ),
     ];
 
+/// Variable tool: `figma_get_variable_collections`.
+List<ToolDefinition> _variableTools() => [
+      ToolDefinition(
+        name: 'figma_get_variable_collections',
+        description: 'Get variable collections from a Figma file',
+        integration: 'figma',
+        category: 'variables',
+        params: [_keyParam()],
+      ),
+    ];
+
+/// Library tool: `figma_get_library_components`.
+List<ToolDefinition> _libraryTools() => [
+      ToolDefinition(
+        name: 'figma_get_library_components',
+        description: 'Get components from a Figma team library',
+        integration: 'figma',
+        category: 'library',
+        params: [_libraryKeyParam()],
+      ),
+    ];
+
 /// Shared `key` parameter (Figma file key).
 ToolParam _keyParam() => ToolParam(
       name: 'key',
       description: 'The Figma file key',
+      required: true,
+    );
+
+/// Shared `library_key` parameter (Figma team library key).
+ToolParam _libraryKeyParam() => ToolParam(
+      name: 'library_key',
+      description: 'The Figma team library key',
       required: true,
     );
 
@@ -192,9 +232,15 @@ class FigmaToolExecutor {
           a['message'] as String,
         ),
     'figma_get_components': (a) => _client.getComponents(a['key'] as String),
+    'figma_get_file_components': (a) =>
+        _client.getComponents(a['key'] as String),
     'figma_get_component_sets': (a) =>
         _client.getComponentSets(a['key'] as String),
     'figma_get_styles': (a) => _client.getStyles(a['key'] as String),
+    'figma_get_variable_collections': (a) =>
+        _client.getVariableCollections(a['key'] as String),
+    'figma_get_library_components': (a) =>
+        _client.getLibraryComponents(a['library_key'] as String),
     'figma_export_image': (a) => _client.exportImage(
           a['key'] as String,
           format: a['format'] as String?,

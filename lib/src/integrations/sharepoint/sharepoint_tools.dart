@@ -9,12 +9,28 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'sharepoint_client.dart';
 
+/// Shared param for drive id.
+const _driveIdParam = ToolParam(
+  name: 'drive_id',
+  description: 'The SharePoint drive id',
+  required: true,
+);
+
+/// Shared param for item id.
+const _itemIdParam = ToolParam(
+  name: 'item_id',
+  description: 'The SharePoint item id',
+  required: true,
+);
+
 /// Returns all SharePoint MCP tool definitions.
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> sharepointTools() => [
       _testTool(),
       _getDriveTool(),
+      _getSiteTool(),
+      _listSitesTool(),
       _listFilesTool(),
       _getFileTool(),
       _uploadFileTool(),
@@ -22,6 +38,7 @@ List<ToolDefinition> sharepointTools() => [
       _getDriveItemsTool(),
       _searchDriveTool(),
       _deleteDriveItemTool(),
+      _copyItemTool(),
     ];
 
 /// Connectivity-check tool: `sharepoint_test`.
@@ -42,6 +59,30 @@ ToolDefinition _getDriveTool() => ToolDefinition(
       params: [],
     );
 
+/// Get-site tool: `sharepoint_get_site`.
+ToolDefinition _getSiteTool() => ToolDefinition(
+      name: 'sharepoint_get_site',
+      description: 'Get the root SharePoint site',
+      integration: 'sharepoint',
+      category: 'sites',
+      params: [],
+    );
+
+/// List-sites tool: `sharepoint_list_sites`.
+ToolDefinition _listSitesTool() => ToolDefinition(
+      name: 'sharepoint_list_sites',
+      description: 'Search for SharePoint sites matching a query',
+      integration: 'sharepoint',
+      category: 'sites',
+      params: [
+        ToolParam(
+          name: 'query',
+          description: 'The search text to match site names against',
+          required: true,
+        ),
+      ],
+    );
+
 /// List-files tool: `sharepoint_list_files`.
 ToolDefinition _listFilesTool() => ToolDefinition(
       name: 'sharepoint_list_files',
@@ -49,11 +90,7 @@ ToolDefinition _listFilesTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
+        _driveIdParam,
       ],
     );
 
@@ -65,16 +102,8 @@ ToolDefinition _getFileTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
-        ToolParam(
-          name: 'item_id',
-          description: 'The SharePoint item id',
-          required: true,
-        ),
+        _driveIdParam,
+        _itemIdParam,
       ],
     );
 
@@ -85,11 +114,7 @@ ToolDefinition _uploadFileTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
+        _driveIdParam,
         ToolParam(
           name: 'folder_id',
           description: 'The SharePoint folder item id',
@@ -115,11 +140,7 @@ ToolDefinition _createFolderTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
+        _driveIdParam,
         ToolParam(
           name: 'parent_id',
           description: 'The parent item id',
@@ -141,11 +162,7 @@ ToolDefinition _getDriveItemsTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
+        _driveIdParam,
         ToolParam(
           name: 'folder_id',
           description: 'The SharePoint folder item id',
@@ -161,11 +178,7 @@ ToolDefinition _searchDriveTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
-        ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
-          required: true,
-        ),
+        _driveIdParam,
         ToolParam(
           name: 'query',
           description: 'The search text to match item names against',
@@ -182,14 +195,36 @@ ToolDefinition _deleteDriveItemTool() => ToolDefinition(
       integration: 'sharepoint',
       category: 'files',
       params: [
+        _driveIdParam,
+        _itemIdParam,
+      ],
+    );
+
+/// Copy-item tool: `sharepoint_copy_item`.
+ToolDefinition _copyItemTool() => ToolDefinition(
+      name: 'sharepoint_copy_item',
+      description: 'Copy a SharePoint drive item to a destination folder',
+      integration: 'sharepoint',
+      category: 'files',
+      params: [
         ToolParam(
-          name: 'drive_id',
-          description: 'The SharePoint drive id',
+          name: 'src_drive_id',
+          description: 'The source SharePoint drive id',
           required: true,
         ),
         ToolParam(
-          name: 'item_id',
-          description: 'The SharePoint item id',
+          name: 'src_item_id',
+          description: 'The source SharePoint item id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'dst_drive_id',
+          description: 'The destination SharePoint drive id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'dst_folder_id',
+          description: 'The destination folder item id',
           required: true,
         ),
       ],
@@ -218,6 +253,8 @@ class SharepointToolExecutor {
       _handlers = {
     'sharepoint_test': (_) => _client.testConnection(),
     'sharepoint_get_drive': (_) => _client.getDrive(),
+    'sharepoint_get_site': (_) => _client.getSite(),
+    'sharepoint_list_sites': (a) => _client.listSites(a['query'] as String),
     'sharepoint_list_files': (a) => _client.listFiles(a['drive_id'] as String),
     'sharepoint_get_file': (a) => _client.getFile(
           a['drive_id'] as String,
@@ -245,6 +282,12 @@ class SharepointToolExecutor {
     'sharepoint_delete_drive_item': (a) => _client.deleteDriveItem(
           a['drive_id'] as String,
           a['item_id'] as String,
+        ),
+    'sharepoint_copy_item': (a) => _client.copyItem(
+          a['src_drive_id'] as String,
+          a['src_item_id'] as String,
+          a['dst_drive_id'] as String,
+          a['dst_folder_id'] as String,
         ),
   };
 }

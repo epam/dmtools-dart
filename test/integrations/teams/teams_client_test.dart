@@ -17,6 +17,9 @@ void main() {
   getChatMembersTests();
   createChatTests();
   getTeamsTests();
+  getTeamChannelsTests();
+  sendChannelMessageTests();
+  getChannelMessagesTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -261,6 +264,75 @@ void getTeamsTests() {
   });
 }
 
+/// `teams_get_team_channels` — GET `teams/{teamId}/channels`.
+void getTeamChannelsTests() {
+  group('TeamsClient.getTeamChannels', () {
+    test('returns the decoded channels object', () async {
+      final f = mockTeams((o) => routeByPath({'/channels': _channelsBody}, o));
+      final channels = await f.client.getTeamChannels('t1');
+      expect(channels['value'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/v1.0/teams/t1/channels'));
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/channels': '[1]'}, o));
+      expect(await f.client.getTeamChannels('t1'), isEmpty);
+    });
+  });
+}
+
+/// `teams_send_channel_message` — POST
+/// `teams/{teamId}/channels/{channelId}/messages`.
+void sendChannelMessageTests() {
+  group('TeamsClient.sendChannelMessage', () {
+    test('POSTs the message body and returns the decoded object', () async {
+      final f = mockTeams(
+        (o) => routeByPath({'/messages': _sentChannelMessageBody}, o),
+      );
+      final result = await f.client.sendChannelMessage('t1', 'ch1', 'hello');
+      expect(result['id'], 'cm-1');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/v1.0/teams/t1/channels/ch1/messages'));
+      expect(
+        jsonDecode(call.data as String),
+        {
+          'body': {'content': 'hello'},
+        },
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/messages': '[1]'}, o));
+      expect(await f.client.sendChannelMessage('t1', 'ch1', 'hi'), isEmpty);
+    });
+  });
+}
+
+/// `teams_get_channel_messages` — GET
+/// `teams/{teamId}/channels/{channelId}/messages`.
+void getChannelMessagesTests() {
+  group('TeamsClient.getChannelMessages', () {
+    test('returns the decoded messages object', () async {
+      final f = mockTeams(
+        (o) => routeByPath({'/messages': _chatMessagesBody}, o),
+      );
+      final messages = await f.client.getChannelMessages('t1', 'ch1');
+      expect(messages['value'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/v1.0/teams/t1/channels/ch1/messages'));
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockTeams((o) => routeByPath({'/messages': '[1]'}, o));
+      expect(await f.client.getChannelMessages('t1', 'ch1'), isEmpty);
+    });
+  });
+}
+
 /// Canned `me` response body (the authenticated user profile).
 const _meBody =
     '{"displayName":"Ada Lovelace","userPrincipalName":"ada@x.com"}';
@@ -285,3 +357,10 @@ const _chatBody = '{"id":"chat-9","chatType":"oneOnOne"}';
 
 /// Canned joined-teams response body.
 const _teamsBody = '{"value":[{"id":"t1","displayName":"Team A"}]}';
+
+/// Canned team-channels response body.
+const _channelsBody =
+    '{"value":[{"id":"ch1","displayName":"General"},{"id":"ch2"}]}';
+
+/// Canned send-channel-message response body.
+const _sentChannelMessageBody = '{"id":"cm-1","body":{"content":"hello"}}';

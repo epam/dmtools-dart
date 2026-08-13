@@ -18,6 +18,8 @@ void main() {
   getJobDetailsTests();
   getQueueTests();
   cancelBuildTests();
+  getBuildArtifactsTests();
+  getJobConfigTests();
 }
 
 /// The expected `Basic` header value produced by the fixture's config.
@@ -291,3 +293,52 @@ const _jobDetailsBody =
 
 /// Canned queue response body.
 const _queueBody = '{"items":[{"id":42},{"id":43}]}';
+
+/// `jenkins_get_build_artifacts` — GET
+/// `job/{name}/{buildNumber}/api/json?tree=artifacts[fileName,relativePath]`.
+void getBuildArtifactsTests() {
+  group('JenkinsClient.getBuildArtifacts', () {
+    test('returns the decoded artifacts object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/api/json': _artifactsBody}, o),
+      );
+      final result = await f.client.getBuildArtifacts('job-a', 5);
+      expect(result?['artifacts'], isA<List>());
+      final call = f.adapter.calls.single;
+      expect(call.path, endsWith('/job/job-a/5/api/json'));
+      expect(
+        call.queryParameters['tree'],
+        'artifacts[fileName,relativePath]',
+      );
+    });
+
+    test('returns null when the body is not an object', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/api/json': '[1]'}, o),
+      );
+      expect(await f.client.getBuildArtifacts('job-a', 5), isNull);
+    });
+  });
+}
+
+/// `jenkins_get_job_config` — GET `job/{name}/config.xml`.
+void getJobConfigTests() {
+  group('JenkinsClient.getJobConfig', () {
+    test('returns the raw XML configuration', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/config.xml': _configXml}, o),
+      );
+      final xml = await f.client.getJobConfig('job-a');
+      expect(xml, _configXml);
+      expect(f.adapter.calls.single.path, endsWith('/job/job-a/config.xml'));
+    });
+  });
+}
+
+/// Canned artifacts response body.
+const _artifactsBody =
+    '{"artifacts":[{"fileName":"app.jar","relativePath":"target/app.jar"}]}';
+
+/// Canned config.xml response body.
+const _configXml =
+    '<?xml version="1.0"?><project><description>CI</description></project>';

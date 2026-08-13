@@ -36,6 +36,7 @@ List<ToolDefinition> jenkinsTools() => [
       ..._jobTools(),
       ..._buildTools(),
       ..._queueTools(),
+      ..._configTools(),
     ];
 
 /// Connectivity-check tool: `jenkins_test`.
@@ -58,11 +59,12 @@ List<ToolDefinition> _jobTools() => [
     ];
 
 /// Build tools: `jenkins_get_build`, `jenkins_get_build_log`,
-/// `jenkins_get_last_build`.
+/// `jenkins_get_last_build`, `jenkins_get_build_artifacts`.
 List<ToolDefinition> _buildTools() => [
       _getBuildTool(),
       _getBuildLogTool(),
       _getLastBuildTool(),
+      _getBuildArtifactsTool(),
     ];
 
 /// Job-list tool: `jenkins_get_jobs`.
@@ -110,6 +112,15 @@ ToolDefinition _getLastBuildTool() => ToolDefinition(
       params: [_nameParam],
     );
 
+/// Build-artifacts tool: `jenkins_get_build_artifacts`.
+ToolDefinition _getBuildArtifactsTool() => ToolDefinition(
+      name: 'jenkins_get_build_artifacts',
+      description: 'List artifacts produced by a Jenkins job build',
+      integration: 'jenkins',
+      category: 'builds',
+      params: _nameAndBuildParams,
+    );
+
 /// Job-details tool: `jenkins_get_job_details`.
 ToolDefinition _getJobDetailsTool() => ToolDefinition(
       name: 'jenkins_get_job_details',
@@ -141,6 +152,17 @@ List<ToolDefinition> _queueTools() => [
             required: true,
           ),
         ],
+      ),
+    ];
+
+/// Config tools: `jenkins_get_job_config`.
+List<ToolDefinition> _configTools() => [
+      ToolDefinition(
+        name: 'jenkins_get_job_config',
+        description: 'Get the XML configuration of a Jenkins job',
+        integration: 'jenkins',
+        category: 'config',
+        params: [_nameParam],
       ),
     ];
 
@@ -182,5 +204,10 @@ class JenkinsToolExecutor {
     'jenkins_get_queue': (_) => _client.getQueue(),
     'jenkins_cancel_build': (a) =>
         _client.cancelBuild(requiredInt(a, 'queueId')),
+    'jenkins_get_build_artifacts': (a) => _client.getBuildArtifacts(
+          a['name'] as String,
+          requiredInt(a, 'buildNumber'),
+        ),
+    'jenkins_get_job_config': (a) => _client.getJobConfig(a['name'] as String),
   };
 }

@@ -9,6 +9,7 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   executorDispatchTests();
+  downloadAttachmentDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -113,6 +114,28 @@ void executorDispatchTests() {
   });
 }
 
+/// Download-attachment dispatch through [ConfluenceToolExecutor.execute].
+void downloadAttachmentDispatchTests() {
+  group('ConfluenceToolExecutor.execute (download attachment)', () {
+    late _SpyConfluenceClient spy;
+    late ConfluenceToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyConfluenceClient(mockHttp((o) => '{}').http);
+      executor = ConfluenceToolExecutor(spy);
+    });
+
+    test('routes confluence_download_attachment with pageId and attachmentId',
+        () async {
+      await executor.execute('confluence_download_attachment', {
+        'pageId': '42',
+        'attachmentId': 'att-1',
+      });
+      expect(spy.calls, ['downloadAttachment:42:att-1']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyConfluenceClient extends ConfluenceClient {
   _SpyConfluenceClient(super.http);
@@ -157,6 +180,12 @@ class _SpyConfluenceClient extends ConfluenceClient {
     calls.add('search:$query');
     return super.search(query);
   }
+
+  @override
+  Future<String> downloadAttachment(String pageId, String attachmentId) {
+    calls.add('downloadAttachment:$pageId:$attachmentId');
+    return super.downloadAttachment(pageId, attachmentId);
+  }
 }
 
 /// The full tool catalog in declaration order.
@@ -176,6 +205,7 @@ const _expectedToolOrder = [
   'confluence_add_label',
   'confluence_get_labels',
   'confluence_get_page_attachments',
+  'confluence_download_attachment',
   'confluence_get_blog_posts',
   'confluence_get_content_children',
   'confluence_move_page',

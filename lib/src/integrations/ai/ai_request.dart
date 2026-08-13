@@ -3,7 +3,9 @@
 /// Every provider client ([GeminiClient], [OpenAIClient], [OllamaClient],
 /// [DialClient], [AnthropicClient]) routes its POST and response extraction
 /// through [postChat] so the common sequence is not duplicated across files
-/// and the per-provider classes stay thin.
+/// and the per-provider classes stay thin. The [AiChatClient] interface
+/// defines the chat, completion, and embedding contract each provider
+/// implements.
 library;
 
 import 'dart:convert';
@@ -12,7 +14,10 @@ import 'package:dio/dio.dart';
 
 import 'ai_messages.dart';
 
-/// Contract for an AI provider client that accepts a message history.
+/// Contract for an AI provider client.
+///
+/// Despite the name this interface covers chat, completion, and embedding
+/// operations — every provider client implements all three.
 abstract interface class AiChatClient {
   /// Sends a multi-turn chat built from [messages] and returns the text.
   Future<String> chatWithMessages(
@@ -30,6 +35,12 @@ abstract interface class AiChatClient {
     int maxTokens, [
     double? temperature,
   ]);
+
+  /// Generates an embedding vector for [text] using [model], returned as a
+  /// JSON-encoded array of numbers.
+  ///
+  /// Providers that do not expose an embeddings API throw [UnsupportedError].
+  Future<String> embed(String model, String text);
 }
 
 /// Single-turn chat support for every [AiChatClient].
@@ -104,4 +115,24 @@ String extractContentBlockText(String body) {
   final decoded = jsonDecode(body) as Map<String, dynamic>;
   final block = firstBlock(decoded, 'content');
   return block == null ? '' : block['text'] as String? ?? '';
+}
+
+/// Extracts `data[0].embedding` as a JSON array string (OpenAI / DIAL).
+String extractEmbeddingArray(String body) {
+  final decoded = jsonDecode(body) as Map<String, dynamic>;
+  final data = firstBlock(decoded, 'data');
+  return data == null ? '[]' : jsonEncode(data['embedding'] ?? const []);
+}
+
+/// Extracts `embedding.values` as a JSON array string (Gemini).
+String extractValuesEmbedding(String body) {
+  final decoded = jsonDecode(body) as Map<String, dynamic>;
+  final embedding = decoded['embedding'] as Map<String, dynamic>?;
+  return embedding == null ? '[]' : jsonEncode(embedding['values'] ?? const []);
+}
+
+/// Extracts the top-level `embedding` array as a JSON string (Ollama).
+String extractPlainEmbedding(String body) {
+  final decoded = jsonDecode(body) as Map<String, dynamic>;
+  return jsonEncode(decoded['embedding'] ?? const []);
 }

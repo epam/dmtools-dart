@@ -69,9 +69,20 @@ class DialClient implements AiChatClient {
     return _post(body);
   }
 
+  /// Generates an embedding for [text] using [model].
   /// Posts a chat-completions [body] with the client's Bearer auth.
   Future<String> _post(Map<String, dynamic> body) => postChat(
       _dio, _basePath, body, bearerHeaders(_apiKey), extractChoiceContent);
+
+  /// Generates an embedding via the DIAL (OpenAI-compatible) endpoint.
+  @override
+  Future<String> embed(String model, String text) => postChat(
+        _dio,
+        _basePath,
+        {'model': model, 'input': text},
+        bearerHeaders(_apiKey),
+        extractEmbeddingArray,
+      );
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

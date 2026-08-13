@@ -17,6 +17,8 @@ void main() {
   getComponentSetsTests();
   getStylesTests();
   exportImageTests();
+  getVariableCollectionsTests();
+  getLibraryComponentsTests();
 }
 
 /// The base path injected by the fixture's config.
@@ -240,6 +242,38 @@ void exportImageTests() {
   });
 }
 
+/// `figma_get_variable_collections` — GET `/files/{key}/variables/local`.
+void getVariableCollectionsTests() {
+  group('FigmaClient.getVariableCollections', () {
+    test('returns the decoded variables map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/variables/local': _variablesBody}, o),
+      );
+      final result = await f.client.getVariableCollections('aBc123');
+      expect(result['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/files/aBc123/variables/local'));
+    });
+  });
+}
+
+/// `figma_get_library_components` — GET `/libraries/{libraryKey}/components`.
+void getLibraryComponentsTests() {
+  group('FigmaClient.getLibraryComponents', () {
+    test('returns the decoded library components map', () async {
+      final f = mockFigma(
+        (o) => routeByPath({'/components': _libraryComponentsBody}, o),
+      );
+      final result = await f.client.getLibraryComponents('lib1');
+      expect(result['meta'], isA<Map>());
+      final call = f.adapter.calls.single;
+      expect(call.method, 'GET');
+      expect(call.path, endsWith('/libraries/lib1/components'));
+    });
+  });
+}
+
 /// Canned `/me` response body.
 const _meBody = '{"handle":"designer-1","email":"d@example.com"}';
 
@@ -269,3 +303,11 @@ const _componentSetsBody =
 
 /// Canned `/files/{key}/styles` response body.
 const _stylesBody = '{"meta":{"styles":[{"key":"red","name":"Red"}]}}';
+
+/// Canned `/files/{key}/variables/local` response body.
+const _variablesBody =
+    '{"meta":{"variableCollections":[{"id":"vc1","name":"Colors"}]}}';
+
+/// Canned `/libraries/{libraryKey}/components` response body.
+const _libraryComponentsBody =
+    '{"meta":{"components":[{"key":"card","name":"Card"}]}}';

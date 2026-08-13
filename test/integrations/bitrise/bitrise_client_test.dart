@@ -16,6 +16,8 @@ void main() {
   triggerBuildTests();
   triggerBuildWithParamsTests();
   abortBuildTests();
+  getWorkflowsTests();
+  getArtifactsTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -233,3 +235,55 @@ void abortBuildTests() {
 
 /// Canned abort-build response body.
 const _abortBody = '{"status":"ok","build_slug":"build-2"}';
+
+/// `bitrise_get_workflows` — GET `apps/{appSlug}/build-slots`.
+void getWorkflowsTests() {
+  group('BitriseClient.getWorkflows', () {
+    test('returns the decoded workflows object', () async {
+      final f =
+          mockBitrise((o) => routeByPath({'/build-slots': _workflowsBody}, o));
+      final workflows = await f.client.getWorkflows('app-1');
+      expect(workflows['data'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v0.1/apps/app-1/build-slots'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockBitrise((o) => routeByPath({'/build-slots': '[1, 2]'}, o));
+      expect(await f.client.getWorkflows('app-1'), isEmpty);
+    });
+  });
+}
+
+/// `bitrise_get_artifacts` — GET `apps/{appSlug}/builds/{buildSlug}/artifacts`.
+void getArtifactsTests() {
+  group('BitriseClient.getArtifacts', () {
+    test('returns the decoded artifacts object', () async {
+      final f = mockBitrise(
+        (o) => routeByPath({'/artifacts': _artifactsBody}, o),
+      );
+      final artifacts = await f.client.getArtifacts('app-1', 'build-2');
+      expect(artifacts['data'], isA<List>());
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/v0.1/apps/app-1/builds/build-2/artifacts'),
+      );
+    });
+
+    test('returns an empty map when the body is not an object', () async {
+      final f = mockBitrise((o) => routeByPath({'/artifacts': '[1, 2]'}, o));
+      expect(await f.client.getArtifacts('app-1', 'build-2'), isEmpty);
+    });
+  });
+}
+
+/// Canned workflows response body.
+const _workflowsBody =
+    '{"data":[{"workflow":"primary"},{"workflow":"deploy"}]}';
+
+/// Canned artifacts response body.
+const _artifactsBody =
+    '{"data":[{"slug":"a1","title":"app.apk"},{"slug":"a2","title":"log.txt"}],'
+    '"paging":{}}';

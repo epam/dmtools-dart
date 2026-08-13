@@ -21,27 +21,7 @@ void toolCatalogTests() {
     final tools = confluenceTools();
 
     test('registers all tools in declaration order', () {
-      expect(tools.map((t) => t.name), [
-        'confluence_test',
-        'confluence_get_page',
-        'confluence_get_page_by_id',
-        'confluence_create_page',
-        'confluence_update_page',
-        'confluence_delete_page',
-        'confluence_search',
-        'confluence_get_spaces',
-        'confluence_get_space_by_key',
-        'confluence_update_space',
-        'confluence_add_label',
-        'confluence_get_labels',
-        'confluence_get_page_attachments',
-        'confluence_get_blog_posts',
-        'confluence_get_content_children',
-        'confluence_move_page',
-        'confluence_get_page_history',
-        'confluence_get_permissions',
-        'confluence_add_permission',
-      ]);
+      expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 
     test('every tool belongs to the confluence integration', () {
@@ -178,3 +158,31 @@ class _SpyConfluenceClient extends ConfluenceClient {
     return super.search(query);
   }
 }
+
+/// The full tool catalog in declaration order.
+const _expectedToolOrder = [
+  'confluence_test',
+  'confluence_get_page',
+  'confluence_get_page_by_id',
+  'confluence_create_page',
+  'confluence_update_page',
+  'confluence_delete_page',
+  'confluence_search',
+  'confluence_get_spaces',
+  'confluence_get_space_by_key',
+  'confluence_update_space',
+  'confluence_get_space_content',
+  'confluence_create_space',
+  'confluence_add_label',
+  'confluence_get_labels',
+  'confluence_get_page_attachments',
+  'confluence_get_blog_posts',
+  'confluence_get_content_children',
+  'confluence_move_page',
+  'confluence_get_page_history',
+  'confluence_archive_page',
+  'confluence_get_permissions',
+  'confluence_add_permission',
+  'confluence_get_page_properties',
+  'confluence_set_page_property',
+];

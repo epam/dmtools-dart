@@ -13,6 +13,8 @@ void main() {
   testConnectionTests();
   getTestsTests();
   getTestExecutionsTests();
+  getTestStepsTests();
+  getTestPlanTests();
   createTestExecutionTests();
 }
 
@@ -229,6 +231,68 @@ const _testsBody = '[{"key":"PROJ-1"},{"key":"PROJ-2"}]';
 
 /// Canned test-executions response body.
 const _execsBody = '[{"key":"EXEC-1"}]';
+
+/// `getTestSteps` — GET `/api/v2/test/{testKey}/steps`.
+void getTestStepsTests() {
+  group('XrayClient.getTestSteps', () {
+    test('auto-authenticates then GETs test steps', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'steps': _stepsBody,
+        }, o),
+      );
+      final result = await f.client.getTestSteps('PROJ-1');
+      expect(result.map((s) => s['id']).toList(), [1, 2]);
+      final getCall = f.adapter.calls.where((c) => c.method == 'GET').single;
+      expect(getCall.path, contains('test/PROJ-1/steps'));
+    });
+
+    test('returns empty list for non-array body', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'steps': '{"error":"x"}',
+        }, o),
+      );
+      expect(await f.client.getTestSteps('PROJ-1'), isEmpty);
+    });
+  });
+}
+
+/// `getTestPlan` — GET `/api/v2/testplan/{testPlanKey}`.
+void getTestPlanTests() {
+  group('XrayClient.getTestPlan', () {
+    test('auto-authenticates then GETs the test plan', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testplan/PROJ-100': _planBody,
+        }, o),
+      );
+      final result = await f.client.getTestPlan('PROJ-100');
+      expect(result['key'], 'PROJ-100');
+      final getCall = f.adapter.calls.where((c) => c.method == 'GET').single;
+      expect(getCall.path, contains('testplan/PROJ-100'));
+    });
+
+    test('returns empty map for non-object body', () async {
+      final f = mockXray(
+        (o) => routeByPath({
+          'authenticate': '"jwt-token"',
+          'testplan/PROJ-100': '[1, 2]',
+        }, o),
+      );
+      expect(await f.client.getTestPlan('PROJ-100'), isEmpty);
+    });
+  });
+}
+
+/// Canned test-steps response body.
+const _stepsBody = '[{"id":1},{"id":2}]';
+
+/// Canned test-plan response body.
+const _planBody = '{"key":"PROJ-100"}';
 
 /// Canned import/execution result body.
 const _execResultBody = '{"id":"EXEC-100"}';

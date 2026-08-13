@@ -20,6 +20,7 @@ List<ToolDefinition> gitlabTools() => [
       ..._pipelineTools(),
       ..._memberTools(),
       ..._groupTools(),
+      ..._projectTools(),
     ];
 
 /// Shared `project` param — numeric id or `group/project` path.
@@ -58,7 +59,8 @@ List<ToolDefinition> _systemTools() => [
 /// Merge-request tools: `gitlab_get_mr`, `gitlab_list_mrs`,
 /// `gitlab_create_mr_note`, `gitlab_merge_mr`, `gitlab_close_mr`,
 /// `gitlab_get_mr_diff`, `gitlab_approve_mr`, `gitlab_unapprove_mr`,
-/// `gitlab_get_mr_notes`.
+/// `gitlab_get_mr_notes`, `gitlab_get_mr_approvals`, `gitlab_get_mr_discussions`,
+/// `gitlab_trigger_mr_discussion_resolve`.
 List<ToolDefinition> _mergeRequestTools() => [
       _getMrTool(),
       _listMrsTool(),
@@ -69,6 +71,9 @@ List<ToolDefinition> _mergeRequestTools() => [
       _approveMrTool(),
       _unapproveMrTool(),
       _getMrNotesTool(),
+      _getMrApprovalsTool(),
+      _getMrDiscussionsTool(),
+      _triggerMrDiscussionResolveTool(),
     ];
 
 /// Issue tools: `gitlab_get_issue`, `gitlab_create_issue`,
@@ -117,6 +122,13 @@ List<ToolDefinition> _groupTools() => [
         category: 'members',
         params: [_groupIdParam],
       ),
+    ];
+
+/// Project tools: `gitlab_get_project_details`,
+/// `gitlab_get_project_variables`.
+List<ToolDefinition> _projectTools() => [
+      _getProjectDetailsTool(),
+      _getProjectVariablesTool(),
     ];
 
 /// Merge-request read tool: `gitlab_get_mr`.
@@ -213,6 +225,48 @@ ToolDefinition _getMrNotesTool() => ToolDefinition(
       integration: 'gitlab',
       category: 'merge_requests',
       params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request approvals tool: `gitlab_get_mr_approvals`.
+ToolDefinition _getMrApprovalsTool() => ToolDefinition(
+      name: 'gitlab_get_mr_approvals',
+      description: 'Get the approval state of a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request discussions tool: `gitlab_get_mr_discussions`.
+ToolDefinition _getMrDiscussionsTool() => ToolDefinition(
+      name: 'gitlab_get_mr_discussions',
+      description: 'List the discussions (threads) of a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_projectParam, _iidParam('merge request')],
+    );
+
+/// Merge-request discussion resolve tool: `gitlab_trigger_mr_discussion_resolve`.
+ToolDefinition _triggerMrDiscussionResolveTool() => ToolDefinition(
+      name: 'gitlab_trigger_mr_discussion_resolve',
+      description:
+          'Resolve or unresolve a discussion on a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _projectParam,
+        _iidParam('merge request'),
+        ToolParam(
+          name: 'discussion_id',
+          description: 'The discussion (thread) id',
+          required: true,
+        ),
+        ToolParam(
+          name: 'resolved',
+          description: 'true to resolve, false to unresolve the discussion',
+          type: 'boolean',
+          required: true,
+        ),
+      ],
     );
 
 /// Issue-read tool: `gitlab_get_issue`.
@@ -384,10 +438,35 @@ ToolDefinition _getPipelineTool() => ToolDefinition(
       ],
     );
 
+/// Project-details tool: `gitlab_get_project_details`.
+ToolDefinition _getProjectDetailsTool() => ToolDefinition(
+      name: 'gitlab_get_project_details',
+      description: 'Get details of a GitLab project',
+      integration: 'gitlab',
+      category: 'projects',
+      params: [_projectParam],
+    );
+
+/// Project-variables tool: `gitlab_get_project_variables`.
+ToolDefinition _getProjectVariablesTool() => ToolDefinition(
+      name: 'gitlab_get_project_variables',
+      description: 'List the CI/CD variables of a GitLab project',
+      integration: 'gitlab',
+      category: 'projects',
+      params: [_projectParam],
+    );
+
 /// Parses a JSON `iid` argument into an int (accepts int or numeric string).
 int _toInt(Object? value) {
   if (value is int) return value;
   return int.parse(value.toString());
+}
+
+/// Parses a JSON `resolved` argument into a bool (accepts bool, int, or string).
+bool _toBool(Object? value) {
+  if (value is bool) return value;
+  if (value is int) return value != 0;
+  return value.toString().toLowerCase() == 'true';
 }
 
 /// Executes GitLab MCP tools by dispatching to [GitlabClient].
@@ -417,6 +496,7 @@ class GitlabToolExecutor {
     ..._repositoryHandlers(),
     ..._pipelineHandlers(),
     ..._memberHandlers(),
+    ..._projectHandlers(),
   };
 
   /// Connectivity-check handler.
@@ -464,6 +544,21 @@ class GitlabToolExecutor {
             'gitlab_get_mr_notes': (a) => _client.getMrNotes(
                   a['project'] as String,
                   _toInt(a['iid']),
+                ),
+            'gitlab_get_mr_approvals': (a) => _client.getMrApprovals(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_get_mr_discussions': (a) => _client.getMrDiscussions(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                ),
+            'gitlab_trigger_mr_discussion_resolve': (a) =>
+                _client.triggerMrDiscussionResolve(
+                  a['project'] as String,
+                  _toInt(a['iid']),
+                  a['discussion_id'] as String,
+                  _toBool(a['resolved']),
                 ),
           };
 
@@ -530,5 +625,14 @@ class GitlabToolExecutor {
                 _client.getProjectMembers(a['project'] as String),
             'gitlab_get_group_members': (a) =>
                 _client.getGroupMembers(a['group_id'] as String),
+          };
+
+  /// Project tool handlers.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _projectHandlers() => {
+            'gitlab_get_project_details': (a) =>
+                _client.getProjectDetails(a['project'] as String),
+            'gitlab_get_project_variables': (a) =>
+                _client.getProjectVariables(a['project'] as String),
           };
 }

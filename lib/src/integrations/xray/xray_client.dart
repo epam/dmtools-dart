@@ -81,8 +81,8 @@ class XrayHttpClient extends BaseHttpClient {
 ///
 /// Auto-authenticates (using the configured client credentials) on the first
 /// API call that requires a Bearer token, so callers can invoke [getTests],
-/// [getTestExecutions], or [createTestExecution] without a manual
-/// [authenticate] call.
+/// [getTestExecutions], [getTestSteps], [getTestPlan], or
+/// [createTestExecution] without a manual [authenticate] call.
 class XrayClient {
   final XrayHttpClient _http;
 
@@ -150,6 +150,26 @@ class XrayClient {
     await _ensureAuthenticated();
     final body = await _http.get('test/$testKey/testexecutions');
     return _decodeList(body);
+  }
+
+  /// `jira_xray_get_test_steps` — GET `/api/v2/test/{testKey}/steps`.
+  ///
+  /// Returns the decoded list of test-step objects, or an empty list when
+  /// the response body is not a JSON array.
+  Future<List<Map<String, dynamic>>> getTestSteps(String testKey) async {
+    await _ensureAuthenticated();
+    final body = await _http.get('test/$testKey/steps');
+    return _decodeList(body);
+  }
+
+  /// `jira_xray_get_test_plan` — GET `/api/v2/testplan/{testPlanKey}`.
+  ///
+  /// Returns the decoded test-plan object, or an empty map when the body is
+  /// not a JSON object.
+  Future<Map<String, dynamic>> getTestPlan(String testPlanKey) async {
+    await _ensureAuthenticated();
+    final body = await _http.get('testplan/$testPlanKey');
+    return _decodeMap(body) ?? {};
   }
 
   /// `jira_xray_create_test_execution` — POST `/api/v2/import/execution`.

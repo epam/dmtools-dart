@@ -15,9 +15,12 @@ List<ToolDefinition> adoTools() => [
       ..._systemTools(),
       ..._workItemTools(),
       ..._workItemQueryTools(),
+      ..._commentTools(),
       ..._teamTools(),
       ..._projectTools(),
       ..._pullRequestTools(),
+      ..._pullRequestUpdateTools(),
+      ..._pullRequestStatusTools(),
       ..._repoTools(),
       ..._buildTools(),
     ];
@@ -118,6 +121,28 @@ List<ToolDefinition> _workItemQueryTools() => [
       ),
     ];
 
+/// Work-item comment tools: `ado_get_work_item_comments`,
+/// `ado_add_work_item_comment`.
+List<ToolDefinition> _commentTools() => [
+      ToolDefinition(
+        name: 'ado_get_work_item_comments',
+        description: 'List the comments on an Azure DevOps work item',
+        integration: 'ado',
+        category: 'comment_management',
+        params: [_idParam('The work item ID')],
+      ),
+      ToolDefinition(
+        name: 'ado_add_work_item_comment',
+        description: 'Add a comment to an Azure DevOps work item',
+        integration: 'ado',
+        category: 'comment_management',
+        params: [
+          _idParam('The work item ID'),
+          ToolParam(name: 'text', description: 'The comment text'),
+        ],
+      ),
+    ];
+
 /// Team tools: `ado_get_teams`, `ado_get_team_members`.
 List<ToolDefinition> _teamTools() => [
       ToolDefinition(
@@ -194,6 +219,75 @@ List<ToolDefinition> _pullRequestTools() => [
           _projectParam(),
           _numberParam('prId', 'The pull request ID'),
           ToolParam(name: 'reviewerId', description: 'The reviewer user ID'),
+        ],
+      ),
+    ];
+
+/// Pull-request update tools: `ado_update_pull_request`,
+/// `ado_get_pull_request_commits`.
+List<ToolDefinition> _pullRequestUpdateTools() => [
+      ToolDefinition(
+        name: 'ado_update_pull_request',
+        description: 'Update the title and description of an Azure DevOps '
+            'pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+          ToolParam(name: 'title', description: 'The new pull request title'),
+          ToolParam(
+            name: 'description',
+            description: 'The new pull request description',
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_get_pull_request_commits',
+        description: 'List the commits in an Azure DevOps pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+        ],
+      ),
+    ];
+
+/// Pull-request status tools: `ado_get_pull_request_statuses`,
+/// `ado_create_pull_request_status`.
+List<ToolDefinition> _pullRequestStatusTools() => [
+      ToolDefinition(
+        name: 'ado_get_pull_request_statuses',
+        description: 'List the statuses posted on an Azure DevOps pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_create_pull_request_status',
+        description: 'Post a status (e.g. a build result) to an Azure DevOps '
+            'pull request',
+        integration: 'ado',
+        category: 'pull_requests',
+        params: [
+          _projectParam(),
+          _numberParam('prId', 'The pull request ID'),
+          ToolParam(
+            name: 'state',
+            description: 'The status state: pending, succeeded, or failed',
+          ),
+          ToolParam(
+            name: 'description',
+            description: 'The status description',
+          ),
+          ToolParam(
+            name: 'context',
+            description: 'The status context name, e.g. ci/build',
+          ),
         ],
       ),
     ];
@@ -363,6 +457,32 @@ class AdoToolExecutor {
           a['project'] as String,
           _num(a, 'prId'),
           a['reviewerId'] as String,
+        ),
+    'ado_update_pull_request': (a) => _client.updatePullRequest(
+          a['project'] as String,
+          _num(a, 'prId'),
+          a['title'] as String,
+          a['description'] as String,
+        ),
+    'ado_get_pull_request_commits': (a) => _client.getPullRequestCommits(
+          a['project'] as String,
+          _num(a, 'prId'),
+        ),
+    'ado_get_pull_request_statuses': (a) => _client.getPullRequestStatuses(
+          a['project'] as String,
+          _num(a, 'prId'),
+        ),
+    'ado_create_pull_request_status': (a) => _client.createPullRequestStatus(
+          a['project'] as String,
+          _num(a, 'prId'),
+          a['state'] as String,
+          a['description'] as String,
+          a['context'] as String,
+        ),
+    'ado_get_work_item_comments': (a) => _client.getWorkItemComments(_id(a)),
+    'ado_add_work_item_comment': (a) => _client.addWorkItemComment(
+          _id(a),
+          a['text'] as String,
         ),
     'ado_create_repo': (a) => _client.createRepo(
           a['project'] as String,

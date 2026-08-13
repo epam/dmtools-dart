@@ -391,6 +391,113 @@ class GithubClient {
     return _decodeEmptyOk(body);
   }
 
+  /// `github_get_repo` — GET `/repos/{owner}/{repo}`.
+  Future<Map<String, dynamic>> getRepo(String owner, String repo) async {
+    final body = await _http.get('repos/$owner/$repo');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_update_pr` — PATCH `/repos/{owner}/{repo}/pulls/{number}`.
+  ///
+  /// Only the fields provided are sent, so [title] and [body] may each be
+  /// omitted to leave that field unchanged.
+  Future<Map<String, dynamic>> updatePullRequest(
+    String owner,
+    String repo,
+    int number, [
+    String? title,
+    String? body,
+  ]) async {
+    final payload = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+    };
+    final response = await _http.patch(
+      'repos/$owner/$repo/pulls/$number',
+      body: jsonEncode(payload),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_request_reviewers` — POST
+  /// `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers`.
+  Future<Map<String, dynamic>> requestReviewers(
+    String owner,
+    String repo,
+    int number,
+    List<String> reviewers,
+  ) async {
+    final response = await _http.post(
+      'repos/$owner/$repo/pulls/$number/requested_reviewers',
+      body: jsonEncode({'reviewers': reviewers}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_dismiss_review` — PUT
+  /// `/repos/{owner}/{repo}/pulls/{number}/reviews/{reviewId}/dismissals`.
+  Future<Map<String, dynamic>> dismissReview(
+    String owner,
+    String repo,
+    int number,
+    int reviewId,
+    String message,
+  ) async {
+    final response = await _http.put(
+      'repos/$owner/$repo/pulls/$number/reviews/$reviewId/dismissals',
+      body: jsonEncode({'message': message}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_get_workflow_runs` — GET `/repos/{owner}/{repo}/actions/runs`.
+  Future<Map<String, dynamic>> getWorkflowRuns(
+      String owner, String repo) async {
+    final body = await _http.get('repos/$owner/$repo/actions/runs');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_rerun_workflow` — POST
+  /// `/repos/{owner}/{repo}/actions/runs/{runId}/rerun`.
+  ///
+  /// Returns an empty map on GitHub's empty 201 response body.
+  Future<Map<String, dynamic>> reRunWorkflow(
+    String owner,
+    String repo,
+    int runId,
+  ) async {
+    final body = await _http.post(
+      'repos/$owner/$repo/actions/runs/$runId/rerun',
+    );
+    return _decodeEmptyOk(body);
+  }
+
+  /// `github_get_check_runs` — GET
+  /// `/repos/{owner}/{repo}/commits/{ref}/check-runs`.
+  Future<Map<String, dynamic>> getCheckRuns(
+    String owner,
+    String repo,
+    String ref,
+  ) async {
+    final body = await _http.get('repos/$owner/$repo/commits/$ref/check-runs');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_get_tree` — GET `/repos/{owner}/{repo}/git/trees/{ref}`.
+  ///
+  /// Requests the full recursive tree (`recursive=1`).
+  Future<Map<String, dynamic>> getTree(
+    String owner,
+    String repo,
+    String ref,
+  ) async {
+    final body = await _http.get(
+      'repos/$owner/$repo/git/trees/$ref',
+      queryParams: {'recursive': '1'},
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// POSTs [endpoint] with [base] merged with an optional `body` field.
   Future<Map<String, dynamic>> _postWithOptionalBody(
     String endpoint,

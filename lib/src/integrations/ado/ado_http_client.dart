@@ -141,6 +141,12 @@ class AdoHttpClient extends BaseHttpClient {
         contentType: 'application/json-patch+json',
       );
 
+  /// PATCHes a JSON body, attaching the API version as a query parameter. Used
+  /// to update pull requests (ADO accepts a plain-JSON PATCH for PR fields).
+  @override
+  Future<String> patch(String path, {Object? body}) =>
+      _request('PATCH', path, body: body);
+
   /// PATCHes a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item updates.
   Future<String> patchPatch(String path, {Object? body}) => _request(

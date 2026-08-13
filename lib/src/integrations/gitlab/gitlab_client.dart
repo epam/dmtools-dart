@@ -178,6 +178,44 @@ class GitlabClient {
         'projects/${_encodeProject(project)}/merge_requests/$iid/notes',
       );
 
+  /// `gitlab_get_mr_approvals` — GET
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/approvals`.
+  ///
+  /// Returns the merge-request approval state, or `null` for non-object
+  /// bodies.
+  Future<Map<String, dynamic>?> getMrApprovals(String project, int iid) =>
+      _getObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/approvals',
+      );
+
+  /// `gitlab_get_mr_discussions` — GET
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/discussions`.
+  Future<List<Map<String, dynamic>>> getMrDiscussions(
+    String project,
+    int iid,
+  ) =>
+      _getList(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/discussions',
+      );
+
+  /// `gitlab_trigger_mr_discussion_resolve` — PUT
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/discussions/{discussionId}`
+  /// with `resolved` in the body.
+  ///
+  /// [resolved] resolves the discussion when true, unresolves it when false.
+  /// Returns the updated discussion, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> triggerMrDiscussionResolve(
+    String project,
+    int iid,
+    String discussionId,
+    bool resolved,
+  ) =>
+      _putObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid'
+        '/discussions/$discussionId',
+        jsonEncode({'resolved': resolved}),
+      );
+
   /// `gitlab_get_issue` — GET `/api/v4/projects/{id}/issues/{iid}`.
   ///
   /// Returns `null` for non-object bodies.
@@ -301,4 +339,14 @@ class GitlabClient {
   /// `gitlab_get_group_members` — GET `/api/v4/groups/{id}/members`.
   Future<List<Map<String, dynamic>>> getGroupMembers(String groupId) =>
       _getList('groups/${Uri.encodeComponent(groupId)}/members');
+
+  /// `gitlab_get_project_details` — GET `/api/v4/projects/{id}`.
+  ///
+  /// Returns the project object, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> getProjectDetails(String project) =>
+      _getObject('projects/${_encodeProject(project)}');
+
+  /// `gitlab_get_project_variables` — GET `/api/v4/projects/{id}/variables`.
+  Future<List<Map<String, dynamic>>> getProjectVariables(String project) =>
+      _getList('projects/${_encodeProject(project)}/variables');
 }

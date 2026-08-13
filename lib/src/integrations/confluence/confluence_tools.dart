@@ -19,12 +19,14 @@ List<ToolDefinition> confluenceTools() => [
       ..._pageDeleteTools(),
       ..._searchTools(),
       ..._spaceTools(),
+      ..._spaceContentTools(),
       ..._labelTools(),
       ..._attachmentTools(),
       ..._blogTools(),
       ..._contentTools(),
       ..._pageLifecycleTools(),
       ..._permissionTools(),
+      ..._propertyTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -212,6 +214,47 @@ List<ToolDefinition> _spaceTools() => [
       ),
     ];
 
+/// Space-content tools: `confluence_get_space_content` /
+/// `confluence_create_space`.
+List<ToolDefinition> _spaceContentTools() => [
+      ToolDefinition(
+        name: 'confluence_get_space_content',
+        description: 'List all content of a given type in a Confluence space',
+        integration: 'confluence',
+        category: 'space',
+        params: [
+          ToolParam(
+            name: 'spaceKey',
+            description: 'The Confluence space key (e.g. ENG)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'type',
+            description: 'The content type to list (e.g. page, blogpost)',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_create_space',
+        description: 'Create a new Confluence space with a key and name',
+        integration: 'confluence',
+        category: 'space',
+        params: [
+          ToolParam(
+            name: 'key',
+            description: 'The space key (e.g. ENG)',
+            required: true,
+          ),
+          ToolParam(
+            name: 'name',
+            description: 'The human-readable space name',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Attachment tool: `confluence_get_page_attachments`.
 List<ToolDefinition> _attachmentTools() => [
       ToolDefinition(
@@ -332,6 +375,19 @@ List<ToolDefinition> _pageLifecycleTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'confluence_archive_page',
+        description: 'Archive a Confluence page by id',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
     ];
 
 /// Permission tools: `confluence_get_permissions` /
@@ -364,6 +420,47 @@ List<ToolDefinition> _permissionTools() => [
           ToolParam(
             name: 'permission',
             description: 'The permission entry as a JSON object',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Property tools: `confluence_get_page_properties` /
+/// `confluence_set_page_property`.
+List<ToolDefinition> _propertyTools() => [
+      ToolDefinition(
+        name: 'confluence_get_page_properties',
+        description: 'List content properties on a Confluence page',
+        integration: 'confluence',
+        category: 'properties',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_set_page_property',
+        description: 'Set a content property on a Confluence page',
+        integration: 'confluence',
+        category: 'properties',
+        params: [
+          ToolParam(
+            name: 'id',
+            description: 'The Confluence page id',
+            required: true,
+          ),
+          ToolParam(
+            name: 'key',
+            description: 'The property key',
+            required: true,
+          ),
+          ToolParam(
+            name: 'value',
+            description: 'The property value as a JSON object',
             required: true,
           ),
         ],
@@ -440,6 +537,22 @@ class ConfluenceToolExecutor {
     'confluence_add_permission': (a) => _client.addPermission(
           a['spaceKey'] as String,
           a['permission'] as Map<String, dynamic>,
+        ),
+    'confluence_get_space_content': (a) => _client.getSpaceContent(
+          a['spaceKey'] as String,
+          a['type'] as String,
+        ),
+    'confluence_create_space': (a) => _client.createSpace(
+          a['key'] as String,
+          a['name'] as String,
+        ),
+    'confluence_archive_page': (a) => _client.archivePage(a['id'] as String),
+    'confluence_get_page_properties': (a) =>
+        _client.getPageProperties(a['id'] as String),
+    'confluence_set_page_property': (a) => _client.setPageProperty(
+          a['id'] as String,
+          a['key'] as String,
+          a['value'] as Map<String, dynamic>,
         ),
   };
 }

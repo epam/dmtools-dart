@@ -9,6 +9,7 @@ void main() {
   toolCatalogShapeTests();
   toolCatalogParamTests();
   executorDispatchTests();
+  batch2ExecutorDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -20,10 +21,13 @@ void toolCatalogShapeTests() {
   group('xrayTools catalog', () {
     final tools = xrayTools();
 
-    test('registers the three tools in declaration order', () {
+    test('registers the six tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jira_xray_test',
         'jira_xray_get_tests',
+        'jira_xray_get_test_executions',
+        'jira_xray_get_test_steps',
+        'jira_xray_get_test_plan',
         'jira_xray_create_test_execution',
       ]);
     });
@@ -55,6 +59,27 @@ void toolCatalogParamTests() {
     expect(tool.params[0].type, 'string');
     expect(tool.params[1].type, 'object');
     expect(tool.params.every((p) => p.required), isTrue);
+  });
+
+  test('jira_xray_get_test_executions requires a testKey', () {
+    final tool = toolNamed('jira_xray_get_test_executions');
+    expect(tool.category, 'test_management');
+    expect(tool.params.map((p) => p.name), ['testKey']);
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('jira_xray_get_test_steps requires a testKey', () {
+    final tool = toolNamed('jira_xray_get_test_steps');
+    expect(tool.category, 'test_management');
+    expect(tool.params.map((p) => p.name), ['testKey']);
+    expect(tool.params.single.required, isTrue);
+  });
+
+  test('jira_xray_get_test_plan requires a testPlanKey', () {
+    final tool = toolNamed('jira_xray_get_test_plan');
+    expect(tool.category, 'test_management');
+    expect(tool.params.map((p) => p.name), ['testPlanKey']);
+    expect(tool.params.single.required, isTrue);
   });
 }
 
@@ -107,6 +132,36 @@ void executorDispatchTests() {
   });
 }
 
+/// Batch-2 executor dispatch tests for the new Xray read tools.
+void batch2ExecutorDispatchTests() {
+  group('XrayToolExecutor.execute batch-2', () {
+    late _SpyXrayClient spy;
+    late XrayToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyXrayClient(mockXrayHttp((o) => '{}').http);
+      executor = XrayToolExecutor(spy);
+    });
+
+    test('routes jira_xray_get_test_executions with a testKey', () async {
+      await executor
+          .execute('jira_xray_get_test_executions', {'testKey': 'PROJ-1'});
+      expect(spy.calls, ['getTestExecutions:PROJ-1']);
+    });
+
+    test('routes jira_xray_get_test_steps with a testKey', () async {
+      await executor.execute('jira_xray_get_test_steps', {'testKey': 'PROJ-1'});
+      expect(spy.calls, ['getTestSteps:PROJ-1']);
+    });
+
+    test('routes jira_xray_get_test_plan with a testPlanKey', () async {
+      await executor
+          .execute('jira_xray_get_test_plan', {'testPlanKey': 'PROJ-100'});
+      expect(spy.calls, ['getTestPlan:PROJ-100']);
+    });
+  });
+}
+
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyXrayClient extends XrayClient {
   _SpyXrayClient(super.http);
@@ -132,5 +187,23 @@ class _SpyXrayClient extends XrayClient {
   ) {
     calls.add('createTestExecution:$projectKey:$testExecJson');
     return super.createTestExecution(projectKey, testExecJson);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTestExecutions(String testKey) {
+    calls.add('getTestExecutions:$testKey');
+    return super.getTestExecutions(testKey);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getTestSteps(String testKey) {
+    calls.add('getTestSteps:$testKey');
+    return super.getTestSteps(testKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getTestPlan(String testPlanKey) {
+    calls.add('getTestPlan:$testPlanKey');
+    return super.getTestPlan(testPlanKey);
   }
 }

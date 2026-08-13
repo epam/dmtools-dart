@@ -159,7 +159,7 @@ void _testList() {
       expect(_dispatcher.dispatch(['list']), 0);
       final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
       final tools = decoded['tools'] as List;
-      expect(tools.length, 233);
+      expect(tools.length, 265);
       final names = tools
           .map((t) => (t as Map<String, dynamic>)['name'] as String)
           .toSet();

@@ -4,6 +4,7 @@
 /// All operations use `dart:io` directly.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import '../../mcp/tool_definition.dart';
@@ -25,6 +26,10 @@ List<ToolDefinition> fileTools() => [
       _writeLinesTool(),
       _appendTool(),
       _infoTool(),
+      _readJsonTool(),
+      _writeJsonTool(),
+      _existsInPathTool(),
+      _getSizeTool(),
     ];
 
 /// `file_read` — read the contents of a text file.
@@ -164,6 +169,56 @@ ToolDefinition _infoTool() => ToolDefinition(
       ],
     );
 
+/// `file_read_json` — read a file and parse it as JSON.
+ToolDefinition _readJsonTool() => ToolDefinition(
+      name: 'file_read_json',
+      description: 'Read a file and parse it as JSON',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to read'),
+      ],
+    );
+
+/// `file_write_json` — serialize a map to a file as JSON.
+ToolDefinition _writeJsonTool() => ToolDefinition(
+      name: 'file_write_json',
+      description: 'Write a map to a file as JSON',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to write'),
+        ToolParam(
+          name: 'data',
+          description: 'The map to serialize',
+          type: 'object',
+        ),
+      ],
+    );
+
+/// `file_exists_in_path` — search for a file by name within a directory tree.
+ToolDefinition _existsInPathTool() => ToolDefinition(
+      name: 'file_exists_in_path',
+      description: 'Search for a file by name within a directory tree',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'Root directory to search'),
+        ToolParam(name: 'filename', description: 'File name to find'),
+      ],
+    );
+
+/// `file_get_size` — return the size of a file in bytes.
+ToolDefinition _getSizeTool() => ToolDefinition(
+      name: 'file_get_size',
+      description: 'Return the size of a file in bytes',
+      integration: 'file',
+      category: 'filesystem',
+      params: [
+        ToolParam(name: 'path', description: 'File path to measure'),
+      ],
+    );
+
 /// Executes file MCP tools using `dart:io`.
 ///
 /// Each method performs a single file-system operation; [execute] dispatches
@@ -251,6 +306,31 @@ class FileToolExecutor {
     };
   }
 
+  /// Reads the file at [path] and returns its decoded JSON value.
+  Future<dynamic> readJson(String path) async {
+    final content = await File(path).readAsString();
+    return jsonDecode(content);
+  }
+
+  /// Encodes [data] as JSON and writes it to the file at [path].
+  Future<void> writeJson(String path, Map<String, dynamic> data) =>
+      File(path).writeAsString(jsonEncode(data));
+
+  /// Returns `true` if a file named [filename] exists under [path].
+  Future<bool> existsInPath(String path, String filename) async {
+    final dir = Directory(path);
+    if (!dir.existsSync()) return false;
+    await for (final entry in dir.list(recursive: true)) {
+      if (entry is File && entry.uri.pathSegments.last == filename) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Returns the size of the file at [path] in bytes.
+  Future<int> getSize(String path) => File(path).length();
+
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
@@ -269,5 +349,15 @@ class FileToolExecutor {
         ),
     'file_append': (a) => append(a['path'] as String, a['content'] as String),
     'file_info': (a) => getFileInfo(a['path'] as String),
+    'file_read_json': (a) => readJson(a['path'] as String),
+    'file_write_json': (a) => writeJson(
+          a['path'] as String,
+          (a['data'] as Map).cast<String, dynamic>(),
+        ),
+    'file_exists_in_path': (a) => existsInPath(
+          a['path'] as String,
+          a['filename'] as String,
+        ),
+    'file_get_size': (a) => getSize(a['path'] as String),
   };
 }

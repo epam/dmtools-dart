@@ -252,6 +252,78 @@ class AdoClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// `ado_update_pull_request` — PATCH `git/pullrequests/{prId}` with the new
+  /// [title] and [description] as a plain-JSON body.
+  ///
+  /// The [project] argument mirrors the Java tool surface; the request is
+  /// scoped to the project configured on this client.
+  Future<Map<String, dynamic>> updatePullRequest(
+    String project,
+    int prId,
+    String title,
+    String description,
+  ) async {
+    final body = await _http.patch(
+      'git/pullrequests/$prId',
+      body: jsonEncode({'title': title, 'description': description}),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_pull_request_commits` — GET `git/pullrequests/{prId}/commits`.
+  Future<List<Map<String, dynamic>>> getPullRequestCommits(
+    String project,
+    int prId,
+  ) async {
+    final body = await _http.get('git/pullrequests/$prId/commits');
+    return _decodeList(body);
+  }
+
+  /// `ado_get_pull_request_statuses` — GET `git/pullrequests/{prId}/statuses`.
+  Future<List<Map<String, dynamic>>> getPullRequestStatuses(
+    String project,
+    int prId,
+  ) async {
+    final body = await _http.get('git/pullrequests/$prId/statuses');
+    return _decodeList(body);
+  }
+
+  /// `ado_create_pull_request_status` — POST `git/pullrequests/{prId}/statuses`
+  /// with [state], [description], and [context] as the status context name.
+  Future<Map<String, dynamic>> createPullRequestStatus(
+    String project,
+    int prId,
+    String state,
+    String description,
+    String context,
+  ) async {
+    final body = await _http.post(
+      'git/pullrequests/$prId/statuses',
+      body: jsonEncode({
+        'state': state,
+        'description': description,
+        'context': {'name': context},
+      }),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `ado_get_work_item_comments` — GET `wit/workitems/{id}/comments`.
+  Future<List<Map<String, dynamic>>> getWorkItemComments(int id) async {
+    final body = await _http.get('wit/workitems/$id/comments');
+    return _decodeList(body);
+  }
+
+  /// `ado_add_work_item_comment` — POST `wit/workitems/{id}/comments` with
+  /// `{"text": text}` (mirrors the Java `postComment` body).
+  Future<Map<String, dynamic>> addWorkItemComment(int id, String text) async {
+    final body = await _http.post(
+      'wit/workitems/$id/comments',
+      body: jsonEncode({'text': text}),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// Decodes a JSON array body into a list of typed maps.
   List<Map<String, dynamic>> _decodeList(String body) =>
       (jsonDecode(body) as List)

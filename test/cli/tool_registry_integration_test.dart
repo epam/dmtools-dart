@@ -66,7 +66,7 @@ void _testCatalogMembership() {
 void _testCounts() {
   group('counts', () {
     test('has the expected total tool count', () {
-      expect(_registry.allTools.length, 233);
+      expect(_registry.allTools.length, 265);
     });
 
     test('per-integration counts sum to the total', () {

@@ -9,13 +9,17 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'github_client.dart';
 
+part 'github_tools_batch4.dart';
+
 /// Returns all GitHub MCP tool definitions.
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> githubTools() => [
       ..._systemTools(),
+      ..._repositoryTools(),
       ..._pullRequestTools(),
       ..._prStateTools(),
+      ..._prUpdateTools(),
       ..._reviewTools(),
       ..._commentTools(),
       ..._issueTools(),
@@ -23,7 +27,11 @@ List<ToolDefinition> githubTools() => [
       ..._fileTools(),
       ..._releaseTools(),
       ..._commitTools(),
+      ..._actionsTools(),
     ];
+
+/// Repository, PR-update, and Actions catalog functions live in
+/// `github_tools_batch4.dart` (split for file-size).
 
 /// Connectivity-check tool: `github_test`.
 List<ToolDefinition> _systemTools() => [
@@ -259,7 +267,7 @@ List<ToolDefinition> _prStateTools() => [
       ),
     ];
 
-/// Review tool: `github_create_review`.
+/// Review tools: `github_create_review`, `github_dismiss_review`.
 List<ToolDefinition> _reviewTools() => [
       ToolDefinition(
         name: 'github_create_review',
@@ -278,6 +286,28 @@ List<ToolDefinition> _reviewTools() => [
           ToolParam(
             name: 'event',
             description: 'Review event: APPROVE, REQUEST_CHANGES, or COMMENT',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'github_dismiss_review',
+        description: 'Dismiss a review on a GitHub pull request',
+        integration: 'github',
+        category: 'reviews',
+        params: [
+          _ownerParam(),
+          _repoParam(),
+          _numberParam('The pull request number'),
+          ToolParam(
+            name: 'review_id',
+            description: 'The id of the review to dismiss',
+            type: 'number',
+            required: true,
+          ),
+          ToolParam(
+            name: 'message',
+            description: 'The dismissal message',
             required: true,
           ),
         ],
@@ -655,6 +685,49 @@ class GithubToolExecutor {
           a['owner'] as String,
           a['repo'] as String,
           a['sha'] as String?,
+        ),
+    'github_get_repo': (a) => _client.getRepo(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_update_pr': (a) => _client.updatePullRequest(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          a['title'] as String?,
+          a['body'] as String?,
+        ),
+    'github_request_reviewers': (a) => _client.requestReviewers(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          (a['reviewers'] as List).cast<String>(),
+        ),
+    'github_dismiss_review': (a) => _client.dismissReview(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'number'),
+          requiredInt(a, 'review_id'),
+          a['message'] as String,
+        ),
+    'github_get_workflow_runs': (a) => _client.getWorkflowRuns(
+          a['owner'] as String,
+          a['repo'] as String,
+        ),
+    'github_rerun_workflow': (a) => _client.reRunWorkflow(
+          a['owner'] as String,
+          a['repo'] as String,
+          requiredInt(a, 'run_id'),
+        ),
+    'github_get_check_runs': (a) => _client.getCheckRuns(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['ref'] as String,
+        ),
+    'github_get_tree': (a) => _client.getTree(
+          a['owner'] as String,
+          a['repo'] as String,
+          a['ref'] as String,
         ),
   };
 }

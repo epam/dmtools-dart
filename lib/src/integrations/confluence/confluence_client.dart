@@ -250,6 +250,62 @@ class ConfluenceClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// `confluence_get_space_content` — GET `space/{key}/content/{type}`.
+  ///
+  /// Returns all content of [contentType] (e.g. `page`) in the space with
+  /// [spaceKey], at every depth.
+  Future<List<Map<String, dynamic>>> getSpaceContent(
+    String spaceKey,
+    String contentType,
+  ) =>
+      _getList('space/$spaceKey/content/$contentType',
+          queryParams: {'depth': 'all'});
+
+  /// `confluence_create_space` — POST `space`.
+  ///
+  /// Creates a new space with [key] and [name]; returns the created space
+  /// object from the API.
+  Future<Map<String, dynamic>> createSpace(String key, String name) async {
+    final body = await _http.post(
+      'space',
+      body: jsonEncode(_createSpacePayload(key, name)),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_archive_page` — PUT `content/{id}` with status `archived`.
+  ///
+  /// Archives the page with [id]; returns the response object from the API.
+  Future<Map<String, dynamic>> archivePage(String id) async {
+    final body = await _http.put(
+      'content/$id',
+      body: jsonEncode(_archivePayload(id)),
+    );
+    return body.isEmpty ? {} : jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_page_properties` — GET `content/{id}/property`.
+  ///
+  /// Returns the content properties of the page with [id].
+  Future<List<Map<String, dynamic>>> getPageProperties(String id) =>
+      _getList('content/$id/property');
+
+  /// `confluence_set_page_property` — POST `content/{id}/property`.
+  ///
+  /// Sets the content property [key] to [value] on the page with [id];
+  /// returns the created property object from the API.
+  Future<Map<String, dynamic>> setPageProperty(
+    String id,
+    String key,
+    Map<String, dynamic> value,
+  ) async {
+    final body = await _http.post(
+      'content/$id/property',
+      body: jsonEncode(_propertyPayload(key, value)),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// GET helper: fetches [path] and returns its `results` array as typed maps.
   Future<List<Map<String, dynamic>>> _getList(
     String path, {
@@ -283,4 +339,19 @@ class ConfluenceClient {
   Map<String, dynamic> _movePayload(String targetId) => {
         'target': {'id': targetId}
       };
+
+  /// Builds the create-space payload with [key] and [name].
+  Map<String, dynamic> _createSpacePayload(String key, String name) =>
+      {'key': key, 'name': name};
+
+  /// Builds the archive payload setting the page status to `archived`.
+  Map<String, dynamic> _archivePayload(String id) =>
+      {'id': id, 'type': 'page', 'status': 'archived'};
+
+  /// Builds the content-property payload for POST `content/{id}/property`.
+  Map<String, dynamic> _propertyPayload(
+    String key,
+    Map<String, dynamic> value,
+  ) =>
+      {'key': key, 'value': value};
 }

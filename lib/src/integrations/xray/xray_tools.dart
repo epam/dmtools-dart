@@ -32,6 +32,7 @@ ToolDefinition _xrayTool({
 List<ToolDefinition> xrayTools() => [
       ..._systemTools(),
       ..._testReadTools(),
+      ..._testPlanTools(),
       ..._executionTools(),
     ];
 
@@ -44,7 +45,8 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// Test-read tool: `jira_xray_get_tests`.
+/// Test-read tools: `jira_xray_get_tests`, `jira_xray_get_test_executions`,
+/// `jira_xray_get_test_steps`.
 List<ToolDefinition> _testReadTools() => [
       _xrayTool(
         name: 'jira_xray_get_tests',
@@ -54,6 +56,43 @@ List<ToolDefinition> _testReadTools() => [
             name: 'testKeys',
             description: 'Comma-separated test keys (e.g. PROJ-1,PROJ-2)',
             type: 'array',
+            required: true,
+          ),
+        ],
+      ),
+      _xrayTool(
+        name: 'jira_xray_get_test_executions',
+        description: 'Get the test executions that contain a given test',
+        params: [
+          ToolParam(
+            name: 'testKey',
+            description: 'The test issue key (e.g. PROJ-1)',
+            required: true,
+          ),
+        ],
+      ),
+      _xrayTool(
+        name: 'jira_xray_get_test_steps',
+        description: 'Get the steps of a given Xray test',
+        params: [
+          ToolParam(
+            name: 'testKey',
+            description: 'The test issue key (e.g. PROJ-1)',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
+/// Test-plan tool: `jira_xray_get_test_plan`.
+List<ToolDefinition> _testPlanTools() => [
+      _xrayTool(
+        name: 'jira_xray_get_test_plan',
+        description: 'Get a Xray test plan by its key',
+        params: [
+          ToolParam(
+            name: 'testPlanKey',
+            description: 'The test plan issue key (e.g. PROJ-100)',
             required: true,
           ),
         ],
@@ -119,6 +158,12 @@ class XrayToolExecutor {
     'jira_xray_test': (_) => _client.testConnection(),
     'jira_xray_get_tests': (a) =>
         _client.getTests(_parseStringList(a['testKeys'])),
+    'jira_xray_get_test_executions': (a) =>
+        _client.getTestExecutions(a['testKey'] as String),
+    'jira_xray_get_test_steps': (a) =>
+        _client.getTestSteps(a['testKey'] as String),
+    'jira_xray_get_test_plan': (a) =>
+        _client.getTestPlan(a['testPlanKey'] as String),
     'jira_xray_create_test_execution': (a) => _client.createTestExecution(
           a['projectKey'] as String,
           a['testExecJson'] as Map<String, dynamic>,

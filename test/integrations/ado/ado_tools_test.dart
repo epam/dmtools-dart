@@ -7,6 +7,7 @@ import 'ado_test_support.dart';
 /// Tests for the [adoTools] catalog and [AdoToolExecutor] dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
+  catalogOrderTests();
   catalogTests();
   executorRoutingTests();
   executorEdgeCaseTests();
@@ -23,8 +24,9 @@ String _spyRouter(RequestOptions o) {
 }
 
 /// Catalog shape: tool count, order, integration, and params.
-void catalogTests() {
-  group('adoTools catalog', () {
+/// Asserts the full ADO tool catalog in declaration order.
+void catalogOrderTests() {
+  group('adoTools catalog order', () {
     final tools = adoTools();
 
     test('registers all tools in declaration order', () {
@@ -37,6 +39,8 @@ void catalogTests() {
         'ado_get_work_items',
         'ado_list_work_items',
         'ado_get_work_item_types',
+        'ado_get_work_item_comments',
+        'ado_add_work_item_comment',
         'ado_get_teams',
         'ado_get_team_members',
         'ado_get_project_properties',
@@ -44,6 +48,10 @@ void catalogTests() {
         'ado_get_pr',
         'ado_get_pull_request_reviewers',
         'ado_add_pull_request_reviewer',
+        'ado_update_pull_request',
+        'ado_get_pull_request_commits',
+        'ado_get_pull_request_statuses',
+        'ado_create_pull_request_status',
         'ado_create_repo',
         'ado_get_repos',
         'ado_get_repo_branches',
@@ -52,6 +60,13 @@ void catalogTests() {
         'ado_trigger_build',
       ]);
     });
+  });
+}
+
+/// Catalog shape: integration and per-tool param assertions.
+void catalogTests() {
+  group('adoTools catalog', () {
+    final tools = adoTools();
 
     test('every tool belongs to the ado integration', () {
       expect(tools.every((t) => t.integration == 'ado'), isTrue);

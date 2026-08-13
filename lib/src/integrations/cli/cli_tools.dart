@@ -28,7 +28,7 @@ const Set<String> defaultAllowedCommands = {
   'az',
 };
 
-/// Returns the CLI MCP tool definition.
+/// Returns the CLI MCP tool definitions.
 List<ToolDefinition> cliTools() => [
       ToolDefinition(
         name: 'cli_execute_command',
@@ -41,6 +41,27 @@ List<ToolDefinition> cliTools() => [
             name: 'args',
             description: 'Arguments to pass to the command',
             type: 'array',
+            required: false,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'cli_execute_command_with_env',
+        description: 'Execute a whitelisted CLI command with extra env vars',
+        integration: 'cli',
+        category: 'system',
+        params: [
+          ToolParam(name: 'command', description: 'The CLI command to run'),
+          ToolParam(
+            name: 'args',
+            description: 'Arguments to pass to the command',
+            type: 'array',
+            required: false,
+          ),
+          ToolParam(
+            name: 'env_vars',
+            description: 'Extra environment variables for the process',
+            type: 'object',
             required: false,
           ),
         ],
@@ -86,30 +107,70 @@ class CliToolExecutor {
       throw ArgumentError('Command not allowed: $command');
     }
     final result = await Process.run(command, args ?? const []);
-    return {
-      'stdout': result.stdout.toString(),
-      'stderr': result.stderr.toString(),
-      'exitCode': result.exitCode,
-    };
+    return _resultMap(result);
   }
 
-  /// Dispatches [toolName] with [args] to [executeCommand].
+  /// Executes [command] with [args] and extra [envVars] via [Process.run].
+  ///
+  /// Returns a map with `stdout`, `stderr`, and `exitCode`.
+  /// Throws [ArgumentError] if the command is not whitelisted.
+  Future<Map<String, dynamic>> executeCommandWithEnv(
+    String command, [
+    List<String>? args,
+    Map<String, String>? envVars,
+  ]) async {
+    if (!isAllowed(command)) {
+      throw ArgumentError('Command not allowed: $command');
+    }
+    final result = await Process.run(
+      command,
+      args ?? const [],
+      environment: envVars,
+    );
+    return _resultMap(result);
+  }
+
+  Map<String, dynamic> _resultMap(ProcessResult result) => {
+        'stdout': result.stdout.toString(),
+        'stderr': result.stderr.toString(),
+        'exitCode': result.exitCode,
+      };
+
+  /// Dispatches [toolName] with [args] to the matching CLI executor method.
   ///
   /// Throws [ArgumentError] for an unknown CLI tool name.
   Future<Map<String, dynamic>> execute(
     String toolName,
     Map<String, dynamic> args,
-  ) {
-    if (toolName != 'cli_execute_command') {
+  ) async {
+    final handler = _handlers[toolName];
+    if (handler == null) {
       throw ArgumentError('Unknown CLI tool: $toolName');
     }
-    final command = args['command'] as String;
-    final cmdArgs = _parseArgs(args['args']);
-    return executeCommand(command, cmdArgs);
+    return handler(args);
   }
 
   List<String> _parseArgs(dynamic value) {
     if (value is List) return value.cast<String>();
     return const [];
   }
+
+  Map<String, String> _parseEnv(dynamic value) {
+    if (value is Map) return value.cast<String, String>();
+    return const {};
+  }
+
+  /// Tool-name → handler dispatch table, mirroring the Java method routing.
+  late final Map<String,
+      Future<Map<String, dynamic>> Function(Map<String, dynamic>)> _handlers = {
+    'cli_execute_command': (a) => executeCommand(
+          a['command'] as String,
+          _parseArgs(a['args']),
+        ),
+    'cli_execute_command_with_env': (a) => executeCommandWithEnv(
+          a['command'] as String,
+          _parseArgs(a['args']),
+          _parseEnv(a['env_vars']),
+        ),
+  };
 }

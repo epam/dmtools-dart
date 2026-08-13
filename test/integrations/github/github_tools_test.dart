@@ -18,6 +18,44 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     githubTools().firstWhere((t) => t.name == name);
 
+/// Expected tool names in declaration order.
+const _githubToolNames = [
+  'github_test',
+  'github_get_repo',
+  'github_get_tree',
+  'github_get_pr',
+  'github_list_prs',
+  'github_create_pr',
+  'github_merge_pr',
+  'github_close_pr',
+  'github_reopen_pr',
+  'github_get_pr_diff',
+  'github_get_pr_files',
+  'github_update_pr',
+  'github_request_reviewers',
+  'github_create_review',
+  'github_dismiss_review',
+  'github_create_comment',
+  'github_get_issue',
+  'github_create_issue',
+  'github_close_issue',
+  'github_add_labels',
+  'github_remove_label',
+  'github_list_branches',
+  'github_create_branch',
+  'github_delete_branch',
+  'github_get_file_content',
+  'github_update_file',
+  'github_list_releases',
+  'github_get_release',
+  'github_create_release',
+  'github_get_commit',
+  'github_list_commits',
+  'github_get_workflow_runs',
+  'github_rerun_workflow',
+  'github_get_check_runs',
+];
+
 /// Serves `[]` for the PR-list GET (expects a JSON array), `{}` otherwise.
 String _spyRouter(RequestOptions o) {
   if (o.method == 'GET' && o.path.endsWith('/pulls')) return '[]';
@@ -29,35 +67,8 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the twenty-six tools in declaration order', () {
-      expect(tools.map((t) => t.name), [
-        'github_test',
-        'github_get_pr',
-        'github_list_prs',
-        'github_create_pr',
-        'github_merge_pr',
-        'github_close_pr',
-        'github_reopen_pr',
-        'github_get_pr_diff',
-        'github_get_pr_files',
-        'github_create_review',
-        'github_create_comment',
-        'github_get_issue',
-        'github_create_issue',
-        'github_close_issue',
-        'github_add_labels',
-        'github_remove_label',
-        'github_list_branches',
-        'github_create_branch',
-        'github_delete_branch',
-        'github_get_file_content',
-        'github_update_file',
-        'github_list_releases',
-        'github_get_release',
-        'github_create_release',
-        'github_get_commit',
-        'github_list_commits',
-      ]);
+    test('registers the thirty-four tools in declaration order', () {
+      expect(tools.map((t) => t.name), _githubToolNames);
     });
 
     test('every tool belongs to the github integration', () {

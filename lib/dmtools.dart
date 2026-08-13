@@ -9,6 +9,7 @@ export 'src/agents/cli_agent_params.dart';
 export 'src/agents/cli_command_builder.dart';
 export 'src/agents/cli_execution_helper.dart';
 export 'src/agents/instruction_processor.dart';
+export 'src/agents/ticket_input_context_builder.dart';
 export 'src/cli/cli_args.dart';
 export 'src/cli/cli_dispatcher.dart';
 export 'src/cli/config_merger.dart';

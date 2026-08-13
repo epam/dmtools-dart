@@ -22,6 +22,7 @@ void main() {
   lifecycleContextTests();
   lifecycleEnvTests();
   lifecycleJsActionTests();
+  lifecycleTicketDataTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -738,6 +739,47 @@ void factoryTests() {
 
     test('throws ArgumentError for unknown', () {
       expect(() => AgentFactory.create('nope', {}), throwsArgumentError);
+    });
+  });
+}
+
+void lifecycleTicketDataTests() {
+  group('CliAgent ticket data', () {
+    test('writes ticket.md to input context when ticketData is set', () async {
+      final tmp = await _createTempDir();
+      try {
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+          ticketData: {
+            'key': 'PROJ-7',
+            'fields': {'summary': 'Ship it', 'description': 'Final polish.'},
+          },
+        )).run();
+        final dir = '${tmp.path}/input/cli-agent';
+        expect(File('$dir/ticket.md').readAsStringSync(),
+            contains('# PROJ-7: Ship it'));
+        expect(File('$dir/ticket.json').existsSync(), isTrue);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('creates empty input context when ticketData is null', () async {
+      final tmp = await _createTempDir();
+      try {
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect(Directory('${tmp.path}/input/cli-agent').listSync(), isEmpty);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
     });
   });
 }

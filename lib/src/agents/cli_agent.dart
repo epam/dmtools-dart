@@ -25,6 +25,7 @@ import '../js/job_runner.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
+import 'ticket_input_context_builder.dart';
 
 /// Executes a CliAgent job — lightweight CLI-agent orchestrator.
 ///
@@ -36,11 +37,14 @@ class CliAgent {
   /// Creates a CliAgent with the given [params].
   ///
   /// - [workingDirectory] — overrides `params.workingDirectory` when set.
+  /// - [ticketData] — raw tracker ticket JSON for the input context; in a
+  ///   real run this is fetched from Jira/ADO via the tracker client.
   /// - [propertyReader] — property resolution; defaults to a new reader.
   /// - [jsRunner] — JS execution engine; defaults to [JsJobRunner].
   CliAgent({
     required this.params,
     this.workingDirectory,
+    this.ticketData,
     PropertyReader? propertyReader,
     JsJobRunner? jsRunner,
   })  : propertyReader = propertyReader ?? PropertyReader(),
@@ -52,6 +56,12 @@ class CliAgent {
   /// Working-directory override; when null, `params.workingDirectory` or
   /// the CWD is used.
   final String? workingDirectory;
+
+  /// Raw tracker ticket JSON used to populate the input context.
+  ///
+  /// When null (no tracker configured), the input context folder is created
+  /// empty — the ticket-agnostic behavior.
+  final Map<String, dynamic>? ticketData;
 
   /// Property reader for environment resolution.
   final PropertyReader propertyReader;
@@ -418,11 +428,17 @@ class CliAgent {
     }
   }
 
-  /// Creates the empty input context folder: `input/<contextId>/`.
+  /// Creates the input context folder: `input/<contextId>/`.
+  ///
+  /// When [ticketData] is set (fetched from a tracker), the folder is
+  /// populated with `ticket.md`, `ticket.json`, `subtasks/`, and
+  /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty folder
+  /// is created — the ticket-agnostic behavior.
   String _createInputContext(String workDir) {
-    final path = '$workDir/input/${params.contextId}';
-    Directory(path).createSync(recursive: true);
-    return path;
+    return TicketInputContextBuilder(workDir).build(
+      params.contextId,
+      ticketData: ticketData,
+    );
   }
 
   /// Ensures the `outputs/` folder exists before CLI commands run.

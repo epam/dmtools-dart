@@ -80,13 +80,17 @@ ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`
 all functional.
 
 **Remaining work** (diminishing returns, in priority order):
-1. Sync HTTP dispatch landed — [SyncHttpClient] + [SyncToolDispatcher] route
+1. Sync HTTP dispatch expanded — [SyncHttpClient] + [SyncToolDispatcher] route
    `jira_*` and `github_*` tool calls via curl subprocess within
-   NativeCallable callbacks. Supports `jira_get_ticket`, `jira_post_comment`,
-   `jira_search_by_jql`, `jira_add_label`, `jira_remove_label`,
-   `jira_move_to_status`, `github_get_pr`, `github_create_comment`. Other
-   integrations can be added to `SyncToolDispatcher._jiraFns` /
-   `_githubFns` dispatch maps.
+   NativeCallable callbacks. Jira tools: `jira_get_ticket`,
+   `jira_post_comment`, `jira_search_by_jql`, `jira_add_label`,
+   `jira_remove_label`, `jira_move_to_status`, `jira_get_comments`,
+   `jira_update_field`, `jira_update_description`, `jira_get_transitions`,
+   `jira_assign_to` (alias `jira_assign`), `jira_get_my_profile`,
+   `jira_delete_ticket`, `jira_create_ticket_basic` (alias
+   `jira_create_ticket`). GitHub tools: `github_get_pr`,
+   `github_create_comment`. File-system (`file_*`) and CLI (`cli_*`) tools
+   delegate to the host bridge via `SyncToolDispatcher.nonHttpHandler`.
 2. CliAgent timer/error/line JS actions, InstructionProcessor
 3. CI: agents suite job wired (quality.yml updated, continues-on-error until
    sync HTTP dispatch lands)

@@ -4,10 +4,17 @@
 /// It builds integration clients on the fly from [PropertyReader] config,
 /// makes blocking HTTP calls via [SyncHttpClient], and returns JSON results.
 ///
-/// Supported tools (initial set, per the sync-dispatch phase plan):
+/// Supported tools:
 /// - Jira: `jira_get_ticket`, `jira_post_comment`, `jira_search_by_jql`,
-///   `jira_add_label`, `jira_remove_label`, `jira_move_to_status`
+///   `jira_add_label`, `jira_remove_label`, `jira_move_to_status`,
+///   `jira_get_comments`, `jira_update_field`, `jira_update_description`,
+///   `jira_get_transitions`, `jira_assign_to` (alias `jira_assign`),
+///   `jira_get_my_profile`, `jira_delete_ticket`,
+///   `jira_create_ticket_basic` (alias `jira_create_ticket`)
 /// - GitHub: `github_get_pr`, `github_create_comment`
+///
+/// File-system (`file_*`) and CLI (`cli_*`) tools are not HTTP-based; they
+/// delegate to the host bridge's direct dispatch via [nonHttpHandler].
 ///
 /// URL shapes and headers mirror the async [JiraHttpClient] /
 /// [GithubHttpClient] transports (`/rest/api/latest`, `X-Atlassian-Token`,
@@ -30,12 +37,29 @@ typedef SyncToolFn = String Function(
   Map<String, dynamic>,
 );
 
+/// Executor for a non-HTTP (file/CLI) tool call: receives the raw [toolName]
+/// and [args], returns the JSON result string.
+typedef SyncNonHttpHandler = String Function(
+  String toolName,
+  Map<String, dynamic> args,
+);
+
 /// Routes tool calls to integration clients over synchronous HTTP.
+///
+/// Non-HTTP tools (file-system, CLI) are delegated to [nonHttpHandler] when
+/// provided; otherwise `execute` returns `null` for them.
 class SyncToolDispatcher {
   final PropertyReader _reader;
+  final SyncNonHttpHandler? _nonHttpHandler;
 
   /// Creates a dispatcher reading integration config from [reader].
-  SyncToolDispatcher(this._reader);
+  ///
+  /// The optional [nonHttpHandler] receives `file_*` and `cli_*` tool calls
+  /// so the dispatcher can serve as a single routing entry point.
+  SyncToolDispatcher(
+    this._reader, {
+    SyncNonHttpHandler? nonHttpHandler,
+  }) : _nonHttpHandler = nonHttpHandler;
 
   /// Jira tool executors; config is resolved once before dispatch.
   late final Map<String, SyncToolFn> _jiraFns = {
@@ -45,6 +69,16 @@ class SyncToolDispatcher {
     'jira_add_label': _jiraAddLabel,
     'jira_remove_label': _jiraRemoveLabel,
     'jira_move_to_status': _jiraMoveToStatus,
+    'jira_get_comments': _jiraGetComments,
+    'jira_update_field': _jiraUpdateField,
+    'jira_update_description': _jiraUpdateDescription,
+    'jira_get_transitions': _jiraGetTransitions,
+    'jira_assign_to': _jiraAssignTo,
+    'jira_assign': _jiraAssignTo,
+    'jira_get_my_profile': _jiraGetMyProfile,
+    'jira_delete_ticket': _jiraDeleteTicket,
+    'jira_create_ticket_basic': _jiraCreateTicketBasic,
+    'jira_create_ticket': _jiraCreateTicketBasic,
   };
 
   /// GitHub tool executors; config is resolved once before dispatch.
@@ -54,7 +88,7 @@ class SyncToolDispatcher {
   };
 
   /// Executes a tool call. Returns a JSON result string, or `null` when no
-  /// integration matches the tool name (caller falls back to an error).
+  /// integration matches the tool name and no [nonHttpHandler] is set.
   String? execute(String toolName, Map<String, dynamic> args) {
     if (toolName.startsWith('jira_')) {
       return _dispatch(toolName, args, _jiraFns, _jiraConfig, 'Jira');
@@ -62,6 +96,9 @@ class SyncToolDispatcher {
     if (toolName.startsWith('github_')) {
       return _dispatch(toolName, args, _githubFns, _githubConfig, 'GitHub');
     }
+    // File-system and CLI tools delegate to the host bridge.
+    final handler = _nonHttpHandler;
+    if (handler != null) return handler(toolName, args);
     return null;
   }
 
@@ -184,6 +221,89 @@ class SyncToolDispatcher {
         jsonEncode({
           'transition': {'id': id},
         }));
+  }
+
+  /// `jira_get_comments` — GET `issue/{key}/comment`.
+  String _jiraGetComments(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    final url = '${config.baseUrl}/issue/${_asStr(args['key'])}/comment';
+    return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  }
+
+  /// `jira_update_field` — PUT `issue/{key}` with `{fields:{field:value}}`.
+  String _jiraUpdateField(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    return _putBody(
+      config,
+      '${config.baseUrl}/issue/${_asStr(args['key'])}',
+      jsonEncode({
+        'fields': {_asStr(args['field']): args['value']},
+      }),
+    );
+  }
+
+  /// `jira_update_description` — PUT `issue/{key}` with the description.
+  String _jiraUpdateDescription(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    return _putBody(
+      config,
+      '${config.baseUrl}/issue/${_asStr(args['key'])}',
+      jsonEncode({
+        'fields': {'description': _asStr(args['description'])},
+      }),
+    );
+  }
+
+  /// `jira_get_transitions` — GET `issue/{key}/transitions`.
+  String _jiraGetTransitions(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    final url = '${config.baseUrl}/issue/${_asStr(args['key'])}/transitions';
+    return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  }
+
+  /// `jira_assign_to` (alias `jira_assign`) — PUT `issue/{key}/assignee`.
+  String _jiraAssignTo(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    return _putBody(
+      config,
+      '${config.baseUrl}/issue/${_asStr(args['key'])}/assignee',
+      jsonEncode({'accountId': _asStr(args['accountId'])}),
+    );
+  }
+
+  /// `jira_get_my_profile` — GET `myself`.
+  String _jiraGetMyProfile(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    return _bodyOrError(
+      SyncHttpClient.get('${config.baseUrl}/myself', headers: config.headers),
+    );
+  }
+
+  /// `jira_delete_ticket` — DELETE `issue/{key}`.
+  String _jiraDeleteTicket(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    return _bodyOrError(
+      SyncHttpClient.delete(
+        '${config.baseUrl}/issue/${_asStr(args['key'])}',
+        headers: config.headers,
+      ),
+    );
+  }
+
+  /// `jira_create_ticket_basic` (alias `jira_create_ticket`) — POST `issue`.
+  ///
+  /// Description is included only when provided (Java `createTicketBasic`).
+  String _jiraCreateTicketBasic(
+      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    final fields = <String, dynamic>{
+      'project': {'key': _asStr(args['project'])},
+      'issuetype': {'name': _asStr(args['issueType'])},
+      'summary': _asStr(args['summary']),
+    };
+    final description = _asStr(args['description']);
+    if (description.isNotEmpty) fields['description'] = description;
+    return _postBody(
+        config, '${config.baseUrl}/issue', jsonEncode({'fields': fields}));
   }
 
   /// Fetches the current labels list for [key]; empty list on failure.

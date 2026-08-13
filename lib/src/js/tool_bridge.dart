@@ -9,9 +9,10 @@
 /// - `set_env_variable(name, value)` — no-op (Phase 1 handles overrides).
 /// - `console.log/error/warn/info/debug` — prints to Dart's stdout/stderr.
 ///
-/// File-system and CLI tools execute synchronously via `dart:io`. HTTP tools
-/// (jira, github, …) dispatch synchronously via curl subprocess — see
-/// [SyncToolDispatcher].
+/// File-system and CLI tools execute synchronously via `dart:io` — the
+/// [SyncToolDispatcher] delegates them back through the non-HTTP handler.
+/// HTTP tools (jira, github, …) dispatch synchronously via curl subprocess —
+/// see [SyncToolDispatcher].
 library;
 
 import 'dart:convert';
@@ -101,8 +102,24 @@ class ToolBridge {
   /// No-op: runtime env overrides are handled by the Phase 1 property layer.
   String _setEnvVariable(String argsJson) => '{"success":true}';
 
-  /// Routes [toolName] to the matching executor by integration type.
+  /// Routes [toolName] through [SyncToolDispatcher], the single entry point.
+  ///
+  /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI
+  /// tools delegate back to [_dispatchNonHttp] for direct `dart:io` execution.
   String _execute(String toolName, Map<String, dynamic> args) {
+    if (_registry.getTool(toolName) == null) {
+      return _err('Unknown tool: $toolName');
+    }
+    final dispatcher = SyncToolDispatcher(
+      PropertyReader(),
+      nonHttpHandler: _dispatchNonHttp,
+    );
+    return dispatcher.execute(toolName, args) ??
+        _err('Tool not available: $toolName');
+  }
+
+  /// Delegates non-HTTP tools (file-system, CLI) to their sync executors.
+  String _dispatchNonHttp(String toolName, Map<String, dynamic> args) {
     final tool = _registry.getTool(toolName);
     if (tool == null) return _err('Unknown tool: $toolName');
     switch (tool.integration) {
@@ -111,15 +128,8 @@ class ToolBridge {
       case 'cli':
         return _executeCliTool(args);
       default:
-        return _executeHttpTool(toolName, args);
+        return _err('Unsupported non-HTTP integration: ${tool.integration}');
     }
-  }
-
-  /// Dispatches HTTP-based tools (jira, github, …) via synchronous curl.
-  String _executeHttpTool(String toolName, Map<String, dynamic> args) {
-    final dispatcher = SyncToolDispatcher(PropertyReader());
-    return dispatcher.execute(toolName, args) ??
-        _err('Tool not available: $toolName');
   }
 
   /// Dispatches a file tool synchronously by name.

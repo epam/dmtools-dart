@@ -14,9 +14,12 @@ import 'echo_server_helper.dart';
 void main() {
   _testRouting();
   _testNoConfig();
+  _testJiraAliases();
+  _testNonHttpDelegation();
   if (hasPython3()) {
     _testJiraTools();
     _testGithubTools();
+    _testJiraExtendedTools();
   }
 }
 
@@ -240,6 +243,236 @@ void _testJiraWriteTools() {
         jsonDecode(result!),
         {'error': 'No transition found for status: In Progress'},
       );
+    });
+  });
+}
+
+void _testJiraExtendedTools() {
+  _testJiraExtendedReadTools();
+  _testJiraExtendedWriteTools();
+  _testJiraLifecycleTools();
+}
+
+void _testJiraExtendedReadTools() {
+  group('SyncToolDispatcher Jira extended read tools', () {
+    late EchoServer server;
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'JIRA_LOGIN_PASS_TOKEN': 'dGVzdDp0b2tlbg==',
+        'JIRA_AUTH_TYPE': 'Basic',
+      });
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('jira_get_comments hits the comment endpoint', () {
+      final body = jsonDecode(
+          dispatcher.execute('jira_get_comments', {'key': 'PROJ-1'})!);
+      expect(body['method'], 'GET');
+      expect(body['path'], '/rest/api/latest/issue/PROJ-1/comment');
+    });
+
+    test('jira_get_transitions hits the transitions endpoint', () {
+      final body = jsonDecode(
+          dispatcher.execute('jira_get_transitions', {'key': 'PROJ-1'})!);
+      expect(body['method'], 'GET');
+      expect(body['path'], '/rest/api/latest/issue/PROJ-1/transitions');
+    });
+
+    test('jira_get_my_profile hits the myself endpoint', () {
+      final body = jsonDecode(dispatcher.execute('jira_get_my_profile', {})!);
+      expect(body['method'], 'GET');
+      expect(body['path'], '/rest/api/latest/myself');
+    });
+  });
+}
+
+void _testJiraExtendedWriteTools() {
+  group('SyncToolDispatcher Jira extended write tools', () {
+    late EchoServer server;
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'JIRA_LOGIN_PASS_TOKEN': 'dGVzdDp0b2tlbg==',
+        'JIRA_AUTH_TYPE': 'Basic',
+      });
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('jira_update_field PUTs the field value', () {
+      final body = jsonDecode(dispatcher.execute('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'priority',
+        'value': 'High',
+      })!);
+      expect(body['method'], 'PUT');
+      expect(body['path'], '/rest/api/latest/issue/PROJ-1');
+      final fields = jsonDecode(body['body'] as String)['fields'];
+      expect(fields['priority'], 'High');
+    });
+
+    test('jira_update_description PUTs the description', () {
+      final body = jsonDecode(dispatcher.execute('jira_update_description', {
+        'key': 'PROJ-1',
+        'description': 'Updated text',
+      })!);
+      final fields = jsonDecode(body['body'] as String)['fields'];
+      expect(fields['description'], 'Updated text');
+    });
+
+    test('jira_assign_to PUTs accountId to the assignee endpoint', () {
+      final body = jsonDecode(dispatcher.execute('jira_assign_to', {
+        'key': 'PROJ-1',
+        'accountId': 'acc-42',
+      })!);
+      expect(body['method'], 'PUT');
+      expect(body['path'], '/rest/api/latest/issue/PROJ-1/assignee');
+      expect(
+        jsonDecode(body['body'] as String)['accountId'],
+        'acc-42',
+      );
+    });
+  });
+}
+
+void _testJiraLifecycleTools() {
+  group('SyncToolDispatcher Jira lifecycle tools', () {
+    late EchoServer server;
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'JIRA_LOGIN_PASS_TOKEN': 'dGVzdDp0b2tlbg==',
+        'JIRA_AUTH_TYPE': 'Basic',
+      });
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('jira_delete_ticket DELETEs the issue', () {
+      final body = jsonDecode(
+          dispatcher.execute('jira_delete_ticket', {'key': 'PROJ-1'})!);
+      expect(body['method'], 'DELETE');
+      expect(body['path'], '/rest/api/latest/issue/PROJ-1');
+    });
+
+    test('jira_create_ticket_basic POSTs the create body', () {
+      final body = jsonDecode(dispatcher.execute(
+        'jira_create_ticket_basic',
+        {
+          'project': 'PROJ',
+          'issueType': 'Task',
+          'summary': 'New work',
+          'description': 'Details',
+        },
+      )!);
+      expect(body['method'], 'POST');
+      expect(body['path'], '/rest/api/latest/issue');
+      final fields = jsonDecode(body['body'] as String)['fields'];
+      expect(fields['project']['key'], 'PROJ');
+      expect(fields['summary'], 'New work');
+      expect(fields['description'], 'Details');
+    });
+  });
+}
+
+void _testJiraAliases() {
+  group('SyncToolDispatcher Jira tool aliases', () {
+    setUp(() => PropertyReader.setOverrides({
+          'JIRA_BASE_PATH': '',
+          'JIRA_LOGIN_PASS_TOKEN': '',
+        }));
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('jira_assign alias routes to the assign executor', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('jira_assign', {'key': 'K'})!),
+        {'error': 'Jira not configured'},
+      );
+    });
+
+    test('jira_create_ticket alias routes to the create executor', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(
+        jsonDecode(d.execute('jira_create_ticket', {})!),
+        {'error': 'Jira not configured'},
+      );
+    });
+  });
+}
+
+/// Verifies [toolName] with [args] is passed through to the non-HTTP handler.
+void _expectDelegated(String toolName, Map<String, dynamic> args) {
+  late String gotName;
+  late Map<String, dynamic> gotArgs;
+  final d = SyncToolDispatcher(
+    PropertyReader(),
+    nonHttpHandler: (name, a) {
+      gotName = name;
+      gotArgs = a;
+      return '{"delegated":true}';
+    },
+  );
+  expect(d.execute(toolName, args), '{"delegated":true}');
+  expect(gotName, toolName);
+  expect(gotArgs, args);
+}
+
+void _testNonHttpDelegation() {
+  group('SyncToolDispatcher non-HTTP delegation', () {
+    test('delegates file_write to the handler', () {
+      _expectDelegated('file_write', {'path': '/tmp/a.txt', 'content': 'x'});
+    });
+
+    test('delegates file_list to the handler', () {
+      _expectDelegated('file_list', {'path': '/tmp'});
+    });
+
+    test('delegates file_exists to the handler', () {
+      _expectDelegated('file_exists', {'path': '/tmp/a.txt'});
+    });
+
+    test('delegates file_delete to the handler', () {
+      _expectDelegated('file_delete', {'path': '/tmp/a.txt'});
+    });
+
+    test('delegates cli_execute_command to the handler', () {
+      _expectDelegated('cli_execute_command', {
+        'command': 'git',
+        'args': ['status'],
+      });
+    });
+
+    test('returns null for non-HTTP tool without a handler', () {
+      final d = SyncToolDispatcher(PropertyReader());
+      expect(d.execute('file_write', {'path': 'x'}), isNull);
     });
   });
 }

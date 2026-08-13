@@ -9,8 +9,12 @@
 /// Script hooks (`setup`/`cache`/`reset`) run as shell commands unless the
 /// path ends with `.js` — then they execute via [JsJobRunner]. JS actions
 /// (`preJSAction`/`preCliJSAction`/`postJSAction`) always run via
-/// [JsJobRunner]. Errors in hooks and actions are caught and logged (the
-/// lifecycle continues); only CLI command failures can fail the run.
+/// [JsJobRunner]. During the `cliCommands` phase, three further JS actions may
+/// fire when configured: `timerJSAction` (periodic, plus a final tick),
+/// `cliExecutionErrorJSAction` (on a non-zero exit), and `cliOutputLineJSAction`
+/// (per output line; returning `true` stops the batch). Errors in hooks and
+/// actions are caught and logged (the lifecycle continues); only CLI command
+/// failures can fail the run.
 library;
 
 import 'dart:io';
@@ -206,6 +210,11 @@ class CliAgent {
   // ------------------------------------------------------------------
 
   /// Builds and executes CLI commands, returning the extracted response.
+  ///
+  /// When any of `timerJSAction`, `cliExecutionErrorJSAction`, or
+  /// `cliOutputLineJSAction` is configured, commands run through the monitored
+  /// path ([CliExecutionHelper.executeCommandsWithCallbacks]) so the hooks fire
+  /// periodically / per-line / on error. Otherwise the buffered path is used.
   Future<String> _executeCliCommands(String workDir) async {
     final builder = const CliCommandBuilder();
     final finalCommands = builder.buildCommands(
@@ -215,12 +224,124 @@ class CliAgent {
       params.cliPromptsByTracker,
     );
     _ensureOutputFolder(workDir);
-    _cliResult = await const CliExecutionHelper().executeCommands(
-      finalCommands,
-      workingDirectory: workDir,
-      environment: _buildSubprocessEnvironment(workDir, true),
-    );
+    final env = _buildSubprocessEnvironment(workDir, true);
+    final live = LiveCliOutput();
+    final callbacks = _buildCliCallbacks(workDir, live);
+    final helper = const CliExecutionHelper();
+    _cliResult = callbacks == null
+        ? await helper.executeCommands(
+            finalCommands,
+            workingDirectory: workDir,
+            environment: env,
+          )
+        : await helper.executeCommandsWithCallbacks(
+            finalCommands,
+            workingDirectory: workDir,
+            environment: env,
+            callbacks: callbacks,
+          );
     return _extractResponse(_cliResult!);
+  }
+
+  // ------------------------------------------------------------------
+  // Context JS actions (timer / error / line)
+  // ------------------------------------------------------------------
+
+  /// Builds CLI-execution callbacks for the timer/error/line JS actions, or
+  /// `null` when none are configured.
+  CliExecutionCallbacks? _buildCliCallbacks(
+    String workDir,
+    LiveCliOutput live,
+  ) {
+    final timer = _buildTimerAction(workDir, live);
+    final error = _buildErrorHandler(workDir, live);
+    final stop = _buildLineStopPredicate(workDir, live);
+    if (timer == null && error == null && stop == null) return null;
+    return CliExecutionCallbacks(
+      timerAction: timer,
+      timerIntervalSeconds: params.timerIntervalSeconds,
+      errorHandler: error,
+      lineStopPredicate: stop,
+      liveOutput: live,
+    );
+  }
+
+  /// Builds the periodic timer callback (Java `buildTimerRunnable`).
+  void Function()? _buildTimerAction(String workDir, LiveCliOutput live) {
+    final action = params.timerJSAction;
+    if (action == null || action.trim().isEmpty) return null;
+    return () => _runContextJsAction(
+          'timerJSAction',
+          action,
+          workDir,
+          {'currentCliOutput': live.value},
+        );
+  }
+
+  /// Builds the CLI-failure callback (Java `buildErrorHandler`).
+  void Function(String)? _buildErrorHandler(
+      String workDir, LiveCliOutput live) {
+    final action = params.cliExecutionErrorJSAction;
+    if (action == null || action.trim().isEmpty) return null;
+    return (String errorMessage) => _runContextJsAction(
+          'cliExecutionErrorJSAction',
+          action,
+          workDir,
+          {'errorMessage': errorMessage, 'currentCliOutput': live.value},
+        );
+  }
+
+  /// Builds the per-line stop predicate (Java `buildLineStopPredicate`).
+  bool Function(String)? _buildLineStopPredicate(
+    String workDir,
+    LiveCliOutput live,
+  ) {
+    final action = params.cliOutputLineJSAction;
+    if (action == null || action.trim().isEmpty) return null;
+    return (String line) {
+      final result = _runContextJsAction(
+        'cliOutputLineJSAction',
+        action,
+        workDir,
+        {'line': line, 'currentCliOutput': live.value},
+      );
+      return result?.toLowerCase() == 'true';
+    };
+  }
+
+  /// Runs a context JS action via [JsJobRunner], injecting [context] globals.
+  ///
+  /// Returns the JSON-serialized result (for line-stop boolean parsing).
+  /// Errors are caught and logged — the lifecycle continues — mirroring the
+  /// Java `executeJsAction` / `buildLineStopPredicate` swallow-and-continue
+  /// contract.
+  String? _runContextJsAction(
+    String name,
+    String actionPath,
+    String workDir,
+    Map<String, dynamic> context,
+  ) {
+    try {
+      return jsRunner.runScript(
+        scriptPath: actionPath,
+        jobParams: _buildJobParams(null, null),
+        workingDirectory: workDir,
+        config: JsRunConfig(
+          extraGlobals: _mergeContextGlobals(context, workDir),
+        ),
+      );
+    } catch (e) {
+      stderr.writeln('$name failed, continuing: $e');
+      return null;
+    }
+  }
+
+  /// Merges the standard JS action globals with action-specific [context].
+  Map<String, dynamic> _mergeContextGlobals(
+    Map<String, dynamic> context,
+    String workDir,
+  ) {
+    return {..._buildExtraGlobals(null, null, workDir), ...context};
   }
 
   /// Extracts the response from the CLI result.

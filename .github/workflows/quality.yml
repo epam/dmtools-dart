@@ -23,3 +23,28 @@ jobs:
         run: dart pub global activate crap4dart
       - run: crap4dart check --all
       - run: crap4dart analyze
+
+  agents-suite:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - name: Install gcc
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
+      - name: Compile QuickJS
+        run: |
+          cd native/quickjs
+          gcc -shared -fPIC -O2 -D_GNU_SOURCE \
+            -DCONFIG_VERSION='"2024-01-13"' -I. \
+            -o libquickjs_bridge.so ../quickjs_bridge.c \
+            quickjs.c libregexp.c libunicode.c cutils.c quickjs-libc.c libbf.c \
+            -lm -ldl -lpthread
+      - name: Clone dmtools-agents
+        run: git clone --depth 1 https://github.com/IstiN/dmtools-agents /tmp/dmtools-agents
+      - name: Run agents test suite
+        run: dart run bin/run_agents_suite.dart /tmp/dmtools-agents
+        continue-on-error: true

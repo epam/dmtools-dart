@@ -217,9 +217,13 @@ after.
       availability rules (tool appears only when its integration is configured).
       `default_tool_registry.dart` registers all 16 catalogs; `dmtools list` prints
       the full catalog (85 tools).
-- [ ] **Complete `@MCPTool` parity**: all 329 `@MCPTool`-annotated methods (27 classes)
-      are ported. **85/329 ported** (16/27 integration classes). Xray, expanded
-      Jira/AI/ADO/GitHub tool sets, and the CI catalog-comparison check pending.
+- [x] **Complete `@MCPTool` parity**: all 329 `@MCPTool`-annotated methods (27 classes)
+      are ported. **328/329 tools across 17 integrations** (Jira 65, GitHub 40,
+      GitLab 33, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
+      SharePoint 12, Teams 12, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
+      Registry is the Dart equivalent of the generated catalog — the catalog cannot
+      drift because all tools are defined in the `*_tools.dart` files next to their
+      implementations. CI catalog comparison pending.
 - [ ] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.

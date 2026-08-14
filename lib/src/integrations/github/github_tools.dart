@@ -9,8 +9,12 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'github_client.dart';
 
-part 'github_tools_batch4.dart';
-part 'github_tools_batch5.dart';
+part 'github_actions_tools.dart';
+part 'github_codeowners_tools.dart';
+part 'github_collaborator_tools.dart';
+part 'github_pr_update_tools.dart';
+part 'github_repository_tools.dart';
+part 'github_workflow_catalog_tools.dart';
 
 /// Returns all GitHub MCP tool definitions.
 ///
@@ -34,11 +38,9 @@ List<ToolDefinition> githubTools() => [
       ..._collaboratorTools(),
     ];
 
-/// Repository, PR-update, and Actions catalog functions live in
-/// `github_tools_batch4.dart` (split for file-size).
-///
-/// Workflow-catalog, CODEOWNERS, and collaborator tool functions live in
-/// `github_tools_batch5.dart`.
+/// Per-domain catalog functions live in `github_<domain>_tools.dart` part
+/// files (repository, PR update, actions, workflow catalog, CODEOWNERS,
+/// collaborators) to keep file sizes manageable.
 
 /// Connectivity-check tool: `github_test`.
 List<ToolDefinition> _systemTools() => [

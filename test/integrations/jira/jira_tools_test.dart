@@ -16,7 +16,7 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     jiraTools().firstWhere((t) => t.name == name);
 
-/// Expected tool names in declaration order (batches 1–7).
+/// Expected tool names in declaration order.
 const _expectedToolNames = [
   'jira_test',
   'jira_get_ticket',

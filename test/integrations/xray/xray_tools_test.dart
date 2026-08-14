@@ -9,8 +9,8 @@ void main() {
   toolCatalogShapeTests();
   toolCatalogParamTests();
   executorDispatchTests();
-  batch2ExecutorDispatchTests();
-  batch3ExecutorDispatchTests();
+  executionStepPlanDispatchTests();
+  runUpdateDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -151,9 +151,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Batch-2 executor dispatch tests for the new Xray read tools.
-void batch2ExecutorDispatchTests() {
-  group('XrayToolExecutor.execute batch-2', () {
+/// Executor dispatch tests for the execution, step, and plan read tools.
+void executionStepPlanDispatchTests() {
+  group('XrayToolExecutor.execute (executions, steps, plans)', () {
     late _SpyXrayClient spy;
     late XrayToolExecutor executor;
 
@@ -181,9 +181,9 @@ void batch2ExecutorDispatchTests() {
   });
 }
 
-/// Batch-3 executor dispatch tests for the new Xray write/read tools.
-void batch3ExecutorDispatchTests() {
-  group('XrayToolExecutor.execute batch-3', () {
+/// Executor dispatch tests for the execution update and run read tools.
+void runUpdateDispatchTests() {
+  group('XrayToolExecutor.execute (execution updates and test runs)', () {
     late _SpyXrayClient spy;
     late XrayToolExecutor executor;
 

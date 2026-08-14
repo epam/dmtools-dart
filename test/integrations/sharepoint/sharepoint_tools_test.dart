@@ -8,12 +8,12 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   toolCatalogParamTests();
-  batch3CatalogParamTests();
+  driveContentCatalogParamTests();
   siteCatalogParamTests();
   copyItemCatalogTests();
   executorDispatchTests();
   fileToolDispatchTests();
-  batch3ToolDispatchTests();
+  driveContentDispatchTests();
   siteDispatchTests();
   copyItemDispatchTests();
 }
@@ -100,8 +100,8 @@ void toolCatalogParamTests() {
   });
 }
 
-/// Per-tool parameter declarations for the batch-3 drive tools.
-void batch3CatalogParamTests() {
+/// Per-tool parameter declarations for the drive-content tools.
+void driveContentCatalogParamTests() {
   group('sharepoint_get_drive_items', () {
     final tool = toolNamed('sharepoint_get_drive_items');
 
@@ -208,9 +208,9 @@ void fileToolDispatchTests() {
   });
 }
 
-/// Dispatch tests for the batch-3 drive tools.
-void batch3ToolDispatchTests() {
-  group('SharepointToolExecutor.execute batch-3 tools', () {
+/// Dispatch tests for the drive-content tools.
+void driveContentDispatchTests() {
+  group('SharepointToolExecutor.execute drive-content tools', () {
     late _SpySharepointClient spy;
     late SharepointToolExecutor executor;
 

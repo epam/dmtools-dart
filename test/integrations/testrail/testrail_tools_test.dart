@@ -8,14 +8,14 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogShapeTests();
   toolCatalogParamTests();
-  toolCatalogBatch2ParamTests();
-  toolCatalogBatch3ParamTests();
-  toolCatalogBatch4ParamTests();
+  runSectionCaseCatalogParamTests();
+  milestonePlanRunCatalogParamTests();
+  metadataCatalogParamTests();
   executorDispatchTests();
-  executorBatch2DispatchTests();
-  executorBatch3DispatchTests();
-  executorBatch4DispatchTests();
-  executorBatch5DispatchTests();
+  runSectionCaseDispatchTests();
+  milestonePlanRunDispatchTests();
+  metadataDispatchTests();
+  caseDeletionAndMetadataDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -89,8 +89,8 @@ void toolCatalogParamTests() {
   });
 }
 
-/// Batch-2 catalog params: runs, sections, and case write tools.
-void toolCatalogBatch2ParamTests() {
+/// Catalog params: runs, sections, and case write tools.
+void runSectionCaseCatalogParamTests() {
   test('testrail_add_case requires a numeric sectionId and title', () {
     final tool = toolNamed('testrail_add_case');
     expect(tool.category, 'test_cases');
@@ -183,9 +183,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Batch-2 dispatch tests for runs, sections, and case write tools.
-void executorBatch2DispatchTests() {
-  group('TestRailToolExecutor.execute (batch 2)', () {
+/// Dispatch tests for the run, section, and case write tools.
+void runSectionCaseDispatchTests() {
+  group('TestRailToolExecutor.execute (runs, sections, case writes)', () {
     late _SpyTestRailClient spy;
     late TestRailToolExecutor executor;
 
@@ -222,8 +222,8 @@ void executorBatch2DispatchTests() {
   });
 }
 
-/// Batch-3 catalog params: milestones, plans, and run write tools.
-void toolCatalogBatch3ParamTests() {
+/// Catalog params: milestones, plans, and run write tools.
+void milestonePlanRunCatalogParamTests() {
   test('testrail_get_milestones requires a numeric projectId', () {
     final tool = toolNamed('testrail_get_milestones');
     expect(tool.category, 'milestones');
@@ -257,9 +257,9 @@ void toolCatalogBatch3ParamTests() {
   });
 }
 
-/// Batch-3 dispatch tests for milestones, plans, and run write tools.
-void executorBatch3DispatchTests() {
-  group('TestRailToolExecutor.execute (batch 3)', () {
+/// Dispatch tests for the milestone, plan, and run write tools.
+void milestonePlanRunDispatchTests() {
+  group('TestRailToolExecutor.execute (milestones, plans, run writes)', () {
     late _SpyTestRailClient spy;
     late TestRailToolExecutor executor;
 
@@ -296,8 +296,9 @@ void executorBatch3DispatchTests() {
   });
 }
 
-/// Batch-4 catalog params: case types, priorities, statuses.
-void toolCatalogBatch4ParamTests() {
+/// Catalog params: case types, priorities, statuses, references, and
+/// templates.
+void metadataCatalogParamTests() {
   test('testrail_get_case_types requires a numeric projectId', () {
     final tool = toolNamed('testrail_get_case_types');
     expect(tool.category, 'metadata');
@@ -333,9 +334,9 @@ void toolCatalogBatch4ParamTests() {
   });
 }
 
-/// Batch-4 dispatch tests for case types, priorities, and statuses.
-void executorBatch4DispatchTests() {
-  group('TestRailToolExecutor.execute (batch 4)', () {
+/// Dispatch tests for the case type, priority, and status tools.
+void metadataDispatchTests() {
+  group('TestRailToolExecutor.execute (case types, priorities, statuses)', () {
     late _SpyTestRailClient spy;
     late TestRailToolExecutor executor;
 
@@ -361,9 +362,10 @@ void executorBatch4DispatchTests() {
   });
 }
 
-/// Batch-5 dispatch tests for the delete-case, references, templates tools.
-void executorBatch5DispatchTests() {
-  group('TestRailToolExecutor.execute (batch 5)', () {
+/// Dispatch tests for the delete-case, reference, and template tools.
+void caseDeletionAndMetadataDispatchTests() {
+  group('TestRailToolExecutor.execute (case deletion, references, templates)',
+      () {
     late _SpyTestRailClient spy;
     late TestRailToolExecutor executor;
 

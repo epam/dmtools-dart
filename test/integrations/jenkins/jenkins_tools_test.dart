@@ -7,14 +7,14 @@ import 'jenkins_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
-  toolCatalogBatch3ParamTests();
-  toolCatalogBatch4ParamTests();
-  toolCatalogBatch5ParamTests();
+  jobQueueCatalogParamTests();
+  artifactConfigCatalogParamTests();
+  buildHistoryConsoleCatalogParamTests();
   executorDispatchTests();
-  executorBatch2DispatchTests();
-  executorBatch3DispatchTests();
-  executorBatch4DispatchTests();
-  executorBatch5DispatchTests();
+  buildInspectionDispatchTests();
+  jobQueueDispatchTests();
+  artifactConfigDispatchTests();
+  buildHistoryConsoleDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -79,8 +79,8 @@ void toolCatalogTests() {
   });
 }
 
-/// Batch-2+3 catalog params: last build, job details, queue, cancel build.
-void toolCatalogBatch3ParamTests() {
+/// Catalog params: last build, job details, queue, and build cancellation.
+void jobQueueCatalogParamTests() {
   group('jenkins_get_last_build', () {
     final tool = toolNamed('jenkins_get_last_build');
 
@@ -153,9 +153,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Batch-2 dispatch tests for build detail, build log, and last build.
-void executorBatch2DispatchTests() {
-  group('JenkinsToolExecutor.execute (batch 2)', () {
+/// Dispatch tests for build detail, build log, and last build.
+void buildInspectionDispatchTests() {
+  group('JenkinsToolExecutor.execute (build inspection)', () {
     late _SpyJenkinsClient spy;
     late JenkinsToolExecutor executor;
 
@@ -195,9 +195,9 @@ void executorBatch2DispatchTests() {
   });
 }
 
-/// Batch-3 dispatch tests for job details, queue, and cancel build.
-void executorBatch3DispatchTests() {
-  group('JenkinsToolExecutor.execute (batch 3)', () {
+/// Dispatch tests for job details, queue, and build cancellation.
+void jobQueueDispatchTests() {
+  group('JenkinsToolExecutor.execute (job details and queue)', () {
     late _SpyJenkinsClient spy;
     late JenkinsToolExecutor executor;
 
@@ -228,8 +228,8 @@ void executorBatch3DispatchTests() {
   });
 }
 
-/// Batch-4 catalog params: build artifacts and job config.
-void toolCatalogBatch4ParamTests() {
+/// Catalog params: build artifacts and job config.
+void artifactConfigCatalogParamTests() {
   group('jenkins_get_build_artifacts', () {
     final tool = toolNamed('jenkins_get_build_artifacts');
 
@@ -250,8 +250,8 @@ void toolCatalogBatch4ParamTests() {
   });
 }
 
-/// Batch-5 catalog params: job builds and console output.
-void toolCatalogBatch5ParamTests() {
+/// Catalog params: job build history and console output.
+void buildHistoryConsoleCatalogParamTests() {
   group('jenkins_get_job_builds', () {
     final tool = toolNamed('jenkins_get_job_builds');
 
@@ -277,9 +277,9 @@ void toolCatalogBatch5ParamTests() {
   });
 }
 
-/// Batch-4 dispatch tests for build artifacts and job config.
-void executorBatch4DispatchTests() {
-  group('JenkinsToolExecutor.execute (batch 4)', () {
+/// Dispatch tests for build artifacts and job config.
+void artifactConfigDispatchTests() {
+  group('JenkinsToolExecutor.execute (artifacts and job config)', () {
     late _SpyJenkinsClient spy;
     late JenkinsToolExecutor executor;
 
@@ -304,9 +304,9 @@ void executorBatch4DispatchTests() {
   });
 }
 
-/// Batch-5 dispatch tests for job builds and console output.
-void executorBatch5DispatchTests() {
-  group('JenkinsToolExecutor.execute (batch 5)', () {
+/// Dispatch tests for job build history and console output.
+void buildHistoryConsoleDispatchTests() {
+  group('JenkinsToolExecutor.execute (build history and console)', () {
     late _SpyJenkinsClient spy;
     late JenkinsToolExecutor executor;
 

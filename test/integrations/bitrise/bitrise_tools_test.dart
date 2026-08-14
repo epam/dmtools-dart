@@ -8,13 +8,13 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogShapeTests();
   toolCatalogParamTests();
-  toolCatalogBatch4ParamTests();
-  toolCatalogBatch5ParamTests();
+  workflowArtifactCatalogParamTests();
+  artifactDetailCatalogParamTests();
   executorDispatchTests();
-  executorBatch2DispatchTests();
-  executorBatch3DispatchTests();
-  executorBatch4DispatchTests();
-  executorBatch5DispatchTests();
+  buildDetailAndTriggerDispatchTests();
+  buildAbortDispatchTests();
+  workflowArtifactDispatchTests();
+  artifactDetailDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -128,9 +128,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Batch-2 dispatch tests for apps, build detail, and parameterized triggers.
-void executorBatch2DispatchTests() {
-  group('BitriseToolExecutor.execute (batch 2)', () {
+/// Dispatch tests for build detail and parameterized build triggers.
+void buildDetailAndTriggerDispatchTests() {
+  group('BitriseToolExecutor.execute (build detail and triggers)', () {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
@@ -170,9 +170,9 @@ void executorBatch2DispatchTests() {
   });
 }
 
-/// Batch-3 dispatch tests for the build-abort tool.
-void executorBatch3DispatchTests() {
-  group('BitriseToolExecutor.execute (batch 3)', () {
+/// Dispatch tests for the build-abort tool.
+void buildAbortDispatchTests() {
+  group('BitriseToolExecutor.execute (build abort)', () {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
@@ -191,8 +191,8 @@ void executorBatch3DispatchTests() {
   });
 }
 
-/// Batch-4 catalog params: workflows and artifacts.
-void toolCatalogBatch4ParamTests() {
+/// Catalog params: workflows and artifacts.
+void workflowArtifactCatalogParamTests() {
   group('bitrise_get_workflows', () {
     final tool = toolNamed('bitrise_get_workflows');
 
@@ -212,9 +212,9 @@ void toolCatalogBatch4ParamTests() {
   });
 }
 
-/// Batch-4 dispatch tests for workflows and artifacts.
-void executorBatch4DispatchTests() {
-  group('BitriseToolExecutor.execute (batch 4)', () {
+/// Dispatch tests for the workflow and artifact listing tools.
+void workflowArtifactDispatchTests() {
+  group('BitriseToolExecutor.execute (workflows and artifacts)', () {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
@@ -238,8 +238,8 @@ void executorBatch4DispatchTests() {
   });
 }
 
-/// Batch-5 catalog params: artifact detail.
-void toolCatalogBatch5ParamTests() {
+/// Catalog params: artifact detail.
+void artifactDetailCatalogParamTests() {
   group('bitrise_get_artifact_detail', () {
     final tool = toolNamed('bitrise_get_artifact_detail');
 
@@ -253,9 +253,9 @@ void toolCatalogBatch5ParamTests() {
   });
 }
 
-/// Batch-5 dispatch tests for artifact detail.
-void executorBatch5DispatchTests() {
-  group('BitriseToolExecutor.execute (batch 5)', () {
+/// Dispatch tests for the artifact-detail tool.
+void artifactDetailDispatchTests() {
+  group('BitriseToolExecutor.execute (artifact detail)', () {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 

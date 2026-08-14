@@ -10,9 +10,9 @@ void main() {
   catalogTests();
   catalogParamTests();
   executorRoutingTests();
-  executorNewToolRoutingTests();
-  executorBatch3RoutingTests();
-  executorBatch4RoutingTests();
+  commentComponentStyleExportRoutingTests();
+  libraryVariableRoutingTests();
+  nodeStyleRoutingTests();
   executorEdgeCaseTests();
 }
 
@@ -131,11 +131,12 @@ void executorRoutingTests() {
   });
 }
 
-/// [FigmaToolExecutor.execute] routes batch-2 tool names to client calls.
-void executorNewToolRoutingTests() {
+/// [FigmaToolExecutor.execute] routes the comment, component, style, and
+/// image-export tools.
+void commentComponentStyleExportRoutingTests() {
   late _ExecutorFixture f;
 
-  group('FigmaToolExecutor.execute (batch 2)', () {
+  group('FigmaToolExecutor.execute (comments, components, styles, export)', () {
     setUp(() => f = _executorFixture());
 
     test('routes figma_get_comments with key', () async {
@@ -182,11 +183,12 @@ void executorNewToolRoutingTests() {
   });
 }
 
-/// [FigmaToolExecutor.execute] routes batch-3 tool names to client calls.
-void executorBatch3RoutingTests() {
+/// [FigmaToolExecutor.execute] routes the component-library and
+/// variable-collection tools.
+void libraryVariableRoutingTests() {
   late _ExecutorFixture f;
 
-  group('FigmaToolExecutor.execute (batch 3)', () {
+  group('FigmaToolExecutor.execute (libraries and variables)', () {
     setUp(() => f = _executorFixture());
 
     test('routes figma_get_file_components as alias to getComponents',
@@ -213,11 +215,11 @@ void executorBatch3RoutingTests() {
   });
 }
 
-/// [FigmaToolExecutor.execute] routes batch-4 tool names to client calls.
-void executorBatch4RoutingTests() {
+/// [FigmaToolExecutor.execute] routes the node and style lookup tools.
+void nodeStyleRoutingTests() {
   late _ExecutorFixture f;
 
-  group('FigmaToolExecutor.execute (batch 4)', () {
+  group('FigmaToolExecutor.execute (node and style lookups)', () {
     setUp(() => f = _executorFixture());
 
     test('routes figma_get_style with key', () async {

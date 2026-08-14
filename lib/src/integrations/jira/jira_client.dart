@@ -11,9 +11,20 @@ import 'dart:io';
 import 'jira_http_client.dart';
 import 'jira_utils.dart';
 
-part 'jira_client_batch5.dart';
-part 'jira_client_batch6.dart';
-part 'jira_client_batch7.dart';
+part 'jira_agile_client.dart';
+part 'jira_attachment_client.dart';
+part 'jira_export_client.dart';
+part 'jira_fix_version_client.dart';
+part 'jira_issue_type_client.dart';
+part 'jira_metadata_client.dart';
+part 'jira_project_client.dart';
+part 'jira_scheme_client.dart';
+part 'jira_search_client.dart';
+part 'jira_transition_client.dart';
+part 'jira_user_client.dart';
+part 'jira_watcher_client.dart';
+part 'jira_workflow_client.dart';
+part 'jira_worklog_client.dart';
 
 /// Jira API methods exposed to the MCP tool runtime.
 class JiraClient {
@@ -412,8 +423,6 @@ class JiraClient {
     if (decoded is Map<String, dynamic>) return decoded;
     return {};
   }
-
-  // ── Batch 4: remaining Java tools ──────────────────────────────────────
 
   /// `jira_post_comment_if_not_exists` — POST comment only if absent.
   ///

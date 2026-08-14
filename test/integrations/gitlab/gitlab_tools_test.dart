@@ -7,9 +7,9 @@ import 'gitlab_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
-  toolCatalogBatch4ParamTests();
+  mrReviewAndProjectCatalogParamTests();
   executorDispatchTests();
-  batch4ExecutorDispatchTests();
+  mrReviewAndProjectExecutorDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -107,8 +107,8 @@ void toolCatalogTests() {
   });
 }
 
-/// Batch-4 catalog param tests for the new tools.
-void toolCatalogBatch4ParamTests() {
+/// Catalog param tests for the MR-review and project tools.
+void mrReviewAndProjectCatalogParamTests() {
   group('gitlab_get_mr_approvals', () {
     final tool = toolNamed('gitlab_get_mr_approvals');
 
@@ -202,9 +202,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Batch-4 executor dispatch tests for the new MR and project tools.
-void batch4ExecutorDispatchTests() {
-  group('GitlabToolExecutor.execute batch-4', () {
+/// Executor dispatch tests for the MR-review and project tools.
+void mrReviewAndProjectExecutorDispatchTests() {
+  group('GitlabToolExecutor.execute (MR review and projects)', () {
     late _SpyGitlabClient spy;
     late GitlabToolExecutor executor;
 

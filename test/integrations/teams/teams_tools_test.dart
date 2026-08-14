@@ -8,11 +8,11 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   toolCatalogTests();
   toolCatalogParamTests();
-  batch3CatalogParamTests();
-  batch4CatalogParamTests();
+  chatAndTeamCatalogParamTests();
+  replyToolCatalogParamTests();
   executorDispatchTests();
-  batch3ToolDispatchTests();
-  batch4ToolDispatchTests();
+  chatAndTeamToolDispatchTests();
+  replyToolDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -47,7 +47,7 @@ void toolCatalogTests() {
   });
 }
 
-/// Per-tool parameter declarations for the original batch-1 tools.
+/// Per-tool parameter declarations for the core messaging tools.
 void toolCatalogParamTests() {
   group('teams_send_message', () {
     final tool = toolNamed('teams_send_message');
@@ -85,8 +85,8 @@ void toolCatalogParamTests() {
   });
 }
 
-/// Per-tool parameter declarations for the batch-3 chat/team tools.
-void batch3CatalogParamTests() {
+/// Per-tool parameter declarations for the chat and team tools.
+void chatAndTeamCatalogParamTests() {
   group('teams_get_chat_members', () {
     final tool = toolNamed('teams_get_chat_members');
 
@@ -146,8 +146,8 @@ void batch3CatalogParamTests() {
   });
 }
 
-/// Per-tool parameter declarations for the batch-4 reply tool.
-void batch4CatalogParamTests() {
+/// Per-tool parameter declarations for the reply tool.
+void replyToolCatalogParamTests() {
   group('teams_reply_to_message', () {
     final tool = toolNamed('teams_reply_to_message');
 
@@ -209,9 +209,9 @@ void executorDispatchTests() {
   });
 }
 
-/// Dispatch tests for the batch-3 chat/team tools.
-void batch3ToolDispatchTests() {
-  group('TeamsToolExecutor.execute batch-3 tools', () {
+/// Dispatch tests for the chat and team tools.
+void chatAndTeamToolDispatchTests() {
+  group('TeamsToolExecutor.execute chat/team tools', () {
     late _SpyTeamsClient spy;
     late TeamsToolExecutor executor;
 
@@ -264,9 +264,9 @@ void batch3ToolDispatchTests() {
   });
 }
 
-/// Dispatch tests for the batch-4 reply tool.
-void batch4ToolDispatchTests() {
-  group('TeamsToolExecutor.execute batch-4 tools', () {
+/// Dispatch tests for the reply tool.
+void replyToolDispatchTests() {
+  group('TeamsToolExecutor.execute reply tool', () {
     late _SpyTeamsClient spy;
     late TeamsToolExecutor executor;
 

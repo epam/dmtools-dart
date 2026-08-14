@@ -8,9 +8,20 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'jira_client.dart';
 
-part 'jira_tools_batch5.dart';
-part 'jira_tools_batch6.dart';
-part 'jira_tools_batch7.dart';
+part 'jira_agile_tools.dart';
+part 'jira_attachment_tools.dart';
+part 'jira_export_tools.dart';
+part 'jira_fix_version_tools.dart';
+part 'jira_issue_type_tools.dart';
+part 'jira_metadata_tools.dart';
+part 'jira_project_tools.dart';
+part 'jira_scheme_tools.dart';
+part 'jira_search_tools.dart';
+part 'jira_transition_tools.dart';
+part 'jira_user_tools.dart';
+part 'jira_watcher_tools.dart';
+part 'jira_workflow_tools.dart';
+part 'jira_worklog_tools.dart';
 
 /// Reusable parameter: Jira ticket key.
 const _keyParam = ToolParam(
@@ -83,14 +94,29 @@ List<ToolDefinition> jiraTools() => [
       ..._createWithParentTools(),
       ..._commentIfExistsTools(),
       ..._adfFieldTools(),
-      ..._batchFieldTools(),
+      ..._fieldsByNameTools(),
       ..._rawUpdateTools(),
       ..._linkTools(),
       ..._genericRequestTools(),
       ..._projectDetailTools(),
-      ..._batch5Tools(),
-      ..._batch6Tools(),
-      ..._batch7Tools(),
+      ..._transitionTools(),
+      ..._userTools(),
+      ..._attachmentTools(),
+      ..._projectLifecycleTools(),
+      ..._workflowTools(),
+      ..._projectStructureTools(),
+      ..._boardConfigTools(),
+      ..._schemeTools(),
+      ..._issueTypeTools(),
+      ..._fixVersionTools(),
+      ..._myProfileTools(),
+      ..._searchPageTools(),
+      ..._attachmentReadTools(),
+      ..._worklogTools(),
+      ..._watcherTools(),
+      ..._metadataTools(),
+      ..._exportTools(),
+      ..._agileTools(),
     ];
 
 /// Connectivity-check tool: `jira_test`.
@@ -407,8 +433,6 @@ List<ToolDefinition> _createWithParentTools() => [
       ),
     ];
 
-// ── Batch 4 tool definitions ─────────────────────────────────────────────
-
 /// Comment-if-not-exists tool: `jira_post_comment_if_not_exists`.
 List<ToolDefinition> _commentIfExistsTools() => [
       _jiraTool(
@@ -447,8 +471,9 @@ List<ToolDefinition> _adfFieldTools() => [
       ),
     ];
 
-/// Batch field tools: search by name + update all matching.
-List<ToolDefinition> _batchFieldTools() => [
+/// Field-by-name tools: search field definitions by display name and update
+/// every matching field on a ticket.
+List<ToolDefinition> _fieldsByNameTools() => [
       _jiraTool(
         name: 'jira_get_all_fields_with_name',
         description: 'Find all Jira field definitions matching a display name',
@@ -567,14 +592,31 @@ class JiraToolExecutor {
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
     ..._coreHandlers(),
-    ..._batch3Handlers(),
-    ..._batch4Handlers(),
-    ..._batch5Handlers(),
-    ...batch6Handlers(),
-    ...batch7Handlers(),
+    ..._projectMetaHandlers(),
+    ..._ticketWriteHandlers(),
+    ..._commentIfExistsHandlers(),
+    ..._adfFieldHandlers(),
+    ..._fieldsByNameHandlers(),
+    ..._rawUpdateHandlers(),
+    ..._linkHandlers(),
+    ..._genericRequestHandlers(),
+    ..._projectHandlers(),
+    ..._transitionHandlers(),
+    ..._userHandlers(),
+    ..._attachmentHandlers(),
+    ..._workflowHandlers(),
+    ..._schemeHandlers(),
+    ..._issueTypeHandlers(),
+    ..._fixVersionHandlers(),
+    ..._searchPageHandlers(),
+    ..._worklogHandlers(),
+    ..._watcherHandlers(),
+    ..._metadataHandlers(),
+    ..._exportHandlers(),
+    ..._agileHandlers(),
   };
 
-  /// Dispatch entries for the batch-1/2 Jira tools.
+  /// Dispatch entries for the core Jira ticket tools.
   Map<String, Future<dynamic> Function(Map<String, dynamic>)> _coreHandlers() =>
       {
         'jira_test': (_) => _client.testConnection(),
@@ -627,9 +669,9 @@ class JiraToolExecutor {
             ),
       };
 
-  /// Dispatch entries for the batch-3 Jira tools.
+  /// Dispatch entries for the project-metadata read tools.
   Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _batch3Handlers() => {
+      _projectMetaHandlers() => {
             'jira_get_issue_types': (a) =>
                 _client.getIssueTypes(a['project'] as String),
             'jira_get_fields': (a) => _client.getFields(a['project'] as String),
@@ -637,6 +679,12 @@ class JiraToolExecutor {
                 _client.getComponents(a['project'] as String),
             'jira_get_fix_versions': (a) =>
                 _client.getFixVersions(a['project'] as String),
+          };
+
+  /// Dispatch entries for the ticket write, subtask, and create-with-parent
+  /// tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _ticketWriteHandlers() => {
             'jira_set_fix_version': (a) => _client.setFixVersion(
                   a['key'] as String,
                   a['fixVersion'] as String,
@@ -659,19 +707,29 @@ class JiraToolExecutor {
                 ),
           };
 
-  /// Dispatch entries for the batch-4 Jira tools.
+  /// Dispatch entries for the comment-if-not-exists tool.
   Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _batch4Handlers() => {
+      _commentIfExistsHandlers() => {
             'jira_post_comment_if_not_exists': (a) =>
                 _client.postCommentIfNotExists(
                   a['key'] as String,
                   a['comment'] as String,
                 ),
+          };
+
+  /// Dispatch entries for the ADF field-update tool.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _adfFieldHandlers() => {
             'jira_update_field_as_adf': (a) => _client.updateFieldAsAdf(
                   a['key'] as String,
                   a['field'] as String,
                   a['value'] as Map<String, dynamic>,
                 ),
+          };
+
+  /// Dispatch entries for the field-by-name tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _fieldsByNameHandlers() => {
             'jira_get_all_fields_with_name': (a) =>
                 _client.getAllFieldsWithName(
                   a['project'] as String,
@@ -683,112 +741,32 @@ class JiraToolExecutor {
                   a['fieldName'] as String,
                   a['value'],
                 ),
+          };
+
+  /// Dispatch entries for the raw-update tool.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _rawUpdateHandlers() => {
             'jira_update_ticket': (a) => _client.updateTicket(
                   a['key'] as String,
                   a['jsonParams'] as Map<String, dynamic>,
                 ),
-            'jira_link_issues': (a) => _client.linkIssues(
-                  a['linkType'] as String,
-                  a['inwardKey'] as String,
-                  a['outwardKey'] as String,
-                ),
-            'jira_get_issue_link_types': (_) => _client.getIssueLinkTypes(),
+          };
+
+  /// Dispatch entries for the issue-link tools.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)> _linkHandlers() =>
+      {
+        'jira_link_issues': (a) => _client.linkIssues(
+              a['linkType'] as String,
+              a['inwardKey'] as String,
+              a['outwardKey'] as String,
+            ),
+        'jira_get_issue_link_types': (_) => _client.getIssueLinkTypes(),
+      };
+
+  /// Dispatch entries for the generic request tool.
+  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _genericRequestHandlers() => {
             'jira_execute_request': (a) =>
                 _client.executeRequest(a['url'] as String),
-            'jira_get_project_details': (a) =>
-                _client.getProjectDetails(a['projectKey'] as String),
-            'jira_get_project_statuses': (a) =>
-                _client.getProjectStatuses(a['project'] as String),
-          };
-
-  /// Dispatch entries for the batch-5 Jira tools.
-  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _batch5Handlers() => {
-            ..._batch5TicketHandlers(),
-            ..._batch5ProjectHandlers(),
-          };
-
-  /// Dispatch entries for batch-5 ticket-level tools.
-  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _batch5TicketHandlers() => {
-            'jira_move_to_status_with_resolution': (a) =>
-                _client.moveToStatusWithResolution(
-                  a['key'] as String,
-                  a['status'] as String,
-                  a['resolution'] as String,
-                ),
-            'jira_get_account_by_email': (a) => _client.getAccountByEmail(
-                  a['email'] as String,
-                ),
-            'jira_get_user_profile': (a) => _client.getUserProfile(
-                  a['userId'] as String,
-                ),
-            'jira_attach_file_to_ticket': (a) => _client.attachFileToTicket(
-                  a['key'] as String,
-                  a['fileName'] as String,
-                  a['filePath'] as String,
-                ),
-            'jira_download_attachment': (a) => _client.downloadAttachment(
-                  a['url'] as String,
-                  a['filePath'] as String,
-                ),
-            'jira_add_fix_version': (a) => _client.addFixVersion(
-                  a['key'] as String,
-                  a['version'] as String,
-                ),
-            'jira_remove_fix_version': (a) => _client.removeFixVersion(
-                  a['key'] as String,
-                  a['version'] as String,
-                ),
-            'jira_get_my_profile': (_) => _client.getMyProfile(),
-          };
-
-  /// Dispatch entries for batch-5 project-level tools.
-  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _batch5ProjectHandlers() => {
-            'jira_clone_project': (a) => _client.cloneProject(
-                  a['source'] as String,
-                  a['target'] as String,
-                  a['targetName'] as String,
-                  a['lead'] as String?,
-                ),
-            'jira_delete_project': (a) => _client.deleteProject(
-                  a['key'] as String,
-                  a['confirmDelete'] as bool,
-                ),
-            'jira_setup_project_workflow': (a) => _client.setupProjectWorkflow(
-                  a['target'] as String,
-                  a['statusesJson'] as Map<String, dynamic>,
-                ),
-            'jira_sync_project_workflow': (a) => _client.syncProjectWorkflow(
-                  a['source'] as String,
-                  a['target'] as String,
-                ),
-            'jira_copy_project_structure': (a) => _client.copyProjectStructure(
-                  a['source'] as String,
-                  a['target'] as String,
-                ),
-            'jira_get_project_board_config': (a) =>
-                _client.getProjectBoardConfig(a['project'] as String),
-            'jira_get_project_issue_type_scheme': (a) =>
-                _client.getProjectIssueTypeScheme(a['project'] as String),
-            'jira_assign_issue_type_scheme': (a) =>
-                _client.assignIssueTypeScheme(
-                  a['projectId'] as String,
-                  a['schemeId'] as String,
-                ),
-            'jira_get_project_workflow_scheme': (a) =>
-                _client.getProjectWorkflowScheme(a['project'] as String),
-            'jira_assign_workflow_scheme': (a) => _client.assignWorkflowScheme(
-                  a['projectId'] as String,
-                  a['schemeId'] as String,
-                ),
-            'jira_create_project_issue_type': (a) =>
-                _client.createProjectIssueType(
-                  a['project'] as String,
-                  a['name'] as String,
-                  a['type'] as String,
-                  a['description'] as String?,
-                ),
           };
 }

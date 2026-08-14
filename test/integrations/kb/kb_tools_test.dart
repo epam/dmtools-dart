@@ -6,10 +6,10 @@ import 'package:test/test.dart';
 /// Tests for the [kbTools] catalog and [KbToolExecutor] dispatch.
 void main() {
   readCatalogTests();
-  batch4CatalogParamTests();
+  searchAndListCatalogParamTests();
   mutationCatalogTests();
   readDispatchTests();
-  batch4DispatchTests();
+  searchAndListDispatchTests();
   writeDispatchTests();
   unknownToolTests();
 }
@@ -67,8 +67,8 @@ void readCatalogTests() {
   });
 }
 
-/// Batch-4 catalog param shape for the new search/list tools.
-void batch4CatalogParamTests() {
+/// Catalog param shape for the full-search and directory-listing tools.
+void searchAndListCatalogParamTests() {
   group('kb_search_docs_full', () {
     final tool = kbTools().firstWhere((t) => t.name == 'kb_search_docs_full');
 
@@ -160,8 +160,8 @@ void readDispatchTests() {
   });
 }
 
-/// Batch-4 executor dispatch for the new search/list tools.
-void batch4DispatchTests() {
+/// Executor dispatch for the full-search and directory-listing tools.
+void searchAndListDispatchTests() {
   late KbToolExecutor executor;
   late Directory kb;
 
@@ -172,7 +172,7 @@ void batch4DispatchTests() {
 
   tearDown(() => kb.deleteSync(recursive: true));
 
-  group('KbToolExecutor.execute (batch 4)', () {
+  group('KbToolExecutor.execute (full search and listing)', () {
     test('routes kb_search_docs_full and caps the result count', () async {
       final results = await executor.execute(
         'kb_search_docs_full',

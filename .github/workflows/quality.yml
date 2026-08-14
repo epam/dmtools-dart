@@ -11,6 +11,16 @@ jobs:
         with:
           sdk: stable
       - run: dart pub get
+      - name: Install gcc
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
+      - name: Compile QuickJS
+        run: |
+          cd native/quickjs
+          gcc -shared -fPIC -O2 -D_GNU_SOURCE \
+            -DCONFIG_VERSION='"2024-01-13"' -I. \
+            -o libquickjs_bridge.so ../quickjs_bridge.c \
+            quickjs.c libregexp.c libunicode.c cutils.c quickjs-libc.c libbf.c \
+            -lm -ldl -lpthread
       - run: dart format --set-exit-if-changed .
       - run: dart analyze
       - run: dart test --coverage=coverage

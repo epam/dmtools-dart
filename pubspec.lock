@@ -233,6 +233,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  quickjs_runtime:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: main
+      resolved-ref: "0155dc1b32a8bbc6e7488b0260a6689ab0fe626a"
+      url: "https://github.com/IstiN/quickjs_runtime.git"
+    source: git
+    version: "0.1.0"
   shelf:
     dependency: transitive
     description:

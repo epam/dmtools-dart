@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:dmtools/src/js/quickjs_runtime.dart';
+import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'package:test/test.dart';
 
 /// Spike tests proving the QuickJS FFI bridge works end-to-end: eval, JSON

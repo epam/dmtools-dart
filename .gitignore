@@ -11,3 +11,7 @@ coverage/
 .idea/
 native/quickjs/*.o
 native/quickjs/*.so
+native/quickjs/*.dll
+native/quickjs/*.dylib
+/dmtools
+/dmtools.exe

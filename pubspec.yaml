@@ -12,6 +12,10 @@ environment:
 dependencies:
   dio: ^5.4.0
   ffi: ^2.1.0
+  quickjs_runtime:
+    git:
+      url: https://github.com/IstiN/quickjs_runtime.git
+      ref: main
 
 dev_dependencies:
   test: ^1.24.0

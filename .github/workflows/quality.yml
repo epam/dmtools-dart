@@ -13,14 +13,10 @@ jobs:
       - run: dart pub get
       - name: Install gcc
         run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
-      - name: Compile QuickJS
+      - name: Build QuickJS (quickjs_runtime package)
         run: |
-          cd native/quickjs
-          gcc -shared -fPIC -O2 -D_GNU_SOURCE \
-            -DCONFIG_VERSION='"2024-01-13"' -I. \
-            -o libquickjs_bridge.so ../quickjs_bridge.c \
-            quickjs.c libregexp.c libunicode.c cutils.c quickjs-libc.c libbf.c \
-            -lm -ldl -lpthread
+          PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
+          bash "$PKG/tool/build_quickjs.sh"
       - run: dart format --set-exit-if-changed .
       - run: dart analyze
       - run: dart test --coverage=coverage
@@ -33,7 +29,10 @@ jobs:
           COV=$(grep -o 'end_of_record' coverage/lcov.info | wc -l)
           echo "lines=$(wc -l < coverage/lcov.info)" >> $GITHUB_OUTPUT
       - name: Install crap4dart
-        run: dart pub global activate crap4dart
+        # Pinned: 0.5.x adds class_size/unused_files gates that fail on the
+        # ported Java-mirroring client classes and on barrel-exported entry
+        # files. Unpin only together with a crap4dart.yaml/config decision.
+        run: dart pub global activate crap4dart 0.2.1
       - run: crap4dart check --all
       - run: crap4dart analyze
       - name: Generate badges
@@ -73,14 +72,10 @@ jobs:
       - run: dart pub get
       - name: Install gcc
         run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
-      - name: Compile QuickJS
+      - name: Build QuickJS (quickjs_runtime package)
         run: |
-          cd native/quickjs
-          gcc -shared -fPIC -O2 -D_GNU_SOURCE \
-            -DCONFIG_VERSION='"2024-01-13"' -I. \
-            -o libquickjs_bridge.so ../quickjs_bridge.c \
-            quickjs.c libregexp.c libunicode.c cutils.c quickjs-libc.c libbf.c \
-            -lm -ldl -lpthread
+          PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
+          bash "$PKG/tool/build_quickjs.sh"
       - name: Clone dmtools-agents
         run: git clone --depth 1 https://github.com/IstiN/dmtools-agents /tmp/dmtools-agents
       - name: Run agents test suite

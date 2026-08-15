@@ -20,7 +20,7 @@ import 'dart:io';
 
 import '../config/property_reader.dart';
 import '../mcp/tool_registry.dart';
-import 'quickjs_runtime.dart';
+import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'sync_tool_dispatcher.dart';
 
 /// Registers JS host functions backed by the Dart MCP tool registry.

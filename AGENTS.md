@@ -15,8 +15,13 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
    A config or `dmtools.env` that works with Java must work unchanged here.
    When behavior is ambiguous, **the Java source is the spec**; record the decision
    in the commit message.
-3. **No JVM, no GraalVM.** Dart only. JS runtime will be QuickJS via `dart:ffi`
-   with synchronous host calls (not the `flutter_js` plugin).
+3. **No JVM, no GraalVM.** Dart only. JS runtime is QuickJS via `dart:ffi` with
+   synchronous host calls (not the `flutter_js` plugin), consumed from the
+   **`quickjs_runtime` package** (github.com/IstiN/quickjs_runtime, git dep in
+   `pubspec.yaml`) — never vendored here. Build the native library with
+   `make native` (or `bash "$QUICKJS_PKG/tool/build_quickjs.sh"`); the .so is
+   built inside the package checkout and found via
+   `.dart_tool/package_config.json` (override with `JSR_QUICKJS_LIB`).
 4. **Thin `bin/`.** CI coverage is collected with `--report-on lib`, so `bin/` is
    outside LCOV. All logic lives in `lib/`; `bin/` only parses argv and delegates.
 5. **Tests ship with code.** Coverage gate is 80% (`gates.test_coverage`).
@@ -51,6 +56,7 @@ export PATH="$HOME/.pub-cache/bin:$PATH"   # crap4dart lives here; without it th
                                            # pre-commit hook SKIPS checks silently
 
 dart pub get
+make native                               # build the QuickJS .so (quickjs_runtime pkg)
 dart format .                              # CI fails on unformatted code
 dart analyze
 dart test --coverage=coverage

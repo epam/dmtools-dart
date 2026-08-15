@@ -17,7 +17,7 @@ import 'dart:io';
 
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
-import 'quickjs_runtime.dart';
+import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'tool_bridge.dart';
 import 'tool_wrapper_generator.dart';
 

@@ -69,8 +69,10 @@ void _adoReadTests(AdoClient Function() client, String gate) {
   test('auth: testConnection resolves the authenticated user', () async {
     final result = await client().testConnection();
 
-    expect(result['success'], isTrue, reason: 'authentication failed');
-    expect(result['authenticatedUser'], isNotNull);
+    expect(result['success'], isTrue,
+        reason:
+            'authentication failed: ${result['error'] ?? result['message']}');
+    expect(result['user'], isNotNull);
   });
 
   test('list work items: WIQL finds work items in the sandbox project',

@@ -125,9 +125,12 @@ void _confluenceWriteTest(
 
 /// Picks the title of the first search result that has one.
 String _firstResultTitle(List<Map<String, dynamic>> results) {
+  // `content?title=` only matches pages — a blog post title would make
+  // the follow-up getPage query return empty results.
   for (final r in results) {
+    if (r['type'] != 'page') continue;
     final title = r['title'];
     if (title is String && title.isNotEmpty) return title;
   }
-  fail('no titled content in sandbox space to read');
+  fail('no titled page in sandbox space to read');
 }

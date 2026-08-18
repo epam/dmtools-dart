@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:dmtools/src/config/property_reader.dart';
 import 'package:dmtools/src/js/sync_tool_dispatcher.dart';
+import 'package:dmtools/src/js/tool_bridge.dart';
+import 'package:dmtools/src/mcp/default_tool_registry.dart';
 import 'package:test/test.dart';
 
 import 'echo_server_helper.dart';
@@ -26,6 +28,7 @@ void main() {
     _testConfluenceReadTools();
     _testConfluenceWriteTools();
     _testAdoTools();
+    _testAdoWiqlSurface();
   }
 }
 
@@ -239,15 +242,56 @@ void _testAdoTools() {
       final expected = 'Basic ${base64Encode(utf8.encode(':pat-token'))}';
       expect(body['headers']['Authorization'], expected);
     });
+  });
+}
 
-    test('ado_list_work_items POSTs WIQL query to the wiql endpoint', () {
-      final body = jsonDecode(dispatcher.execute('ado_list_work_items', {
+/// The WIQL two-step contract on the JS/CLI surface: full work items,
+/// never the id/url stubs the WIQL POST returns.
+void _testAdoWiqlSurface() {
+  group('SyncToolDispatcher ADO WIQL surface', () {
+    late EchoServer server;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'ADO_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'ADO_ORGANIZATION': 'myorg',
+        'ADO_PROJECT': 'myproj',
+        'ADO_PAT_TOKEN': 'pat-token',
+      });
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('ado_list_work_items returns full work items, not WIQL stubs', () {
+      final dispatcher = SyncToolDispatcher(PropertyReader());
+      final result = dispatcher.execute('ado_list_work_items', {
         'wiql': 'SELECT [System.Id] FROM WorkItems',
-      })!);
-      expect(body['method'], 'POST');
-      expect(body['path'], '/myorg/myproj/_apis/wit/wiql?api-version=7.0');
-      final payload = jsonDecode(body['body'] as String);
-      expect(payload['query'], 'SELECT [System.Id] FROM WorkItems');
+      })!;
+      // Two-step contract (Java searchAndPerform): the WIQL POST yields
+      // id stubs, the dispatcher must batch-fetch full work items — JS
+      // agents are the primary consumers of this surface.
+      final items = jsonDecode(result) as List;
+      expect(items, hasLength(1));
+      final item = items.single as Map<String, dynamic>;
+      expect(item['id'], 7);
+      expect(item['fields'], isNotNull,
+          reason: 'got a WIQL id/url stub instead of a full work item');
+    });
+
+    test('ado_search_by_wiql alias dispatches on the JS surface', () {
+      // The JS entry point (executeToolViaJava) goes through ToolBridge,
+      // which resolves aliases to the canonical tool name.
+      final bridge = ToolBridge(registry: createDefaultToolRegistry());
+      final result = bridge.execute('ado_search_by_wiql', {
+        'wiql': 'SELECT [System.Id] FROM WorkItems',
+      });
+      final items = jsonDecode(result) as List;
+      expect(items.single['fields'], isNotNull);
     });
   });
 }

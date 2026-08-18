@@ -26,12 +26,23 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         if self.command in ("POST", "PUT", "PATCH"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8", errors="replace")
-        response = json.dumps({
+        payload = {
             "method": self.command,
             "path": self.path,
             "headers": {k: v for k, v in self.headers.items()},
             "body": body,
-        })
+        }
+        # ADO stub shapes for the WIQL two-step regression test: the WIQL
+        # POST answers id/url stubs, the ids= detail GET answers full items
+        # (mirrors the real dev.azure.com response envelopes).
+        if "/wit/wiql" in self.path:
+            payload["workItems"] = [{"id": 7, "url": "stub://7"}]
+        elif "/wit/workitems" in self.path and "ids=" in self.path:
+            payload["count"] = 1
+            payload["value"] = [
+                {"id": 7, "fields": {"System.Title": "T"}}
+            ]
+        response = json.dumps(payload)
         encoded = response.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

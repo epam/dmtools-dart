@@ -448,9 +448,10 @@ class _WorkItemSpy extends AdoClient {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids) {
+  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids,
+      {List<String>? fields}) {
     calls.add('getWorkItems:${ids.join(',')}');
-    return super.getWorkItems(ids);
+    return super.getWorkItems(ids, fields: fields);
   }
 
   @override

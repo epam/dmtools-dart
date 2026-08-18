@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart' show DioException;
 
 import 'ado_http_client.dart';
+import 'ado_json.dart';
 
 /// Azure DevOps API methods exposed to the MCP tool runtime.
 class AdoClient {
@@ -115,10 +116,17 @@ class AdoClient {
   }
 
   /// `ado_get_work_items` — GET `wit/workitems?ids=1,2,...`.
-  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids) async {
+  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids,
+      {List<String>? fields}) async {
     final body = await _http.get(
       'wit/workitems',
-      queryParams: {'ids': ids.join(',')},
+      queryParams: {
+        'ids': ids.join(','),
+        if (fields != null && fields.isNotEmpty)
+          'fields': fields.join(',')
+        else
+          r'$expand': 'relations',
+      },
     );
     return _decodeList(body);
   }
@@ -128,34 +136,21 @@ class AdoClient {
   /// items.
   ///
   /// Mirrors Java `searchAndPerform`: the WIQL response carries only
-  /// id/url stubs, so the ids are re-fetched via `wit/workitems` in
-  /// batches of 200 (the ADO limit), requesting [fields] when given and
-  /// `$expand=relations` otherwise.
+  /// id/url stubs, so the ids are re-fetched via [getWorkItems] in
+  /// batches of 200 (the ADO limit).
   Future<List<Map<String, dynamic>>> listWorkItems(String wiql,
       {List<String>? fields}) async {
     final body = await _http.post(
       'wit/wiql',
       body: jsonEncode({'query': wiql}),
     );
-    final stubs = _decodeList(body);
-    final ids = stubs
-        .map((item) => item['id'])
-        .whereType<int>()
-        .toList(growable: false);
+    final decoded = jsonDecode(body);
+    final ids = decoded is Map && decoded['workItems'] is List
+        ? wiqlStubIds(decoded['workItems'] as List)
+        : const <int>[];
     final results = <Map<String, dynamic>>[];
-    const batchSize = 200;
-    for (var start = 0; start < ids.length; start += batchSize) {
-      final end =
-          start + batchSize < ids.length ? start + batchSize : ids.length;
-      final query = <String, dynamic>{
-        'ids': ids.sublist(start, end).join(','),
-        if (fields != null && fields.isNotEmpty)
-          'fields': fields.join(',')
-        else
-          r'$expand': 'relations',
-      };
-      final detail = await _http.get('wit/workitems', queryParams: query);
-      results.addAll(_decodeList(detail));
+    for (final batch in batchIds(ids)) {
+      results.addAll(await getWorkItems(batch, fields: fields));
     }
     return results;
   }
@@ -445,22 +440,7 @@ class AdoClient {
   ///
   /// ADO list endpoints never return bare arrays: paged endpoints wrap
   /// the items as `{count, value: [...]}` and WIQL as
-  /// `{queryType, columns, workItems: [...]}`, so those keys are
-  /// unwrapped before mapping.
-  List<Map<String, dynamic>> _decodeList(String body) {
-    final decoded = jsonDecode(body);
-    final List items;
-    if (decoded is List) {
-      items = decoded;
-    } else if (decoded is Map && decoded['value'] is List) {
-      items = decoded['value'] as List;
-    } else if (decoded is Map && decoded['workItems'] is List) {
-      items = decoded['workItems'] as List;
-    } else {
-      items = const [];
-    }
-    return items
-        .map((entry) => Map<String, dynamic>.from(entry as Map))
-        .toList();
-  }
+  /// `{queryType, columns, workItems: [...]}` — see [unwrapAdoItems].
+  List<Map<String, dynamic>> _decodeList(String body) =>
+      unwrapAdoItems(jsonDecode(body));
 }

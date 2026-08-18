@@ -37,6 +37,7 @@ import 'dart:convert';
 
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
+import '../integrations/ado/ado_json.dart';
 import '../integrations/jira/jira_utils.dart';
 import 'sync_http_client.dart';
 
@@ -615,14 +616,50 @@ class _AdoSyncTools {
     return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
   }
 
-  /// `ado_list_work_items` — POST `wit/wiql?api-version=7.0` with the WIQL.
+  /// `ado_list_work_items` — POST `wit/wiql`, then batch-fetch full items.
+  ///
+  /// Mirrors [AdoClient.listWorkItems] / Java `searchAndPerform`: the
+  /// WIQL response carries only id/url stubs, so the ids are re-fetched
+  /// via `wit/workitems` in batches of 200 (`fields=...` when given,
+  /// `$expand=relations` otherwise) and the full items are returned.
   String _adoListWorkItems(
     SyncIntegrationConfig config,
     Map<String, dynamic> args,
   ) {
-    final url = '${config.baseUrl}/wit/wiql?api-version=$_adoApiVersion';
-    final body = jsonEncode({'query': _asStr(args['wiql'])});
-    return _postBody(config, url, body);
+    final wiqlUrl = '${config.baseUrl}/wit/wiql?api-version=$_adoApiVersion';
+    final wiqlBody = _postBody(
+      config,
+      wiqlUrl,
+      jsonEncode({'query': _asStr(args['wiql'])}),
+    );
+    final wiql = _tryDecode(wiqlBody);
+    if (wiql is! Map || wiql['workItems'] is! List) return wiqlBody;
+    final ids = wiqlStubIds(wiql['workItems'] as List);
+    final fields = (args['fields'] as List?)?.cast<String>();
+    final items = <Map<String, dynamic>>[];
+    for (final batch in batchIds(ids)) {
+      final detail = _adoDetailBatch(config, batch, fields);
+      if (detail == null) continue;
+      items.addAll(detail);
+    }
+    return jsonEncode(items);
+  }
+
+  /// Fetches one `wit/workitems` id batch, or `null` on an error body.
+  List<Map<String, dynamic>>? _adoDetailBatch(
+    SyncIntegrationConfig config,
+    List<int> ids,
+    List<String>? fields,
+  ) {
+    final extra = fields != null && fields.isNotEmpty
+        ? 'fields=${Uri.encodeQueryComponent(fields.join(','))}'
+        : r'$expand=relations';
+    final url = '${config.baseUrl}/wit/workitems'
+        '?ids=${ids.join(',')}&$extra&api-version=$_adoApiVersion';
+    final body = _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+    final decoded = _tryDecode(body);
+    if (decoded is Map && decoded['error'] != null) return null;
+    return unwrapAdoItems(decoded);
   }
 }
 
@@ -630,6 +667,15 @@ class _AdoSyncTools {
 
 /// Media type for JSON request/response bodies.
 const _jsonContentType = 'application/json';
+
+/// Decodes [body] as JSON, returning it verbatim when it does not parse.
+dynamic _tryDecode(String body) {
+  try {
+    return jsonDecode(body);
+  } on FormatException {
+    return body;
+  }
+}
 
 /// Resolves [toolName] against [fns], checks config, then dispatches.
 String _dispatch(

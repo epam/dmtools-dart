@@ -8,6 +8,11 @@ import 'confluence_test_support.dart';
 /// Coverage + behavior tests for [ConfluenceClient] and
 /// [ConfluenceHttpClient].
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   tearDown(PropertyReader.clearOverrides);
   httpClientTests();
   testConnectionTests();

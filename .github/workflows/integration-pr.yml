@@ -49,6 +49,7 @@ jobs:
           DMTOOLS_IT_GITHUB_REPO: ${{ vars.DMTOOLS_IT_GITHUB_REPO }}
 
           # GitLab
+          GITLAB_BASE_PATH: ${{ vars.GITLAB_BASE_PATH }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           DMTOOLS_IT_GITLAB_PROJECT: ${{ vars.DMTOOLS_IT_GITLAB_PROJECT }}
 

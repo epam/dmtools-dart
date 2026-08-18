@@ -153,6 +153,18 @@ void testConnectionTests() {
           endsWith('app.vssps.visualstudio.com/_apis/profile/profiles/me'));
     });
 
+    test('falls back to the projects endpoint when the profile is unreadable',
+        () async {
+      final f = mockAdo((o) {
+        if (o.path.contains('profiles/me')) return 'garbage';
+        if (o.path.endsWith('/projects')) return '[]';
+        return '{}';
+      });
+      final result = await f.client.testConnection();
+      expect(result['success'], isTrue);
+      expect(result['message'] as String, contains('profile unreadable'));
+    });
+
     test('reports failure on a non-JSON body', () async {
       final f = mockAdo((o) => 'not-json');
       final result = await f.client.testConnection();

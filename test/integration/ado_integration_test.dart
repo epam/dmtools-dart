@@ -72,7 +72,11 @@ void _adoReadTests(AdoClient Function() client, String gate) {
     expect(result['success'], isTrue,
         reason:
             'authentication failed: ${result['error'] ?? result['message']}');
-    expect(result['user'], isNotNull);
+    // The Profile API carries user/email; a PAT without profile scope
+    // falls back to the projects proof, where only success is known.
+    if (result['user'] != null) {
+      expect(result['user'], isA<String>());
+    }
   });
 
   test('list work items: WIQL finds work items in the sandbox project',

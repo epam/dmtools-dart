@@ -9,6 +9,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:dio/dio.dart' show DioException;
+
 import 'ado_http_client.dart';
 
 /// Azure DevOps API methods exposed to the MCP tool runtime.
@@ -23,8 +25,12 @@ class AdoClient {
   ///
   /// Mirrors Java `testConnection`/`getMyProfile`: the org-host
   /// `connection-data` endpoint returns 404 for PATs scoped to work
-  /// items, while the Profile API accepts them. Returns `success`,
-  /// the user's name and email on success, or a failure map on error.
+  /// items, while the Profile API accepts them. A PAT without the
+  /// profile-read scope gets 401 from the Profile API (Java fails the
+  /// same way); this port falls back to an authenticated
+  /// `GET {org}/_apis/projects` as the connectivity proof so
+  /// work-item-scoped PATs still pass. Returns `success` plus the
+  /// user's name/email when the profile was readable.
   Future<Map<String, dynamic>> testConnection() async {
     try {
       final body = await _http.getProfile('profile/profiles/me');
@@ -36,11 +42,20 @@ class AdoClient {
         'email': data['emailAddress'],
       };
     } on Object catch (e) {
-      return {
-        'success': false,
-        'message': 'Azure DevOps connection failed',
-        'error': e.toString(),
-      };
+      try {
+        jsonDecode(await _http.getOrg('projects'));
+        return {
+          'success': true,
+          'message': 'Azure DevOps connection successful '
+              '(profile unreadable: ${e is DioException ? e.response?.statusCode : e})',
+        };
+      } on Object catch (fallbackError) {
+        return {
+          'success': false,
+          'message': 'Azure DevOps connection failed',
+          'error': fallbackError.toString(),
+        };
+      }
     }
   }
 

@@ -96,7 +96,9 @@ class AdoHttpClient extends BaseHttpClient {
     final response = await dio.get<String>(
       'https://app.vssps.visualstudio.com/_apis/$path',
       queryParameters: {'api-version': '7.1'},
-      options: Options(headers: headers),
+      options: Options(
+        headers: {...headers, 'User-Agent': 'DMTools'},
+      ),
     );
     return response.data ?? '';
   }

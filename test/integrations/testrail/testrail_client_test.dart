@@ -7,6 +7,11 @@ import 'testrail_test_support.dart';
 
 /// Coverage + behavior tests for [TestRailClient] and [TestRailHttpClient].
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   tearDown(PropertyReader.clearOverrides);
   httpClientTests();
   testConnectionTests();

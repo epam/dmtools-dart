@@ -56,7 +56,7 @@ class RoutingAdapter implements HttpClientAdapter {
 
 /// The Confluence config injected for every fixture built by [mockConfluence].
 const _testConfig = {
-  'CONFLUENCE_BASE_PATH': 'https://confluence.example.com',
+  'CONFLUENCE_BASE_PATH': 'https://confluence.example.com/wiki',
   'CONFLUENCE_EMAIL': 'dev@example.com',
   'CONFLUENCE_API_TOKEN': 'tok-123',
 };

@@ -17,10 +17,18 @@ scripting runtime via `dart:ffi`. No JVM, no GraalVM — Dart only.
 
 ```bash
 dart pub get
+make native          # compile the QuickJS shared library (required before tests)
 dart format .
 dart analyze
 dart test
 ```
+
+> **`make native` is required once per checkout.** The JS runtime
+> (`quickjs_runtime` package) loads `libquickjs_bridge.so` at test and CLI
+> run time; without it you get raw `dlopen ... libquickjs_bridge.so (no
+> such file)` failures. `make native` builds it inside the package
+> checkout (override the location via `JSR_QUICKJS_LIB`); see the
+> [Makefile](Makefile) for platform notes. CI builds it automatically.
 
 Quality gates (CI [quality.yml](.github/workflows/quality.yml)): `dart format`
 clean, `dart analyze` clean, 80% line coverage on `lib`, and a CRAP score

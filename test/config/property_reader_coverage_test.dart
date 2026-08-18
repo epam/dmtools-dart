@@ -9,6 +9,11 @@ import 'package:test/test.dart';
 late PropertyReader reader;
 
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   setUp(() {
     PropertyReader.setOverrides({});
     reader = PropertyReader();

@@ -87,6 +87,20 @@ class AdoHttpClient extends BaseHttpClient {
     return response.data ?? '';
   }
 
+  /// Performs a GET against the Profile API host
+  /// (`app.vssps.visualstudio.com`), which serves PAT-authenticated
+  /// profile lookups off the organization host — mirrors Java
+  /// `executeProfileRequest` (org-host `_apis/connection-data` rejects
+  /// PATs scoped to work items).
+  Future<String> getProfile(String path) async {
+    final response = await dio.get<String>(
+      'https://app.vssps.visualstudio.com/_apis/$path',
+      queryParameters: {'api-version': '7.1'},
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
   /// Performs a GET, merging `api-version` into the query parameters.
   @override
   Future<String> get(

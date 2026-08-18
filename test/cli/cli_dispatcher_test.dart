@@ -13,6 +13,11 @@ late List<String> _lines;
 late CliDispatcher _dispatcher;
 
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   setUp(() {
     _tmp = Directory.systemTemp.createTempSync('dmtools_cli_');
     PropertyReader.setOverrides({});

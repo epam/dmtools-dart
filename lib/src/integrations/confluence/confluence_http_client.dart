@@ -58,6 +58,12 @@ class ConfluenceHttpClient extends BaseHttpClient {
         'Accept': 'application/json',
       };
 
+  /// Builds a REST URL under [basePath].
+  ///
+  /// By Java convention `CONFLUENCE_BASE_PATH` already contains the
+  /// `/wiki` segment (e.g. `https://org.atlassian.net/wiki`); Java's
+  /// `Confluence.java` builds `getBasePath() + "/rest/api/" + path`, so
+  /// no `/wiki` is appended here.
   @override
-  String buildUrl(String path) => '$basePath/wiki/rest/api/$path';
+  String buildUrl(String path) => '$basePath/rest/api/$path';
 }

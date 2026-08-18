@@ -133,8 +133,13 @@ List<ToolDefinition> _workItemQueryTools() => [
         description: 'Run a WIQL query to list Azure DevOps work items',
         integration: 'ado',
         category: 'work_item_management',
+        aliases: ['ado_search_by_wiql', 'tracker_search'],
         params: [
           ToolParam(name: 'wiql', description: 'The WIQL query string'),
+          ToolParam(
+            name: 'fields',
+            description: 'Optional array of fields to include',
+          ),
         ],
       ),
       ToolDefinition(
@@ -151,6 +156,7 @@ List<ToolDefinition> _workItemQueryTools() => [
 List<ToolDefinition> _commentTools() => [
       ToolDefinition(
         name: 'ado_get_work_item_comments',
+        aliases: ['ado_get_comments'],
         description: 'List the comments on an Azure DevOps work item',
         integration: 'ado',
         category: 'comment_management',
@@ -158,6 +164,7 @@ List<ToolDefinition> _commentTools() => [
       ),
       ToolDefinition(
         name: 'ado_add_work_item_comment',
+        aliases: ['ado_post_comment'],
         description: 'Add a comment to an Azure DevOps work item',
         integration: 'ado',
         category: 'comment_management',
@@ -506,7 +513,8 @@ class AdoToolExecutor {
         ),
     'ado_get_work_item_revisions': (a) => _client.getWorkItemRevisions(_id(a)),
     'ado_get_work_items': (a) => _client.getWorkItems(_intList(a, 'ids')),
-    'ado_list_work_items': (a) => _client.listWorkItems(a['wiql'] as String),
+    'ado_list_work_items': (a) => _client.listWorkItems(a['wiql'] as String,
+        fields: (a['fields'] as List?)?.cast<String>()),
     'ado_get_work_item_types': (a) =>
         _client.getWorkItemTypes(a['project'] as String),
     'ado_get_teams': (a) => _client.getTeams(a['project'] as String),

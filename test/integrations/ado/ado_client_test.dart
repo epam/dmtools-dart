@@ -8,6 +8,11 @@ import 'ado_test_support.dart';
 
 /// Coverage + behavior tests for [AdoClient] and [AdoHttpClient].
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   tearDown(PropertyReader.clearOverrides);
   httpClientTests();
   httpClientVerbTests();
@@ -128,19 +133,24 @@ void httpClientConfigErrorTests() {
   });
 }
 
-/// `ado_test` — connectivity check via GET `{org}/_apis/connection-data`.
+/// `ado_test` — connectivity check via the Profile API
+/// (`app.vssps.visualstudio.com/_apis/profile/profiles/me`).
 void testConnectionTests() {
   group('AdoClient.testConnection', () {
-    test('returns success with the authenticated user', () async {
+    test('returns success with the profile name and email', () async {
       final f = mockAdo(
-        (o) => routeByPath({'/connection-data': _connBody}, o),
+        (o) => routeByPath({
+          'app.vssps.visualstudio.com/_apis/profile/profiles/me':
+              '{"displayName":"Ada","emailAddress":"ada@contoso.com"}',
+        }, o),
       );
       final result = await f.client.testConnection();
       expect(result['success'], isTrue);
       expect(result['message'], 'Azure DevOps connection successful');
-      expect(result['authenticatedUser'], 'me');
+      expect(result['user'], 'Ada');
+      expect(result['email'], 'ada@contoso.com');
       expect(f.adapter.calls.single.path,
-          endsWith('/contoso/_apis/connection-data'));
+          endsWith('app.vssps.visualstudio.com/_apis/profile/profiles/me'));
     });
 
     test('reports failure on a non-JSON body', () async {
@@ -240,7 +250,6 @@ void getPrTests() {
 }
 
 /// Canned `_apis/connection-data` response body.
-const _connBody = '{"authenticatedUser":"me"}';
 
 /// Canned single work-item response body.
 const _itemBody = '{"id":42,"title":"Fix bug"}';

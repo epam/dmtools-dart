@@ -116,14 +116,18 @@ class ToolBridge {
   /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI
   /// tools delegate back to [_dispatchNonHttp] for direct `dart:io` execution.
   String _execute(String toolName, Map<String, dynamic> args) {
-    if (_registry.getTool(toolName) == null) {
+    final tool = _registry.getTool(toolName);
+    if (tool == null) {
       return _err('Unknown tool: $toolName');
     }
+    // Dispatch under the canonical name so Java-side aliases (e.g.
+    // `ado_search_by_wiql` -> `ado_list_work_items`) route to the same
+    // executor entry.
     final dispatcher = SyncToolDispatcher(
       PropertyReader(),
       nonHttpHandler: _dispatchNonHttp,
     );
-    return dispatcher.execute(toolName, args) ??
+    return dispatcher.execute(tool.name, args) ??
         _err('Tool not available: $toolName');
   }
 

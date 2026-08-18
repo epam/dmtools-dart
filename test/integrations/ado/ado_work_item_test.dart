@@ -89,18 +89,76 @@ void getWorkItemsTests() {
   });
 }
 
-/// `ado_list_work_items` — POST `wit/wiql`.
+/// `ado_list_work_items` — POST `wit/wiql`, then batch `wit/workitems`.
 void listWorkItemsTests() {
   group('AdoClient.listWorkItems', () {
-    test('POSTs the WIQL query body and decodes the list', () async {
-      final f = mockAdo((o) => routeByPath({'/wiql': _itemArray}, o));
+    test('POSTs WIQL then batch-fetches full work items', () async {
+      final f = mockAdo(_wiqlRouter);
       final items = await f.client.listWorkItems('Select [System.Id]');
       expect(items.map((i) => i['id']).toList(), [1, 2]);
-      final call = f.adapter.calls.single;
-      expect(call.method, 'POST');
-      expect(call.path, endsWith('/contoso/dmtools/_apis/wit/wiql'));
-      expect(jsonDecode(call.data as String), {'query': 'Select [System.Id]'});
+      expect(items.first['fields'], isNotNull,
+          reason: 'must return full work items, not WIQL id stubs');
+      final calls = f.adapter.calls;
+      expect(calls, hasLength(2));
+      expect(calls.first.method, 'POST');
+      expect(calls.first.path, endsWith('/contoso/dmtools/_apis/wit/wiql'));
+      expect(jsonDecode(calls.first.data as String),
+          {'query': 'Select [System.Id]'});
+      expect(calls.last.method, 'GET');
+      expect(calls.last.path, endsWith('/contoso/dmtools/_apis/wit/workitems'));
+      expect(calls.last.queryParameters['ids'], '1,2');
+      expect(calls.last.queryParameters[r'$expand'], 'relations');
     });
+
+    test('requests explicit fields instead of \$expand when given', () async {
+      final f = mockAdo(_wiqlRouter);
+      await f.client
+          .listWorkItems('Select [System.Id]', fields: ['System.Title']);
+      final detail = f.adapter.calls.last;
+      expect(detail.queryParameters['fields'], 'System.Title');
+      expect(detail.queryParameters.containsKey(r'$expand'), isFalse);
+    });
+
+    test('splits ids into batches of 200', () async {
+      final f = mockAdo(_wiqlRouter);
+      final items =
+          await f.client.listWorkItems('Select [System.Id] FROM 201 stubs');
+      expect(items, hasLength(201));
+      final detailCalls =
+          f.adapter.calls.where((c) => c.method == 'GET').toList();
+      expect(detailCalls, hasLength(2));
+      expect(
+          detailCalls.first.queryParameters['ids'].split(','), hasLength(200));
+      expect(detailCalls.last.queryParameters['ids'].split(','), hasLength(1));
+    });
+  });
+}
+
+/// Serves the real ADO response shapes: the WIQL POST answers id/url
+/// stubs wrapped in `workItems`, the detail GET answers `{count, value}`.
+String _wiqlRouter(RequestOptions o) {
+  if (o.path.endsWith('/wiql')) {
+    final query = o.data is String
+        ? (jsonDecode(o.data as String) as Map)['query'] as String? ?? ''
+        : '';
+    final count = query.contains('201 stubs') ? 201 : 2;
+    return jsonEncode({
+      'queryType': 'flat',
+      'workItems': [
+        for (var i = 1; i <= count; i++) {'id': i, 'url': 'stub://$i'},
+      ],
+    });
+  }
+  final ids = (o.queryParameters['ids'] as String).split(',').map(int.parse);
+  return jsonEncode({
+    'count': ids.length,
+    'value': [
+      for (final id in ids)
+        {
+          'id': id,
+          'fields': {'System.Id': id}
+        },
+    ],
   });
 }
 
@@ -236,9 +294,10 @@ void workItemCatalogParamShapeTests() {
       expect(tool.params.single.type, 'array');
     });
 
-    test('ado_list_work_items declares a required wiql string', () {
+    test('ado_list_work_items declares wiql and optional fields', () {
       final tool = toolNamed('ado_list_work_items');
-      expect(tool.params.single.name, 'wiql');
+      expect(tool.params.map((p) => p.name), ['wiql', 'fields']);
+      expect(tool.aliases, ['ado_search_by_wiql', 'tracker_search']);
     });
 
     test('ado_get_work_item_revisions declares a numeric id', () {
@@ -395,9 +454,10 @@ class _WorkItemSpy extends AdoClient {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> listWorkItems(String wiql) {
+  Future<List<Map<String, dynamic>>> listWorkItems(String wiql,
+      {List<String>? fields}) {
     calls.add('listWorkItems:$wiql');
-    return super.listWorkItems(wiql);
+    return super.listWorkItems(wiql, fields: fields);
   }
 
   @override

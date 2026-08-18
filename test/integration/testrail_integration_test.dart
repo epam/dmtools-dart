@@ -59,8 +59,14 @@ void _testrailSmokeGroup(String gate) {
     () {
       late final TestRailClient client;
       setUpAll(() {
+        // The gate var picks the sandbox project; mirror it into the
+        // client config so TESTRAIL_PROJECT does not have to be set
+        // separately for the same purpose (review note).
+        final existing = PropertyReader.getOverrides();
+        PropertyReader.setOverrides({...existing, 'TESTRAIL_PROJECT': gate});
         client = TestRailClient(TestRailHttpClient(PropertyReader()));
       });
+      tearDownAll(PropertyReader.clearOverrides);
       _testrailReadTests(() => client);
     },
     skip: gate.isEmpty

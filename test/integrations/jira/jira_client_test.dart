@@ -8,6 +8,11 @@ import 'jira_test_support.dart';
 
 /// Coverage + behavior tests for [JiraClient] and [JiraHttpClient].
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   tearDown(PropertyReader.clearOverrides);
   httpClientTests();
   testConnectionTests();

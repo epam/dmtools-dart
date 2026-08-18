@@ -18,18 +18,22 @@ class AdoClient {
   /// Creates a client backed by [_http].
   AdoClient(this._http);
 
-  /// `ado_test` — connectivity check via GET `{org}/_apis/connection-data`.
+  /// `ado_test` — connectivity check via the Profile API
+  /// (`app.vssps.visualstudio.com/_apis/profile/profiles/me`).
   ///
-  /// Returns `success` + the authenticated user descriptor on success, or a
-  /// failure map on error.
+  /// Mirrors Java `testConnection`/`getMyProfile`: the org-host
+  /// `connection-data` endpoint returns 404 for PATs scoped to work
+  /// items, while the Profile API accepts them. Returns `success`,
+  /// the user's name and email on success, or a failure map on error.
   Future<Map<String, dynamic>> testConnection() async {
     try {
-      final body = await _http.getOrg('connection-data');
+      final body = await _http.getProfile('profile/profiles/me');
       final data = jsonDecode(body) as Map<String, dynamic>;
       return {
         'success': true,
         'message': 'Azure DevOps connection successful',
-        'authenticatedUser': data['authenticatedUser'],
+        'user': data['displayName'],
+        'email': data['emailAddress'],
       };
     } on Object catch (e) {
       return {
@@ -104,13 +108,41 @@ class AdoClient {
     return _decodeList(body);
   }
 
-  /// `ado_list_work_items` — POST `wit/wiql` with the WIQL query [wiql].
-  Future<List<Map<String, dynamic>>> listWorkItems(String wiql) async {
+  /// `ado_list_work_items` (Java `ado_search_by_wiql`, alias
+  /// `tracker_search`) — POST `wit/wiql`, then batch-fetch the full work
+  /// items.
+  ///
+  /// Mirrors Java `searchAndPerform`: the WIQL response carries only
+  /// id/url stubs, so the ids are re-fetched via `wit/workitems` in
+  /// batches of 200 (the ADO limit), requesting [fields] when given and
+  /// `$expand=relations` otherwise.
+  Future<List<Map<String, dynamic>>> listWorkItems(String wiql,
+      {List<String>? fields}) async {
     final body = await _http.post(
       'wit/wiql',
       body: jsonEncode({'query': wiql}),
     );
-    return _decodeList(body);
+    final stubs = _decodeList(body);
+    final ids = stubs
+        .map((item) => item['id'])
+        .whereType<int>()
+        .toList(growable: false);
+    final results = <Map<String, dynamic>>[];
+    const batchSize = 200;
+    for (var start = 0; start < ids.length; start += batchSize) {
+      final end =
+          start + batchSize < ids.length ? start + batchSize : ids.length;
+      final query = <String, dynamic>{
+        'ids': ids.sublist(start, end).join(','),
+        if (fields != null && fields.isNotEmpty)
+          'fields': fields.join(',')
+        else
+          r'$expand': 'relations',
+      };
+      final detail = await _http.get('wit/workitems', queryParams: query);
+      results.addAll(_decodeList(detail));
+    }
+    return results;
   }
 
   /// `ado_get_work_item_types` — GET `wit/workitemtypes`.
@@ -394,9 +426,26 @@ class AdoClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
-  /// Decodes a JSON array body into a list of typed maps.
-  List<Map<String, dynamic>> _decodeList(String body) =>
-      (jsonDecode(body) as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+  /// Decodes a JSON list body into a list of typed maps.
+  ///
+  /// ADO list endpoints never return bare arrays: paged endpoints wrap
+  /// the items as `{count, value: [...]}` and WIQL as
+  /// `{queryType, columns, workItems: [...]}`, so those keys are
+  /// unwrapped before mapping.
+  List<Map<String, dynamic>> _decodeList(String body) {
+    final decoded = jsonDecode(body);
+    final List items;
+    if (decoded is List) {
+      items = decoded;
+    } else if (decoded is Map && decoded['value'] is List) {
+      items = decoded['value'] as List;
+    } else if (decoded is Map && decoded['workItems'] is List) {
+      items = decoded['workItems'] as List;
+    } else {
+      items = const [];
+    }
+    return items
+        .map((entry) => Map<String, dynamic>.from(entry as Map))
+        .toList();
+  }
 }

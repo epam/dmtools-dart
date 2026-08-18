@@ -15,6 +15,11 @@ import 'echo_server_helper.dart';
 /// mirror the async `GitlabHttpClient` / `ConfluenceHttpClient` /
 /// `AdoHttpClient` transports so both paths hit the same endpoints.
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   if (hasPython3()) {
     _testGitlabReadTools();
     _testGitlabWriteTools();

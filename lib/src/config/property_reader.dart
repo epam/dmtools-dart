@@ -53,6 +53,23 @@ class PropertyReader {
     return o != null ? Map.unmodifiable(o) : const <String, String>{};
   }
 
+  // --- Test isolation (hermetic L1 tests) ---
+
+  /// Testing-only switch: when `true`, `dmtools.env` / `dmtools-local.env`
+  /// discovery via CWD/project root is skipped (readers with an explicit
+  /// [basePath] still load files) and the OS-environment source is replaced
+  /// by [testEnvironment].
+  ///
+  /// Keeps unit tests hermetic: a developer's real `dmtools.env` in the
+  /// project root (the normal L3 setup) otherwise leaks live credentials
+  /// into tests that expect empty configuration.
+  static bool testIsolation = false;
+
+  /// The environment map consulted instead of `Platform.environment` when
+  /// [testIsolation] is enabled. Tests may populate it to exercise the
+  /// OS-variable tier of the resolution chain.
+  static final Map<String, String> testEnvironment = {};
+
   /// Optional base directory override (for testing).
   ///
   /// When set, `.env` files are loaded from this directory instead of
@@ -93,9 +110,10 @@ class PropertyReader {
     if (_localEnvProps!.containsKey(key)) {
       return _localEnvProps![key];
     }
-    // 4. OS environment variables.
-    if (Platform.environment.containsKey(key)) {
-      return Platform.environment[key];
+    // 4. OS environment variables (or the isolated test map).
+    final env = testIsolation ? testEnvironment : Platform.environment;
+    if (env.containsKey(key)) {
+      return env[key];
     }
     return null;
   }
@@ -113,15 +131,22 @@ class PropertyReader {
 
   void _ensureEnvLoaded() {
     if (_envPropsLoaded) return;
-    _envProps = _loadEnvFile('dmtools.env');
+    _envProps =
+        _isolationBlocksDefaultFiles() ? {} : _loadEnvFile('dmtools.env');
     _envPropsLoaded = true;
   }
 
   void _ensureLocalEnvLoaded() {
     if (_localEnvPropsLoaded) return;
-    _localEnvProps = _loadEnvFile('dmtools-local.env');
+    _localEnvProps =
+        _isolationBlocksDefaultFiles() ? {} : _loadEnvFile('dmtools-local.env');
     _localEnvPropsLoaded = true;
   }
+
+  /// Whether test isolation is active and this reader uses the default
+  /// (CWD/project-root) search — under isolation only explicit
+  /// [basePath] directories are still loaded.
+  bool _isolationBlocksDefaultFiles() => testIsolation && basePath == null;
 
   /// Loads an `.env` file from the base path (CWD by default).
   Map<String, String> _loadEnvFile(String filename) {

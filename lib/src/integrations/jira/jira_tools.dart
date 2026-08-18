@@ -288,6 +288,7 @@ List<ToolDefinition> _fieldTools() => [
 List<ToolDefinition> _createTools() => [
       _jiraTool(
         name: 'jira_create_ticket',
+        aliases: ['jira_create_ticket_basic'],
         description:
             'Create a basic Jira ticket with summary and optional description',
         params: [

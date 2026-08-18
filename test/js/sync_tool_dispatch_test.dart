@@ -12,6 +12,11 @@ import 'echo_server_helper.dart';
 /// Dart's [HttpServer] runs on the event loop, which is frozen during
 /// `Process.runSync('curl', …)`.
 void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
   _testRouting();
   _testUnsupportedIntegrationTools();
   _testNoConfig();

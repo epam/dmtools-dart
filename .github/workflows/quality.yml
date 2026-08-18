@@ -29,10 +29,9 @@ jobs:
           COV=$(grep -o 'end_of_record' coverage/lcov.info | wc -l)
           echo "lines=$(wc -l < coverage/lcov.info)" >> $GITHUB_OUTPUT
       - name: Install crap4dart
-        # Pinned: 0.5.x adds class_size/unused_files gates that fail on the
-        # ported Java-mirroring client classes and on barrel-exported entry
-        # files. Unpin only together with a crap4dart.yaml/config decision.
-        run: dart pub global activate crap4dart 0.2.1
+        # 0.9.2 per maintainer request (tracks the current gate set:
+        # class_size, magic_constants, test_assertions, folder_structure).
+        run: dart pub global activate crap4dart 0.9.2
       - run: crap4dart check --all
       - run: crap4dart analyze
       - name: Generate badges

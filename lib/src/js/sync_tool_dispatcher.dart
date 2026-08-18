@@ -25,6 +25,12 @@
 /// [AdoHttpClient] transports (`/rest/api/latest`, `X-Atlassian-Token`,
 /// `PRIVATE-TOKEN`, Bearer auth, ADO Basic PAT, …) so both paths hit the same
 /// endpoints.
+///
+/// Each HTTP integration lives in its own private tools class
+/// ([_JiraSyncTools], [_GithubSyncTools], [_GitLabSyncTools],
+/// [_ConfluenceSyncTools], [_AdoSyncTools]) that owns its config resolver and
+/// request builders; the shared request plumbing ([_dispatch], [_postBody],
+/// [_asStr], …) lives in top-level helpers.
 library;
 
 import 'dart:convert';
@@ -67,6 +73,53 @@ class SyncToolDispatcher {
     SyncNonHttpHandler? nonHttpHandler,
   }) : _nonHttpHandler = nonHttpHandler;
 
+  /// Jira tools; built lazily on the first `jira_*` dispatch.
+  late final _JiraSyncTools _jira = _JiraSyncTools(_reader);
+
+  /// GitHub tools; built lazily on the first `github_*` dispatch.
+  late final _GithubSyncTools _github = _GithubSyncTools(_reader);
+
+  /// GitLab tools; built lazily on the first `gitlab_*` dispatch.
+  late final _GitLabSyncTools _gitlab = _GitLabSyncTools(_reader);
+
+  /// Confluence tools; built lazily on the first `confluence_*` dispatch.
+  late final _ConfluenceSyncTools _confluence = _ConfluenceSyncTools(_reader);
+
+  /// ADO tools; built lazily on the first `ado_*` dispatch.
+  late final _AdoSyncTools _ado = _AdoSyncTools(_reader);
+
+  /// Executes a tool call. Returns a JSON result string, or `null` when no
+  /// integration matches the tool name and no [nonHttpHandler] is set.
+  String? execute(String toolName, Map<String, dynamic> args) {
+    if (toolName.startsWith('jira_')) {
+      return _jira.dispatch(toolName, args);
+    }
+    if (toolName.startsWith('github_')) {
+      return _github.dispatch(toolName, args);
+    }
+    if (toolName.startsWith('gitlab_')) {
+      return _gitlab.dispatch(toolName, args);
+    }
+    if (toolName.startsWith('confluence_')) {
+      return _confluence.dispatch(toolName, args);
+    }
+    if (toolName.startsWith('ado_')) {
+      return _ado.dispatch(toolName, args);
+    }
+    // File-system and CLI tools delegate to the host bridge.
+    final handler = _nonHttpHandler;
+    if (handler != null) return handler(toolName, args);
+    return null;
+  }
+}
+
+/// Jira request builders: config resolver plus the `jira_*` executors.
+class _JiraSyncTools {
+  final PropertyReader _reader;
+
+  /// Creates Jira tooling reading config from [reader].
+  _JiraSyncTools(this._reader);
+
   /// Jira tool executors; config is resolved once before dispatch.
   late final Map<String, SyncToolFn> _jiraFns = {
     'jira_get_ticket': _jiraGetTicket,
@@ -87,73 +140,9 @@ class SyncToolDispatcher {
     'jira_create_ticket': _jiraCreateTicketBasic,
   };
 
-  /// GitHub tool executors; config is resolved once before dispatch.
-  late final Map<String, SyncToolFn> _githubFns = {
-    'github_get_pr': _githubGetPr,
-    'github_create_comment': _githubCreateComment,
-  };
-
-  /// GitLab tool executors; config is resolved once before dispatch.
-  late final Map<String, SyncToolFn> _gitlabFns = {
-    'gitlab_get_mr': _gitlabGetMr,
-    'gitlab_list_mrs': _gitlabListMrs,
-    'gitlab_create_mr_note': _gitlabCreateMrNote,
-  };
-
-  /// Confluence tool executors; config is resolved once before dispatch.
-  late final Map<String, SyncToolFn> _confluenceFns = {
-    'confluence_search': _confluenceSearch,
-    'confluence_get_page': _confluenceGetPage,
-    'confluence_create_page': _confluenceCreatePage,
-  };
-
-  /// ADO tool executors; config is resolved once before dispatch.
-  late final Map<String, SyncToolFn> _adoFns = {
-    'ado_get_work_item': _adoGetWorkItem,
-    'ado_list_work_items': _adoListWorkItems,
-  };
-
-  /// Executes a tool call. Returns a JSON result string, or `null` when no
-  /// integration matches the tool name and no [nonHttpHandler] is set.
-  String? execute(String toolName, Map<String, dynamic> args) {
-    if (toolName.startsWith('jira_')) {
-      return _dispatch(toolName, args, _jiraFns, _jiraConfig, 'Jira');
-    }
-    if (toolName.startsWith('github_')) {
-      return _dispatch(toolName, args, _githubFns, _githubConfig, 'GitHub');
-    }
-    if (toolName.startsWith('gitlab_')) {
-      return _dispatch(toolName, args, _gitlabFns, _gitlabConfig, 'GitLab');
-    }
-    if (toolName.startsWith('confluence_')) {
-      return _dispatch(
-          toolName, args, _confluenceFns, _confluenceConfig, 'Confluence');
-    }
-    if (toolName.startsWith('ado_')) {
-      return _dispatch(toolName, args, _adoFns, _adoConfig, 'ADO');
-    }
-    // File-system and CLI tools delegate to the host bridge.
-    final handler = _nonHttpHandler;
-    if (handler != null) return handler(toolName, args);
-    return null;
-  }
-
-  /// Resolves [toolName] against [fns], checks config, then dispatches.
-  String _dispatch(
-    String toolName,
-    Map<String, dynamic> args,
-    Map<String, SyncToolFn> fns,
-    SyncIntegrationConfig? Function() configFn,
-    String integration,
-  ) {
-    final fn = fns[toolName];
-    if (fn == null) return _err('Unsupported $integration tool: $toolName');
-    final config = configFn();
-    if (config == null) return _err('$integration not configured');
-    return fn(config, args);
-  }
-
-  // ── Config builders ─────────────────────────────────────────────────────
+  /// Dispatches a Jira tool call against [_jiraFns].
+  String dispatch(String toolName, Map<String, dynamic> args) =>
+      _dispatch(toolName, args, _jiraFns, _jiraConfig, 'Jira');
 
   /// Builds Jira config, or `null` when base path / auth is missing.
   SyncIntegrationConfig? _jiraConfig() {
@@ -167,86 +156,10 @@ class SyncToolDispatcher {
       headers: {
         'Authorization': '$authType $token',
         'X-Atlassian-Token': 'nocheck',
-        'Content-Type': 'application/json',
+        'Content-Type': _jsonContentType,
       },
     );
   }
-
-  /// Builds GitHub config, or `null` when the token is missing.
-  SyncIntegrationConfig? _githubConfig() {
-    final token = _reader.getGithubToken();
-    if (token == null || token.isEmpty) return null;
-    return (
-      baseUrl: _reader.getGithubBasePath(),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'Content-Type': 'application/json',
-      },
-    );
-  }
-
-  /// Builds GitLab config, or `null` when base path / token is missing.
-  ///
-  /// Mirrors [GitlabHttpClient]: `PRIVATE-TOKEN` header, `/api/v4` suffix.
-  SyncIntegrationConfig? _gitlabConfig() {
-    final basePath = _reader.getGitLabBasePath();
-    if (basePath == null || basePath.isEmpty) return null;
-    final token = _reader.getGitLabToken();
-    if (token == null || token.isEmpty) return null;
-    return (
-      baseUrl: '$basePath/api/v4',
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    );
-  }
-
-  /// Builds Confluence config, or `null` when base path / auth is missing.
-  ///
-  /// Mirrors [ConfluenceHttpClient]: `{authType} {token}` Authorization,
-  /// `/wiki/rest/api` suffix.
-  SyncIntegrationConfig? _confluenceConfig() {
-    final basePath = _reader.getConfluenceBasePath();
-    if (basePath == null || basePath.isEmpty) return null;
-    final token = _reader.getConfluenceLoginPassToken();
-    if (token == null || token.isEmpty) return null;
-    final authType = _reader.getConfluenceAuthType();
-    return (
-      baseUrl: '$basePath/wiki/rest/api',
-      headers: {
-        'Authorization': '$authType $token',
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    );
-  }
-
-  /// Builds ADO config, or `null` when organization / project / PAT is missing.
-  ///
-  /// Mirrors [AdoHttpClient]: Basic `base64(':' + PAT)` auth, base URL
-  /// `{ADO_BASE_PATH}/{org}/{project}/_apis`.
-  SyncIntegrationConfig? _adoConfig() {
-    final organization = _reader.getAdoOrganization();
-    if (organization == null || organization.isEmpty) return null;
-    final project = _reader.getAdoProject();
-    if (project == null || project.isEmpty) return null;
-    final pat = _reader.getAdoPatToken();
-    if (pat == null || pat.isEmpty) return null;
-    final basic = base64Encode(utf8.encode(':$pat'));
-    final basePath = _reader.getAdoBasePath();
-    return (
-      baseUrl: '$basePath/$organization/$project/_apis',
-      headers: {
-        'Authorization': 'Basic $basic',
-        'Content-Type': 'application/json',
-      },
-    );
-  }
-
-  // ── Jira tools ──────────────────────────────────────────────────────────
 
   /// `jira_get_ticket` — GET `issue/{key}?fields={fields}`.
   String _jiraGetTicket(
@@ -339,7 +252,9 @@ class SyncToolDispatcher {
 
   /// `jira_update_description` — PUT `issue/{key}` with the description.
   String _jiraUpdateDescription(
-      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    SyncIntegrationConfig config,
+    Map<String, dynamic> args,
+  ) {
     return _putBody(
       config,
       '${config.baseUrl}/issue/${_asStr(args['key'])}',
@@ -389,7 +304,9 @@ class SyncToolDispatcher {
   ///
   /// Description is included only when provided (Java `createTicketBasic`).
   String _jiraCreateTicketBasic(
-      SyncIntegrationConfig config, Map<String, dynamic> args) {
+    SyncIntegrationConfig config,
+    Map<String, dynamic> args,
+  ) {
     final fields = <String, dynamic>{
       'project': {'key': _asStr(args['project'])},
       'issuetype': {'name': _asStr(args['issueType'])},
@@ -434,8 +351,39 @@ class SyncToolDispatcher {
     final list = decoded['transitions'] as List? ?? [];
     return list.cast<Map<String, dynamic>>();
   }
+}
 
-  // ── GitHub tools ────────────────────────────────────────────────────────
+/// GitHub request builders: config resolver plus the `github_*` executors.
+class _GithubSyncTools {
+  final PropertyReader _reader;
+
+  /// Creates GitHub tooling reading config from [reader].
+  _GithubSyncTools(this._reader);
+
+  /// GitHub tool executors; config is resolved once before dispatch.
+  late final Map<String, SyncToolFn> _githubFns = {
+    'github_get_pr': _githubGetPr,
+    'github_create_comment': _githubCreateComment,
+  };
+
+  /// Dispatches a GitHub tool call against [_githubFns].
+  String dispatch(String toolName, Map<String, dynamic> args) =>
+      _dispatch(toolName, args, _githubFns, _githubConfig, 'GitHub');
+
+  /// Builds GitHub config, or `null` when the token is missing.
+  SyncIntegrationConfig? _githubConfig() {
+    final token = _reader.getGithubToken();
+    if (token == null || token.isEmpty) return null;
+    return (
+      baseUrl: _reader.getGithubBasePath(),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': _jsonContentType,
+      },
+    );
+  }
 
   /// `github_get_pr` — GET `repos/{owner}/{repo}/pulls/{number}`.
   String _githubGetPr(SyncIntegrationConfig config, Map<String, dynamic> args) {
@@ -453,8 +401,42 @@ class SyncToolDispatcher {
         '/${_asStr(args['repo'])}/issues/${_asInt(args['number'])}/comments';
     return _postBody(config, url, jsonEncode({'body': _asStr(args['body'])}));
   }
+}
 
-  // ── GitLab tools ────────────────────────────────────────────────────────
+/// GitLab request builders: config resolver plus the `gitlab_*` executors.
+class _GitLabSyncTools {
+  final PropertyReader _reader;
+
+  /// Creates GitLab tooling reading config from [reader].
+  _GitLabSyncTools(this._reader);
+
+  /// GitLab tool executors; config is resolved once before dispatch.
+  late final Map<String, SyncToolFn> _gitlabFns = {
+    'gitlab_get_mr': _gitlabGetMr,
+    'gitlab_list_mrs': _gitlabListMrs,
+    'gitlab_create_mr_note': _gitlabCreateMrNote,
+  };
+
+  /// Dispatches a GitLab tool call against [_gitlabFns].
+  String dispatch(String toolName, Map<String, dynamic> args) =>
+      _dispatch(toolName, args, _gitlabFns, _gitlabConfig, 'GitLab');
+
+  /// Builds GitLab config, or `null` when base path / token is missing.
+  ///
+  /// Mirrors [GitlabHttpClient]: `PRIVATE-TOKEN` header, `/api/v4` suffix.
+  SyncIntegrationConfig? _gitlabConfig() {
+    final basePath = _reader.getGitLabBasePath();
+    if (basePath == null || basePath.isEmpty) return null;
+    final token = _reader.getGitLabToken();
+    if (token == null || token.isEmpty) return null;
+    return (
+      baseUrl: '$basePath/api/v4',
+      headers: {
+        'PRIVATE-TOKEN': token,
+        'Content-Type': _jsonContentType,
+      },
+    );
+  }
 
   /// URL-encodes a project id or `group/project` path for path segments.
   String _encodeProject(String project) => Uri.encodeComponent(project);
@@ -491,8 +473,45 @@ class SyncToolDispatcher {
     final url = '${config.baseUrl}/projects/$project/merge_requests/$iid/notes';
     return _postBody(config, url, jsonEncode({'body': _asStr(args['body'])}));
   }
+}
 
-  // ── Confluence tools ────────────────────────────────────────────────────
+/// Confluence request builders: config + the `confluence_*` executors.
+class _ConfluenceSyncTools {
+  final PropertyReader _reader;
+
+  /// Creates Confluence tooling reading config from [reader].
+  _ConfluenceSyncTools(this._reader);
+
+  /// Confluence tool executors; config is resolved once before dispatch.
+  late final Map<String, SyncToolFn> _confluenceFns = {
+    'confluence_search': _confluenceSearch,
+    'confluence_get_page': _confluenceGetPage,
+    'confluence_create_page': _confluenceCreatePage,
+  };
+
+  /// Dispatches a Confluence tool call against [_confluenceFns].
+  String dispatch(String toolName, Map<String, dynamic> args) => _dispatch(
+      toolName, args, _confluenceFns, _confluenceConfig, 'Confluence');
+
+  /// Builds Confluence config, or `null` when base path / auth is missing.
+  ///
+  /// Mirrors [ConfluenceHttpClient]: `{authType} {token}` Authorization,
+  /// `/wiki/rest/api` suffix.
+  SyncIntegrationConfig? _confluenceConfig() {
+    final basePath = _reader.getConfluenceBasePath();
+    if (basePath == null || basePath.isEmpty) return null;
+    final token = _reader.getConfluenceLoginPassToken();
+    if (token == null || token.isEmpty) return null;
+    final authType = _reader.getConfluenceAuthType();
+    return (
+      baseUrl: '$basePath/wiki/rest/api',
+      headers: {
+        'Authorization': '$authType $token',
+        'Accept': _jsonContentType,
+        'Content-Type': _jsonContentType,
+      },
+    );
+  }
 
   /// `confluence_search` — GET `content/search?cql={cql}`.
   String _confluenceSearch(
@@ -541,11 +560,49 @@ class SyncToolDispatcher {
           },
         },
       };
+}
 
-  // ── ADO tools ───────────────────────────────────────────────────────────
+/// ADO request builders: config resolver plus the `ado_*` executors.
+class _AdoSyncTools {
+  final PropertyReader _reader;
+
+  /// Creates ADO tooling reading config from [reader].
+  _AdoSyncTools(this._reader);
 
   /// ADO REST API version sent on every request (mirrors Java `API_VERSION`).
   static const _adoApiVersion = '7.0';
+
+  /// ADO tool executors; config is resolved once before dispatch.
+  late final Map<String, SyncToolFn> _adoFns = {
+    'ado_get_work_item': _adoGetWorkItem,
+    'ado_list_work_items': _adoListWorkItems,
+  };
+
+  /// Dispatches an ADO tool call against [_adoFns].
+  String dispatch(String toolName, Map<String, dynamic> args) =>
+      _dispatch(toolName, args, _adoFns, _adoConfig, 'ADO');
+
+  /// Builds ADO config, or `null` when organization / project / PAT is missing.
+  ///
+  /// Mirrors [AdoHttpClient]: Basic `base64(':' + PAT)` auth, base URL
+  /// `{ADO_BASE_PATH}/{org}/{project}/_apis`.
+  SyncIntegrationConfig? _adoConfig() {
+    final organization = _reader.getAdoOrganization();
+    if (organization == null || organization.isEmpty) return null;
+    final project = _reader.getAdoProject();
+    if (project == null || project.isEmpty) return null;
+    final pat = _reader.getAdoPatToken();
+    if (pat == null || pat.isEmpty) return null;
+    final basic = base64Encode(utf8.encode(':$pat'));
+    final basePath = _reader.getAdoBasePath();
+    return (
+      baseUrl: '$basePath/$organization/$project/_apis',
+      headers: {
+        'Authorization': 'Basic $basic',
+        'Content-Type': _jsonContentType,
+      },
+    );
+  }
 
   /// `ado_get_work_item` — GET `wit/workitems/{id}?api-version=7.0`.
   String _adoGetWorkItem(
@@ -567,59 +624,75 @@ class SyncToolDispatcher {
     final body = jsonEncode({'query': _asStr(args['wiql'])});
     return _postBody(config, url, body);
   }
-
-  // ── Shared HTTP helpers ─────────────────────────────────────────────────
-
-  /// GETs a JSON object, returning `null` on failure or non-object body.
-  Map<String, dynamic>? _getJson(SyncIntegrationConfig config, String url) {
-    final resp = SyncHttpClient.get(url, headers: config.headers);
-    if (!resp.isOk) return null;
-    try {
-      final decoded = jsonDecode(resp.body);
-      if (decoded is Map<String, dynamic>) return decoded;
-    } catch (_) {
-      // fall through
-    }
-    return null;
-  }
-
-  /// POSTs [body] to [url] and returns the result string.
-  String _postBody(SyncIntegrationConfig config, String url, String body) =>
-      _bodyOrError(
-          SyncHttpClient.post(url, headers: config.headers, body: body));
-
-  /// PUTs [body] to [url] and returns the result string.
-  String _putBody(SyncIntegrationConfig config, String url, String body) =>
-      _bodyOrError(
-          SyncHttpClient.put(url, headers: config.headers, body: body));
-
-  /// Returns the response body, or an error JSON when curl failed.
-  String _bodyOrError(SyncHttpResponse resp) {
-    if (resp.statusCode == 0) return _err('HTTP request failed: ${resp.body}');
-    return resp.body;
-  }
-
-  /// Joins a `fields` argument (list or comma string) into a query value.
-  ///
-  /// Defaults to `*navigable` (the Java `JiraClient` default).
-  String _joinFields(dynamic fields) {
-    if (fields == null) return '*navigable';
-    if (fields is String) return fields;
-    if (fields is List) return fields.cast<String>().join(',');
-    return '*navigable';
-  }
-
-  /// Coerces a loosely-typed JS argument to a string.
-  String _asStr(dynamic value) => value?.toString() ?? '';
-
-  /// Coerces a loosely-typed JS argument to an int.
-  int _asInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
-  }
-
-  /// Encodes a JSON error result string.
-  String _err(String message) => jsonEncode({'error': message});
 }
+
+// ── Shared dispatch + HTTP helpers ───────────────────────────────────────
+
+/// Media type for JSON request/response bodies.
+const _jsonContentType = 'application/json';
+
+/// Resolves [toolName] against [fns], checks config, then dispatches.
+String _dispatch(
+  String toolName,
+  Map<String, dynamic> args,
+  Map<String, SyncToolFn> fns,
+  SyncIntegrationConfig? Function() configFn,
+  String integration,
+) {
+  final fn = fns[toolName];
+  if (fn == null) return _err('Unsupported $integration tool: $toolName');
+  final config = configFn();
+  if (config == null) return _err('$integration not configured');
+  return fn(config, args);
+}
+
+/// GETs a JSON object, returning `null` on failure or non-object body.
+Map<String, dynamic>? _getJson(SyncIntegrationConfig config, String url) {
+  final resp = SyncHttpClient.get(url, headers: config.headers);
+  if (!resp.isOk) return null;
+  try {
+    final decoded = jsonDecode(resp.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+  } catch (_) {
+    // fall through
+  }
+  return null;
+}
+
+/// POSTs [body] to [url] and returns the result string.
+String _postBody(SyncIntegrationConfig config, String url, String body) =>
+    _bodyOrError(SyncHttpClient.post(url, headers: config.headers, body: body));
+
+/// PUTs [body] to [url] and returns the result string.
+String _putBody(SyncIntegrationConfig config, String url, String body) =>
+    _bodyOrError(SyncHttpClient.put(url, headers: config.headers, body: body));
+
+/// Returns the response body, or an error JSON when curl failed.
+String _bodyOrError(SyncHttpResponse resp) {
+  if (resp.statusCode == 0) return _err('HTTP request failed: ${resp.body}');
+  return resp.body;
+}
+
+/// Joins a `fields` argument (list or comma string) into a query value.
+///
+/// Defaults to `*navigable` (the Java `JiraClient` default).
+String _joinFields(dynamic fields) {
+  if (fields == null) return '*navigable';
+  if (fields is String) return fields;
+  if (fields is List) return fields.cast<String>().join(',');
+  return '*navigable';
+}
+
+/// Coerces a loosely-typed JS argument to a string.
+String _asStr(dynamic value) => value?.toString() ?? '';
+
+/// Coerces a loosely-typed JS argument to an int.
+int _asInt(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
+/// Encodes a JSON error result string.
+String _err(String message) => jsonEncode({'error': message});

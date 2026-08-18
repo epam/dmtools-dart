@@ -148,6 +148,8 @@ void _registerWriteTests(
     final result = _decode(
       bridge().execute('jira_move_to_status', {'key': key, 'status': target}),
     );
+    expect(result.containsKey('error'), isFalse,
+        reason: 'move_to_status dispatcher error: ${result['error']}');
     _expectNoError(result, context: 'move_to_status');
   });
 }

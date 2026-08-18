@@ -90,18 +90,12 @@ void _testrailReadTests(TestRailClient Function() client) {
   test('get cases: lists cases in the sandbox suite', () async {
     final cases = await client().getCases(suiteId!);
 
-    expect(
-      cases,
-      isNotEmpty,
-      reason: 'sandbox suite $suiteId has no cases to read',
-    );
+    expect(cases, isNotEmpty, reason: 'empty suite $suiteId');
   }, skip: suiteSkip);
 
   test('get case: fetches a sandbox case', () async {
     final cases = await client().getCases(suiteId!);
-    if (cases.isEmpty) {
-      fail('sandbox suite $suiteId has no cases to read');
-    }
+    expect(cases, isNotEmpty, reason: 'empty suite $suiteId');
 
     final id = cases.first['id'] as int;
     final testCase = await client().getCase(id);

@@ -551,8 +551,9 @@ void _testJiraAliases() {
   });
 }
 
-/// Verifies [toolName] with [args] is passed through to the non-HTTP handler.
-void _expectDelegated(String toolName, Map<String, dynamic> args) {
+/// Verifies [toolName] with [args] is passed through to the non-HTTP handler
+/// and returns the tool name the handler received.
+String _expectDelegated(String toolName, Map<String, dynamic> args) {
   late String gotName;
   late Map<String, dynamic> gotArgs;
   final d = SyncToolDispatcher(
@@ -566,31 +567,39 @@ void _expectDelegated(String toolName, Map<String, dynamic> args) {
   expect(d.execute(toolName, args), '{"delegated":true}');
   expect(gotName, toolName);
   expect(gotArgs, args);
+  return gotName;
 }
 
 void _testNonHttpDelegation() {
   group('SyncToolDispatcher non-HTTP delegation', () {
     test('delegates file_write to the handler', () {
-      _expectDelegated('file_write', {'path': '/tmp/a.txt', 'content': 'x'});
+      expect(
+          _expectDelegated(
+              'file_write', {'path': '/tmp/a.txt', 'content': 'x'}),
+          'file_write');
     });
 
     test('delegates file_list to the handler', () {
-      _expectDelegated('file_list', {'path': '/tmp'});
+      expect(_expectDelegated('file_list', {'path': '/tmp'}), 'file_list');
     });
 
     test('delegates file_exists to the handler', () {
-      _expectDelegated('file_exists', {'path': '/tmp/a.txt'});
+      expect(_expectDelegated('file_exists', {'path': '/tmp/a.txt'}),
+          'file_exists');
     });
 
     test('delegates file_delete to the handler', () {
-      _expectDelegated('file_delete', {'path': '/tmp/a.txt'});
+      expect(_expectDelegated('file_delete', {'path': '/tmp/a.txt'}),
+          'file_delete');
     });
 
     test('delegates cli_execute_command to the handler', () {
-      _expectDelegated('cli_execute_command', {
-        'command': 'git',
-        'args': ['status'],
-      });
+      expect(
+          _expectDelegated('cli_execute_command', {
+            'command': 'git',
+            'args': ['status'],
+          }),
+          'cli_execute_command');
     });
 
     test('returns null for non-HTTP tool without a handler', () {

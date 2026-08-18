@@ -100,7 +100,7 @@ class ToolBridge {
   }
 
   /// No-op: runtime env overrides are handled by the Phase 1 property layer.
-  String _setEnvVariable(String argsJson) => '{"success":true}';
+  String _setEnvVariable(String argsJson) => _successJson;
 
   /// Executes [toolName] with [args], returning the JSON result string.
   ///
@@ -177,7 +177,7 @@ class ToolBridge {
   String _writeFile(String path, String content) {
     try {
       File(_resolve(path)).writeAsStringSync(content);
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -216,7 +216,7 @@ class ToolBridge {
   String _copy(String source, String dest) {
     try {
       File(_resolve(source)).copySync(_resolve(dest));
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -225,7 +225,7 @@ class ToolBridge {
   String _move(String source, String dest) {
     try {
       File(_resolve(source)).renameSync(_resolve(dest));
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -234,7 +234,7 @@ class ToolBridge {
   String _mkdir(String path) {
     try {
       Directory(_resolve(path)).createSync(recursive: true);
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -253,7 +253,7 @@ class ToolBridge {
     try {
       final list = (lines as List).cast<String>();
       File(_resolve(path)).writeAsStringSync(list.join('\n'));
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -262,7 +262,7 @@ class ToolBridge {
   String _append(String path, String content) {
     try {
       File(_resolve(path)).writeAsStringSync(content, mode: FileMode.append);
-      return '{"success":true}';
+      return _successJson;
     } catch (e) {
       return _err(e.toString());
     }
@@ -283,15 +283,23 @@ class ToolBridge {
     });
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────
+  /// Resolves [path] against the working directory when relative.
+  String _resolve(String path) {
+    if (path.startsWith('/')) return path;
+    final base = _workingDirectory ?? Directory.current.path;
+    return '$base/$path';
+  }
+}
 
-  /// JS bootstrap that builds the `console` object over the private host
-  /// functions registered by [_registerConsole].
-  ///
-  /// Arguments are formatted in JS (strings as-is, other values via
-  /// `JSON.stringify`) and joined with spaces, matching the console
-  /// convention used by testRunner.js and agent scripts.
-  static const String _consoleBootstrap = '''
+// ── Console bridge ──────────────────────────────────────────────────────
+
+/// JS bootstrap that builds the `console` object over the private host
+/// functions registered by [_registerConsole].
+///
+/// Arguments are formatted in JS (strings as-is, other values via
+/// `JSON.stringify`) and joined with spaces, matching the console
+/// convention used by testRunner.js and agent scripts.
+const String _consoleBootstrap = '''
 (function() {
     function __joinArgs(args) {
         var parts = [];
@@ -317,48 +325,45 @@ class ToolBridge {
 })();
 ''';
 
-  /// Registers the `console` object on [runtime].
-  ///
-  /// Host functions print synchronously to Dart's stdout/stderr and return
-  /// JS `undefined`, so `console.log(...)` calls chain as no-ops.
-  void _registerConsole(QuickjsRuntime runtime) {
-    runtime.registerHostFunction(
-        '__consoleLog', (argsJson) => _printTo(stdout, argsJson));
-    runtime.registerHostFunction(
-        '__consoleWarn', (argsJson) => _printTo(stderr, argsJson));
-    runtime.registerHostFunction(
-        '__consoleError', (argsJson) => _printTo(stderr, argsJson));
-    runtime.eval(_consoleBootstrap, filename: '<console>');
-  }
+/// JSON body returned by host functions that only signal success.
+const _successJson = '{"success":true}';
 
-  /// Prints one console line and signals JS `undefined` (Dart `null`).
-  String? _printTo(IOSink sink, String argsJson) {
-    sink.writeln(_consoleArg(argsJson));
-    return null;
-  }
-
-  /// Decodes the JSON-marshaled console argument back to a display string.
-  String _consoleArg(String argsJson) {
-    try {
-      final decoded = jsonDecode(argsJson);
-      return decoded is String ? decoded : argsJson;
-    } catch (_) {
-      return argsJson;
-    }
-  }
-
-  /// Resolves [path] against the working directory when relative.
-  String _resolve(String path) {
-    if (path.startsWith('/')) return path;
-    final base = _workingDirectory ?? Directory.current.path;
-    return '$base/$path';
-  }
-
-  static Map<String, dynamic> _castArgs(dynamic value) =>
-      value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
-
-  static List<String> _castList(dynamic value) =>
-      value is List ? value.cast<String>() : const [];
-
-  static String _err(String message) => jsonEncode({'error': message});
+/// Registers the `console` object on [runtime].
+///
+/// Host functions print synchronously to Dart's stdout/stderr and return
+/// JS `undefined`, so `console.log(...)` calls chain as no-ops.
+void _registerConsole(QuickjsRuntime runtime) {
+  runtime.registerHostFunction(
+      '__consoleLog', (argsJson) => _printTo(stdout, argsJson));
+  runtime.registerHostFunction(
+      '__consoleWarn', (argsJson) => _printTo(stderr, argsJson));
+  runtime.registerHostFunction(
+      '__consoleError', (argsJson) => _printTo(stderr, argsJson));
+  runtime.eval(_consoleBootstrap, filename: '<console>');
 }
+
+/// Prints one console line and signals JS `undefined` (Dart `null`).
+String? _printTo(IOSink sink, String argsJson) {
+  sink.writeln(_consoleArg(argsJson));
+  return null;
+}
+
+/// Decodes the JSON-marshaled console argument back to a display string.
+String _consoleArg(String argsJson) {
+  try {
+    final decoded = jsonDecode(argsJson);
+    return decoded is String ? decoded : argsJson;
+  } catch (_) {
+    return argsJson;
+  }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+Map<String, dynamic> _castArgs(dynamic value) =>
+    value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
+
+List<String> _castList(dynamic value) =>
+    value is List ? value.cast<String>() : const [];
+
+String _err(String message) => jsonEncode({'error': message});

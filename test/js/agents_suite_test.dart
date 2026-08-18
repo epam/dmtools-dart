@@ -16,6 +16,7 @@ void main() {
   final hasRepo = File(runnerPath).existsSync();
 
   test('testRunner.js runs one test file', () {
+    expect(File(runnerPath).existsSync(), isTrue);
     final result = const JsJobRunner().runScript(
       scriptPath: runnerPath,
       jobParams: {

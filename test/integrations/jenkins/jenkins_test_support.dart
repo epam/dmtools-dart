@@ -53,12 +53,19 @@ const _testConfig = {
   'JENKINS_API_TOKEN': 'token-123',
 };
 
+/// Canned CSRF crumb served for `crumbIssuer` lookups.
+const _crumbBody = '{"crumb":"abc123","crumbRequestField":"Jenkins-Crumb"}';
+
 /// Builds a [JenkinsClient] over a mocked [Dio] routed by [router].
 ///
 /// The router maps each incoming [RequestOptions] to the response body the
 /// fake server should return; served requests land in `fixture.adapter.calls`.
+/// The crumbIssuer lookup is answered with [_crumbBody]; build a client from
+/// [mockHttp] with a throwing router to simulate a crumbs-disabled server.
 MockJenkinsFixture mockJenkins(String Function(RequestOptions options) router) {
-  final httpFix = mockHttp(router);
+  final httpFix = mockHttp(
+    (o) => o.path.contains('crumbIssuer') ? _crumbBody : router(o),
+  );
   return (client: JenkinsClient(httpFix.http), adapter: httpFix.adapter);
 }
 

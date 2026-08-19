@@ -26,7 +26,7 @@ class BitriseClient {
     try {
       final body = await _http.get('apps');
       final decoded = jsonDecode(body);
-      final appCount = decoded is List ? decoded.length : 0;
+      final appCount = _unwrapList(decoded).length;
       return {
         'success': true,
         'message': 'Bitrise connection successful',
@@ -110,12 +110,15 @@ class BitriseClient {
     return _postBuild(appSlug, buildParams);
   }
 
-  /// `bitrise_get_workflows` — GET `apps/{appSlug}/build-slots`.
+  /// `bitrise_get_workflows` — GET `apps/{appSlug}/build-workflows`.
   ///
-  /// Returns the decoded response object (contains workflow slots), or an
+  /// Mirrors Java `bitrise_list_workflows`, which reads the workflow list
+  /// from the `build-workflows` endpoint (the v0.1 API has no
+  /// `build-slots` route). Returns the decoded response object, or an
   /// empty map for non-object bodies.
   Future<Map<String, dynamic>> getWorkflows(String appSlug) async {
-    final body = await _http.get('apps/${_encodeSlug(appSlug)}/build-slots');
+    final body =
+        await _http.get('apps/${_encodeSlug(appSlug)}/build-workflows');
     return _decodeObject(body) ?? const {};
   }
 
@@ -168,9 +171,25 @@ class BitriseClient {
   }
 
   /// Parses [body] as a JSON object list, or returns empty on mismatch.
+  ///
+  /// Bitrise v0.1 wraps list responses in `{data: [...], paging: {...}}` —
+  /// the wrapped shape is unwrapped first; a bare array is accepted as a
+  /// fallback for older/mock endpoints.
   List<Map<String, dynamic>> _decodeList(String body) {
     final parsed = jsonDecode(body);
-    if (parsed is! List) return const [];
-    return parsed.cast<Map>().map(Map<String, dynamic>.from).toList();
+    return _unwrapList(parsed)
+        .cast<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+  }
+
+  /// Extracts the list payload from a Bitrise response ([decoded]).
+  List _unwrapList(dynamic decoded) {
+    if (decoded is List) return decoded;
+    if (decoded is Map<String, dynamic>) {
+      final data = decoded['data'];
+      if (data is List) return data;
+    }
+    return const [];
   }
 }

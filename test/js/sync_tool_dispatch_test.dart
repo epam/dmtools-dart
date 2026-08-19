@@ -224,6 +224,8 @@ void _testJiraTools() {
   _testJiraReadTools();
   _testJiraTicketFields();
   _testJiraWriteTools();
+  _testJiraLabelTools();
+  _testJiraLabelAbortTools();
 }
 
 void _testJiraReadTools() {
@@ -351,17 +353,6 @@ void _testJiraWriteTools() {
       expect(reqBody['body'], 'Hello world');
     });
 
-    test('jira_add_label PUTs full label set', () {
-      final result = dispatcher.execute('jira_add_label', {
-        'key': 'PROJ-1',
-        'label': 'bug',
-      });
-      final body = jsonDecode(result!);
-      expect(body['method'], 'PUT');
-      final putBody = jsonDecode(body['body'] as String);
-      expect(putBody['update']['labels'][0]['set'], contains('bug'));
-    });
-
     test('jira_move_to_status returns error when no transitions found', () {
       final result = dispatcher.execute('jira_move_to_status', {
         'key': 'PROJ-1',
@@ -370,6 +361,100 @@ void _testJiraWriteTools() {
       expect(
         jsonDecode(result!),
         {'error': 'No transition found for status: In Progress'},
+      );
+    });
+  });
+}
+
+/// Label add/remove — including the no-PUT-on-failed-fetch contract that
+/// guards against wiping a ticket's labels on a transient GET failure.
+void _testJiraLabelTools() {
+  group('SyncToolDispatcher Jira label tools', () {
+    late EchoServer server;
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'JIRA_LOGIN_PASS_TOKEN': 'dGVzdDp0b2tlbg==',
+        'JIRA_AUTH_TYPE': 'Basic',
+      });
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('jira_add_label PUTs the fetched set plus the new label', () {
+      final result = dispatcher.execute('jira_add_label', {
+        'key': 'PROJ-1',
+        'label': 'bug',
+      });
+      final body = jsonDecode(result!);
+      expect(body['method'], 'PUT');
+      final putBody = jsonDecode(body['body'] as String);
+      expect(putBody['update']['labels'][0]['set'], ['existing', 'bug']);
+    });
+
+    test('jira_remove_label PUTs the fetched set minus the label', () {
+      final result = dispatcher.execute('jira_remove_label', {
+        'key': 'PROJ-1',
+        'label': 'existing',
+      });
+      final body = jsonDecode(result!);
+      final putBody = jsonDecode(body['body'] as String);
+      expect(putBody['update']['labels'][0]['set'], isEmpty);
+    });
+  });
+}
+
+/// The no-PUT-on-failed-fetch contract that guards against wiping a
+/// ticket's labels on a transient GET failure.
+void _testJiraLabelAbortTools() {
+  group('SyncToolDispatcher Jira label fetch failures', () {
+    late EchoServer server;
+    late SyncToolDispatcher dispatcher;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'JIRA_LOGIN_PASS_TOKEN': 'dGVzdDp0b2tlbg==',
+        'JIRA_AUTH_TYPE': 'Basic',
+      });
+      dispatcher = SyncToolDispatcher(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('jira_add_label aborts (no PUT) when the label fetch fails', () {
+      final result = dispatcher.execute('jira_add_label', {
+        'key': '__jira_fail',
+        'label': 'bug',
+      });
+      final body = jsonDecode(result!);
+      expect(body, {
+        'error': 'Failed to fetch labels for __jira_fail',
+      });
+      expect(body['method'], isNull); // no PUT echo — nothing was sent
+    });
+
+    test('jira_remove_label aborts (no PUT) when the label fetch fails', () {
+      final result = dispatcher.execute('jira_remove_label', {
+        'key': '__jira_fail',
+        'label': 'bug',
+      });
+      expect(
+        jsonDecode(result!),
+        {'error': 'Failed to fetch labels for __jira_fail'},
       );
     });
   });

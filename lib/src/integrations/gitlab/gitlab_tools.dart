@@ -22,7 +22,6 @@ List<ToolDefinition> gitlabTools() => [
       ..._groupTools(),
       ..._projectTools(),
       ..._mrPipelineTools(),
-      ..._mrBlockTools(),
       ..._projectHookTools(),
     ];
 
@@ -470,24 +469,6 @@ List<ToolDefinition> _mrPipelineTools() => [
       ),
     ];
 
-/// MR-block tools: `gitlab_block_mr`, `gitlab_unblock_mr`.
-List<ToolDefinition> _mrBlockTools() => [
-      ToolDefinition(
-        name: 'gitlab_block_mr',
-        description: 'Block a GitLab merge request',
-        integration: 'gitlab',
-        category: 'merge_requests',
-        params: [_projectParam, _iidParam('merge request')],
-      ),
-      ToolDefinition(
-        name: 'gitlab_unblock_mr',
-        description: 'Unblock a GitLab merge request',
-        integration: 'gitlab',
-        category: 'merge_requests',
-        params: [_projectParam, _iidParam('merge request')],
-      ),
-    ];
-
 /// Project-hook tools: `gitlab_get_project_hooks`, `gitlab_add_project_hook`.
 List<ToolDefinition> _projectHookTools() => [
       ToolDefinition(
@@ -555,7 +536,6 @@ class GitlabToolExecutor {
     ..._memberHandlers(),
     ..._projectHandlers(),
     ..._mrPipelineHandlers(),
-    ..._mrBlockHandlers(),
     ..._projectHookHandlers(),
   };
 
@@ -700,19 +680,6 @@ class GitlabToolExecutor {
   Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _mrPipelineHandlers() => {
             'gitlab_get_mr_pipelines': (a) => _client.getMrPipelines(
-                  a['project'] as String,
-                  _toInt(a['iid']),
-                ),
-          };
-
-  /// Merge-request block/unblock handlers.
-  Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _mrBlockHandlers() => {
-            'gitlab_block_mr': (a) => _client.blockMr(
-                  a['project'] as String,
-                  _toInt(a['iid']),
-                ),
-            'gitlab_unblock_mr': (a) => _client.unblockMr(
                   a['project'] as String,
                   _toInt(a['iid']),
                 ),

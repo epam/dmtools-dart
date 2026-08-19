@@ -14,6 +14,7 @@ import 'echo_server_helper.dart';
 /// `Process.runSync('curl', …)`, so a separate process is required.
 void main() {
   _testBuildArgs();
+  _testRenderHeaderFile();
   _testParseResponse();
   _testIsOk();
   if (hasPython3()) {
@@ -30,41 +31,59 @@ void _testBuildArgs() {
       expect(args.last, 'http://ex.com/api');
     });
 
-    test('POST: -d body flag added', () {
+    test('carries connect and total timeouts', () {
+      final args = SyncHttpClient.buildArgs('GET', 'http://ex.com/api');
+      expect(args[args.indexOf('--connect-timeout') + 1], '10');
+      expect(args[args.indexOf('--max-time') + 1], '60');
+    });
+
+    test('body referenced via --data-binary @file, never inline', () {
       final args = SyncHttpClient.buildArgs(
         'POST',
         'http://ex.com',
-        body: '{"k":"v"}',
+        bodyFile: '/tmp/body.json',
       );
-      expect(args[args.indexOf('-d') + 1], '{"k":"v"}');
+      expect(args[args.indexOf('--data-binary') + 1], '@/tmp/body.json');
+      expect(args, isNot(contains('{"k":"v"}')));
       expect(args[args.indexOf('-X') + 1], 'POST');
     });
 
-    test('headers rendered as "Key: Value" -H pairs', () {
+    test('headers referenced via -H @file, secrets never inline', () {
       final args = SyncHttpClient.buildArgs(
         'GET',
         'http://ex.com',
-        headers: {'Authorization': 'Bearer tok', 'Accept': 'json'},
+        headerFile: '/tmp/headers.txt',
       );
-      expect(args, contains('Authorization: Bearer tok'));
-      expect(args, contains('Accept: json'));
+      expect(args[args.indexOf('-H') + 1], '@/tmp/headers.txt');
+      expect(args, isNot(contains('Bearer tok')));
     });
 
     test('URL is always the final argument', () {
       final args = SyncHttpClient.buildArgs(
         'POST',
         'http://ex.com/p',
-        headers: {'H': 'V'},
-        body: '{}',
+        headerFile: '/tmp/h',
+        bodyFile: '/tmp/b',
       );
       expect(args.last, 'http://ex.com/p');
     });
 
-    test('no headers or body omits -H and -d flags', () {
+    test('no header/body files omits -H and --data-binary flags', () {
       final args = SyncHttpClient.buildArgs('DELETE', 'http://ex.com');
       expect(args.contains('-H'), isFalse);
-      expect(args.contains('-d'), isFalse);
+      expect(args.contains('--data-binary'), isFalse);
     });
+  });
+}
+
+/// [SyncHttpClient.renderHeaderFile] — the `-H @file` payload format.
+void _testRenderHeaderFile() {
+  test('renderHeaderFile writes one "Key: Value" line per header', () {
+    final rendered = SyncHttpClient.renderHeaderFile({
+      'Authorization': 'Bearer tok',
+      'Accept': 'json',
+    });
+    expect(rendered, 'Authorization: Bearer tok\nAccept: json');
   });
 }
 
@@ -91,10 +110,19 @@ void _testParseResponse() {
 
     test('connection failure (000) returns stderr as body', () {
       final resp = SyncHttpClient.parseResponse(
-        _result('\n000', stderr: 'Connection refused'),
+        _result('\n000', stderr: 'Connection refused', exitCode: 7),
       );
       expect(resp.statusCode, 0);
-      expect(resp.body, 'Connection refused');
+      expect(resp.body, 'curl exit 7: Connection refused');
+    });
+
+    test('curl exit 28 (timeout) surfaces a distinct timeout error', () {
+      final resp = SyncHttpClient.parseResponse(
+        _result('\n000', stderr: 'Operation timed out', exitCode: 28),
+      );
+      expect(resp.statusCode, 0);
+      expect(resp.body, contains('timed out'));
+      expect(resp.body, contains('--max-time'));
     });
   });
 }
@@ -191,8 +219,19 @@ void _testLiveHeadersAndFailures() {
       expect(resp.statusCode, 0);
       expect(resp.isOk, isFalse);
     });
+
+    test('large body (200KB) avoids the argv size limit via temp file', () {
+      final big = 'x' * 200 * 1024;
+      final resp = SyncHttpClient.post(
+        'http://127.0.0.1:${server.port}/big',
+        body: big,
+      );
+      expect(resp.statusCode, 200);
+      final body = jsonDecode(resp.body);
+      expect((body['body'] as String).length, 200 * 1024);
+    });
   });
 }
 
-ProcessResult _result(String stdout, {String stderr = ''}) =>
-    ProcessResult(0, 0, stdout, stderr);
+ProcessResult _result(String stdout, {String stderr = '', int exitCode = 0}) =>
+    ProcessResult(0, exitCode, stdout, stderr);

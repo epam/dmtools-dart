@@ -47,8 +47,6 @@ const _expectedToolOrder = [
   'gitlab_get_project_details',
   'gitlab_get_project_variables',
   'gitlab_get_mr_pipelines',
-  'gitlab_block_mr',
-  'gitlab_unblock_mr',
   'gitlab_get_project_hooks',
   'gitlab_add_project_hook',
 ];
@@ -58,7 +56,7 @@ void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the thirty-three tools in declaration order', () {
+    test('registers the thirty-one tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 

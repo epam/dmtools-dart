@@ -28,7 +28,9 @@ jobs:
           - bitrise
           - jenkins
           - teams
-          - sharepoint
+          # sharepoint: re-add once SHAREPOINT_* secrets/vars exist — with
+          # DMTOOLS_IT_REQUIRE_CREDS=true and no injected config the leg is
+          # guaranteed red (review round 3).
     # Serialize per integration so two runs never write to the same sandbox at
     # once; a manual dispatch queues behind (does not cancel) a running nightly.
     concurrency:
@@ -63,6 +65,7 @@ jobs:
 
           # GitLab
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_BASE_PATH: ${{ vars.GITLAB_BASE_PATH }}
           DMTOOLS_IT_GITLAB_PROJECT: ${{ secrets.DMTOOLS_IT_GITLAB_PROJECT }}
 
           # Confluence

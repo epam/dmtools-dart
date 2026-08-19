@@ -108,17 +108,41 @@ void getJobsTests() {
   });
 }
 
-/// `jenkins_trigger_job` — POST `job/{name}/build`.
+/// `jenkins_trigger_job` — POST `{jobPath}/build` with a CSRF crumb.
 void triggerJobTests() {
   group('JenkinsClient.triggerJob', () {
-    test('POSTs the build and reports success', () async {
+    test('POSTs the build carrying the crumb header', () async {
       final f = mockJenkins((o) => '');
       final result = await f.client.triggerJob('job-a');
       expect(result['success'], isTrue);
       expect(result['job'], 'job-a');
-      final call = f.adapter.calls.single;
+      // First the crumb lookup, then the build POST.
+      expect(f.adapter.calls.first.path, contains('crumbIssuer'));
+      final call = f.adapter.calls.last;
       expect(call.method, 'POST');
       expect(call.path, endsWith('/job/job-a/build'));
+      expect(call.headers['Jenkins-Crumb'], 'abc123');
+    });
+
+    test('folder jobs become job/ segments per path element', () async {
+      final f = mockJenkins((o) => '');
+      await f.client.triggerJob('team/service');
+      final call = f.adapter.calls.last;
+      expect(call.path, endsWith('/job/team/job/service/build'));
+    });
+
+    test('POSTs without a crumb when crumbs are disabled', () async {
+      // A crumbIssuer error (CSRF off) must not break POSTs.
+      final http = mockHttp(
+        (o) => o.path.contains('crumbIssuer')
+            ? throw StateError('404 crumbIssuer')
+            : '',
+      );
+      final client = JenkinsClient(http.http);
+      final result = await client.triggerJob('job-a');
+      expect(result['success'], isTrue);
+      expect(http.adapter.calls.last.headers.containsKey('Jenkins-Crumb'),
+          isFalse);
     });
 
     test('reports failure when the POST throws', () async {
@@ -156,6 +180,18 @@ void getBuildTests() {
       expect(build?['number'], 5);
       expect(build?['result'], 'SUCCESS');
       expect(f.adapter.calls.single.path, endsWith('/job/job-a/5/api/json'));
+    });
+
+    test('folder jobs encode as job/ segments per path element', () async {
+      final f = mockJenkins(
+        (o) => routeByPath({'/5/api/json': _buildBody}, o),
+      );
+      final build = await f.client.getBuild('team/service', 5);
+      expect(build?['number'], 5);
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/job/team/job/service/5/api/json'),
+      );
     });
 
     test('returns null when the body is not an object', () async {
@@ -264,17 +300,17 @@ void getQueueTests() {
   });
 }
 
-/// `jenkins_cancel_build` — POST `cancelItem?id={queueId}`.
+/// `jenkins_cancel_build` — POST `queue/cancelItem?id={queueId}`.
 void cancelBuildTests() {
   group('JenkinsClient.cancelBuild', () {
-    test('POSTs the cancel and reports success', () async {
+    test('POSTs the queue cancel and reports success', () async {
       final f = mockJenkins((o) => '');
       final result = await f.client.cancelBuild(42);
       expect(result['success'], isTrue);
       expect(result['queueId'], 42);
-      final call = f.adapter.calls.single;
+      final call = f.adapter.calls.last;
       expect(call.method, 'POST');
-      expect(call.path, endsWith('/cancelItem?id=42'));
+      expect(call.path, endsWith('/queue/cancelItem?id=42'));
     });
 
     test('reports failure when the POST throws', () async {

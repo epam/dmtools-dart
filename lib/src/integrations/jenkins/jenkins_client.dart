@@ -2,7 +2,9 @@
 ///
 /// Each method corresponds to a Jenkins MCP tool. Transport is delegated to
 /// [JenkinsHttpClient]; this layer shapes requests and parses JSON into typed
-/// results. Job names are URL-encoded automatically.
+/// results. Job names may be folder paths (`team/service`), encoded as
+/// Jenkins `job/` segments per path element; POSTs carry the CSRF crumb when
+/// the server exposes one.
 library;
 
 import 'dart:convert';
@@ -16,8 +18,49 @@ class JenkinsClient {
   /// Creates a client backed by [_http].
   JenkinsClient(this._http);
 
-  /// URL-encodes a job name for safe path-segment use.
-  String _encodeJob(String name) => Uri.encodeComponent(name);
+  /// Cached CSRF crumb header (`{field: value}`), or `null` until fetched.
+  ///
+  /// Jenkins instances with CSRF protection enabled (the default) reject
+  /// POSTs without a valid crumb; instances with it disabled answer the
+  /// `crumbIssuer` lookup with an error and POSTs proceed crumb-less.
+  /// API-token auth is crumb-exempt server-side, so the crumb is strictly
+  /// additive coverage.
+  Map<String, String>? _crumb;
+
+  /// Converts a job name or folder path into Jenkins REST API segments.
+  ///
+  /// Ports Java `Jenkins.toApiJobPath`: `folder/job-name` becomes
+  /// `job/folder/job/job-name` — each `/`-separated element encoded as its
+  /// own `job/` segment (never `%2F`-encoded as one segment).
+  String _apiJobPath(String name) {
+    final segments =
+        name.split('/').where((s) => s.isNotEmpty).map(Uri.encodeComponent);
+    return segments.map((s) => 'job/$s').join('/');
+  }
+
+  /// Fetches (once) and returns the CSRF crumb headers for POSTs, or an
+  /// empty map when the server has crumbs disabled.
+  Future<Map<String, String>> _crumbHeaders() async {
+    final cached = _crumb;
+    if (cached != null) return cached;
+    try {
+      final body = await _http.get('crumbIssuer/api/json');
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic> &&
+          decoded['crumb'] is String &&
+          decoded['crumbRequestField'] is String) {
+        _crumb = {
+          decoded['crumbRequestField'] as String: decoded['crumb'] as String,
+        };
+      } else {
+        _crumb = const {};
+      }
+    } on Object {
+      // crumbIssuer 404/403 → CSRF protection disabled; POST without crumb.
+      _crumb = const {};
+    }
+    return _crumb!;
+  }
 
   /// `jenkins_test` — connectivity check via GET `api/json`.
   ///
@@ -59,13 +102,17 @@ class JenkinsClient {
     );
   }
 
-  /// `jenkins_trigger_job` — POST `job/{name}/build`.
+  /// `jenkins_trigger_job` — POST `{jobPath}/build`.
   ///
   /// Triggers an unconditional build of [name]. Returns a success/failure map
-  /// since the Jenkins response body is empty.
+  /// since the Jenkins response body is empty. POSTs carry the CSRF crumb
+  /// when the server requires one (see [_crumbHeaders]).
   Future<Map<String, dynamic>> triggerJob(String name) async {
     try {
-      await _http.post('job/${_encodeJob(name)}/build');
+      await _http.post(
+        '${_apiJobPath(name)}/build',
+        extra: await _crumbHeaders(),
+      );
       return {
         'success': true,
         'message': 'Job $name triggered',
@@ -88,7 +135,7 @@ class JenkinsClient {
     int buildNumber,
   ) async {
     final body = await _http.get(
-      'job/${_encodeJob(name)}/$buildNumber/api/json',
+      '${_apiJobPath(name)}/$buildNumber/api/json',
     );
     return _decodeMap(body);
   }
@@ -97,7 +144,7 @@ class JenkinsClient {
   ///
   /// Returns the raw console log text.
   Future<String> getBuildLog(String name, int buildNumber) async {
-    return _http.get('job/${_encodeJob(name)}/$buildNumber/consoleText');
+    return _http.get('${_apiJobPath(name)}/$buildNumber/consoleText');
   }
 
   /// `jenkins_get_console_output` — GET
@@ -111,7 +158,7 @@ class JenkinsClient {
     int startByte,
   ) async {
     return _http.get(
-      'job/${_encodeJob(name)}/$buildNumber/consoleText',
+      '${_apiJobPath(name)}/$buildNumber/consoleText',
       extra: {'Range': 'bytes=$startByte-'},
     );
   }
@@ -120,7 +167,7 @@ class JenkinsClient {
   ///
   /// Returns `null` when the response body is not a JSON object.
   Future<Map<String, dynamic>?> getLastBuild(String name) async {
-    final body = await _http.get('job/${_encodeJob(name)}/lastBuild/api/json');
+    final body = await _http.get('${_apiJobPath(name)}/lastBuild/api/json');
     return _decodeMap(body);
   }
 
@@ -130,7 +177,7 @@ class JenkinsClient {
   /// when the response body is not a JSON object.
   Future<Map<String, dynamic>?> getJobDetails(String name) async {
     final body = await _http.get(
-      'job/${_encodeJob(name)}/api/json',
+      '${_apiJobPath(name)}/api/json',
       queryParams: {'tree': 'builds[number,result]'},
     );
     return _decodeMap(body);
@@ -143,7 +190,7 @@ class JenkinsClient {
   /// timestamp. Returns `null` when the response body is not a JSON object.
   Future<Map<String, dynamic>?> getJobBuilds(String name, int limit) async {
     final body = await _http.get(
-      'job/${_encodeJob(name)}/api/json',
+      '${_apiJobPath(name)}/api/json',
       queryParams: {'tree': 'builds[number,result,timestamp]{0,$limit}'},
     );
     return _decodeMap(body);
@@ -157,13 +204,17 @@ class JenkinsClient {
     return _decodeMap(body);
   }
 
-  /// `jenkins_cancel_build` — POST `cancelItem?id={queueId}`.
+  /// `jenkins_cancel_build` — POST `queue/cancelItem?id={queueId}`.
   ///
   /// Cancels the queued build identified by [queueId]. Returns a
-  /// success/failure map since the Jenkins response body is empty.
+  /// success/failure map since the Jenkins response body is empty. POSTs
+  /// carry the CSRF crumb when the server requires one.
   Future<Map<String, dynamic>> cancelBuild(int queueId) async {
     try {
-      await _http.post('cancelItem?id=$queueId');
+      await _http.post(
+        'queue/cancelItem?id=$queueId',
+        extra: await _crumbHeaders(),
+      );
       return {
         'success': true,
         'message': 'Queue item $queueId cancelled',
@@ -188,7 +239,7 @@ class JenkinsClient {
     int buildNumber,
   ) async {
     final body = await _http.get(
-      'job/${_encodeJob(name)}/$buildNumber/api/json',
+      '${_apiJobPath(name)}/$buildNumber/api/json',
       queryParams: {
         'tree': 'artifacts[fileName,relativePath]',
       },
@@ -200,7 +251,7 @@ class JenkinsClient {
   ///
   /// Returns the raw job configuration XML.
   Future<String> getJobConfig(String name) async {
-    return _http.get('job/${_encodeJob(name)}/config.xml');
+    return _http.get('${_apiJobPath(name)}/config.xml');
   }
 
   /// Decodes a JSON body to a map, or `null` when not an object.

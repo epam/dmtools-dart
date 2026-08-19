@@ -24,7 +24,6 @@ List<ToolDefinition> teamsTools() => [
       _getTeamChannelsTool(),
       _sendChannelMessageTool(),
       _getChannelMessagesTool(),
-      _replyToMessageTool(),
     ];
 
 /// Connectivity-check tool: `teams_test`.
@@ -168,31 +167,6 @@ ToolDefinition _getChannelMessagesTool() => ToolDefinition(
       params: [_teamIdParam(), _channelIdParam()],
     );
 
-/// Reply-to-message tool: `teams_reply_to_message`.
-ToolDefinition _replyToMessageTool() => ToolDefinition(
-      name: 'teams_reply_to_message',
-      description: 'Reply to a message in a Teams chat',
-      integration: 'teams',
-      category: 'messages',
-      params: [
-        ToolParam(
-          name: 'chat_id',
-          description: 'The Teams chat id',
-          required: true,
-        ),
-        ToolParam(
-          name: 'message_id',
-          description: 'The id of the message to reply to',
-          required: true,
-        ),
-        ToolParam(
-          name: 'body',
-          description: 'The reply body content',
-          required: true,
-        ),
-      ],
-    );
-
 /// Shared `team_id` parameter.
 ToolParam _teamIdParam() => ToolParam(
       name: 'team_id',
@@ -267,11 +241,6 @@ class TeamsToolExecutor {
     'teams_get_channel_messages': (a) => _client.getChannelMessages(
           a['team_id'] as String,
           a['channel_id'] as String,
-        ),
-    'teams_reply_to_message': (a) => _client.replyToMessage(
-          a['chat_id'] as String,
-          a['message_id'] as String,
-          a['body'] as String,
         ),
   };
 }

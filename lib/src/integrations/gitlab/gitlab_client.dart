@@ -116,12 +116,17 @@ class GitlabClient {
         jsonEncode({'body': body}),
       );
 
-  /// `gitlab_merge_mr` — PUT `/api/v4/projects/{id}/merge_requests/{iid}`
-  /// with `state_event=merge`.
+  /// `gitlab_merge_mr` — PUT
+  /// `/api/v4/projects/{id}/merge_requests/{iid}/merge`.
   ///
-  /// Returns the updated merge request, or `null` for non-object bodies.
-  Future<Map<String, dynamic>?> mergeMr(String project, int iid) =>
-      _setMrState(project, iid, 'merge');
+  /// Mirrors Java `mergeMergeRequest`: merging is a dedicated endpoint, not
+  /// a `state_event` (those only support `close`/`reopen`).
+  ///
+  /// Returns the merged merge request, or `null` for non-object bodies.
+  Future<Map<String, dynamic>?> mergeMr(String project, int iid) => _putObject(
+        'projects/${_encodeProject(project)}/merge_requests/$iid/merge',
+        '{}',
+      );
 
   /// `gitlab_close_mr` — PUT `/api/v4/projects/{id}/merge_requests/{iid}`
   /// with `state_event=close`.
@@ -130,7 +135,10 @@ class GitlabClient {
   Future<Map<String, dynamic>?> closeMr(String project, int iid) =>
       _setMrState(project, iid, 'close');
 
-  /// PUTs a `state_event` on a merge request — shared by merge/close.
+  /// PUTs a `state_event` on a merge request — shared by close/reopen.
+  ///
+  /// `merge` is deliberately absent: merging runs through the dedicated
+  /// `.../merge` endpoint (see [mergeMr]).
   Future<Map<String, dynamic>?> _setMrState(
     String project,
     int iid,
@@ -357,25 +365,6 @@ class GitlabClient {
   Future<List<Map<String, dynamic>>> getMrPipelines(String project, int iid) =>
       _getList(
         'projects/${_encodeProject(project)}/merge_requests/$iid/pipelines',
-      );
-
-  /// `gitlab_block_mr` — POST
-  /// `/api/v4/projects/{id}/merge_requests/{iid}/block`.
-  ///
-  /// Returns the updated merge request, or `null` for non-object bodies.
-  Future<Map<String, dynamic>?> blockMr(String project, int iid) => _postObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/block',
-        null,
-      );
-
-  /// `gitlab_unblock_mr` — POST
-  /// `/api/v4/projects/{id}/merge_requests/{iid}/unblock`.
-  ///
-  /// Returns the updated merge request, or `null` for non-object bodies.
-  Future<Map<String, dynamic>?> unblockMr(String project, int iid) =>
-      _postObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/unblock',
-        null,
       );
 
   /// `gitlab_get_project_hooks` — GET `/api/v4/projects/{id}/hooks`.

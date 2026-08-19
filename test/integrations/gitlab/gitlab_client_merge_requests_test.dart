@@ -6,9 +6,9 @@ import 'package:test/test.dart';
 
 import 'gitlab_test_support.dart';
 
-/// GitLab merge-request tools: state transitions (merge/close/block/unblock),
-/// approvals, notes, discussions and resolve, diff, and MR pipelines — client
-/// method coverage plus executor dispatch.
+/// GitLab merge-request tools: state transitions (merge/close), approvals,
+/// notes, discussions and resolve, diff, and MR pipelines — client method
+/// coverage plus executor dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
   mergeMrTests();
@@ -21,23 +21,16 @@ void main() {
   getMrDiscussionsTests();
   triggerMrDiscussionResolveTests();
   getMrPipelinesTests();
-  blockMrTests();
-  unblockMrTests();
   mrStateExecutorDispatchTests();
   mrDiffExecutorDispatchTests();
   mrApprovalExecutorDispatchTests();
   mrReadExecutorDispatchTests();
   mrDiscussionResolveExecutorDispatchTests();
   mrPipelineExecutorDispatchTests();
-  mrBlockExecutorDispatchTests();
 }
 
 /// Canned merged merge-request body (post state transition).
 const _mergedMrBody = '{"iid":42,"state":"merged"}';
-
-/// Canned blocked merge-request body (post block/unblock).
-const _blockedMrBody =
-    '{"id":42,"title":"MR","detailed_merge_status":"blocked"}';
 
 /// Canned merge-request changes body.
 const _mrDiffBody =
@@ -73,9 +66,9 @@ const _mrPipelinesBody =
 /// `gitlab_merge_mr` — PUT state_event=merge.
 void mergeMrTests() {
   group('GitlabClient.mergeMr', () {
-    test('PUTs state_event=merge and returns the MR', () async {
+    test('PUTs the dedicated merge endpoint and returns the MR', () async {
       final f = mockGitlab(
-        (o) => routeByPath({'/merge_requests/42': _mergedMrBody}, o),
+        (o) => routeByPath({'/merge_requests/42/merge': _mergedMrBody}, o),
       );
       final mr = await f.client.mergeMr('group/proj', 42);
       expect(mr?['iid'], 42);
@@ -83,9 +76,8 @@ void mergeMrTests() {
       expect(call.method, 'PUT');
       expect(
         call.path,
-        endsWith('/api/v4/projects/group%2Fproj/merge_requests/42'),
+        endsWith('/api/v4/projects/group%2Fproj/merge_requests/42/merge'),
       );
-      expect(jsonDecode(call.data as String), {'state_event': 'merge'});
     });
   });
 }
@@ -328,61 +320,16 @@ void getMrPipelinesTests() {
   });
 }
 
-/// `gitlab_block_mr` — POST /merge_requests/{iid}/block.
-void blockMrTests() {
-  group('GitlabClient.blockMr', () {
-    test('POSTs block and returns the MR', () async {
-      final f = mockGitlab(
-        (o) => routeByPath({'/merge_requests/42/block': _blockedMrBody}, o),
-      );
-      final mr = await f.client.blockMr('1', 42);
-      expect(mr?['id'], 42);
-      final call = f.adapter.calls.single;
-      expect(call.method, 'POST');
-      expect(
-        call.path,
-        endsWith('/api/v4/projects/1/merge_requests/42/block'),
-      );
-    });
-
-    test('returns null when the body is not an object', () async {
-      final f = mockGitlab(
-        (o) => routeByPath({'/merge_requests/42/block': '[]'}, o),
-      );
-      expect(await f.client.blockMr('1', 42), isNull);
-    });
-  });
-}
-
-/// `gitlab_unblock_mr` — POST /merge_requests/{iid}/unblock.
-void unblockMrTests() {
-  group('GitlabClient.unblockMr', () {
-    test('POSTs unblock and returns the MR', () async {
-      final f = mockGitlab(
-        (o) => routeByPath({'/merge_requests/42/unblock': _blockedMrBody}, o),
-      );
-      final mr = await f.client.unblockMr('1', 42);
-      expect(mr?['id'], 42);
-      final call = f.adapter.calls.single;
-      expect(call.method, 'POST');
-      expect(
-        call.path,
-        endsWith('/api/v4/projects/1/merge_requests/42/unblock'),
-      );
-    });
-  });
-}
-
 /// [GitlabToolExecutor.execute] routes the MR state-transition tools.
 void mrStateExecutorDispatchTests() {
   group('GitlabToolExecutor.execute (merge requests)', () {
     test('gitlab_merge_mr routes project and iid', () async {
       final f = _executor(
-          (o) => routeByPath({'/merge_requests/3': _mergedMrBody}, o));
+          (o) => routeByPath({'/merge_requests/3/merge': _mergedMrBody}, o));
       await f.executor.execute('gitlab_merge_mr', {'project': '1', 'iid': 3});
       final call = f.adapter.calls.single;
       expect(call.method, 'PUT');
-      expect(jsonDecode(call.data as String), {'state_event': 'merge'});
+      expect(call.path, endsWith('/merge_requests/3/merge'));
     });
 
     test('gitlab_close_mr routes project and iid', () async {
@@ -535,33 +482,6 @@ void mrPipelineExecutorDispatchTests() {
       expect(
         f.adapter.calls.single.path,
         endsWith('/merge_requests/3/pipelines'),
-      );
-    });
-  });
-}
-
-/// [GitlabToolExecutor.execute] routes the MR blocking tools.
-void mrBlockExecutorDispatchTests() {
-  group('GitlabToolExecutor.execute (merge requests)', () {
-    test('gitlab_block_mr routes project and iid', () async {
-      final f = _executor(
-        (o) => routeByPath({'/merge_requests/3/block': _blockedMrBody}, o),
-      );
-      await f.executor.execute('gitlab_block_mr', {'project': '1', 'iid': 3});
-      expect(
-        f.adapter.calls.single.path,
-        endsWith('/merge_requests/3/block'),
-      );
-    });
-
-    test('gitlab_unblock_mr routes project and iid', () async {
-      final f = _executor(
-        (o) => routeByPath({'/merge_requests/3/unblock': _blockedMrBody}, o),
-      );
-      await f.executor.execute('gitlab_unblock_mr', {'project': '1', 'iid': 3});
-      expect(
-        f.adapter.calls.single.path,
-        endsWith('/merge_requests/3/unblock'),
       );
     });
   });

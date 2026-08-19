@@ -27,24 +27,30 @@ class TeamsHttpClient extends BaseHttpClient {
   ///
   /// Pass [dio] to inject a custom HTTP transport (tests); production code
   /// omits it and gets a default [Dio] with 60s timeouts. Pass [token] to
-  /// supply an access token resolved by the OAuth flow; when omitted the
-  /// client falls back to `TEAMS_REFRESH_TOKEN`.
+  /// supply an access token resolved by the OAuth flow.
   ///
-  /// Throws [StateError] when no token is configured.
+  /// Throws [StateError] when no access token is supplied. A refresh token
+  /// (`TEAMS_REFRESH_TOKEN`) is deliberately NOT accepted here: it is not an
+  /// access token — sending it as a Bearer would 401 on every call while
+  /// leaking the long-lived credential. Exchange it first via the OAuth
+  /// refresh flow (`login.microsoftonline.com/…/oauth2/v2.0/token`,
+  /// `grant_type=refresh_token`) as Java's `OAuth2AuthenticationFlow` does.
   factory TeamsHttpClient(
     PropertyReader reader, {
     Dio? dio,
     String? token,
   }) {
     final basePath = reader.getTeamsBasePath();
-    final resolved = token ?? reader.getTeamsRefreshToken();
-    if (resolved == null || resolved.isEmpty) {
-      throw StateError('Teams access token is not configured');
+    if (token == null || token.isEmpty) {
+      throw StateError(
+        'Teams access token is not configured — exchange '
+        'TEAMS_REFRESH_TOKEN via the OAuth refresh flow first',
+      );
     }
     return TeamsHttpClient._(
       dio: dio ?? BaseHttpClient.createDefaultDio(),
       basePath: basePath,
-      token: resolved,
+      token: token,
     );
   }
 

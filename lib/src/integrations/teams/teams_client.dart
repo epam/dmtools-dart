@@ -197,26 +197,6 @@ class TeamsClient {
     return _decodeObject(body);
   }
 
-  /// `teams_reply_to_message` — POST
-  /// `chats/{chatId}/messages/{messageId}/replies`.
-  ///
-  /// Posts [body] as the reply content to the chat message [messageId].
-  /// Returns the decoded Graph response object, or an empty map for
-  /// non-object bodies.
-  Future<Map<String, dynamic>> replyToMessage(
-    String chatId,
-    String messageId,
-    String body,
-  ) async {
-    final result = await _http.post(
-      'chats/${_encodeId(chatId)}/messages/${_encodeId(messageId)}/replies',
-      body: jsonEncode({
-        'body': {'content': body},
-      }),
-    );
-    return _decodeObject(result);
-  }
-
   /// Decodes a Graph JSON body into a map, or returns empty for non-objects.
   Map<String, dynamic> _decodeObject(String body) {
     final decoded = jsonDecode(body);

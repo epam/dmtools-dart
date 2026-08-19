@@ -20,7 +20,6 @@ void main() {
   getTeamChannelsTests();
   sendChannelMessageTests();
   getChannelMessagesTests();
-  replyToMessageTests();
 }
 
 /// The expected Bearer token produced by the fixture's config.
@@ -64,6 +63,16 @@ void httpClientTests() {
 
     test('throws StateError when no Teams token is configured', () {
       PropertyReader.clearOverrides();
+      expect(() => TeamsHttpClient(PropertyReader()), throwsStateError);
+    });
+
+    test('rejects refresh-only config instead of sending it as Bearer', () {
+      // A refresh token is not an access token — the client must fail fast
+      // rather than 401 on every call while leaking the credential.
+      PropertyReader.setOverrides({
+        'TEAMS_BASE_PATH': 'https://graph.microsoft.com/v1.0',
+        'TEAMS_REFRESH_TOKEN': 'long-lived-refresh-token',
+      });
       expect(() => TeamsHttpClient(PropertyReader()), throwsStateError);
     });
   });
@@ -330,37 +339,6 @@ void getChannelMessagesTests() {
     test('returns an empty map when the body is not an object', () async {
       final f = mockTeams((o) => routeByPath({'/messages': '[1]'}, o));
       expect(await f.client.getChannelMessages('t1', 'ch1'), isEmpty);
-    });
-  });
-}
-
-/// `teams_reply_to_message` — POST
-/// `chats/{chatId}/messages/{messageId}/replies`.
-void replyToMessageTests() {
-  group('TeamsClient.replyToMessage', () {
-    test('POSTs the reply body and returns the decoded object', () async {
-      final f = mockTeams(
-        (o) => routeByPath({'/replies': _sentMessageBody}, o),
-      );
-      final result = await f.client.replyToMessage('chat-1', 'msg-1', 'hello');
-      expect(result['id'], 'msg-1');
-      final call = f.adapter.calls.single;
-      expect(call.method, 'POST');
-      expect(
-        call.path,
-        endsWith('/v1.0/chats/chat-1/messages/msg-1/replies'),
-      );
-      expect(
-        jsonDecode(call.data as String),
-        {
-          'body': {'content': 'hello'},
-        },
-      );
-    });
-
-    test('returns an empty map when the body is not an object', () async {
-      final f = mockTeams((o) => routeByPath({'/replies': '[1]'}, o));
-      expect(await f.client.replyToMessage('chat-1', 'msg-1', 'hi'), isEmpty);
     });
   });
 }

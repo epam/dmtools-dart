@@ -24,6 +24,7 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
 
   _testOverrides();
+  _testZoneOverrides();
   _testGetValue();
   _testResolutionOrder();
   _testJiraTokens();
@@ -79,6 +80,62 @@ void _testOverrides() {
       PropertyReader.setOverrides({'K': 'V'});
       final overrides = PropertyReader.getOverrides();
       expect(() => overrides['X'] = 'Y', throwsUnsupportedError);
+    });
+  });
+}
+
+void _testZoneOverrides() {
+  group('runWithOverrides (zone-scoped overrides)', () {
+    test('getOverrides returns the zone map inside the body, across awaits',
+        () async {
+      PropertyReader.setOverrides({'STATIC_KEY': 'static'});
+      String? before;
+      String? after;
+      await PropertyReader.runWithOverrides({'ZONE_KEY': 'zoned'}, () async {
+        before = PropertyReader.getOverrides()['ZONE_KEY'];
+        await Future.delayed(const Duration(milliseconds: 10));
+        after = PropertyReader.getOverrides()['ZONE_KEY'];
+      });
+      // The zone map is visible for the whole body, across the await, and
+      // wins over the static map (STATIC_KEY is not part of it).
+      expect(before, 'zoned');
+      expect(after, 'zoned');
+      expect(PropertyReader.getOverrides(), {'STATIC_KEY': 'static'});
+    });
+
+    test('concurrent bodies each see their own map across awaits', () async {
+      final firstSeen = <String>[];
+      final secondSeen = <String>[];
+      final first = PropertyReader.runWithOverrides({'WHO': 'first'}, () async {
+        await Future.delayed(const Duration(milliseconds: 20));
+        firstSeen.add(PropertyReader.getOverrides()['WHO'] ?? 'none');
+        await Future.delayed(const Duration(milliseconds: 20));
+        firstSeen.add(PropertyReader.getOverrides()['WHO'] ?? 'none');
+      });
+      final second = PropertyReader.runWithOverrides(
+        {'WHO': 'second'},
+        () async {
+          await Future.delayed(const Duration(milliseconds: 20));
+          secondSeen.add(PropertyReader.getOverrides()['WHO'] ?? 'none');
+          await Future.delayed(const Duration(milliseconds: 20));
+          secondSeen.add(PropertyReader.getOverrides()['WHO'] ?? 'none');
+        },
+      );
+      await Future.wait([first, second]);
+      expect(firstSeen, everyElement('first'));
+      expect(secondSeen, everyElement('second'));
+    });
+
+    test('static map is untouched after runWithOverrides completes', () async {
+      PropertyReader.setOverrides({'STATIC_KEY': 'static'});
+      await PropertyReader.runWithOverrides({'ZONE_KEY': 'zoned'}, () async {
+        expect(PropertyReader.getOverrides(), {'ZONE_KEY': 'zoned'});
+      });
+      // Outside the zone the static map is exactly what setOverrides left.
+      expect(PropertyReader.getOverrides(), {'STATIC_KEY': 'static'});
+      // setOverrides still works after a zone-scoped run.
+      PropertyReader.setOverrides({'NEW_KEY': 'new-value'});
+      expect(PropertyReader.getOverrides(), {'NEW_KEY': 'new-value'});
     });
   });
 }

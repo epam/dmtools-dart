@@ -125,8 +125,11 @@ void triggerBuildTests() {
   });
 }
 
-/// Canned `apps` response body (an array of app objects).
-const _appsBody = '[{"slug":"app-1"},{"slug":"app-2"}]';
+/// Canned `apps` response body (the real v0.1 wrapped shape).
+const _appsBody = '{"data":[{"slug":"app-1"},{"slug":"app-2"}],"paging":{}}';
+
+/// Pre-wrap `apps` shape (bare array) — accepted only as a fallback.
+const _appsBareArrayBody = '[{"slug":"app-1"},{"slug":"app-2"}]';
 
 /// Canned builds response body.
 const _buildsBody = '{"data":[{"slug":"b1"},{"slug":"b2"}],"paging":{}}';
@@ -137,14 +140,21 @@ const _triggerBody = '{"status":"ok","build_slug":"b1"}';
 /// `bitrise_get_apps` — GET `apps`.
 void getAppsTests() {
   group('BitriseClient.getApps', () {
-    test('returns the decoded list of apps', () async {
+    test('unwraps {data: [...]} — the real v0.1 response shape', () async {
       final f = mockBitrise((o) => routeByPath({'/apps': _appsBody}, o));
       final apps = await f.client.getApps();
       expect(apps.map((a) => a['slug']).toList(), ['app-1', 'app-2']);
       expect(f.adapter.calls.single.path, endsWith('/v0.1/apps'));
     });
 
-    test('returns empty list when the body is not an array', () async {
+    test('accepts a bare array as a legacy fallback', () async {
+      final f =
+          mockBitrise((o) => routeByPath({'/apps': _appsBareArrayBody}, o));
+      final apps = await f.client.getApps();
+      expect(apps.map((a) => a['slug']).toList(), ['app-1', 'app-2']);
+    });
+
+    test('returns empty list when the body has no list payload', () async {
       final f = mockBitrise((o) => routeByPath({'/apps': '{"x":1}'}, o));
       expect(await f.client.getApps(), isEmpty);
     });
@@ -242,22 +252,24 @@ void abortBuildTests() {
 /// Canned abort-build response body.
 const _abortBody = '{"status":"ok","build_slug":"build-2"}';
 
-/// `bitrise_get_workflows` — GET `apps/{appSlug}/build-slots`.
+/// `bitrise_get_workflows` — GET `apps/{appSlug}/build-workflows`.
 void getWorkflowsTests() {
   group('BitriseClient.getWorkflows', () {
     test('returns the decoded workflows object', () async {
-      final f =
-          mockBitrise((o) => routeByPath({'/build-slots': _workflowsBody}, o));
+      final f = mockBitrise(
+        (o) => routeByPath({'/build-workflows': _workflowsBody}, o),
+      );
       final workflows = await f.client.getWorkflows('app-1');
       expect(workflows['data'], isA<List>());
       expect(
         f.adapter.calls.single.path,
-        endsWith('/v0.1/apps/app-1/build-slots'),
+        endsWith('/v0.1/apps/app-1/build-workflows'),
       );
     });
 
     test('returns an empty map when the body is not an object', () async {
-      final f = mockBitrise((o) => routeByPath({'/build-slots': '[1, 2]'}, o));
+      final f =
+          mockBitrise((o) => routeByPath({'/build-workflows': '[1, 2]'}, o));
       expect(await f.client.getWorkflows('app-1'), isEmpty);
     });
   });

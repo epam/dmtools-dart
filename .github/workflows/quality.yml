@@ -79,4 +79,3 @@ jobs:
         run: git clone --depth 1 https://github.com/IstiN/dmtools-agents /tmp/dmtools-agents
       - name: Run agents test suite
         run: dart run bin/run_agents_suite.dart /tmp/dmtools-agents
-        continue-on-error: true

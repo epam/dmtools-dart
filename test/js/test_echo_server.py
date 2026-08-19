@@ -42,6 +42,20 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["value"] = [
                 {"id": 7, "fields": {"System.Title": "T"}}
             ]
+        # Jira label-fetch fixture: a normal ?fields=labels GET answers the
+        # ticket's current labels; __jira_fail=1 marks the GET as a transient
+        # 5xx (regression guard: a failed fetch must abort, never PUT an
+        # empty set).
+        elif "fields=labels" in self.path:
+            if "__jira_fail" in self.path:
+                encoded = b'{"errors": ["transient"]}'
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            payload["fields"] = {"labels": ["existing"]}
         response = json.dumps(payload)
         encoded = response.encode("utf-8")
         self.send_response(200)

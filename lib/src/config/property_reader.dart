@@ -17,6 +17,7 @@
 /// the working directory overrides a real env var set in the shell.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'env_file_parser.dart';
@@ -30,6 +31,18 @@ class PropertyReader {
 
   // --- Static overrides (Java ThreadLocal equivalent) ---
 
+  /// Zone key carrying the per-job override map inside [runWithOverrides].
+  ///
+  /// Dart's [Zone] is the analog of Java's `ThreadLocal`: values flow
+  /// through `await` boundaries and stay isolated between concurrently
+  /// running jobs in the same isolate.
+  static const _overridesZoneKey = #dmtoolsPropertyOverrides;
+
+  /// Root-level overrides, used outside a [runWithOverrides] scope.
+  ///
+  /// Safe for the single-job CLI flow; concurrent jobs must use
+  /// [runWithOverrides] so one job's [clearOverrides] cannot wipe another's
+  /// overrides mid-flight.
   static Map<String, String>? _overrides;
 
   /// Sets zone-static overrides for the current isolate.
@@ -47,8 +60,28 @@ class PropertyReader {
     _overrides = null;
   }
 
+  /// Runs [body] with [overrides] active for the current async context.
+  ///
+  /// The overrides live in a [Zone] value, so two concurrently running jobs
+  /// each keep their own map across `await` boundaries (the Java original
+  /// gets the same isolation from `ThreadLocal`).
+  static Future<T> runWithOverrides<T>(
+    Map<String, String> overrides,
+    Future<T> Function() body,
+  ) {
+    return runZoned(
+      body,
+      zoneValues: {_overridesZoneKey: overrides},
+    );
+  }
+
   /// Returns the current override map (empty if none set).
+  ///
+  /// Zone-scoped overrides ([runWithOverrides]) take precedence over the
+  /// root static map ([setOverrides]).
   static Map<String, String> getOverrides() {
+    final zoned = Zone.current[_overridesZoneKey];
+    if (zoned is Map<String, String>) return Map.unmodifiable(zoned);
     final o = _overrides;
     return o != null ? Map.unmodifiable(o) : const <String, String>{};
   }

@@ -195,22 +195,31 @@ class _JiraSyncTools {
   }
 
   /// `jira_add_label` — fetches labels, appends, PUTs the full set.
+  ///
+  /// The PUT is skipped when the fetch fails: PUTting a set built from an
+  /// empty failure result would wipe every existing label on the ticket.
   String _jiraAddLabel(
       SyncIntegrationConfig config, Map<String, dynamic> args) {
     final key = _asStr(args['key']);
     final labels = _fetchLabels(config, key);
+    if (labels == null) return _err('Failed to fetch labels for $key');
     final label = _asStr(args['label']);
     if (!labels.contains(label)) labels.add(label);
     return _putLabels(config, key, labels);
   }
 
   /// `jira_remove_label` — fetches labels, removes, PUTs the full set.
+  ///
+  /// Same failure contract as [_jiraAddLabel]: no PUT without a confirmed
+  /// fetch, or a transient GET error would clear the label set.
   String _jiraRemoveLabel(
     SyncIntegrationConfig config,
     Map<String, dynamic> args,
   ) {
     final key = _asStr(args['key']);
-    final labels = _fetchLabels(config, key)..remove(_asStr(args['label']));
+    final labels = _fetchLabels(config, key);
+    if (labels == null) return _err('Failed to fetch labels for $key');
+    labels.remove(_asStr(args['label']));
     return _putLabels(config, key, labels);
   }
 
@@ -319,11 +328,13 @@ class _JiraSyncTools {
         config, '${config.baseUrl}/issue', jsonEncode({'fields': fields}));
   }
 
-  /// Fetches the current labels list for [key]; empty list on failure.
-  List<String> _fetchLabels(SyncIntegrationConfig config, String key) {
+  /// Fetches the current labels list for [key]; `null` when the fetch fails
+  /// (non-2xx, malformed JSON, curl error). Callers must abort rather than
+  /// PUT an empty set — the failure path is what protects existing labels.
+  List<String>? _fetchLabels(SyncIntegrationConfig config, String key) {
     final decoded =
         _getJson(config, '${config.baseUrl}/issue/$key?fields=labels');
-    if (decoded == null) return [];
+    if (decoded == null) return null;
     final fields = decoded['fields'] as Map<String, dynamic>? ?? {};
     return List<String>.from(fields['labels'] as List? ?? []);
   }

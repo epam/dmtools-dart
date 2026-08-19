@@ -44,6 +44,14 @@ void toolCatalogShapeTests() {
     test('every tool belongs to the bitrise integration', () {
       expect(tools.every((t) => t.integration == 'bitrise'), isTrue);
     });
+
+    test('renamed tools carry their Java names as aliases', () {
+      expect(toolNamed('bitrise_get_apps').aliases, ['bitrise_list_apps']);
+      expect(
+        toolNamed('bitrise_get_workflows').aliases,
+        ['bitrise_list_workflows'],
+      );
+    });
   });
 }
 

@@ -139,7 +139,8 @@ class AdoHttpClient extends BaseHttpClient {
 
   /// POSTs a JSON body, attaching the API version as a query parameter.
   @override
-  Future<String> post(String path, {Object? body}) =>
+  Future<String> post(String path,
+          {Object? body, Map<String, String>? extra}) =>
       _request('POST', path, body: body);
 
   /// PUTs a JSON body, attaching the API version as a query parameter. Used

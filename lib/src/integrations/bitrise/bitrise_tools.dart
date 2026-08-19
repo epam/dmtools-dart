@@ -29,10 +29,11 @@ List<ToolDefinition> _systemTools() => [
       ),
     ];
 
-/// App tool: `bitrise_get_apps`.
+/// App tool: `bitrise_get_apps` (Java alias `bitrise_list_apps`).
 List<ToolDefinition> _appTools() => [
       ToolDefinition(
         name: 'bitrise_get_apps',
+        aliases: ['bitrise_list_apps'],
         description: 'List all Bitrise apps accessible to the token',
         integration: 'bitrise',
         category: 'apps',
@@ -150,10 +151,12 @@ ToolDefinition _abortBuildTool() => ToolDefinition(
       ],
     );
 
-/// Workflows tool: `bitrise_get_workflows`.
+/// Workflows tool: `bitrise_get_workflows` (Java alias
+/// `bitrise_list_workflows`).
 ToolDefinition _getWorkflowsTool() => ToolDefinition(
       name: 'bitrise_get_workflows',
-      description: 'List the workflow build slots for a Bitrise app',
+      aliases: ['bitrise_list_workflows'],
+      description: 'List the workflows available to a Bitrise app',
       integration: 'bitrise',
       category: 'builds',
       params: [

@@ -215,12 +215,12 @@ after.
       Server offset pagination implemented. Xray and L2/L3 contract tests pending.
 - [x] Tool schema registry: same tool names, same argument schemas, same
       availability rules (tool appears only when its integration is configured).
-      `default_tool_registry.dart` registers all 16 catalogs; `dmtools list` prints
-      the full catalog (85 tools).
+      `default_tool_registry.dart` registers all 17 catalogs; `dmtools list` prints
+      the full catalog (325 tools).
 - [x] **Complete `@MCPTool` parity**: all 328 `@MCPTool`-annotated methods (26 classes)
-      are ported. **328/328 tools across 17 integrations** (Jira 65, GitHub 40,
-      GitLab 33, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
-      SharePoint 12, Teams 12, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
+      are ported. **325 tools across 17 integrations** (Jira 65, GitHub 40,
+      GitLab 31, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
+      SharePoint 12, Teams 11, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
       Registry is the Dart equivalent of the generated catalog — the catalog cannot
       drift because all tools are defined in the `*_tools.dart` files next to their
       implementations. CI catalog comparison pending.
@@ -251,12 +251,13 @@ version).
 - [x] Job context injection: `params.jobParams`, `params.ticket` via `setGlobal`.
       Additional context fields (response, initiator, metadata, etc.) ready to add.
 - [x] The dmtools-agents suite (`agents/js/unit-tests/run_all.json`) runs under
-      the Dart runtime: **694/698 tests pass**. The 4 failures are pre-existing
-      upstream bugs in dmtools-agents (would fail under GraalJS too).
+      the Dart runtime: **751 tests pass, 0 fail** (upstream fixed the former
+      4 pre-existing bugs).
 
 **Done when:** `dart run bin/dmtools.dart run agents/js/unit-tests/run_all.json`
-passes **unmodified and green** — **essentially met**: 694/698 pass, the 4
-failures are upstream bugs not runtime issues. Run via
+passes **unmodified and green** — **met**: 751/751 pass locally and in CI
+(the suite job is a hard gate: `run_agents_suite.dart` fails on any test
+failure or malformed result). Run via
 `dart run bin/run_agents_suite.dart /path/to/dmtools-agents`.
 
 ### Phase 5 — CliAgent port (first agent)

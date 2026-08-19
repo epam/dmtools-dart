@@ -86,14 +86,21 @@ class CliAgent {
     if (params.cliCommands.isEmpty) {
       return {'success': true, 'message': 'No cliCommands provided'};
     }
-    final workDir = _resolveWorkingDirectory();
-    PropertyReader.setOverrides(params.envVariables ?? {});
+    // Zone-scoped overrides: two CliAgent jobs running concurrently in one
+    // isolate each keep their own `TrackerParams.envVariables` across
+    // awaits (Java gets this from ThreadLocal).
+    return PropertyReader.runWithOverrides(
+      params.envVariables ?? {},
+      _runGuarded,
+    );
+  }
+
+  /// Runs the lifecycle, converting failures into error results.
+  Future<Map<String, dynamic>> _runGuarded() async {
     try {
-      return await _runLifecycle(workDir);
+      return await _runLifecycle(_resolveWorkingDirectory());
     } catch (e) {
       return {'success': false, 'error': e.toString()};
-    } finally {
-      PropertyReader.clearOverrides();
     }
   }
 

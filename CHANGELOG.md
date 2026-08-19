@@ -20,16 +20,18 @@ Initial feature-complete release. Dart port of [DMTools](https://github.com/epam
 
 #### Phase 2 — CLI interface
 - `dmtools run <config>` — end-to-end: config resolution, deep-merge, AgentFactory dispatch
-- `dmtools list [filter]` — prints 328-tool catalog with filtering
+- `dmtools list [filter]` — prints 325-tool catalog with filtering
 - `dmtools doctor` — 13-integration config presence check
 - `dmtools <tool_name> '<json_args>'` — direct tool invocation with STDIN/heredoc support
 - `dmtools --version`, `--help`, `--list-jobs`, `interactive` (stub)
 
-#### Phase 3 — Integrations (328 tools, 17 integrations)
-- Jira (65), GitHub (40), GitLab (33), ADO (31), Confluence (29), File (19),
-  TestRail (18), Figma (15), Jenkins (13), SharePoint (12), Teams (12),
+#### Phase 3 — Integrations (325 tools, 17 integrations)
+- Jira (65), GitHub (40), GitLab (31), ADO (31), Confluence (29), File (19),
+  TestRail (18), Figma (15), Jenkins (13), SharePoint (12), Teams (11),
   Bitrise (10), AI (8), Xray (8), KB (8), Mermaid (4), CLI (3)
-- 100% Java @MCPTool parity (328 = 328, verified by `catalog_parity_test.dart`)
+- 100% Java @MCPTool parity (325 Dart tools cover all 328 Java `@MCPTool`
+  names — directly, via aliases, or via documented renames — verified by
+  `catalog_parity_test.dart`)
 - Shared `BaseHttpClient` + `BearerHttpClient` base classes
 - AI providers: Gemini, OpenAI, DIAL, Anthropic, Ollama (+ embeddings, summarize, complete)
 - L2 contract test framework
@@ -38,7 +40,7 @@ Initial feature-complete release. Dart port of [DMTools](https://github.com/epam
 - QuickJS compiled from source (`native/quickjs/`), C bridge with flat ABI
 - Synchronous JS→Dart→JS host callbacks via `NativeCallable.isolateLocal`
 - `executeToolViaJava` tool dispatch to Phase 3 registry
-- Auto-generated snake_case wrappers for all 328 tools
+- Auto-generated snake_case wrappers for all 325 tools
 - Sync HTTP dispatch via curl subprocess (26 tools across 5 integrations)
 - **738/738 dmtools-agents tests pass** (primary acceptance gate)
 

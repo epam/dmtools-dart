@@ -9,10 +9,8 @@ void main() {
   toolCatalogTests();
   toolCatalogParamTests();
   chatAndTeamCatalogParamTests();
-  replyToolCatalogParamTests();
   executorDispatchTests();
   chatAndTeamToolDispatchTests();
-  replyToolDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -24,7 +22,7 @@ void toolCatalogTests() {
   group('teamsTools catalog', () {
     final tools = teamsTools();
 
-    test('registers the twelve tools in declaration order', () {
+    test('registers the eleven tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'teams_test',
         'teams_send_message',
@@ -37,7 +35,6 @@ void toolCatalogTests() {
         'teams_get_team_channels',
         'teams_send_channel_message',
         'teams_get_channel_messages',
-        'teams_reply_to_message',
       ]);
     });
 
@@ -141,18 +138,6 @@ void chatAndTeamCatalogParamTests() {
 
     test('declares required team_id and channel_id', () {
       expect(tool.params.map((p) => p.name), ['team_id', 'channel_id']);
-      expect(tool.params.every((p) => p.required), isTrue);
-    });
-  });
-}
-
-/// Per-tool parameter declarations for the reply tool.
-void replyToolCatalogParamTests() {
-  group('teams_reply_to_message', () {
-    final tool = toolNamed('teams_reply_to_message');
-
-    test('declares required chat_id, message_id, and body', () {
-      expect(tool.params.map((p) => p.name), ['chat_id', 'message_id', 'body']);
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
@@ -264,27 +249,6 @@ void chatAndTeamToolDispatchTests() {
   });
 }
 
-/// Dispatch tests for the reply tool.
-void replyToolDispatchTests() {
-  group('TeamsToolExecutor.execute reply tool', () {
-    late _SpyTeamsClient spy;
-    late TeamsToolExecutor executor;
-
-    setUp(() {
-      spy = _SpyTeamsClient(mockHttp((o) => '{}').http);
-      executor = TeamsToolExecutor(spy);
-    });
-
-    test('routes teams_reply_to_message with chat, message, body', () async {
-      await executor.execute(
-        'teams_reply_to_message',
-        {'chat_id': 'c1', 'message_id': 'm1', 'body': 'hi'},
-      );
-      expect(spy.calls, ['replyToMessage:c1:m1:hi']);
-    });
-  });
-}
-
 /// Records every dispatched call then delegates to the real client logic.
 class _SpyTeamsClient extends TeamsClient {
   _SpyTeamsClient(super.http);
@@ -366,15 +330,5 @@ class _SpyTeamsClient extends TeamsClient {
   ) {
     calls.add('getChannelMessages:$teamId:$channelId');
     return super.getChannelMessages(teamId, channelId);
-  }
-
-  @override
-  Future<Map<String, dynamic>> replyToMessage(
-    String chatId,
-    String messageId,
-    String body,
-  ) {
-    calls.add('replyToMessage:$chatId:$messageId:$body');
-    return super.replyToMessage(chatId, messageId, body);
   }
 }

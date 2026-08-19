@@ -47,11 +47,18 @@ abstract class BaseHttpClient {
   }
 
   /// Performs a POST request.
-  Future<String> post(String path, {Object? body}) async {
+  ///
+  /// Pass [extra] to merge additional headers (e.g. a CSRF crumb) on top of
+  /// the integration defaults.
+  Future<String> post(
+    String path, {
+    Object? body,
+    Map<String, String>? extra,
+  }) async {
     final response = await dio.post<String>(
       buildUrl(path),
       data: body,
-      options: Options(headers: headers),
+      options: Options(headers: {...headers, ...?extra}),
     );
     return response.data ?? '';
   }

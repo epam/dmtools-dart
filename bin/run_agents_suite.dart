@@ -34,10 +34,27 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('Result: $result');
 
-  if (result != null) {
-    final decoded = jsonDecode(result);
-    if (decoded is Map && decoded['success'] == false) {
-      exit(1);
-    }
+  // The agents suite is the primary acceptance gate: require a well-formed,
+  // fully-passing result. A missing/malformed result (script crash that
+  // returns undefined) fails the run instead of silently exiting 0.
+  if (result == null) {
+    stderr.writeln('Agents suite returned no result (script crashed?).');
+    exit(1);
   }
+  final decoded = jsonDecode(result);
+  if (decoded is! Map) {
+    stderr.writeln('Agents suite returned a non-object result: $decoded');
+    exit(1);
+  }
+  final passed = decoded['passed'];
+  final failed = decoded['failed'];
+  if (decoded['success'] != true ||
+      passed is! int ||
+      failed is! int ||
+      passed <= 0 ||
+      failed > 0) {
+    stderr.writeln('Agents suite failed: $decoded');
+    exit(1);
+  }
+  stdout.writeln('Agents suite green: $passed passed, $failed failed.');
 }

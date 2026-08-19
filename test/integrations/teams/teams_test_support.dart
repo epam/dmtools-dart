@@ -64,6 +64,9 @@ MockTeamsFixture mockTeams(
 }
 
 /// Builds a [TeamsHttpClient] over a mocked [Dio] routed by [router].
+///
+/// The access token is passed explicitly — the factory accepts only resolved
+/// access tokens, never a raw refresh token.
 MockTeamsHttpFixture mockHttp(
   String Function(RequestOptions options) router,
 ) {
@@ -71,7 +74,11 @@ MockTeamsHttpFixture mockHttp(
   final adapter = RoutingAdapter(router);
   final dio = Dio()..httpClientAdapter = adapter;
   return (
-    http: TeamsHttpClient(PropertyReader(), dio: dio),
+    http: TeamsHttpClient(
+      PropertyReader(),
+      dio: dio,
+      token: _testConfig['TEAMS_REFRESH_TOKEN'],
+    ),
     adapter: adapter,
   );
 }

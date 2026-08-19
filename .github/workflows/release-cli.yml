@@ -1,0 +1,132 @@
+name: Release CLI
+
+# Builds standalone dmtools binaries (AOT via `dart compile exe`) for every
+# supported platform and publishes them as GitHub Release assets:
+#
+#   dmtools-<os>-<arch>.tar.gz   binary + native/quickjs/libquickjs_bridge.so
+#   install.sh                   the one-line installer (from the tag)
+#   dmtools-checksums.sha256     sha256 of every asset
+#
+# Triggers:
+#   - push of a vX.Y.Z tag
+#   - workflow_dispatch with an explicit version (creates/updates the release)
+#
+# Version policy: the tag (or dispatch input) is authoritative. The compiled-in
+# version constant is synced from it before `dart compile exe` so `dmtools
+# --version` always reports the release it came from (test/version_test.dart
+# additionally pins version.dart to pubspec.yaml on main).
+#
+# Platform matrix: linux-x64, macos-x64, macos-arm64. linux-arm64 needs an ARM
+# builder the private repo does not have — install.sh explains the from-source
+# path there. Windows needs MinGW-w64 + a PowerShell installer (follow-up).
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (with or without v prefix)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux, arch: x64 }
+          - { os: macos-13, platform: macos, arch: x64 }
+          - { os: macos-latest, platform: macos, arch: arm64 }
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - run: dart pub get
+
+      - name: Install gcc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc
+
+      - name: Build QuickJS bridge library
+        run: make native
+
+      - name: Derive release version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME}"
+          fi
+          case "$V" in v*) V="${V#v}" ;; esac
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Sync compiled-in version constant
+        run: |
+          sed -i.bak "s/dmtoolsVersion = '[^']*'/dmtoolsVersion = '${{ steps.ver.outputs.version }}'/" \
+            lib/src/version.dart
+          rm -f lib/src/version.dart.bak
+          grep "dmtoolsVersion = '" lib/src/version.dart
+
+      - name: Compile AOT binary
+        run: dart compile exe bin/dmtools.dart -o dmtools
+
+      - name: Assemble and smoke-test the bundle
+        run: |
+          LIB="$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")/native/quickjs/libquickjs_bridge.so"
+          mkdir -p dist/dmtools/native/quickjs
+          cp dmtools dist/dmtools/dmtools
+          cp "$LIB" dist/dmtools/native/quickjs/libquickjs_bridge.so
+          # The installed layout is binary + native/quickjs next to it — prove
+          # the pair works together before shipping it.
+          ./dist/dmtools/dmtools --version
+          ./dist/dmtools/dmtools list | head -n 5
+          tar -czf "dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C dist dmtools
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmtools-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cp install.sh dist/install.sh
+          cd dist
+          sha256sum dmtools-*.tar.gz install.sh > dmtools-checksums.sha256
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: dmtools v${{ needs.build.outputs.version }}
+          draft: false
+          prerelease: false
+          files: dist/*

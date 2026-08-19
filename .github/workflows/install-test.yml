@@ -33,19 +33,17 @@ jobs:
   syntax:
     name: install.sh syntax and lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
+      # dash is /bin/sh on Ubuntu runners and shellcheck is preinstalled —
+      # no apt round-trip (apt hung a job for 5+ minutes on 2026-08-19).
       - name: POSIX sh syntax check (dash)
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends dash
-          dash -n install.sh
+        run: dash -n install.sh
 
       - name: shellcheck
-        run: |
-          sudo apt-get install -y --no-install-recommends shellcheck
-          shellcheck install.sh
+        run: shellcheck install.sh
 
   install:
     name: install on ${{ matrix.os }}

@@ -12,7 +12,21 @@ jobs:
           sdk: stable
       - run: dart pub get
       - name: Install gcc
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
+        run: |
+          # apt hung twice on 2026-08-19 (no exit — jobs burned 19+ minutes on
+          # this step before manual cancellation). Cap each attempt and retry
+          # so a flaky mirror fails the job fast instead of stalling it.
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -qq && \
+               timeout 300 sudo apt-get install -y -qq gcc; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed or timed out; retrying in 15s"
+            sudo dpkg --configure -a || true
+            sleep 15
+          done
+          echo "apt failed after 3 attempts"
+          exit 1
       - name: Build QuickJS (quickjs_runtime package)
         run: |
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
@@ -70,7 +84,21 @@ jobs:
           sdk: stable
       - run: dart pub get
       - name: Install gcc
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq gcc
+        run: |
+          # apt hung twice on 2026-08-19 (no exit — jobs burned 19+ minutes on
+          # this step before manual cancellation). Cap each attempt and retry
+          # so a flaky mirror fails the job fast instead of stalling it.
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -qq && \
+               timeout 300 sudo apt-get install -y -qq gcc; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed or timed out; retrying in 15s"
+            sudo dpkg --configure -a || true
+            sleep 15
+          done
+          echo "apt failed after 3 attempts"
+          exit 1
       - name: Build QuickJS (quickjs_runtime package)
         run: |
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")

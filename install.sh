@@ -185,6 +185,8 @@ case ":${PATH}:" in
   *":$install_bin:") ok "'$BINARY' is already on PATH." ;;
   *)
     warn "'$BINARY' is not on PATH yet. Add it with:"
+    # The literal $PATH belongs in the rc file (expands at shell startup).
+    # shellcheck disable=SC2016
     printf '\n  export PATH="%s:$PATH"\n\n' "$install_bin"
 
     shell_rc=""
@@ -205,6 +207,8 @@ case ":${PATH}:" in
         printf '\n# dmtools CLI PATH\nfish_add_path -g "%s"\n' "$install_bin" >> "$shell_rc"
         ok "Added $install_bin to $shell_rc (open a new terminal, or restart fish)."
       else
+        # The literal $PATH belongs in the rc file (expands at shell startup).
+        # shellcheck disable=SC2016
         printf '\n# dmtools CLI PATH\nexport PATH="%s:$PATH"\n' "$install_bin" >> "$shell_rc"
         ok "Added $install_bin to $shell_rc (open a new terminal, or source it)."
       fi

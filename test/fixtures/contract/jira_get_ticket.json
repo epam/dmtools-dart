@@ -1,0 +1,33 @@
+{
+  "tool_name": "jira_get_ticket",
+  "request_args": {
+    "ticket_id": "PROJ-1"
+  },
+  "java_api_endpoint": "/rest/api/latest/issue/PROJ-1",
+  "java_http_method": "GET",
+  "expected_response": {
+    "key": "PROJ-1",
+    "id": "10001",
+    "self": "https://jira.example.com/rest/api/latest/issue/10001",
+    "fields": {
+      "summary": "Implement login page",
+      "status": {
+        "name": "In Progress",
+        "id": "3"
+      },
+      "issuetype": {
+        "name": "Story",
+        "id": "10001"
+      },
+      "priority": {
+        "name": "High"
+      },
+      "assignee": {
+        "displayName": "Jane Doe",
+        "emailAddress": "jane@example.com"
+      },
+      "created": "2024-01-15T09:30:00.000+0000",
+      "updated": "2024-02-20T14:45:00.000+0000"
+    }
+  }
+}

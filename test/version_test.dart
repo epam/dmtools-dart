@@ -8,7 +8,7 @@ void main() {
     });
 
     test('version constant matches pubspec', () {
-      expect(dmtoolsVersion, '0.0.1');
+      expect(dmtoolsVersion, '0.1.0');
     });
   });
 }

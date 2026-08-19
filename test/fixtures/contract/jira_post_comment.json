@@ -1,0 +1,13 @@
+{
+  "tool_name": "jira_post_comment",
+  "request_args": {
+    "ticket_id": "PROJ-1",
+    "comment": "Looks good to me, approving."
+  },
+  "java_api_endpoint": "/rest/api/latest/issue/PROJ-1/comment",
+  "java_http_method": "POST",
+  "expected_response": {
+    "success": true
+  },
+  "mock_response_body": "{\"id\":\"10100\",\"self\":\"https://jira.example.com/rest/api/latest/issue/10001/comment/10100\",\"body\":\"Looks good to me, approving.\",\"created\":\"2024-02-21T10:00:00.000+0000\"}"
+}

@@ -1,0 +1,37 @@
+# dart_test.yaml — configuration for the `dart test` runner.
+#
+# Test layers (see GOAL.md → Integration testing strategy, and
+# test/integration/README.md):
+#
+#   L1 unit     — test/**, everything mocked. Default run + CI quality.yml.
+#   L2 contract — recorded Java tool traffic replayed against Dart clients.
+#   L3 live     — real APIs against sandbox instances; tagged `integration`.
+#   L4 agents   — dmtools-agents suite under the Dart runtime (own CI job).
+#
+# The L3 layer is EXCLUDED from the default run so live-API tests never slow
+# down or destabilize the quality loop:
+#
+#   dart test                                # L1 + L2; the L3 suite is skipped
+#
+# The `integration` preset opts back in. The default skip is sticky, so
+# `-t integration` alone still skips the tag — the preset is what re-enables
+# it:
+#
+#   dart test -P integration -t integration  # L3 only; real credentials needed
+#
+# CI runs L3 nightly and via workflow_dispatch
+# (.github/workflows/integration.yml), never per-PR by default.
+
+tags:
+  integration:
+    skip: >-
+      Live integration test — excluded from the default run. Target a sandbox
+      via the DMTOOLS_IT_* variables and run explicitly with
+      `dart test -P integration -t integration`.
+
+presets:
+  # Re-enables the `integration` tag so the L3 suite can run on demand.
+  integration:
+    tags:
+      integration:
+        skip: false

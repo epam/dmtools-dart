@@ -1,0 +1,66 @@
+name: Integration (PR)
+
+# L3 live integration smoke tests on every PR. Unlike the nightly
+# integration.yml, this runs the fast sandbox-backed subset (Jira, GitHub,
+# GitLab, Confluence, ADO) so a broken client fails the PR that broke it.
+# Non-sensitive config comes from repository *variables*; credentials from
+# repository *secrets*. Missing config fails loud (DMTOOLS_IT_REQUIRE_CREDS).
+#
+# Fork PRs do not receive secrets, so the matrix fails there by design —
+# maintainers can re-run via workflow_dispatch on the branch.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        integration: [jira, github, gitlab, confluence, ado]
+    concurrency:
+      group: pr-integration-${{ matrix.integration }}-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+
+      - name: Run ${{ matrix.integration }} live integration tests
+        run: >-
+          dart test -P integration -t integration
+          test/integration/${{ matrix.integration }}_integration_test.dart
+        env:
+          DMTOOLS_IT_REQUIRE_CREDS: 'true'
+
+          # Jira
+          JIRA_BASE_PATH: ${{ vars.JIRA_BASE_PATH }}
+          JIRA_EMAIL: ${{ vars.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          DMTOOLS_IT_JIRA_PROJECT: ${{ vars.DMTOOLS_IT_JIRA_PROJECT }}
+
+          # GitHub
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          DMTOOLS_IT_GITHUB_REPO: ${{ vars.DMTOOLS_IT_GITHUB_REPO }}
+
+          # GitLab
+          GITLAB_BASE_PATH: ${{ vars.GITLAB_BASE_PATH }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          DMTOOLS_IT_GITLAB_PROJECT: ${{ vars.DMTOOLS_IT_GITLAB_PROJECT }}
+
+          # Confluence
+          CONFLUENCE_BASE_PATH: ${{ vars.CONFLUENCE_BASE_PATH }}
+          CONFLUENCE_EMAIL: ${{ vars.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          DMTOOLS_IT_CONFLUENCE_SPACE: ${{ vars.DMTOOLS_IT_CONFLUENCE_SPACE }}
+
+          # Azure DevOps
+          ADO_ORGANIZATION: ${{ vars.ADO_ORGANIZATION }}
+          ADO_PROJECT: ${{ vars.ADO_PROJECT }}
+          ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
+          DMTOOLS_IT_ADO_PROJECT: ${{ vars.ADO_PROJECT }}

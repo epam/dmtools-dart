@@ -53,8 +53,14 @@ void _teamsSmokeGroup(String gate) {
     'Teams live smoke path',
     () {
       late final TeamsClient client;
-      setUpAll(() {
-        client = TeamsClient(TeamsHttpClient(PropertyReader()));
+      setUpAll(() async {
+        // A refresh token is not an access token — exchange it via the
+        // OAuth2 flow (Java OAuth2AuthenticationFlow) before any Graph call.
+        final accessToken =
+            await TeamsOAuth.resolveAccessToken(PropertyReader());
+        client = TeamsClient(
+          TeamsHttpClient(PropertyReader(), token: accessToken),
+        );
       });
 
       test('auth: testConnection resolves the signed-in user', () async {

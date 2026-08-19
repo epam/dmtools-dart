@@ -55,8 +55,14 @@ void _sharepointSmokeGroup(String gate) {
     'SharePoint live smoke path',
     () {
       late final SharepointClient client;
-      setUpAll(() {
-        client = SharepointClient(TeamsHttpClient(PropertyReader()));
+      setUpAll(() async {
+        // A refresh token is not an access token — exchange it via the
+        // OAuth2 flow (Java OAuth2AuthenticationFlow) before any Graph call.
+        final accessToken =
+            await TeamsOAuth.resolveAccessToken(PropertyReader());
+        client = SharepointClient(
+          TeamsHttpClient(PropertyReader(), token: accessToken),
+        );
       });
 
       test('auth: testConnection resolves the default drive', () async {

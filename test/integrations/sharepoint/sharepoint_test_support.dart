@@ -70,6 +70,9 @@ MockSharepointFixture mockSharepoint(
 
 /// Builds a [TeamsHttpClient] for SharePoint over a mocked [Dio] routed by
 /// [router].
+///
+/// The access token is passed explicitly — the factory accepts only resolved
+/// access tokens, never a raw refresh token.
 MockSharepointHttpFixture mockSharepointHttp(
   String Function(RequestOptions options) router,
 ) {
@@ -77,7 +80,11 @@ MockSharepointHttpFixture mockSharepointHttp(
   final adapter = RoutingAdapter(router);
   final dio = Dio()..httpClientAdapter = adapter;
   return (
-    http: TeamsHttpClient(PropertyReader(), dio: dio),
+    http: TeamsHttpClient(
+      PropertyReader(),
+      dio: dio,
+      token: _testConfig['TEAMS_REFRESH_TOKEN'],
+    ),
     adapter: adapter,
   );
 }

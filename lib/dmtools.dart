@@ -65,6 +65,7 @@ export 'src/integrations/jenkins/jenkins_http_client.dart';
 export 'src/integrations/jenkins/jenkins_tools.dart';
 export 'src/integrations/teams/teams_client.dart';
 export 'src/integrations/teams/teams_http_client.dart';
+export 'src/integrations/teams/teams_oauth.dart';
 export 'src/integrations/teams/teams_tools.dart';
 export 'src/integrations/sharepoint/sharepoint_client.dart';
 export 'src/integrations/sharepoint/sharepoint_tools.dart';

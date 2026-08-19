@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
@@ -13,11 +14,14 @@ void main() {
     PropertyReader.testEnvironment.clear();
   });
   tearDown(PropertyReader.clearOverrides);
+  tearDown(() => BitriseClient.environment = Platform.environment);
   httpClientTests();
   testConnectionTests();
   getAppsTests();
   getBuildsTests();
   getBuildDetailTests();
+  writeGuardTests();
+  writeGuardTruthyTests();
   triggerBuildTests();
   triggerBuildWithParamsTests();
   abortBuildTests();
@@ -116,9 +120,84 @@ void getBuildsTests() {
   });
 }
 
+/// Write-guard behavior — `BITRISE_ALLOW_WRITES` opt-in for write ops.
+void writeGuardTests() {
+  group('BitriseClient write guard (BITRISE_ALLOW_WRITES)', () {
+    test('triggerBuild throws StateError when the flag is unset', () async {
+      BitriseClient.environment = {};
+      await expectLater(
+        mockBitrise((o) => '{}').client.triggerBuild('app-1'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf([
+              contains('bitrise_trigger_build'),
+              contains('BITRISE_ALLOW_WRITES'),
+            ]),
+          ),
+        ),
+      );
+    });
+
+    test('triggerBuildWithParams throws StateError when the flag is unset',
+        () async {
+      BitriseClient.environment = {'BITRISE_ALLOW_WRITES': '0'};
+      await expectLater(
+        mockBitrise((o) => '{}')
+            .client
+            .triggerBuildWithParams('app-1', 'primary', null),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('BITRISE_ALLOW_WRITES'),
+          ),
+        ),
+      );
+    });
+
+    test('abortBuild throws StateError when the flag is falsy', () async {
+      BitriseClient.environment = {'BITRISE_ALLOW_WRITES': 'false'};
+      await expectLater(
+        mockBitrise((o) => '{}').client.abortBuild('app-1', 'build-1'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('bitrise_abort_build'),
+          ),
+        ),
+      );
+    });
+
+    test('reads stay unguarded with the flag unset', () async {
+      BitriseClient.environment = {};
+      final f = mockBitrise((o) => routeByPath({'/apps': _appsBody}, o));
+      expect((await f.client.getApps()).length, 2);
+    });
+  });
+}
+
+/// Write-guard opt-in spellings — truthy values enable write ops.
+void writeGuardTruthyTests() {
+  group('BitriseClient write guard truthy spellings', () {
+    test('1, true, and YES all enable writes', () async {
+      for (final value in ['1', 'true', 'YES']) {
+        BitriseClient.environment = {'BITRISE_ALLOW_WRITES': value};
+        final f = mockBitrise((o) => routeByPath({'/builds': _triggerBody}, o));
+        expect(await f.client.triggerBuild('app-1'), isNotNull,
+            reason: 'BITRISE_ALLOW_WRITES=$value should enable writes');
+      }
+    });
+  });
+}
+
 /// `bitrise_trigger_build` — POST `apps/{slug}/builds`.
 void triggerBuildTests() {
   group('BitriseClient.triggerBuild', () {
+    setUp(enableBitriseWrites);
+
     test('POSTs build params and returns the decoded object', () async {
       final f = mockBitrise((o) => routeByPath({'/builds': _triggerBody}, o));
       final result = await f.client.triggerBuild('app-slug-1');
@@ -199,6 +278,8 @@ void getBuildDetailTests() {
 /// `bitrise_trigger_build_with_params` — POST `apps/{appSlug}/builds`.
 void triggerBuildWithParamsTests() {
   group('BitriseClient.triggerBuildWithParams', () {
+    setUp(enableBitriseWrites);
+
     test('POSTs workflow_id and environments in build_params', () async {
       final f = mockBitrise((o) => routeByPath({'/builds': _triggerBody}, o));
       final result = await f.client.triggerBuildWithParams(
@@ -244,6 +325,8 @@ const _detailBody = '{"slug":"build-2","status":1}';
 /// `bitrise_abort_build` — POST `apps/{appSlug}/builds/{buildSlug}/abort`.
 void abortBuildTests() {
   group('BitriseClient.abortBuild', () {
+    setUp(enableBitriseWrites);
+
     test('POSTs the abort and returns the decoded object', () async {
       final f = mockBitrise((o) => routeByPath({'/abort': _abortBody}, o));
       final result = await f.client.abortBuild('app-1', 'build-2');

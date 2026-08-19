@@ -1,6 +1,6 @@
 /// Shared base for Bearer-token authenticated integration HTTP clients.
 ///
-/// Integrations that authenticate with a single bearer token (Bitrise, Figma)
+/// Integrations that authenticate with a single bearer token (Figma)
 /// extend this class instead of re-implementing [authHeaders] and [buildUrl].
 /// Integrations whose auth differs — GitHub's extra `Accept` header, GitLab's
 /// `PRIVATE-TOKEN`, Jira/Confluence's Basic+PAT duality — extend

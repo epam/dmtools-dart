@@ -26,7 +26,7 @@ void main() {
   getArtifactDetailTests();
 }
 
-/// The expected Bearer token produced by the fixture's config.
+/// The expected token produced by the fixture's config.
 const _expectedToken = 'bitrise-123';
 
 /// [BitriseHttpClient]: URL building, headers, verbs, and config errors.
@@ -37,10 +37,21 @@ void httpClientTests() {
       expect(f.http.buildUrl('apps'), 'https://bitrise.example.com/v0.1/apps');
     });
 
-    test('assembles Authorization Bearer and Content-Type headers', () {
+    test('assembles Authorization token scheme and Content-Type headers', () {
       final f = mockHttp((o) => '{}');
-      expect(f.http.headers['Authorization'], 'Bearer $_expectedToken');
+      expect(f.http.headers['Authorization'], 'token $_expectedToken');
       expect(f.http.headers['Content-Type'], 'application/json');
+    });
+
+    test('sends the token scheme over the wire (Bitrise rejects Bearer)',
+        () async {
+      final f = mockHttp((o) => '{}');
+      await f.http.get('apps');
+      final auth = f.adapter.calls.single.headers.entries
+          .firstWhere((e) => e.key.toLowerCase() == 'authorization')
+          .value as String;
+      expect(auth, 'token $_expectedToken');
+      f.http.close();
     });
 
     test('get/post/put/delete return the response bodies', () async {

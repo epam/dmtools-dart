@@ -72,6 +72,14 @@ MockHttpFixture mockHttp(String Function(RequestOptions options) router) {
   );
 }
 
+/// Enables Bitrise write ops for the current test by pointing
+/// [BitriseClient.environment] at a controlled map with the flag set.
+///
+/// Pair with a `BitriseClient.environment = Platform.environment` tearDown
+/// so later tests see the real environment again.
+void enableBitriseWrites() =>
+    BitriseClient.environment = {'BITRISE_ALLOW_WRITES': '1'};
+
 /// Routes by request-path suffix, defaulting to [fallback].
 ///
 /// Paths match with `endsWith` against the full request URL, so `'/apps'`

@@ -6,6 +6,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'bitrise_http_client.dart';
 
@@ -13,11 +14,39 @@ import 'bitrise_http_client.dart';
 class BitriseClient {
   final BitriseHttpClient _http;
 
+  /// Process environment probed by the Bitrise write guard.
+  ///
+  /// Production reads [Platform.environment]; tests substitute a controlled
+  /// map. Writes are enabled only by a real environment flag — there is
+  /// deliberately no `dmtools.env`/PropertyReader fallback, so a config file
+  /// can never silently enable account-wide POSTs.
+  static Map<String, String> environment = Platform.environment;
+
   /// Creates a client backed by [_http].
   BitriseClient(this._http);
 
   /// URL-encodes an app slug for safe path-segment use.
   String _encodeSlug(String slug) => Uri.encodeComponent(slug);
+
+  /// Throws [StateError] unless `BITRISE_ALLOW_WRITES` opts [operation] in.
+  ///
+  /// Guards the account-wide write methods (`bitrise_trigger_build`,
+  /// `bitrise_trigger_build_with_params`, `bitrise_abort_build`) so a stray
+  /// workflow or L3 run can't trigger real builds with a full-account PAT.
+  /// Truthy values are `1`, `true`, `yes` (case-insensitive); unset or any
+  /// other value means disabled.
+  void _ensureWritesAllowed(String operation) {
+    final flag = environment['BITRISE_ALLOW_WRITES']?.toLowerCase();
+    final allowed = flag == '1' || flag == 'true' || flag == 'yes';
+    if (!allowed) {
+      throw StateError(
+        '$operation is disabled: Bitrise write operations '
+        '(bitrise_trigger_build, bitrise_trigger_build_with_params, '
+        'bitrise_abort_build) require an explicit opt-in — '
+        'set BITRISE_ALLOW_WRITES=1 in the environment',
+      );
+    }
+  }
 
   /// `bitrise_test` — connectivity check via GET `apps`.
   ///
@@ -55,8 +84,10 @@ class BitriseClient {
   /// Triggers a build with empty build params (the server applies workflow
   /// defaults). Returns the decoded response object, or `null` for non-object
   /// bodies.
-  Future<Map<String, dynamic>?> triggerBuild(String appSlug) =>
-      _postBuild(appSlug, const {});
+  Future<Map<String, dynamic>?> triggerBuild(String appSlug) async {
+    _ensureWritesAllowed('bitrise_trigger_build');
+    return _postBuild(appSlug, const {});
+  }
 
   /// `bitrise_get_apps` — GET `apps`.
   ///
@@ -88,6 +119,7 @@ class BitriseClient {
     String appSlug,
     String buildSlug,
   ) async {
+    _ensureWritesAllowed('bitrise_abort_build');
     final body = await _http.post(
       'apps/${_encodeSlug(appSlug)}/builds/${_encodeSlug(buildSlug)}/abort',
     );
@@ -103,6 +135,7 @@ class BitriseClient {
     String workflow,
     List<Map<String, dynamic>>? environments,
   ) async {
+    _ensureWritesAllowed('bitrise_trigger_build_with_params');
     final buildParams = <String, dynamic>{'workflow_id': workflow};
     if (environments != null) {
       buildParams['environments'] = environments;
@@ -157,6 +190,7 @@ class BitriseClient {
     String appSlug,
     Map<String, dynamic> buildParams,
   ) async {
+    _ensureWritesAllowed('bitrise build trigger');
     final result = await _http.post(
       'apps/${_encodeSlug(appSlug)}/builds',
       body: jsonEncode({'build_params': buildParams}),

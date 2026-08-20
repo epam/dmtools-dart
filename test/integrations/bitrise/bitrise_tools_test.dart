@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -6,6 +8,7 @@ import 'bitrise_test_support.dart';
 /// Tests for the [bitriseTools] catalog and [BitriseToolExecutor] dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
+  tearDown(() => BitriseClient.environment = Platform.environment);
   toolCatalogShapeTests();
   toolCatalogParamTests();
   workflowArtifactCatalogParamTests();
@@ -107,6 +110,7 @@ void executorDispatchTests() {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
+    setUp(enableBitriseWrites);
     setUp(() {
       spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
       executor = BitriseToolExecutor(spy);
@@ -142,6 +146,7 @@ void buildDetailAndTriggerDispatchTests() {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
+    setUp(enableBitriseWrites);
     setUp(() {
       spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
       executor = BitriseToolExecutor(spy);
@@ -184,6 +189,7 @@ void buildAbortDispatchTests() {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
+    setUp(enableBitriseWrites);
     setUp(() {
       spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
       executor = BitriseToolExecutor(spy);
@@ -226,6 +232,7 @@ void workflowArtifactDispatchTests() {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
+    setUp(enableBitriseWrites);
     setUp(() {
       spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
       executor = BitriseToolExecutor(spy);
@@ -267,6 +274,7 @@ void artifactDetailDispatchTests() {
     late _SpyBitriseClient spy;
     late BitriseToolExecutor executor;
 
+    setUp(enableBitriseWrites);
     setUp(() {
       spy = _SpyBitriseClient(mockHttp((o) => '{}').http);
       executor = BitriseToolExecutor(spy);

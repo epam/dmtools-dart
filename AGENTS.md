@@ -42,6 +42,7 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
 | `crap4dart.yaml` | Quality gate config (threshold 8.0, sources lib/bin/test) |
 | `.github/workflows/quality.yml` | CI: format → analyze → test+coverage → crap4dart |
 | `bin/dmtools.dart` | CLI entry (stub; full JobRunner surface = Phase 2) |
+| `install.sh` | One-line installer: prebuilt AOT binaries from GitHub Releases (see `release-cli.yml` / `install-test.yml`) |
 | `lib/` | All implementation code |
 | `test/` | `dart test` suite (L1 unit; L2 contract fixtures later) |
 

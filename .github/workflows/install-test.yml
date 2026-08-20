@@ -1,0 +1,97 @@
+name: Install test
+
+# Simulates a clean-machine install of the dmtools CLI on every supported
+# system type: runs install.sh, puts the install dir on PATH, then exercises
+# the binary — `dmtools --version` and `dmtools list` (no credentials needed).
+#
+# Two modes:
+#   - pull_request touching install.sh / workflows: syntax + shellcheck always
+#     run; the live-install matrix runs only when a release already exists
+#     (skipped for the very first release-cli run, see release-cli.yml).
+#   - workflow_dispatch: full matrix, optional `version` input pins the
+#     release under test (default: latest).
+#
+# The repo is private, so the installer needs an authenticated download —
+# DMTOOLS_GITHUB_TOKEN carries the workflow's own GITHUB_TOKEN.
+
+on:
+  pull_request:
+    paths:
+      - 'install.sh'
+      - '.github/workflows/install-test.yml'
+      - '.github/workflows/release-cli.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to install (optional, default: latest)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: install.sh syntax and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # dash is /bin/sh on Ubuntu runners and shellcheck is preinstalled —
+      # no apt round-trip (apt hung a job for 5+ minutes on 2026-08-19).
+      - name: POSIX sh syntax check (dash)
+        run: dash -n install.sh
+
+      - name: shellcheck
+        run: shellcheck install.sh
+
+  install:
+    name: install on ${{ matrix.os }}
+    needs: syntax
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-13, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check a release exists to install
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/releases/latest" \
+            --jq .tag_name > /tmp/tag 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Latest release: $(cat /tmp/tag)"
+          else
+            # No releases yet (first release-cli run lands after this PR).
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No releases yet — skipping live install."
+          fi
+
+      - name: Run install.sh (latest)
+        if: steps.release.outputs.exists == 'true'
+        env:
+          DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
+        run: sh install.sh
+
+      - name: Run install.sh (pinned version)
+        if: >
+          steps.release.outputs.exists == 'true' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.version != ''
+        env:
+          DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
+        run: sh install.sh "${{ github.event.inputs.version }}"
+
+      - name: Exercise the installed binary
+        if: steps.release.outputs.exists == 'true'
+        run: |
+          export PATH="$HOME/.dmtools/bin:$PATH"
+          dmtools --version
+          dmtools list | head -n 10
+          dmtools doctor || true

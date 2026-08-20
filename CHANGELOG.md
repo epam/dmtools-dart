@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- CLI installer (`install.sh`): one-line `curl | sh` install of prebuilt
+  AOT binaries from GitHub Releases — standalone (no Dart/Flutter needed on
+  the target machine), version-pinned installs (`sh -s -- v0.1.0` or
+  `DMTOOLS_VERSION`), optional `DMTOOLS_GITHUB_TOKEN` auth for the private
+  repo, best-effort sha256 verification, installs to `~/.dmtools/bin`
+  (binary + `native/quickjs/libquickjs_bridge.so` beside it) with PATH
+  management. Modeled on the Java `dm.ai` installer and IstiN's
+  `flutter_agent_harness` `install.sh`.
+- `release-cli.yml`: builds `dmtools-<os>-<arch>.tar.gz` bundles
+  (linux-x64, macos-x64, macos-arm64) on every `vX.Y.Z` tag or dispatch,
+  smoke-tests each bundle on its builder, publishes assets plus
+  `dmtools-checksums.sha256`; the compiled-in version is synced from the
+  tag so `dmtools --version` always matches the release.
+- `install-test.yml`: simulates clean-machine installs across the OS
+  matrix and exercises `dmtools --version` / `dmtools list`; `dash -n` +
+  `shellcheck` the installer on every PR.
+
 ## [0.1.0] — 2026-08-13
 
 Initial feature-complete release. Dart port of [DMTools](https://github.com/epam/dm.ai)

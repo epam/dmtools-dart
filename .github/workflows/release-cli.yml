@@ -1,41 +1,133 @@
 name: Release CLI
 
-# Builds standalone dmtools binaries (AOT via `dart compile exe`) for every
-# supported platform and publishes them as GitHub Release assets:
+# dm.ai-style release flow: press the button (workflow_dispatch), everything
+# else is automatic. A custom version may be passed; leaving it empty
+# auto-increments the patch version from pubspec.yaml.
 #
-#   dmtools-<os>-<arch>.tar.gz   binary + native/quickjs/libquickjs_bridge.so
-#   install.sh                   the one-line installer (from the tag)
-#   dmtools-checksums.sha256     sha256 of every asset
+#   1. version-and-tag: bump pubspec.yaml + lib/src/version.dart, commit,
+#      tag vX.Y.Z, push, generate the changelog since the previous tag
+#   2. build: standalone dmtools binaries (AOT via `dart compile exe`) for
+#      every supported platform, smoke-tested on their builders
+#   3. release: publish tar.gz bundles + install.sh + checksums with the
+#      generated changelog as the release body
 #
-# Triggers:
-#   - push of a vX.Y.Z tag
-#   - workflow_dispatch with an explicit version (creates/updates the release)
-#
-# Version policy: the tag (or dispatch input) is authoritative. The compiled-in
-# version constant is synced from it before `dart compile exe` so `dmtools
-# --version` always reports the release it came from (test/version_test.dart
-# additionally pins version.dart to pubspec.yaml on main).
+# Trigger is dispatch-only (like dm.ai) — the workflow itself pushes the tag,
+# so a tag-push trigger would double-fire.
 #
 # Platform matrix: linux-x64, macos-x64, macos-arm64. linux-arm64 needs an ARM
 # builder the private repo does not have — install.sh explains the from-source
 # path there. Windows needs MinGW-w64 + a PowerShell installer (follow-up).
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (with or without v prefix)'
-        required: true
+        description: 'Custom version (e.g. 0.2.0). Leave empty to auto-increment patch.'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  version-and-tag:
+    name: version and tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.new_version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.body }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags + history for the changelog
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Read current version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | tr -d '"' )
+          echo "current=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Determine new version
+        id: new_version
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          CUSTOM_VERSION="${{ github.event.inputs.version }}"
+
+          if [ -n "$CUSTOM_VERSION" ]; then
+            NEW_VERSION="$CUSTOM_VERSION"
+            case "$NEW_VERSION" in v*) NEW_VERSION="${NEW_VERSION#v}" ;; esac
+            echo "Using custom version: $NEW_VERSION"
+          else
+            # Auto-increment patch version (dm.ai release.yml parity)
+            MAJOR="$(echo "$CURRENT_VERSION" | cut -d. -f1)"
+            MINOR="$(echo "$CURRENT_VERSION" | cut -d. -f2)"
+            PATCH="$(echo "$CURRENT_VERSION" | cut -d. -f3)"
+            NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+            echo "Auto-incremented version: $NEW_VERSION"
+          fi
+
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version files
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          sed -i.bak "s/^version:.*/version: $NEW_VERSION/" pubspec.yaml
+          sed -i.bak "s/dmtoolsVersion = '[^']*'/dmtoolsVersion = '$NEW_VERSION'/" \
+            lib/src/version.dart
+          rm -f pubspec.yaml.bak lib/src/version.dart.bak
+          grep '^version:' pubspec.yaml
+          grep "dmtoolsVersion = '" lib/src/version.dart
+
+      - name: Commit version change
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git add pubspec.yaml lib/src/version.dart
+          git commit -m "chore: bump version to $NEW_VERSION"
+
+      - name: Create tag
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git tag "v$NEW_VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          {
+            echo "## What's Changed"
+            echo ""
+            if git rev-parse "v$CURRENT_VERSION" >/dev/null 2>&1; then
+              git log --format='- %s (%h)' "v$CURRENT_VERSION"..HEAD
+            else
+              echo "- Commits since repository start (previous tag v$CURRENT_VERSION not found)."
+            fi
+            echo ""
+            echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/v$CURRENT_VERSION...v$NEW_VERSION"
+          } > changelog.md
+          cat changelog.md
+          {
+            echo 'body<<CHANGELOG_EOF'
+            cat changelog.md
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        run: |
+          NEW_VERSION="${{ steps.new_version.outputs.version }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "v$NEW_VERSION"
+
   build:
     name: build ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: version-and-tag
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -45,11 +137,11 @@ jobs:
           - { os: ubuntu-latest, platform: linux, arch: x64 }
           - { os: macos-13, platform: macos, arch: x64 }
           - { os: macos-latest, platform: macos, arch: arm64 }
-    outputs:
-      version: ${{ steps.ver.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version-and-tag.outputs.version }}
 
       - uses: dart-lang/setup-dart@v1
         with:
@@ -59,28 +151,21 @@ jobs:
 
       - name: Install gcc (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc
+        run: |
+          # Cap apt with timeout + retries — see ci-apt-hardening (#4).
+          for attempt in 1 2 3; do
+            if timeout 300 sudo apt-get update -qq && \
+               timeout 300 sudo apt-get install -y -qq gcc; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed or timed out; retrying in 15s"
+            sudo dpkg --configure -a || true
+            sleep 15
+          done
+          exit 1
 
       - name: Build QuickJS bridge library
         run: make native
-
-      - name: Derive release version
-        id: ver
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            V="${{ github.event.inputs.version }}"
-          else
-            V="${GITHUB_REF_NAME}"
-          fi
-          case "$V" in v*) V="${V#v}" ;; esac
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-
-      - name: Sync compiled-in version constant
-        run: |
-          sed -i.bak "s/dmtoolsVersion = '[^']*'/dmtoolsVersion = '${{ steps.ver.outputs.version }}'/" \
-            lib/src/version.dart
-          rm -f lib/src/version.dart.bak
-          grep "dmtoolsVersion = '" lib/src/version.dart
 
       - name: Compile AOT binary
         run: dart compile exe bin/dmtools.dart -o dmtools
@@ -105,11 +190,13 @@ jobs:
 
   release:
     name: publish release
-    needs: build
+    needs: [version-and-tag, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version-and-tag.outputs.version }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -125,8 +212,9 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.build.outputs.version }}
-          name: dmtools v${{ needs.build.outputs.version }}
+          tag_name: v${{ needs.version-and-tag.outputs.version }}
+          name: dmtools v${{ needs.version-and-tag.outputs.version }}
+          body: ${{ needs.version-and-tag.outputs.changelog }}
           draft: false
           prerelease: false
           files: dist/*

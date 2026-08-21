@@ -12,8 +12,9 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
    runs `crap4dart check --staged`; CI runs `check --all` + `analyze` on every push.
    Never commit on red, never weaken a gate to make code pass. Known
    exemptions live in `crap4dart.yaml` with comments (Java-parity client
-   classes → class_size warning; test_assertions parser bug with trailing
-   `skip:` args).
+   classes → class_size warning; testrail_create_case* Java-parity
+   @MCPParam signatures → method_size max_params override; test_assertions
+   parser bug with trailing `skip:` args).
 2. **Signature parity with Java DMTools.** Config JSON keys, tool names
    (snake_case), env variables, CLI commands — identical to the Java version.
    A config or `dmtools.env` that works with Java must work unchanged here.
@@ -84,8 +85,8 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**All 5 phases implemented.** 325 MCP tools across 17 integrations (100% of the
-328 Java @MCPTool set). QuickJS runtime via dart:ffi with sync callbacks —
+**All 5 phases implemented.** 328 MCP tools across 17 integrations (100% of the
+329 Java @MCPTool set incl. testrail_get_sections from Java PR #462). QuickJS runtime via dart:ffi with sync callbacks —
 dmtools-agents suite passes unmodified (751 tests green; upstream fixed the
 former 4 failures). CliAgent lifecycle fully
 ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`

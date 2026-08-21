@@ -91,6 +91,15 @@ gates:
     max_lines: 60
     # Maximum number of parameters per method.
     max_params: 6
+    # The TestRail case-creation methods mirror the Java @MCPParam
+    # signatures 1:1 (createCaseDetailed takes 10 @MCPParam arguments in
+    # dm.ai's TestRailClient.java; Java source is the spec per AGENTS.md
+    # rule 2). The test-side spy overrides repeat the same signatures.
+    entries:
+      - paths: ['lib/src/integrations/testrail/testrail_client.dart']
+        max_params: 12
+      - paths: ['test/integrations/testrail/testrail_tools_test.dart']
+        max_params: 12
   # Detect duplicated code blocks.
   duplication:
     enabled: true

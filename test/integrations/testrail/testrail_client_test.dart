@@ -20,6 +20,8 @@ void main() {
   addResultTests();
   getRunsTests();
   getSectionsTests();
+  getSectionsPagingTests();
+  projectIdResolutionTests();
   addCaseTests();
   updateCaseTests();
   getMilestonesTests();
@@ -229,26 +231,109 @@ void getRunsTests() {
   });
 }
 
-/// `testrail_get_sections` — GET `get_sections/{projectId}&suite_id={suiteId}`.
+/// `testrail_get_sections` — paginated GET `get_sections/{projectId}`.
 void getSectionsTests() {
-  group('TestRailClient.getSections', () {
-    test('returns the decoded list of sections', () async {
+  group('TestRailClient.getSectionsByProjectName', () {
+    test('resolves the project and returns every section', () async {
       final f = mockTestRail(
-        (o) => routeByPath({'get_sections': _sectionsBody}, o),
+        (o) => routeByPath({
+          'get_projects': _projectsBody,
+          'get_sections': _sectionsPageBody,
+        }, o),
       );
-      final sections = await f.client.getSections(7);
+      final sections = await f.client.getSectionsByProjectName('My Project');
       expect(sections.map((s) => s['id']).toList(), [10, 11]);
-      final call = f.adapter.calls.single;
-      expect(call.path, contains('get_sections'));
-      expect(call.path, contains('proj-1'));
-      expect(call.path, contains('suite_id=7'));
+      expect(f.adapter.calls.last.path, contains('get_sections/5'));
+      expect(f.adapter.calls.last.path, contains('limit=250&offset=0'));
     });
 
-    test('returns empty list when the body is not an array', () async {
+    test('appends suite_id to the route when provided', () async {
       final f = mockTestRail(
-        (o) => routeByPath({'get_sections': '{"error": "x"}'}, o),
+        (o) => routeByPath({
+          'get_projects': _projectsBody,
+          'get_sections': _sectionsPageBody,
+        }, o),
       );
-      expect(await f.client.getSections(7), isEmpty);
+      await f.client.getSectionsByProjectName('My Project', suiteId: '3');
+      expect(
+        f.adapter.calls.last.path,
+        contains('get_sections/5&suite_id=3&limit=250&offset=0'),
+      );
+    });
+
+    test('returns empty list when the project has no sections', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({
+          'get_projects': _projectsBody,
+          'get_sections': '{"sections":[]}',
+        }, o),
+      );
+      expect(
+        await f.client.getSectionsByProjectName('My Project'),
+        isEmpty,
+      );
+    });
+  });
+}
+
+/// `testrail_get_sections` pagination via `_links.next`.
+void getSectionsPagingTests() {
+  group('TestRailClient.getSectionsByProjectName (pagination)', () {
+    test('follows _links.next until it is null', () async {
+      var sectionCalls = 0;
+      final f = mockTestRail((o) {
+        if (o.path.contains('get_projects')) return _projectsBody;
+        sectionCalls++;
+        return sectionCalls == 1 ? _sectionsPage1Body : _sectionsPage2Body;
+      });
+      final sections = await f.client.getSectionsByProjectName('My Project');
+      expect(sections.map((s) => s['id']).toList(), [10, 11]);
+      expect(sectionCalls, 2);
+      expect(f.adapter.calls.last.path, contains('offset=250'));
+    });
+
+    test('stops via the item-count heuristic without _links', () async {
+      final fullPage = List.generate(250, (i) => '{"id":$i}').join(',');
+      var sectionCalls = 0;
+      final f = mockTestRail((o) {
+        if (o.path.contains('get_projects')) return _projectsBody;
+        sectionCalls++;
+        return sectionCalls == 1
+            ? '{"offset":0,"limit":250,"size":250,"sections":[$fullPage]}'
+            : '{"offset":250,"limit":250,"size":1,"sections":[{"id":999}]}';
+      });
+      final sections = await f.client.getSectionsByProjectName('My Project');
+      expect(sections.length, 251);
+      expect(sectionCalls, 2);
+    });
+  });
+}
+
+/// Project-name resolution: `get_projects` pagination and caching.
+void projectIdResolutionTests() {
+  group('TestRailClient project resolution', () {
+    test('caches resolved project IDs across calls', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({
+          'get_projects': _projectsBody,
+          'get_sections': _sectionsPageBody,
+        }, o),
+      );
+      await f.client.getSectionsByProjectName('My Project');
+      await f.client.getSectionsByProjectName('My Project');
+      final projectCalls =
+          f.adapter.calls.where((c) => c.path.contains('get_projects')).length;
+      expect(projectCalls, 1);
+    });
+
+    test('throws StateError for an unknown project name', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_projects': _projectsBody}, o),
+      );
+      expect(
+        () => f.client.getSectionsByProjectName('Nope'),
+        throwsStateError,
+      );
     });
   });
 }
@@ -304,8 +389,26 @@ void updateCaseTests() {
 /// Canned `get_runs` response body.
 const _runsBody = '[{"id":100},{"id":101}]';
 
-/// Canned `get_sections` response body.
-const _sectionsBody = '[{"id":10},{"id":11}]';
+/// Canned `get_projects` page used for name→ID resolution.
+const _projectsBody =
+    '{"offset":0,"limit":250,"size":1,"projects":[{"id":5,"name":"My Project"}],'
+    '"_links":{"next":null,"prev":null}}';
+
+/// Canned single-page `get_sections` response.
+const _sectionsPageBody =
+    '{"offset":0,"limit":250,"size":2,"sections":[{"id":10,"name":"Core"},'
+    '{"id":11,"name":"Extra"}],"_links":{"next":null,"prev":null}}';
+
+/// First `get_sections` page pointing at a second page.
+const _sectionsPage1Body =
+    '{"offset":0,"limit":250,"size":250,"sections":[{"id":10}],'
+    '"_links":{"next":"https://tr.example.com/index.php?/api/v2/'
+    'get_sections/5&limit=250&offset=250"}}';
+
+/// Final `get_sections` page with a null next link.
+const _sectionsPage2Body =
+    '{"offset":250,"limit":250,"size":1,"sections":[{"id":11}],'
+    '"_links":{"next":null}}';
 
 /// Canned `add_case` response body.
 const _newCaseBody = '{"id":42,"title":"New case"}';

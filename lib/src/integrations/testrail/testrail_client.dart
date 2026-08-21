@@ -56,12 +56,16 @@ class TestRailClient {
     return _decodeMap(await _http.get('get_case/$id'));
   }
 
-  /// `testrail_get_cases` — GET `get_cases/{projectId}&suite_id={suiteId}`.
+  /// `testrail_get_cases` — paginated GET `get_cases/{projectId}`.
   ///
-  /// The project ID comes from the configured `TESTRAIL_PROJECT`.
-  /// Returns an empty list when the response body is not a JSON array.
+  /// The project ID comes from the configured `TESTRAIL_PROJECT`. The v2
+  /// endpoint answers with the pagination envelope (`cases` key + `_links`),
+  /// so the list is collected page by page like the Java client.
   Future<List<Map<String, dynamic>>> getCases(int suiteId) async =>
-      _getList('get_cases/${_http.projectId}&suite_id=$suiteId');
+      _collectPages(
+        'get_cases/${_http.projectId}&suite_id=$suiteId',
+        'cases',
+      );
 
   /// `testrail_add_result` — POST `add_result/{testId}`.
   ///
@@ -133,9 +137,14 @@ class TestRailClient {
 
   /// `testrail_delete_case` — POST `delete_case/{id}`.
   ///
-  /// Deletes test case [id]. Returns the decoded response, or an empty map.
-  Future<Map<String, dynamic>> deleteCase(int id) =>
-      _postForMap('delete_case/$id', const {});
+  /// Deletes test case [id]. TestRail's delete endpoints answer `200 OK`
+  /// with an **empty body** (success carries no payload — the Java client
+  /// returns the raw, empty string), so nothing is decoded; a non-2xx still
+  /// throws via the transport. Returns an empty map.
+  Future<Map<String, dynamic>> deleteCase(int id) async {
+    await _http.post('delete_case/$id', body: '{}');
+    return const {};
+  }
 
   /// `testrail_get_milestones` — GET `get_milestones/{projectId}`.
   ///

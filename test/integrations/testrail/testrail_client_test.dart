@@ -148,12 +148,12 @@ void getCaseTests() {
   });
 }
 
-/// `testrail_get_cases` — GET `get_cases/{projectId}&suite_id={suiteId}`.
+/// `testrail_get_cases` — paginated GET `get_cases/{projectId}`.
 void getCasesTests() {
   group('TestRailClient.getCases', () {
-    test('returns the decoded list of cases', () async {
+    test('collects cases from the v2 pagination envelope', () async {
       final f = mockTestRail(
-        (o) => routeByPath({'get_cases': _casesBody}, o),
+        (o) => routeByPath({'get_cases': _casesEnvelopeBody}, o),
       );
       final cases = await f.client.getCases(2);
       expect(cases.map((c) => c['id']).toList(), [1, 2]);
@@ -163,7 +163,7 @@ void getCasesTests() {
       expect(call.path, contains('suite_id=2'));
     });
 
-    test('returns empty list when the body is not an array', () async {
+    test('returns empty list when the envelope has no cases', () async {
       final f = mockTestRail(
         (o) => routeByPath({'get_cases': '{"error": "x"}'}, o),
       );
@@ -205,8 +205,10 @@ const _userBody = '{"name":"Dev User","email":"dev@example.com"}';
 /// Canned `get_case` response body.
 const _caseBody = '{"id":1,"title":"Sample case"}';
 
-/// Canned `get_cases` response body.
-const _casesBody = '[{"id":1},{"id":2}]';
+/// Canned `get_cases` v2 envelope.
+const _casesEnvelopeBody =
+    '{"offset":0,"limit":250,"size":2,"cases":[{"id":1},{"id":2}],'
+    '"_links":{"next":null,"prev":null}}';
 
 /// Canned `add_result` response body.
 const _resultBody = '{"id":9001}';
@@ -671,18 +673,17 @@ void getTemplatesTests() {
 /// `testrail_delete_case` — POST `delete_case/{id}`.
 void deleteCaseTests() {
   group('TestRailClient.deleteCase', () {
-    test('POSTs the delete and returns the decoded object', () async {
+    test('POSTs the delete and tolerates the empty 200 body', () async {
       final f = mockTestRail(
-        (o) => routeByPath({'delete_case/9': _deletedCaseBody}, o),
+        (o) => routeByPath({'delete_case/9': ''}, o),
       );
-      final result = await f.client.deleteCase(9);
-      expect(result['deleted'], isTrue);
+      expect(await f.client.deleteCase(9), isEmpty);
       final call = f.adapter.calls.single;
       expect(call.method, 'POST');
       expect(call.path, contains('delete_case/9'));
     });
 
-    test('returns empty map when the body is not an object', () async {
+    test('returns an empty map for a non-object body too', () async {
       final f = mockTestRail(
         (o) => routeByPath({'delete_case/9': '[1, 2]'}, o),
       );
@@ -697,6 +698,3 @@ const _referencesBody = '[{"id":1,"name":"JIRA"},{"id":2,"name":"URL"}]';
 /// Canned `get_templates` response body.
 const _templatesBody =
     '[{"id":1,"name":"Test Case (Text)"},{"id":2,"name":"Test Case (Steps)"}]';
-
-/// Canned `delete_case` response body.
-const _deletedCaseBody = '{"deleted":true}';

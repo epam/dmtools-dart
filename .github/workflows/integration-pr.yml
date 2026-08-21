@@ -2,9 +2,14 @@ name: Integration (PR)
 
 # L3 live integration smoke tests on every PR. Unlike the nightly
 # integration.yml, this runs the fast sandbox-backed subset (Jira, GitHub,
-# GitLab, Confluence, ADO) so a broken client fails the PR that broke it.
-# Non-sensitive config comes from repository *variables*; credentials from
-# repository *secrets*. Missing config fails loud (DMTOOLS_IT_REQUIRE_CREDS).
+# GitLab, Confluence, ADO, Bitrise) so a broken client fails the PR that
+# broke it. Non-sensitive config comes from repository *variables*;
+# credentials from repository *secrets*. Missing config fails loud
+# (DMTOOLS_IT_REQUIRE_CREDS).
+#
+# Bitrise is read-only here by design: the write methods are gated behind
+# BITRISE_ALLOW_WRITES (#2), which this workflow never sets — the PAT in
+# BITRISE_TOKEN is full-account.
 #
 # Fork PRs do not receive secrets, so the matrix fails there by design —
 # maintainers can re-run via workflow_dispatch on the branch.
@@ -19,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        integration: [jira, github, gitlab, confluence, ado]
+        integration: [jira, github, gitlab, confluence, ado, bitrise]
     concurrency:
       group: pr-integration-${{ matrix.integration }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false
@@ -64,3 +69,6 @@ jobs:
           ADO_PROJECT: ${{ vars.ADO_PROJECT }}
           ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
           DMTOOLS_IT_ADO_PROJECT: ${{ vars.ADO_PROJECT }}
+
+          # Bitrise (reads only — BITRISE_ALLOW_WRITES is deliberately unset)
+          BITRISE_TOKEN: ${{ secrets.BITRISE_TOKEN }}

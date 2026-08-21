@@ -82,6 +82,22 @@ class TestRailClient {
   Future<List<Map<String, dynamic>>> getRuns(int projectId) async =>
       _getList('get_runs/$projectId');
 
+  /// `testrail_get_projects` — paginated GET `get_projects`.
+  ///
+  /// Aggregates every page into a single envelope (`offset`/`limit`/`size`/
+  /// `projects`/`_links`), mirroring the Java `getProjects` shape. Section-
+  /// and case-creation callers use it to resolve project ids to names.
+  Future<Map<String, dynamic>> getProjects() async {
+    final projects = await _collectPages('get_projects', 'projects');
+    return {
+      'offset': 0,
+      'limit': 250,
+      'size': projects.length,
+      'projects': projects,
+      '_links': {'next': null, 'prev': null},
+    };
+  }
+
   /// `testrail_get_sections` — paginated GET `get_sections/{projectId}`.
   ///
   /// Resolves [projectName] to a project ID, then pages through every

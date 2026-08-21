@@ -22,6 +22,7 @@ void main() {
   getSectionsTests();
   getSectionsPagingTests();
   projectIdResolutionTests();
+  getProjectsTests();
   addCaseTests();
   updateCaseTests();
   getMilestonesTests();
@@ -334,6 +335,36 @@ void projectIdResolutionTests() {
         () => f.client.getSectionsByProjectName('Nope'),
         throwsStateError,
       );
+    });
+  });
+}
+
+/// `testrail_get_projects` — aggregated envelope over `get_projects` pages.
+void getProjectsTests() {
+  group('TestRailClient.getProjects', () {
+    test('returns the aggregated envelope', () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_projects': _projectsBody}, o),
+      );
+      final envelope = await f.client.getProjects();
+
+      expect(envelope['offset'], 0);
+      expect(envelope['size'], 1);
+      expect(envelope['projects'], [
+        {'id': 5, 'name': 'My Project'},
+      ]);
+      expect(envelope['_links'], {'next': null, 'prev': null});
+    });
+
+    test('returns an empty envelope when the account has no projects',
+        () async {
+      final f = mockTestRail(
+        (o) => routeByPath({'get_projects': '{"projects":[]}'}, o),
+      );
+      final envelope = await f.client.getProjects();
+
+      expect(envelope['size'], 0);
+      expect(envelope['projects'], isEmpty);
     });
   });
 }

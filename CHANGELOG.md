@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (creating a "Test Cases" section when the project has none). Markdown
   tables in text fields convert to TestRail `|||:Col|Col` format or HTML for
   the Steps template. Catalog grows to 328 tools; the Java↔Dart gap snapshot
-  shrinks to 210.
+  shrinks to 210. The L3 suite exercises the new tools against the TestRail
+  sandbox (sections read + create/delete round-trips per flavour, resolving
+  the project id → name via the Java-parity `getProjects` envelope), the
+  nightly integration job gains the missing `DMTOOLS_IT_TESTRAIL_SUITE`
+  wiring, and `integration-pr.yml` gains a `testrail` matrix leg.
 - Generic named tool arguments on the CLI: `dmtools <tool> --key value` and
   `--key=value` map onto the tool's arguments (merged over a positional JSON
   blob), porting the Java `McpCliHandler.parseToolArguments` change from the

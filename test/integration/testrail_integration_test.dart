@@ -86,7 +86,7 @@ void _testrailSmokeGroup(String gate, int? projectId, String runId) {
         client = TestRailClient(TestRailHttpClient(PropertyReader()));
       });
       tearDownAll(PropertyReader.clearOverrides);
-      _testrailReadTests(() => client);
+      _testrailReadTests(() => client, () => projectId!, runId);
       _testrailSectionTest(() => client, () => projectId!);
       _testrailCreateTests(() => client, () => projectId!, runId);
       _testrailCreateStepsTest(() => client, () => projectId!, runId);
@@ -99,10 +99,14 @@ void _testrailSmokeGroup(String gate, int? projectId, String runId) {
 
 /// Auth and read smoke tests.
 ///
-/// The get-case test lists cases first to learn an id, then fetches it — the
-/// same list-then-read shape the Jira skeleton uses, since a case cannot be
-/// fetched without first discovering its id.
-void _testrailReadTests(TestRailClient Function() client) {
+/// The sandbox is self-cleaning (every created case is deleted in teardown),
+/// so the case-reading tests **seed their own case first** — the suite cannot
+/// be assumed to hold any pre-existing data.
+void _testrailReadTests(
+  TestRailClient Function() client,
+  int Function() projectId,
+  String runId,
+) {
   final suiteId = int.tryParse(Platform.environment[suiteVar] ?? '');
   final suiteSkip = suiteId == null
       ? 'Set $suiteVar to a sandbox TestRail suite id to run.'
@@ -116,21 +120,43 @@ void _testrailReadTests(TestRailClient Function() client) {
   });
 
   test('get cases: lists cases in the sandbox suite', () async {
-    final cases = await client().getCases(suiteId!);
+    final seedId = await _seedCase(client, projectId, suiteId!, runId);
+    final cases = await client().getCases(suiteId);
 
-    expect(cases, isNotEmpty, reason: 'empty suite $suiteId');
+    expect(
+      cases.map((c) => (c['id'] as num).toInt()),
+      contains(seedId),
+      reason: 'seeded case $seedId missing from suite $suiteId',
+    );
   }, skip: suiteSkip);
 
   test('get case: fetches a sandbox case', () async {
-    final cases = await client().getCases(suiteId!);
-    expect(cases, isNotEmpty, reason: 'empty suite $suiteId');
-
-    final id = cases.first['id'] as int;
-    final testCase = await client().getCase(id);
+    final seedId = await _seedCase(client, projectId, suiteId!, runId);
+    final testCase = await client().getCase(seedId);
 
     expect(testCase, isNotNull);
-    expect(testCase!['id'], id);
+    expect(testCase!['id'], seedId);
   }, skip: suiteSkip);
+}
+
+/// Creates a disposable case in the suite's first section and returns its
+/// id; the deletion is registered with [addTearDown] so the sandbox stays
+/// clean even when the test body fails.
+Future<int> _seedCase(
+  TestRailClient Function() client,
+  int Function() projectId,
+  int suiteId,
+  String runId,
+) async {
+  final sectionId = await _firstSectionId(client(), projectId(), suiteId);
+  final seeded = await client().createCase(
+    await _resolveProjectName(client(), projectId()),
+    'it-$runId seed ${DateTime.now().millisecondsSinceEpoch % 100000}',
+    sectionId: '$sectionId',
+  );
+  final seedId = (seeded['id'] as num).toInt();
+  addTearDown(() => client().deleteCase(seedId));
+  return seedId;
 }
 
 /// Read smoke test for `get_sections` — suite-keyed, read-only.

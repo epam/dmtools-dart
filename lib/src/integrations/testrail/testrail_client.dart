@@ -540,11 +540,18 @@ class TestRailClient {
   }
 
   /// POSTs [payload] to [path] and returns the decoded object, or `{}`.
+  ///
+  /// TestRail occasionally answers writes with `200 OK` and an empty body
+  /// (observed on `add_case`); rather than surfacing a bare `FormatException`
+  /// from [jsonDecode], fail with the offending route spelled out.
   Future<Map<String, dynamic>> _postForMap(
     String path,
     Map<String, dynamic> payload,
   ) async {
     final body = await _http.post(path, body: jsonEncode(payload));
+    if (body.trim().isEmpty) {
+      throw StateError('TestRail returned an empty body for POST $path');
+    }
     return _decodeMap(body) ?? {};
   }
 

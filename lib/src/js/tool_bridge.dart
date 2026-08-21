@@ -36,6 +36,17 @@ class ToolBridge {
       : _registry = registry,
         _workingDirectory = workingDirectory;
 
+  /// The single tool dispatcher shared by every call through this bridge.
+  ///
+  /// Holds the per-integration sync tool sets and their config
+  /// [PropertyReader]; one instance per bridge so repeated tool calls reuse
+  /// the loaded configuration (and its cached `dmtools.env` reads) instead
+  /// of rebuilding both on every call.
+  late final SyncToolDispatcher dispatcher = SyncToolDispatcher(
+    PropertyReader(),
+    nonHttpHandler: _dispatchNonHttp,
+  );
+
   /// Registers `executeToolViaJava`, `file_read`, `set_env_variable`, and
   /// the `console` object as globals on [runtime].
   ///
@@ -111,7 +122,7 @@ class ToolBridge {
   String execute(String toolName, Map<String, dynamic> args) =>
       _execute(toolName, args);
 
-  /// Routes [toolName] through [SyncToolDispatcher], the single entry point.
+  /// Routes [toolName] through [dispatcher], the single entry point.
   ///
   /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI
   /// tools delegate back to [_dispatchNonHttp] for direct `dart:io` execution.
@@ -123,10 +134,6 @@ class ToolBridge {
     // Dispatch under the canonical name so Java-side aliases (e.g.
     // `ado_search_by_wiql` -> `ado_list_work_items`) route to the same
     // executor entry.
-    final dispatcher = SyncToolDispatcher(
-      PropertyReader(),
-      nonHttpHandler: _dispatchNonHttp,
-    );
     return dispatcher.execute(tool.name, args) ??
         _err('Tool not available: $toolName');
   }

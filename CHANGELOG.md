@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Community files ported from the Java [dm.ai](https://github.com/epam/dm.ai)
+  repository: `LICENSE` (Apache-2.0), `SECURITY.md` (vulnerability disclosure
+  policy, repo links adapted), `CODE_OF_CONDUCT.md` (Contributor Covenant
+  2.1), `CONTRIBUTING.md` (dm.ai structure rewritten for the Dart toolchain —
+  `make native`/`dart test`/crap4dart gates instead of Gradle).
 - CLI installer (`install.sh`): one-line `curl | sh` install of prebuilt
   AOT binaries from GitHub Releases — standalone (no Dart/Flutter needed on
   the target machine), version-pinned installs (`sh -s -- v0.1.0` or

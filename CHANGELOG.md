@@ -22,11 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (binary + `native/quickjs/libquickjs_bridge.so` beside it) with PATH
   management. Modeled on the Java `dm.ai` installer and IstiN's
   `flutter_agent_harness` `install.sh`.
-- `release-cli.yml`: builds `dmtools-<os>-<arch>.tar.gz` bundles
-  (linux-x64, macos-x64, macos-arm64) on every `vX.Y.Z` tag or dispatch,
-  smoke-tests each bundle on its builder, publishes assets plus
-  `dmtools-checksums.sha256`; the compiled-in version is synced from the
-  tag so `dmtools --version` always matches the release.
+- `release-cli.yml`: dm.ai-style **button release** — `workflow_dispatch`
+  with an optional custom version; empty input auto-increments the patch
+  version from `pubspec.yaml`, commits the bump (pubspec +
+  `lib/src/version.dart`), tags `vX.Y.Z`, pushes, and publishes the release
+  with a generated changelog. Builds `dmtools-<os>-<arch>.tar.gz` bundles
+  (linux-x64, macos-x64, macos-arm64), smoke-tests each bundle on its
+  builder, and attaches `install.sh` + `dmtools-checksums.sha256`; the
+  compiled-in version is synced from the tag so `dmtools --version` always
+  matches the release.
 - `install-test.yml`: simulates clean-machine installs across the OS
   matrix and exercises `dmtools --version` / `dmtools list`; `dash -n` +
   `shellcheck` the installer on every PR.

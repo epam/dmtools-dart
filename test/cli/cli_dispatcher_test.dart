@@ -44,6 +44,7 @@ void main() {
   _testList();
   _testInteractive();
   _testDirectTool();
+  _testDirectToolNamedArgs();
   _testNoArgs();
   _testDefaults();
 }
@@ -316,6 +317,62 @@ void _testDirectTool() {
       );
       final result = jsonDecode(_lines.last) as Map<String, dynamic>;
       expect(result['error'], contains('not configured'));
+    });
+  });
+}
+
+void _testDirectToolNamedArgs() {
+  group('direct tool invocation (named args)', () {
+    test('executes a file tool with --key value named args', () async {
+      final testFile = File('${_tmp.path}/named.txt')
+        ..writeAsStringSync('named content');
+      expect(
+        await _dispatcher.dispatch(['file_read', '--path', testFile.path]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'named content');
+    });
+
+    test('executes a file tool with --key=value named args', () async {
+      final testFile = File('${_tmp.path}/eq.txt')
+        ..writeAsStringSync('eq content');
+      expect(
+        await _dispatcher.dispatch(['file_read', '--path=${testFile.path}']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'eq content');
+    });
+
+    test('named args override the positional JSON blob', () async {
+      final testFile = File('${_tmp.path}/over.txt')
+        ..writeAsStringSync('override content');
+      expect(
+        await _dispatcher.dispatch([
+          'file_read',
+          jsonEncode({'path': '/nonexistent/first.txt'}),
+          '--path',
+          testFile.path,
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'override content');
+    });
+
+    test('named arg values are not mistaken for the positional JSON blob',
+        () async {
+      final testFile = File('${_tmp.path}/pos.txt')
+        ..writeAsStringSync('positional content');
+      expect(
+        await _dispatcher.dispatch(['file_read', '--path', testFile.path]),
+        0,
+      );
+      expect(
+        _lines.last,
+        isNot(contains('invalid JSON arguments')),
+      );
     });
   });
 }

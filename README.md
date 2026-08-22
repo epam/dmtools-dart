@@ -37,6 +37,19 @@ is committed and tagged, assets and `dmtools-checksums.sha256` are
 published, and installs are exercised on every supported OS by
 [install-test.yml](.github/workflows/install-test.yml).
 
+### Install from a source checkout (macOS / Linux)
+
+```bash
+make install          # build + install to ~/.local/bin (override: PREFIX=…)
+```
+
+Installs the AOT binary to `$(PREFIX)/bin/dmtools` with the QuickJS shared
+library in `native/quickjs/` beside it (the exe-relative lookup path), the
+same layout `install.sh` produces. Prints a PATH hint when
+`~/.local/bin` is not on your `PATH` (macOS: add
+`export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc`). Not supported on
+Windows — use the prebuilt installer or build with `make build`.
+
 ### Build from source
 
 ```bash

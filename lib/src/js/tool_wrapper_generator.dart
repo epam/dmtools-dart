@@ -22,7 +22,6 @@
 /// ```
 library;
 
-import '../mcp/tool_definition.dart';
 import '../mcp/tool_param.dart';
 import '../mcp/tool_registry.dart';
 
@@ -32,33 +31,48 @@ class ToolWrapperGenerator {
   const ToolWrapperGenerator();
 
   /// Generates JS code for all tools in [registry].
+  ///
+  /// Every tool gets a wrapper under its canonical name and under each alias
+  /// — the Java schema registry exposes aliases as dispatchable tools too, so
+  /// scripts may call either name (e.g. `jira_create_ticket_basic` or its
+  /// canonical name). Alias wrappers dispatch under the canonical tool name.
   String generate(ToolRegistry registry) {
     final buffer = StringBuffer()
       ..writeln('// Auto-generated MCP tool wrappers');
     for (final tool in registry.allTools) {
-      buffer.writeln(_wrapperFor(tool));
+      buffer.writeln(_wrapperFor(tool.name, tool.params));
+      for (final alias in tool.aliases) {
+        buffer.writeln(_wrapperFor(alias, tool.params, dispatchAs: tool.name));
+      }
     }
     return buffer.toString();
   }
 
   /// Returns the wrapper JS for a single [tool].
-  String _wrapperFor(ToolDefinition tool) {
-    final params = tool.params;
-    if (params.isEmpty) return _noArgWrapper(tool.name);
-    return _paramWrapper(tool.name, params);
+  String _wrapperFor(
+    String name,
+    List<ToolParam> params, {
+    String? dispatchAs,
+  }) {
+    if (params.isEmpty) return _noArgWrapper(name, dispatchAs);
+    return _paramWrapper(name, params, dispatchAs);
   }
 
   /// Wrapper for a tool that takes no parameters.
-  static String _noArgWrapper(String name) =>
+  static String _noArgWrapper(String name, [String? dispatchAs]) =>
       'globalThis.$name = function() {\n'
-      "  return executeToolViaJava('$name', {});\n"
+      "  return executeToolViaJava('${dispatchAs ?? name}', {});\n"
       '};\n';
 
   /// Wrapper for a tool with positional [params].
   ///
   /// Accepts either positional arguments or a single object argument that
   /// passes through directly.
-  String _paramWrapper(String name, List<ToolParam> params) {
+  String _paramWrapper(
+    String name,
+    List<ToolParam> params, [
+    String? dispatchAs,
+  ]) {
     final paramList = params.map((p) => p.name).join(', ');
     final assignments = [
       for (var i = 0; i < params.length; i++)
@@ -73,7 +87,7 @@ class ToolWrapperGenerator {
         '  } else {\n'
         '$assignments\n'
         '  }\n'
-        "  return executeToolViaJava('$name', args);\n"
+        "  return executeToolViaJava('${dispatchAs ?? name}', args);\n"
         '};\n';
   }
 }

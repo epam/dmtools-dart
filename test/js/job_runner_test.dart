@@ -10,6 +10,9 @@ import 'package:test/test.dart';
 
 /// Tests for [JsJobRunner] — runtime setup, host functions, context
 /// injection, tool wrapper generation, and synchronous tool dispatch.
+///
+/// Every script defines `action(params)` — the JSRunner contract enforced
+/// by [JsJobRunner.runScript] (Java `JobJavaScriptBridge` parity).
 void main() {
   _testBasicExecution();
   _testContextInjection();
@@ -27,12 +30,16 @@ File _writeScript(Directory dir, String name, String content) {
   return file;
 }
 
+/// Wraps a JS [expression] in the action contract and returns the script.
+String _action(String expression) =>
+    'function action(params) { return $expression; }';
+
 void _testBasicExecution() {
   group('basic execution', () {
     test('returns JSON result for simple expression', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_basic');
       try {
-        final script = _writeScript(dir, 'test.js', '1 + 2');
+        final script = _writeScript(dir, 'test.js', _action('1 + 2'));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -50,7 +57,8 @@ void _testContextInjection() {
     test('injects jobParams into JS scope', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_ctx');
       try {
-        final script = _writeScript(dir, 'test.js', 'params.jobParams.key');
+        final script =
+            _writeScript(dir, 'test.js', _action('params.jobParams.key'));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {'key': 'PROJ-123'},
@@ -64,13 +72,35 @@ void _testContextInjection() {
     test('injects ticket into JS scope', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_ticket');
       try {
-        final script = _writeScript(dir, 'test.js', 'params.ticket.id');
+        final script =
+            _writeScript(dir, 'test.js', _action('params.ticket.id'));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
           ticket: {'id': 42},
         );
         expect(jsonDecode(result!), 42);
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+
+    test('merges contextParams into the params object', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_ctxparams');
+      try {
+        final script = _writeScript(
+          dir,
+          'test.js',
+          _action('params.response + ":" + params.initiator'),
+        );
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          config: const JsRunConfig(
+            contextParams: {'response': 'resp', 'initiator': 'me'},
+          ),
+        );
+        expect(jsonDecode(result!), 'resp:me');
       } finally {
         dir.deleteSync(recursive: true);
       }
@@ -84,8 +114,8 @@ void _testHostFunctions() {
       final dir = Directory.systemTemp.createTempSync('dmtools_fread');
       try {
         File('${dir.path}/data.txt').writeAsStringSync('hello world');
-        final script =
-            _writeScript(dir, 'test.js', "file_read({path: 'data.txt'})");
+        final script = _writeScript(
+            dir, 'test.js', _action("file_read({path: 'data.txt'})"));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -100,8 +130,8 @@ void _testHostFunctions() {
     test('set_env_variable is a no-op returning success', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_env');
       try {
-        final script = _writeScript(dir, 'test.js',
-            "set_env_variable({name: 'X', value: 'Y'}).success");
+        final script = _writeScript(
+            dir, 'test.js', _action("set_env_variable('X', 'PATH').success"));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -125,8 +155,10 @@ void _testErrorDispatch() {
         'JIRA_LOGIN_PASS_TOKEN': '',
       });
       try {
-        final script = _writeScript(dir, 'test.js',
-            "executeToolViaJava('jira_get_ticket', {key: 'T-1'}).error");
+        final script = _writeScript(dir, 'test.js', '''
+          var r = executeToolViaJava('jira_get_ticket', {key: 'T-1'});
+          function action(params) { return r.error; }
+        ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -145,7 +177,10 @@ void _testErrorDispatch() {
       final dir = Directory.systemTemp.createTempSync('dmtools_unknown');
       try {
         final script = _writeScript(
-            dir, 'test.js', "executeToolViaJava('nonexistent', {}).error");
+            dir,
+            'test.js',
+            "var r = executeToolViaJava('nonexistent', {}); "
+                'function action(params) { return r.error; }');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -171,7 +206,7 @@ void _testWrapperDispatch() {
       try {
         final script = _writeScript(dir, 'test.js', '''
           var result = jira_get_ticket({key: 'TEST-1'});
-          result.error
+          function action(params) { return result.error; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -191,8 +226,11 @@ void _testWrapperDispatch() {
       final dir = Directory.systemTemp.createTempSync('dmtools_syncfile');
       try {
         File('${dir.path}/notes.txt').writeAsStringSync('secret data');
-        final script = _writeScript(dir, 'test.js',
-            "executeToolViaJava('file_read', {path: 'notes.txt'}).content");
+        final script = _writeScript(
+            dir,
+            'test.js',
+            "var r = executeToolViaJava('file_read', {path: 'notes.txt'}); "
+                'function action(params) { return r.content; }');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -218,10 +256,10 @@ void _testRegistryFiltering() {
             integration: 'custom',
             params: [ToolParam(name: 'msg', description: 'Message')],
           ));
-        final script = _writeScript(dir, 'test.js', '''
+        final script = _writeScript(dir, 'test.js', _action('''
           typeof custom_tool === 'function' &&
           typeof jira_get_ticket === 'undefined'
-        ''');
+        '''));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -236,10 +274,10 @@ void _testRegistryFiltering() {
     test('integrationFilter narrows generated wrappers', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_filter');
       try {
-        final script = _writeScript(dir, 'test.js', '''
+        final script = _writeScript(dir, 'test.js', _action('''
           typeof file_read === 'function' &&
           typeof jira_get_ticket === 'undefined'
-        ''');
+        '''));
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
@@ -263,7 +301,7 @@ void _testFileDeleteDispatch() {
         expect(target.existsSync(), isTrue);
         final script = _writeScript(dir, 'test.js', '''
           var res = executeToolViaJava('file_delete', {path: 'to_delete.txt'});
-          res.deleted
+          function action(params) { return res.deleted; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -282,7 +320,7 @@ void _testFileDeleteDispatch() {
       try {
         final script = _writeScript(dir, 'test.js', '''
           var res = executeToolViaJava('file_delete', {path: 'nope.txt'});
-          res.deleted
+          function action(params) { return res.deleted; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -307,7 +345,9 @@ void _testCliExecuteDispatch() {
             'cli_execute_command',
             {command: 'echo', args: ['hello']}
           );
-          res.exitCode + ':' + res.stdout.trim()
+          function action(params) {
+            return res.exitCode + ':' + res.stdout.trim();
+          }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -324,7 +364,7 @@ void _testCliExecuteDispatch() {
       try {
         final script = _writeScript(dir, 'test.js', '''
           var res = executeToolViaJava('cli_execute_command', {});
-          res.error
+          function action(params) { return res.error; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,

@@ -32,6 +32,17 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             "headers": {k: v for k, v in self.headers.items()},
             "body": body,
         }
+        # JS source fixture for the URL-jsPath tests: serves an agent script
+        # (with the action() contract) as plain text so the loader can eval
+        # it — mirrors a raw.githubusercontent.com fetch.
+        if self.path.startswith("/script.js"):
+            encoded = b'function action(params) { return "from-url"; }'
+            self.send_response(200)
+            self.send_header("Content-Type", "text/javascript")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         # ADO stub shapes for the WIQL two-step regression test: the WIQL
         # POST answers id/url stubs, the ids= detail GET answers full items
         # (mirrors the real dev.azure.com response envelopes).

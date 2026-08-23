@@ -9,6 +9,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Sync tool dispatch for the full agent-used surface — the dispatcher
+  (`lib/src/js/sync_tool_dispatcher.dart`) now routes by prefix to
+  self-contained per-integration classes in `lib/src/js/sync_tools/`
+  (mirroring the Java integration clients):
+  - **Jira** (`jira_sync_tools.dart`): the previous 16 tools plus
+    `jira_link_issues`, `jira_attach_file_to_ticket` (multipart),
+    `jira_create_ticket_with_parent`, `jira_set_priority`,
+    `jira_assign_ticket_to`, `jira_create_ticket_with_json`,
+    `jira_get_field_custom_code`; `jira_create_ticket_basic` restored as the
+    canonical name (Java `JiraClient` parity) with
+    `tracker_create_ticket`/`jira_create_ticket` aliases.
+  - **GitHub** (`github_sync_tools.dart` + workflow-log and release-asset
+    helpers): 23 executors — PR comments/labels/threads/diff/merge, workflow
+    runs (302+ZIP log resolution), draft releases, binary asset upload.
+    Existing `github_get_pr`/`github_create_comment` args fixed to the Java
+    `workspace`/`repository`/`pullRequestId`/`text` names (agents passed
+    these; the old `owner`/`repo`/`number` shape produced
+    `GET repos///pulls/0`).
+  - **GitLab** (`gitlab_sync_tools.dart`): MR comments/threads/labels/diff/
+    merge/rebase, pipelines, statuses, discussions, releases with binary
+    asset transfer, accepts both Java (`workspace`/`repository`/
+    `pullRequestId`) and legacy (`project`/`iid`/`body`) args.
+  - **ADO** (`ado_sync_tools.dart`): PR comments/threads/labels/diff/merge,
+    pipelines (list/runs/logs/trigger) alongside the moved work-item tools.
+  - **Confluence** (`confluence_sync_tools.dart` + `confluence_markdown.dart`
+    + `markdown_confluence_sync.dart`): search/pages/children/update plus the
+    full Markdown→storage directory sync engine (`confluence_sync_markdown_
+    directory`, port of Java `MarkdownConfluenceSync`) with multipart
+    attachments.
+  - **Bitrise** (`bitrise_sync_tools.dart`): builds/artifacts with the
+    `BITRISE_ALLOW_WRITES` write guard (same knob as the async client).
+  - **Jenkins** (`jenkins_sync_tools.dart`): job info + build logs
+    (`toApiJobPath` ported 1:1).
+  - **AI** (`ai_sync_tools.dart`): per-provider `gemini_ai_chat`,
+    `openai_ai_chat`, `anthropic_ai_chat`, `ollama_ai_chat`,
+    `dial_ai_chat`, `bedrock_ai_chat` (Java exposes one @MCPTool per
+    provider; the dmtools-agents `aiChat.js` helper resolves
+    `globalThis[provider + '_ai_chat']` dynamically and falls through on
+    error — failures surface as JS errors via the `__jsError` sentinel).
+  Canonical tool catalog: 328 → 387 definitions; the Java↔Dart gap snapshot
+  shrinks 210 → 159 entries (no agent-script tool call remains uncovered).
+- Tool wrappers for aliases — the wrapper generator emits a JS global per
+  alias dispatching the canonical name (Java's schema registry exposes
+  aliases as dispatchable tools; scripts call e.g.
+  `jira_create_ticket_basic` directly).
 - CommonJS `require()` loader (`lib/src/js/require_loader.dart`) — 1:1 port
   of the Java `JobJavaScriptBridge` module loader (`RequireProxy` /
   `loadModule` / `resolveModulePath` / `setCurrentScriptDirectory`).

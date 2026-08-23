@@ -6,7 +6,8 @@
 /// - `file_read({path})` — synchronous file reader returning the raw file
 ///   content as a plain JS string (mirrors the Java bridge contract that
 ///   testRunner.js and configLoader.js rely on: `content.trim()`).
-/// - `set_env_variable(name, value)` — no-op (Phase 1 handles overrides).
+/// - `set_env_variable(propertyName, envVarName)` — no-op (Phase 1 handles
+///   overrides); validates its argument count for Java parity.
 /// - `console.log/error/warn/info/debug` — prints to Dart's stdout/stderr.
 ///
 /// File-system and CLI tools execute synchronously via `dart:io` — the
@@ -39,15 +40,23 @@ class ToolBridge {
   /// Registers `executeToolViaJava`, `file_read`, `set_env_variable`, and
   /// the `console` object as globals on [runtime].
   ///
+  /// The host functions are registered under private `__…Host` names and
+  /// wrapped by [_hostFunctionBootstrap] under the public global names:
+  /// FFI host functions cannot throw into JS (stray Dart exceptions surface
+  /// as JS `undefined`), so argument-validation failures return a
+  /// `{'__jsError': …}` sentinel that the JS wrapper rethrows as a real
+  /// JS `Error` — mirroring Java `IllegalArgumentException` propagation.
+  ///
   /// Must be called **after** tool wrappers are generated so that the direct
   /// `file_read` host function (returning the raw content string) takes
   /// precedence over any generated wrapper that dispatches via
   /// `executeToolViaJava`.
   void registerOn(QuickjsRuntime runtime) {
-    runtime.registerHostFunction('executeToolViaJava', _dispatchToolCall);
-    runtime.registerHostFunction('file_read', _fileReadHost);
-    runtime.registerHostFunction('set_env_variable', _setEnvVariable);
+    runtime.registerHostFunction('__executeToolViaJavaHost', _dispatchToolCall);
+    runtime.registerHostFunction('__fileReadHost', _fileReadHost);
+    runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
     _registerConsole(runtime);
+    runtime.eval(_hostFunctionBootstrap, filename: '<host_functions>');
   }
 
   /// Dispatch table for synchronous file tool execution.
@@ -69,16 +78,23 @@ class ToolBridge {
 
   /// Handles `executeToolViaJava(toolName, args)` calls from JS wrappers.
   ///
-  /// The C bridge marshals 2+ JS args as a JSON array, so [argsJson] decodes
-  /// to `[toolName, argsObj]`.
+  /// The C bridge marshals the call arguments as JSON: 2+ JS args as an
+  /// array (`[toolName, argsObj]`), a single arg as-is, and none as an
+  /// unparseable object literal (see [_decodeArgs]). Java
+  /// `ExecuteToolProxy` parity: at least the tool name is required (a bare
+  /// tool name executes with empty args); fewer surfaces the `__jsError`
+  /// sentinel.
   String _dispatchToolCall(String argsJson) {
-    final parsed = jsonDecode(argsJson);
-    if (parsed is! List || parsed.length < 2) {
-      return _err('executeToolViaJava expects (toolName, args)');
+    final parsed = _decodeArgs(argsJson);
+    if (parsed is String) {
+      return _execute(parsed, const {});
     }
-    final toolName = parsed[0] as String;
-    final toolArgs = _castArgs(parsed[1]);
-    return _execute(toolName, toolArgs);
+    if (parsed is List && parsed.length >= 2 && parsed[0] is String) {
+      return _execute(parsed[0] as String, _castArgs(parsed[1]));
+    }
+    return _jsError(
+      'executeToolViaJava requires at least 1 argument: toolName',
+    );
   }
 
   /// Handles direct `file_read({path})` calls from JS test scripts.
@@ -88,7 +104,7 @@ class ToolBridge {
   /// be read — the Java bridge contract testRunner.js and configLoader.js
   /// depend on (`content && content.trim()`).
   String _fileReadHost(String argsJson) {
-    final parsed = jsonDecode(argsJson);
+    final parsed = _decodeArgs(argsJson);
     String? path;
     if (parsed is Map) path = parsed['path'] as String?;
     if (path == null) return 'null';
@@ -99,8 +115,23 @@ class ToolBridge {
     }
   }
 
-  /// No-op: runtime env overrides are handled by the Phase 1 property layer.
-  String _setEnvVariable(String argsJson) => _successJson;
+  /// No-op returning success: runtime env overrides are handled by the
+  /// Phase 1 property layer. Argument count is validated for Java
+  /// `SetEnvVariableProxy` parity — `set_env_variable(propertyName,
+  /// envVarName)` requires exactly two positional arguments.
+  ///
+  /// The C bridge marshals a single JS argument as-is and none as an
+  /// unparseable object literal, so anything but a 2+ element array fails
+  /// validation via the `__jsError` sentinel.
+  String _setEnvVariable(String argsJson) {
+    final parsed = _decodeArgs(argsJson);
+    if (parsed is List && parsed.length >= 2) {
+      return _successJson;
+    }
+    return _jsError(
+      'set_env_variable requires 2 arguments: propertyName, envVarName',
+    );
+  }
 
   /// Executes [toolName] with [args], returning the JSON result string.
   ///
@@ -297,6 +328,37 @@ class ToolBridge {
 
 // ── Console bridge ──────────────────────────────────────────────────────
 
+/// JS bootstrap that builds the public host-function globals over the
+/// private `__…Host` functions registered by [ToolBridge.registerOn].
+///
+/// FFI host functions cannot throw into JS, so validation failures return
+/// a `{'__jsError': <message>}` sentinel object; the wrapper turns that
+/// into a real JS `Error` (Java `IllegalArgumentException` parity). All
+/// other results pass through untouched.
+const String _hostFunctionBootstrap = '''
+(function() {
+    function __unwrapHostError(result) {
+        if (result !== null && result !== undefined &&
+                typeof result === 'object' &&
+                result.__jsError !== undefined) {
+            throw new Error(result.__jsError);
+        }
+        return result;
+    }
+    globalThis.executeToolViaJava = function() {
+        return __unwrapHostError(
+            __executeToolViaJavaHost.apply(null, arguments));
+    };
+    globalThis.file_read = function() {
+        return __unwrapHostError(__fileReadHost.apply(null, arguments));
+    };
+    globalThis.set_env_variable = function() {
+        return __unwrapHostError(
+            __setEnvVariableHost.apply(null, arguments));
+    };
+})();
+''';
+
 /// JS bootstrap that builds the `console` object over the private host
 /// functions registered by [_registerConsole].
 ///
@@ -367,7 +429,25 @@ String _consoleArg(String argsJson) {
 Map<String, dynamic> _castArgs(dynamic value) =>
     value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
 
+/// Decodes a host-call argument payload.
+///
+/// The C bridge marshals a JS call with **no** arguments as a bare object
+/// whose string form (`[object Object]`) is not JSON — decoded here as
+/// `null` so callers treat it as "no arguments" instead of crashing (a
+/// crashed host callback surfaces as JS `undefined`, losing the error).
+dynamic _decodeArgs(String argsJson) {
+  try {
+    return jsonDecode(argsJson);
+  } on FormatException {
+    return null;
+  }
+}
+
 List<String> _castList(dynamic value) =>
     value is List ? value.cast<String>() : const [];
 
 String _err(String message) => jsonEncode({'error': message});
+
+/// Sentinel body for host-function argument validation: a JS bootstrap
+/// wrapper turns this into a real JS `Error` (see [_hostFunctionBootstrap]).
+String _jsError(String message) => jsonEncode({'__jsError': message});

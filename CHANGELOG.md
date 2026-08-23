@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CommonJS `require()` loader (`lib/src/js/require_loader.dart`) — 1:1 port
+  of the Java `JobJavaScriptBridge` module loader (`RequireProxy` /
+  `loadModule` / `resolveModulePath` / `setCurrentScriptDirectory`).
+  Implemented as a JS bootstrap prelude over the `file_read` host function
+  and `eval()` so module exports can carry functions (the FFI JSON marshaling
+  cannot). Java-parity semantics: `./`/`../` resolution against the current
+  script directory with `..` normalization, module cache keyed by resolved
+  path with a placeholder cached before eval (circular requires terminate),
+  the exact Java module wrapper, script-directory save/set/restore in
+  `try`/`finally`, `Failed to require module: <path>` on failure with the
+  `JavaScript file not found` cause preserved, and the
+  `require() expects exactly one argument (module path)` validation.
+- JSRunner job context forwarding (`lib/src/agents/agent_factory.dart`) —
+  `ticket`, `response`, `initiator`, `inputJql`, `metadata` from the job
+  params block now land in the JS `params` object exactly as Java
+  `JSRunner.runJobImpl` + `JavaScriptExecutor.withJobContext()`/`.with()`
+  place them; missing/blank `jsPath` fails with the Java message
+  `jsPath parameter is required`, and script failures return
+  `{'success': false, 'error': …}` instead of crashing (Java
+  `JavaScriptExecutor.execute()` error-result parity).
+- Script source resolution parity (`lib/src/js/job_runner.dart`) — Java
+  `loadJavaScriptCode` semantics: http(s) `jsPath` fetches the source
+  synchronously (curl-backed [SyncHttpClient]), inline JS (`function`-prefixed,
+  `action`-containing, or non-path non-`.js` strings) executes directly, and
+  file paths that are missing fail with
+  `JavaScript file not found in resources or filesystem: <path>`.
+- Action contract and error surfacing — scripts without `action(params)`
+  fail with the Java-parity
+  `JavaScript code must define an 'action' function` (Java CliAgent JS
+  actions use the same `JavaScriptExecutor` contract, so it is enforced on
+  both the JSRunner and CliAgent paths); script/action eval exceptions now
+  surface as `JavaScript execution failed: <message>` instead of a silent
+  `null` result.
+- Host-function argument validation with JS-visible errors — FFI host
+  functions cannot throw into JS, so `executeToolViaJava` /
+  `set_env_variable` validation failures return a `{'__jsError': …}`
+  sentinel that a JS bootstrap wrapper rethrows as a real `Error`, matching
+  the Java `IllegalArgumentException` messages
+  (`executeToolViaJava requires at least 1 argument: toolName`,
+  `set_env_variable requires 2 arguments: propertyName, envVarName`).
+  `executeToolViaJava(toolName)` with no args object now executes with empty
+  args, as in Java.
 - Community files ported from the Java [dm.ai](https://github.com/epam/dm.ai)
   repository: `LICENSE` (Apache-2.0), `SECURITY.md` (vulnerability disclosure
   policy, repo links adapted), `CODE_OF_CONDUCT.md` (Contributor Covenant

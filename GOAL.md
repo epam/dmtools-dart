@@ -244,12 +244,19 @@ version).
       marshaling, `NativeCallable.isolateLocal` for sync callbacks on aarch64.
 - [x] `executeToolViaJava` equivalent (single generic dispatch into the Phase 3
       registry), `file_read` host function, `set_env_variable`.
-      CommonJS `require` loader is implemented in JS (testRunner.js / agent
-      scripts use `eval()` + `file_read` directly).
+      CommonJS `require` loader ported 1:1 from the Java `RequireProxy` /
+      `loadModule` (`lib/src/js/require_loader.dart`): a JS bootstrap prelude
+      over `file_read` + `eval()` — `./`/`../` resolution against the current
+      script directory, module cache with a pre-eval placeholder for circular
+      requires, Java's exact module wrapper, and save/restore of the script
+      directory around each module eval. testRunner.js's own closure-scoped
+      `require` shims keep shadowing the global.
 - [x] Generated snake_case wrappers from the tool schema registry — same generation
       approach as Java. All 164 tools get auto-generated wrappers.
-- [x] Job context injection: `params.jobParams`, `params.ticket` via `setGlobal`.
-      Additional context fields (response, initiator, metadata, etc.) ready to add.
+- [x] Job context injection: `params.jobParams`, `params.ticket` via `setGlobal`,
+      plus `response`, `initiator`, `inputJql`, `metadata` forwarded by
+      `JsRunnerJob` exactly as Java `JSRunner.runJobImpl` +
+      `JavaScriptExecutor.withJobContext()`/`.with()` do.
 - [x] The dmtools-agents suite (`agents/js/unit-tests/run_all.json`) runs under
       the Dart runtime: **751 tests pass, 0 fail** (upstream fixed the former
       4 pre-existing bugs).

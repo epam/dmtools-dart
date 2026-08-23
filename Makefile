@@ -46,8 +46,12 @@ LIB_OUT       := $(QUICKJS_PKG)/native/quickjs/libquickjs_bridge.so
 EXE_OUT       := dmtools$(EXE_EXT)
 
 # Install layout (mirrors install.sh): the AOT binary goes to
-# $(PREFIX)/bin and the QuickJS bridge lands in native/quickjs/ beside it —
-# the exe-relative lookup path the runtime checks. Override with
+# $(PREFIX)/bin/dmtools.bin with the QuickJS bridge in native/quickjs/
+# beside it, and a small `dmtools` launcher exports JSR_QUICKJS_LIB
+# pointing at that library — the runtime's first lookup candidate. The
+# launcher is needed because the runtime's "exe-relative" fallback uses
+# Platform.script, which does not resolve to the installed executable in
+# AOT builds (dm.ai#dmtools-dart#10). Override the prefix with
 # `make install PREFIX=/usr/local` (macOS) or any writable prefix.
 PREFIX      ?= $(HOME)/.local
 INSTALL_BIN := $(PREFIX)/bin
@@ -81,9 +85,21 @@ ifeq ($(PLATFORM),windows)
 	@exit 1
 else
 	@mkdir -p "$(INSTALL_BIN)/native/quickjs"
-	install -m 0755 $(EXE_OUT) "$(INSTALL_BIN)/dmtools$(EXE_EXT)"
+	install -m 0755 $(EXE_OUT) "$(INSTALL_BIN)/dmtools.bin"
 	install -m 0644 $(LIB_OUT) "$(INSTALL_BIN)/native/quickjs/libquickjs_bridge.so"
-	@echo "Installed: $(INSTALL_BIN)/dmtools$(EXE_EXT)"
+	@printf '%s\n' \
+	  '#!/bin/sh' \
+	  '# dmtools launcher — points the QuickJS runtime at the library' \
+	  '# installed beside this script (JSR_QUICKJS_LIB is the first' \
+	  '# lookup candidate; the exe-relative fallback of the runtime' \
+	  '# cannot be relied on in AOT builds).' \
+	  'DIR=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)' \
+	  'export JSR_QUICKJS_LIB="$$DIR/native/quickjs/libquickjs_bridge.so"' \
+	  'exec "$$DIR/dmtools.bin" "$$@"' \
+	  > "$(INSTALL_BIN)/dmtools"
+	@chmod 0755 "$(INSTALL_BIN)/dmtools"
+	@echo "Installed: $(INSTALL_BIN)/dmtools (launcher)"
+	@echo "          $(INSTALL_BIN)/dmtools.bin"
 	@echo "          $(INSTALL_BIN)/native/quickjs/libquickjs_bridge.so"
 	@case ":$${PATH}:" in \
 	  *":$(INSTALL_BIN):"*) ;; \

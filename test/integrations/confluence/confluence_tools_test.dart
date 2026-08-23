@@ -42,11 +42,12 @@ void toolCatalogTests() {
     expect(tool.params.every((p) => p.required), isTrue);
   });
 
-  test('confluence_update_page requires id, title, body, version(number)', () {
+  test('confluence_update_page requires contentId/title/parentId/body/space',
+      () {
     final tool = toolNamed('confluence_update_page');
-    expect(tool.params.map((p) => p.name), ['id', 'title', 'body', 'version']);
+    expect(tool.params.map((p) => p.name),
+        ['contentId', 'title', 'parentId', 'body', 'space']);
     expect(tool.params.every((p) => p.required), isTrue);
-    expect(tool.params.last.type, 'number');
   });
 
   test('confluence_search requires cql', () {
@@ -61,56 +62,79 @@ void toolCatalogTests() {
 /// call.
 void executorDispatchTests() {
   group('ConfluenceToolExecutor.execute', () {
-    late _SpyConfluenceClient spy;
-    late ConfluenceToolExecutor executor;
-
     setUp(() {
-      spy = _SpyConfluenceClient(mockHttp((o) => '{}').http);
-      executor = ConfluenceToolExecutor(spy);
+      _spy = _SpyConfluenceClient(mockHttp((o) => '{}').http);
+      _executor = ConfluenceToolExecutor(_spy);
     });
 
-    test('routes confluence_test to testConnection', () async {
-      await executor.execute('confluence_test', {});
-      expect(spy.calls, ['testConnection']);
-    });
+    _executorPageDispatchTests();
+    _executorReadDispatchTests();
+  });
+}
 
-    test('routes confluence_get_page with spaceKey and title', () async {
-      await executor.execute('confluence_get_page', {
-        'spaceKey': 'ENG',
-        'title': 'Doc',
-      });
-      expect(spy.calls, ['getPage:ENG:Doc']);
-    });
+/// Shared fixtures for the executor dispatch groups.
+late _SpyConfluenceClient _spy;
+late ConfluenceToolExecutor _executor;
 
-    test('routes confluence_create_page with spaceKey, title, body', () async {
-      await executor.execute('confluence_create_page', {
-        'spaceKey': 'ENG',
-        'title': 'New',
-        'body': '<p>hi</p>',
-      });
-      expect(spy.calls, ['createPage:ENG:New:<p>hi</p>']);
-    });
+/// Page create/update routing tests.
+void _executorPageDispatchTests() {
+  test('routes confluence_test to testConnection', () async {
+    await _executor.execute('confluence_test', {});
+    expect(_spy.calls, ['testConnection']);
+  });
 
-    test('routes confluence_update_page with id, title, body, version',
-        () async {
-      await executor.execute('confluence_update_page', {
-        'id': '42',
-        'title': 'Up',
-        'body': '<p>up</p>',
-        'version': 3,
-      });
-      expect(spy.calls, ['updatePage:42:Up:<p>up</p>:3']);
+  test('routes confluence_get_page with spaceKey and title', () async {
+    await _executor.execute('confluence_get_page', {
+      'spaceKey': 'ENG',
+      'title': 'Doc',
     });
+    expect(_spy.calls, ['getPage:ENG:Doc']);
+  });
 
-    test('routes confluence_search with cql', () async {
-      await executor.execute('confluence_search', {'cql': 'type = page'});
-      expect(spy.calls, ['search:type = page']);
+  test('routes confluence_create_page with spaceKey, title, body', () async {
+    await _executor.execute('confluence_create_page', {
+      'spaceKey': 'ENG',
+      'title': 'New',
+      'body': '<p>hi</p>',
     });
+    expect(_spy.calls, ['createPage:ENG:New:<p>hi</p>']);
+  });
 
-    test('throws ArgumentError for an unknown tool', () {
-      expect(() => executor.execute('confluence_no_such', {}),
-          throwsArgumentError);
+  test(
+      'routes confluence_update_page with contentId/title/parentId/body/'
+      'space', () async {
+    await _executor.execute('confluence_update_page', {
+      'contentId': '42',
+      'title': 'Up',
+      'parentId': '7',
+      'body': '<p>up</p>',
+      'space': 'ENG',
     });
+    expect(_spy.calls, ['updatePage:42:Up:7:<p>up</p>:ENG']);
+  });
+}
+
+/// Search/content read routing tests.
+void _executorReadDispatchTests() {
+  test('routes confluence_search with cql', () async {
+    await _executor.execute('confluence_search', {'cql': 'type = page'});
+    expect(_spy.calls, ['search:type = page']);
+  });
+
+  test('routes confluence_content_by_id with contentId', () async {
+    await _executor.execute('confluence_content_by_id', {'contentId': '42'});
+    expect(_spy.calls, ['getPageById:42']);
+  });
+
+  test('routes confluence_get_children_by_id with contentId', () async {
+    await _executor
+        .execute('confluence_get_children_by_id', {'contentId': '42'});
+    expect(_spy.calls, ['getContentChildren:42']);
+  });
+
+  test('throws ArgumentError for an unknown tool', () {
+    expect(
+        () => _executor.execute('confluence_no_such', {}), throwsArgumentError);
   });
 }
 
@@ -166,13 +190,22 @@ class _SpyConfluenceClient extends ConfluenceClient {
 
   @override
   Future<Map<String, dynamic>> updatePage(
-    String id,
+    String contentId,
     String title,
+    String parentId,
     String body,
-    int version,
-  ) {
-    calls.add('updatePage:$id:$title:$body:$version');
-    return super.updatePage(id, title, body, version);
+    String space, [
+    String historyComment = '',
+  ]) {
+    calls.add('updatePage:$contentId:$title:$parentId:$body:$space');
+    return super.updatePage(
+      contentId,
+      title,
+      parentId,
+      body,
+      space,
+      historyComment,
+    );
   }
 
   @override
@@ -185,6 +218,18 @@ class _SpyConfluenceClient extends ConfluenceClient {
   Future<String> downloadAttachment(String pageId, String attachmentId) {
     calls.add('downloadAttachment:$pageId:$attachmentId');
     return super.downloadAttachment(pageId, attachmentId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getPageById(String id) {
+    calls.add('getPageById:$id');
+    return super.getPageById(id);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getContentChildren(String id) {
+    calls.add('getContentChildren:$id');
+    return super.getContentChildren(id);
   }
 }
 
@@ -219,4 +264,7 @@ const _expectedToolOrder = [
   'confluence_get_group_members',
   'confluence_get_user_by_key',
   'confluence_get_watchers',
+  'confluence_content_by_id',
+  'confluence_get_children_by_id',
+  'confluence_sync_markdown_directory',
 ];

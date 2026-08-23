@@ -29,18 +29,21 @@ void toolCatalogShapeTests() {
   group('bitriseTools catalog', () {
     final tools = bitriseTools();
 
-    test('registers the ten tools in declaration order', () {
+    test('registers the thirteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'bitrise_test',
         'bitrise_get_apps',
         'bitrise_get_builds',
         'bitrise_get_build_detail',
-        'bitrise_trigger_build',
         'bitrise_trigger_build_with_params',
-        'bitrise_abort_build',
         'bitrise_get_workflows',
         'bitrise_get_artifacts',
         'bitrise_get_artifact_detail',
+        'bitrise_list_builds',
+        'bitrise_trigger_build',
+        'bitrise_abort_build',
+        'bitrise_list_build_artifacts',
+        'bitrise_get_build_artifact',
       ]);
     });
 
@@ -81,9 +84,11 @@ void toolCatalogParamTests() {
   group('bitrise_trigger_build', () {
     final tool = toolNamed('bitrise_trigger_build');
 
-    test('declares a required app_slug', () {
-      expect(tool.params.single.name, 'app_slug');
-      expect(tool.params.single.required, isTrue);
+    test('declares the Java appSlug/workflowId params', () {
+      expect(tool.params.map((p) => p.name),
+          ['appSlug', 'workflowId', 'branch', 'commitMessage', 'envVars']);
+      expect(tool.params.take(2).every((p) => p.required), isTrue);
+      expect(tool.params.skip(2).every((p) => !p.required), isTrue);
     });
   });
 
@@ -126,9 +131,27 @@ void executorDispatchTests() {
       expect(spy.calls, ['getBuilds:app-1']);
     });
 
-    test('routes bitrise_trigger_build with app_slug', () async {
-      await executor.execute('bitrise_trigger_build', {'app_slug': 'app-1'});
-      expect(spy.calls, ['triggerBuild:app-1']);
+    test('routes bitrise_trigger_build with Java appSlug/workflowId args',
+        () async {
+      await executor.execute('bitrise_trigger_build', {
+        'appSlug': 'app-1',
+        'workflowId': 'primary',
+      });
+      expect(spy.calls, ['triggerBuildWithParams:app-1:primary:null']);
+    });
+
+    test('routes bitrise_trigger_build parsing envVars JSON', () async {
+      await executor.execute('bitrise_trigger_build', {
+        'appSlug': 'app-1',
+        'workflowId': 'primary',
+        'envVars': '[{"mapped_to":"K","value":"v"}]',
+      });
+      expect(spy.calls, ['triggerBuildWithParams:app-1:primary:1']);
+    });
+
+    test('routes bitrise_list_builds with Java appSlug', () async {
+      await executor.execute('bitrise_list_builds', {'appSlug': 'app-1'});
+      expect(spy.calls, ['getBuilds:app-1']);
     });
 
     test('throws ArgumentError for an unknown tool', () {
@@ -195,10 +218,10 @@ void buildAbortDispatchTests() {
       executor = BitriseToolExecutor(spy);
     });
 
-    test('routes bitrise_abort_build with app_slug and build_slug', () async {
+    test('routes bitrise_abort_build with Java appSlug/buildSlug', () async {
       await executor.execute('bitrise_abort_build', {
-        'app_slug': 'app-1',
-        'build_slug': 'build-2',
+        'appSlug': 'app-1',
+        'buildSlug': 'build-2',
       });
       expect(spy.calls, ['abortBuild:app-1:build-2']);
     });
@@ -285,6 +308,23 @@ void artifactDetailDispatchTests() {
         'app_slug': 'app-1',
         'build_slug': 'build-2',
         'artifact_slug': 'art-1',
+      });
+      expect(spy.calls, ['getArtifactDetail:app-1:build-2:art-1']);
+    });
+
+    test('routes bitrise_list_build_artifacts with Java slugs', () async {
+      await executor.execute('bitrise_list_build_artifacts', {
+        'appSlug': 'app-1',
+        'buildSlug': 'build-2',
+      });
+      expect(spy.calls, ['getArtifacts:app-1:build-2']);
+    });
+
+    test('routes bitrise_get_build_artifact with Java slugs', () async {
+      await executor.execute('bitrise_get_build_artifact', {
+        'appSlug': 'app-1',
+        'buildSlug': 'build-2',
+        'artifactSlug': 'art-1',
       });
       expect(spy.calls, ['getArtifactDetail:app-1:build-2:art-1']);
     });

@@ -10,8 +10,10 @@ import '../../mcp/tool_param.dart';
 import 'github_client.dart';
 
 part 'github_actions_tools.dart';
+part 'github_agent_tools.dart';
 part 'github_codeowners_tools.dart';
 part 'github_collaborator_tools.dart';
+part 'github_pr_state_tools.dart';
 part 'github_pr_update_tools.dart';
 part 'github_repository_tools.dart';
 part 'github_workflow_catalog_tools.dart';
@@ -36,6 +38,9 @@ List<ToolDefinition> githubTools() => [
       ..._workflowCatalogTools(),
       ..._codeownersTools(),
       ..._collaboratorTools(),
+      ..._agentPrTools(),
+      ..._agentActionsTools(),
+      ..._agentReleaseTools(),
     ];
 
 /// Per-domain catalog functions live in `github_<domain>_tools.dart` part
@@ -55,58 +60,74 @@ List<ToolDefinition> _systemTools() => [
 
 /// Pull-request tools: `github_get_pr`, `github_list_prs`, `github_create_pr`.
 List<ToolDefinition> _pullRequestTools() => [
+      ..._prReadTools(),
+      _createPrTool(),
+    ];
+
+/// PR read tools: `github_get_pr`, `github_list_prs`.
+List<ToolDefinition> _prReadTools() => [
       ToolDefinition(
         name: 'github_get_pr',
-        description: 'Get a GitHub pull request by number',
+        description: 'Get details of a GitHub pull request including title, '
+            'description, status, author, branches, and merge info.',
         integration: 'github',
         category: 'pull_requests',
+        aliases: ['source_code_get_pr'],
         params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
+          _workspaceParam(),
+          _repositoryParam(),
+          _prIdParam(),
         ],
       ),
       ToolDefinition(
         name: 'github_list_prs',
-        description: 'List GitHub pull requests on a repository',
+        description:
+            "List pull requests in a GitHub repository by state. State can "
+            "be 'open', 'closed', or 'merged'. Returns first page (up to "
+            '100) of pull requests.',
         integration: 'github',
         category: 'pull_requests',
+        aliases: ['source_code_list_prs'],
         params: [
-          _ownerParam(),
-          _repoParam(),
+          _workspaceParam(),
+          _repositoryParam(),
           ToolParam(
             name: 'state',
-            description: 'PR state filter: open, closed, or all',
-            required: false,
-          ),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_create_pr',
-        description: 'Create a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          ToolParam(
-            name: 'title',
-            description: 'The title of the new pull request',
-            required: true,
-          ),
-          ToolParam(
-            name: 'head',
-            description: 'The branch containing changes (source)',
-            required: true,
-          ),
-          ToolParam(
-            name: 'base',
-            description: 'The branch to merge changes into (target)',
+            description:
+                "The state of pull requests to list: 'open', 'closed', or "
+                "'merged'. 'opened' is accepted as a synonym for 'open'.",
             required: true,
           ),
         ],
       ),
     ];
+
+/// PR creation tool: `github_create_pr`.
+ToolDefinition _createPrTool() => ToolDefinition(
+      name: 'github_create_pr',
+      description: 'Create a GitHub pull request',
+      integration: 'github',
+      category: 'pull_requests',
+      params: [
+        _ownerParam(),
+        _repoParam(),
+        ToolParam(
+          name: 'title',
+          description: 'The title of the new pull request',
+          required: true,
+        ),
+        ToolParam(
+          name: 'head',
+          description: 'The branch containing changes (source)',
+          required: true,
+        ),
+        ToolParam(
+          name: 'base',
+          description: 'The branch to merge changes into (target)',
+          required: true,
+        ),
+      ],
+    );
 
 /// Comment tool: `github_create_comment`.
 List<ToolDefinition> _commentTools() => [
@@ -116,9 +137,9 @@ List<ToolDefinition> _commentTools() => [
         integration: 'github',
         category: 'comments',
         params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
+          _workspaceParam(),
+          _repositoryParam(),
+          _prIdParam(),
           ToolParam(
             name: 'body',
             description: 'The comment body text',
@@ -213,65 +234,6 @@ List<ToolDefinition> _issueMutationTools() => [
             description: 'The name of the label to remove',
             required: true,
           ),
-        ],
-      ),
-    ];
-
-/// PR state/mutation tools: merge, close, reopen, diff, files.
-List<ToolDefinition> _prStateTools() => [
-      ToolDefinition(
-        name: 'github_merge_pr',
-        description: 'Merge a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_close_pr',
-        description: 'Close a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_reopen_pr',
-        description: 'Reopen a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_get_pr_diff',
-        description: 'Get the raw diff of a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_get_pr_files',
-        description: 'List the files changed in a GitHub pull request',
-        integration: 'github',
-        category: 'pull_requests',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The pull request number'),
         ],
       ),
     ];
@@ -559,20 +521,20 @@ class GithubToolExecutor {
       _handlers = {
     'github_test': (_) => _client.testConnection(),
     'github_get_pr': (a) => _client.getPr(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
+          a['workspace'] as String,
+          a['repository'] as String,
+          requiredInt(a, 'pullRequestId'),
         ),
     'github_list_prs': (a) => _client.listPrs(
-          a['owner'] as String,
-          a['repo'] as String,
+          a['workspace'] as String,
+          a['repository'] as String,
           a['state'] as String?,
         ),
     'github_create_comment': (a) => _client.createComment(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
-          a['body'] as String,
+          a['workspace'] as String,
+          a['repository'] as String,
+          requiredInt(a, 'pullRequestId'),
+          (a['body'] ?? a['text']) as String,
         ),
     'github_get_issue': (a) => _client.getIssue(
           a['owner'] as String,
@@ -587,9 +549,9 @@ class GithubToolExecutor {
           a['base'] as String,
         ),
     'github_merge_pr': (a) => _client.mergePr(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
+          a['workspace'] as String,
+          a['repository'] as String,
+          requiredInt(a, 'pullRequestId'),
         ),
     'github_close_pr': (a) => _client.closePr(
           a['owner'] as String,
@@ -602,9 +564,9 @@ class GithubToolExecutor {
           requiredInt(a, 'number'),
         ),
     'github_get_pr_diff': (a) => _client.getPrDiff(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
+          a['workspace'] as String,
+          a['repository'] as String,
+          requiredInt(a, 'pullRequestID'),
         ),
     'github_get_pr_files': (a) => _client.getPrFiles(
           a['owner'] as String,

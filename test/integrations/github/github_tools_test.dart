@@ -9,6 +9,7 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
   catalogOrderTests();
   catalogParamTests();
+  catalogIssueParamTests();
   executorRoutingTests();
   executorMutationTests();
   executorEdgeCaseTests();
@@ -60,6 +61,24 @@ const _githubToolNames = [
   'github_get_codeowners',
   'github_add_collaborator',
   'github_remove_collaborator',
+  'github_add_pr_comment',
+  'github_add_pr_label',
+  'github_remove_pr_label',
+  'github_get_pr_comments',
+  'github_get_pr_conversations',
+  'github_get_pr_review_threads',
+  'github_resolve_pr_thread',
+  'github_reply_to_pr_thread',
+  'github_add_inline_comment',
+  'github_get_pr_diff_text',
+  'github_get_commit_check_runs',
+  'github_get_job_logs',
+  'github_get_workflow_run_jobs',
+  'github_list_workflow_runs',
+  'github_trigger_workflow',
+  'github_get_workflow_run_logs',
+  'github_get_or_create_draft_release',
+  'github_upload_release_asset',
 ];
 
 /// Serves `[]` for the PR-list GET (expects a JSON array), `{}` otherwise.
@@ -73,7 +92,7 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the forty tools in declaration order', () {
+    test('registers the fifty-eight tools in declaration order', () {
       expect(tools.map((t) => t.name), _githubToolNames);
     });
 
@@ -85,19 +104,24 @@ void catalogOrderTests() {
   group('github_get_pr', () {
     final tool = toolNamed('github_get_pr');
 
-    test('declares required owner, repo, number', () {
-      expect(tool.params.map((p) => p.name), ['owner', 'repo', 'number']);
+    test('declares required workspace, repository, pullRequestId', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['workspace', 'repository', 'pullRequestId'],
+      );
       expect(tool.params.every((p) => p.required), isTrue);
-      expect(tool.params.last.type, 'number');
     });
   });
 
   group('github_list_prs', () {
     final tool = toolNamed('github_list_prs');
 
-    test('makes state optional', () {
-      expect(tool.params.map((p) => p.name), ['owner', 'repo', 'state']);
-      expect(tool.params.last.required, isFalse);
+    test('requires workspace, repository, state (Java parity)', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['workspace', 'repository', 'state'],
+      );
+      expect(tool.params.every((p) => p.required), isTrue);
     });
   });
 }
@@ -119,15 +143,49 @@ void catalogParamTests() {
   group('github_create_comment', () {
     final tool = toolNamed('github_create_comment');
 
-    test('declares required owner, repo, number, body', () {
+    test('declares workspace, repository, pullRequestId, body', () {
       expect(
         tool.params.map((p) => p.name),
-        ['owner', 'repo', 'number', 'body'],
+        ['workspace', 'repository', 'pullRequestId', 'body'],
       );
       expect(tool.params.every((p) => p.required), isTrue);
     });
   });
 
+  group('github_merge_pr', () {
+    final tool = toolNamed('github_merge_pr');
+
+    test('declares Java-parity params with optional merge extras', () {
+      expect(
+        tool.params.map((p) => p.name),
+        [
+          'workspace',
+          'repository',
+          'pullRequestId',
+          'mergeMethod',
+          'commitTitle',
+          'commitMessage',
+        ],
+      );
+      expect(tool.params.take(3).every((p) => p.required), isTrue);
+      expect(tool.params.skip(3).every((p) => !p.required), isTrue);
+    });
+  });
+
+  group('github_get_pr_diff', () {
+    final tool = toolNamed('github_get_pr_diff');
+
+    test('declares workspace, repository, pullRequestID (Java spelling)', () {
+      expect(
+        tool.params.map((p) => p.name),
+        ['workspace', 'repository', 'pullRequestID'],
+      );
+    });
+  });
+}
+
+/// Catalog shape for the issue tool.
+void catalogIssueParamTests() {
   group('github_get_issue', () {
     final tool = toolNamed('github_get_issue');
 
@@ -150,19 +208,20 @@ void executorRoutingTests() {
       expect(f.spy.calls, ['testConnection']);
     });
 
-    test('routes github_get_pr with owner, repo, number', () async {
+    test('routes github_get_pr with workspace, repository, pullRequestId',
+        () async {
       await f.executor.execute('github_get_pr', {
-        'owner': 'epm',
-        'repo': 'dm.ai',
-        'number': 42,
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': 42,
       });
       expect(f.spy.calls, ['getPr:epm:dm.ai:42']);
     });
 
-    test('routes github_list_prs with owner, repo, state', () async {
+    test('routes github_list_prs with workspace, repository, state', () async {
       await f.executor.execute('github_list_prs', {
-        'owner': 'epm',
-        'repo': 'dm.ai',
+        'workspace': 'epm',
+        'repository': 'dm.ai',
         'state': 'closed',
       });
       expect(f.spy.calls, ['listPrs:epm:dm.ai:closed']);
@@ -177,12 +236,12 @@ void executorMutationTests() {
   group('GithubToolExecutor.execute (mutations)', () {
     setUp(() => f = _executorFixture());
 
-    test('routes github_create_comment with owner, repo, number, body',
+    test('routes github_create_comment with workspace, repository, prId, body',
         () async {
       await f.executor.execute('github_create_comment', {
-        'owner': 'epm',
-        'repo': 'dm.ai',
-        'number': 42,
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': 42,
         'body': 'hi',
       });
       expect(f.spy.calls, ['createComment:epm:dm.ai:42:hi']);
@@ -218,11 +277,11 @@ void executorEdgeCaseTests() {
   group('GithubToolExecutor.execute (edge cases)', () {
     setUp(() => f = _executorFixture());
 
-    test('parses number from a numeric string', () async {
+    test('parses pullRequestId from a numeric string', () async {
       await f.executor.execute('github_get_pr', {
-        'owner': 'epm',
-        'repo': 'dm.ai',
-        'number': '42',
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': '42',
       });
       expect(f.spy.calls, ['getPr:epm:dm.ai:42']);
     });

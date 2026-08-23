@@ -368,24 +368,26 @@ class JiraClient {
 
   /// `jira_create_ticket_with_parent` — POST `issue`.
   ///
-  /// Creates a ticket in [project] with a parent link to [parentKey].
+  /// Creates a ticket in [project] with a parent link to [parentKey];
+  /// [description] is included when provided (Java signature parity).
   Future<Map<String, dynamic>> createTicketWithParent(
     String project,
     String issueType,
     String summary,
-    String parentKey,
-  ) async {
-    final body = await _http.post(
-      'issue',
-      body: jsonEncode({
-        'fields': {
-          'project': {'key': project},
-          'issuetype': {'name': issueType},
-          'summary': summary,
-          'parent': {'key': parentKey},
-        },
-      }),
-    );
+    String parentKey, [
+    String? description,
+  ]) async {
+    final fields = <String, dynamic>{
+      'project': {'key': project},
+      'issuetype': {'name': issueType},
+      'summary': summary,
+      'parent': {'key': parentKey},
+    };
+    if (description != null && description.isNotEmpty) {
+      fields['description'] = description;
+    }
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
     return _decodeMap(body);
   }
 
@@ -501,31 +503,93 @@ class JiraClient {
     await _http.put('issue/$key', body: jsonEncode(jsonParams));
   }
 
-  /// `jira_link_issues` — POST `issue/link`.
+  /// `jira_create_ticket_with_json` — POST `issue` with raw fields JSON.
   ///
-  /// Creates an issue link of type [linkType] between [inwardKey] and
-  /// [outwardKey].
-  Future<void> linkIssues(
-    String linkType,
-    String inwardKey,
-    String outwardKey,
+  /// Merges [fieldsJson] over the mandatory `project` field, mirroring the
+  /// Java `createTicketInProjectWithJson` wire format.
+  Future<Map<String, dynamic>> createTicketWithJson(
+    String project,
+    Map<String, dynamic> fieldsJson,
   ) async {
-    await _http.post(
-      'issue/link',
-      body: jsonEncode({
-        'type': {'name': linkType},
-        'inwardIssue': {'key': inwardKey},
-        'outwardIssue': {'key': outwardKey},
-      }),
-    );
+    final fields = <String, dynamic>{
+      'project': {'key': project},
+      ...fieldsJson,
+    };
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
+    return _decodeMap(body);
   }
 
-  /// `jira_get_issue_link_types` — GET `issue/link/type`.
+  /// `jira_link_issues` — POST `issueLink`.
+  ///
+  /// Resolves [relationship] against the `issueLinkType` listing (match by
+  /// type name, inward, or outward description — case-insensitive), then
+  /// posts the link with the source/another keys placed on the side the
+  /// matched direction implies. Mirrors Java `linkIssueWithRelationship`.
+  Future<String> linkIssues(
+    String sourceKey,
+    String anotherKey,
+    String relationship,
+  ) async {
+    final types = await getIssueLinkTypes();
+    final resolved = resolveJiraLinkType(types, relationship);
+    if (resolved == null) {
+      throw StateError('Unknown relationship type: $relationship');
+    }
+    final body = resolved.direction == 'inward'
+        ? {
+            'type': {'name': resolved.name},
+            'outwardIssue': {'key': sourceKey},
+            'inwardIssue': {'key': anotherKey},
+          }
+        : {
+            'type': {'name': resolved.name},
+            'inwardIssue': {'key': sourceKey},
+            'outwardIssue': {'key': anotherKey},
+          };
+    return _http.post('issueLink', body: jsonEncode(body));
+  }
+
+  /// `jira_get_issue_link_types` — GET `issueLinkType`.
   ///
   /// Returns the `issueLinkTypes` array from the link-type listing.
   Future<List<Map<String, dynamic>>> getIssueLinkTypes() async {
-    final body = await _http.get('issue/link/type');
+    final body = await _http.get('issueLinkType');
     return _extractArray(body, 'issueLinkTypes');
+  }
+
+  /// `jira_get_field_custom_code` — resolve a display name to a field id.
+  ///
+  /// Fetches the global `field` listing (Java `getFields`: `field` first,
+  /// `issue/createmeta` expand as fallback), finds every field whose name
+  /// matches [fieldName] case-insensitively, and returns the best
+  /// candidate's id — or `null` when nothing matches.
+  Future<String?> getFieldCustomCode(
+    String project,
+    String fieldName,
+  ) async {
+    final body = await _fieldsListing(project);
+    final best = selectBestJiraField(
+      findAllJiraFieldsByName(fieldName, body),
+    );
+    return best?.id;
+  }
+
+  /// Fetches the field listing for [project] with the Java fallback chain:
+  /// GET `field`; on failure GET `issue/createmeta` with the project
+  /// filter and fields expansion.
+  Future<String> _fieldsListing(String project) async {
+    try {
+      return await _http.get('field');
+    } on Object {
+      return _http.get(
+        'issue/createmeta',
+        queryParams: {
+          'projectKeys': project,
+          'expand': 'projects.issuetypes.fields',
+        },
+      );
+    }
   }
 
   /// `jira_execute_request` — GET any Jira REST path.

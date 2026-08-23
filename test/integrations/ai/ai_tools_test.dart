@@ -31,9 +31,18 @@ void toolCatalogTests() {
   group('aiTools', () {
     final tools = aiTools();
 
-    test('defines the eight AI tools in catalog order', () {
+    test('defines the AI tools in catalog order', () {
       expect(tools.map((t) => t.name).toList(), [
         'ai_chat',
+        // Per-provider chat tools follow the generic one — Java parity
+        // (GeminiJSAIClient.chat → gemini_ai_chat, …); aiChat.js resolves
+        // globalThis[provider + '_ai_chat'] dynamically.
+        'gemini_ai_chat',
+        'openai_ai_chat',
+        'anthropic_ai_chat',
+        'ollama_ai_chat',
+        'dial_ai_chat',
+        'bedrock_ai_chat',
         'ai_chat_with_history',
         'ai_chat_with_system_prompt',
         'ai_complete',

@@ -120,7 +120,9 @@ void executorPrMutationTests() {
     ]) {
       test('routes ${entry.$1} with a coerced number', () async {
         final f = mockGithub(_router);
-        await GithubToolExecutor(f.client).execute(entry.$1, _prArgs('42'));
+        final args =
+            entry.$1 == 'github_merge_pr' ? _prIdArgs('42') : _prArgs('42');
+        await GithubToolExecutor(f.client).execute(entry.$1, args);
         final call = f.adapter.calls.single;
         expect(call.method, entry.$2);
         expect(call.path, endsWith(entry.$3));
@@ -153,7 +155,7 @@ void executorPrContentTests() {
     test('routes github_get_pr_diff with the diff media type', () async {
       final f = mockGithub(_router);
       final diff = await GithubToolExecutor(f.client)
-          .execute('github_get_pr_diff', _prArgs(42));
+          .execute('github_get_pr_diff', _prIdArgs(42, key: 'pullRequestID'));
       expect(diff, isA<String>());
       expect(
         f.adapter.calls.single.headers['Accept'],
@@ -191,6 +193,11 @@ const _repoArgs = {'owner': 'epm', 'repo': 'dm.ai'};
 
 /// PR tool arguments with a [number] value.
 Map<String, dynamic> _prArgs(Object number) => {..._repoArgs, 'number': number};
+
+/// Java-parity PR arguments (`pullRequestId`; the diff tools spell it
+/// `pullRequestID`).
+Map<String, dynamic> _prIdArgs(Object id, {String key = 'pullRequestId'}) =>
+    {'workspace': 'epm', 'repository': 'dm.ai', key: id};
 
 /// Serves `[]` for the changed-files list endpoint and `{}` otherwise.
 String _router(RequestOptions o) {

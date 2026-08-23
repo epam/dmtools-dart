@@ -26,10 +26,11 @@ const _expectedToolNames = [
   'jira_remove_label',
   'jira_move_to_status',
   'jira_get_comments',
-  'jira_assign',
+  'jira_assign_ticket_to',
   'jira_update_field',
   'jira_clear_field',
-  'jira_create_ticket',
+  'jira_create_ticket_basic',
+  'jira_create_ticket_with_json',
   'jira_get_transitions',
   'jira_delete_ticket',
   'jira_get_issue_types',
@@ -44,6 +45,7 @@ const _expectedToolNames = [
   'jira_post_comment_if_not_exists',
   'jira_update_field_as_adf',
   'jira_get_all_fields_with_name',
+  'jira_get_field_custom_code',
   'jira_update_all_fields_with_name',
   'jira_update_ticket',
   'jira_link_issues',
@@ -90,7 +92,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the sixty-five tools in declaration order', () {
+    test('registers the sixty-eight tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 

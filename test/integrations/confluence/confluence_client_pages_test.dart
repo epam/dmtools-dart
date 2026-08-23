@@ -30,7 +30,7 @@ void main() {
 ToolDefinition toolNamed(String name) =>
     confluenceTools().firstWhere((t) => t.name == name);
 
-/// `confluence_get_page_by_id` — GET `content/{id}?expand=body.storage,version`.
+/// `confluence_get_page_by_id` — GET `content/{id}?expand=…`.
 void getPageByIdTests() {
   group('ConfluenceClient.getPageById', () {
     test('returns the page with body and version expanded', () async {
@@ -39,7 +39,7 @@ void getPageByIdTests() {
       final page = await f.client.getPageById('42');
       expect(page['id'], '42');
       expect(f.adapter.calls.single.queryParameters['expand'],
-          'body.storage,version');
+          'body.storage,body.export_view,ancestors,version');
     });
   });
 }

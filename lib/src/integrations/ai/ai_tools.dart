@@ -1,9 +1,12 @@
 /// MCP tool definitions and dispatcher for the AI integration.
 ///
-/// The tool list ports the AI subset of the Java `@MCPTool` catalog; the
+/// The tool list ports the AI subset of the Java `@MCPTool` catalog: the
+/// provider-parameterized tools (`ai_chat`, …) plus the per-provider
+/// `*_ai_chat` tools ([aiChatTools]) that mirror the Java clients 1:1. The
 /// executor routes a tool name + arguments to the matching provider client
 /// ([GeminiClient], [OpenAIClient], [OllamaClient], [DialClient], or
-/// [AnthropicClient]).
+/// [AnthropicClient]); the per-provider tools execute synchronously in the
+/// JS bridge via `AiSyncTools`.
 library;
 
 import 'dart:convert';
@@ -35,6 +38,7 @@ const Map<String, List<String>> aiModels = {
 /// Returns all AI MCP tool definitions.
 List<ToolDefinition> aiTools() => [
       _aiChatTool(),
+      ...aiChatTools(),
       _aiChatWithHistoryTool(),
       _aiChatWithSystemPromptTool(),
       _aiCompleteTool(),
@@ -43,6 +47,60 @@ List<ToolDefinition> aiTools() => [
       _aiListModelsTool(),
       _aiGenerateImageTool(),
     ];
+
+/// Returns the per-provider chat tool definitions: `<provider>_ai_chat`.
+///
+/// Java exposes one @MCPTool per provider (`GeminiJSAIClient.chat` →
+/// `gemini_ai_chat`, `OpenAIClient.chat` → `openai_ai_chat`, …, for
+/// gemini/openai/anthropic/ollama/dial/bedrock) and the dmtools-agents
+/// `aiChat.js` helper resolves `globalThis[provider + '_ai_chat']`
+/// dynamically, falling through to the next provider when a global is
+/// missing. The generic `ai_chat` tool cannot satisfy that lookup, so the
+/// catalog mirrors the Java per-provider names 1:1.
+List<ToolDefinition> aiChatTools() => [
+      _providerAiChatTool(
+        'gemini_ai_chat',
+        'Send a text message to Gemini AI and get response',
+      ),
+      _providerAiChatTool(
+        'openai_ai_chat',
+        'Send a text message to OpenAI and get response',
+      ),
+      _providerAiChatTool(
+        'anthropic_ai_chat',
+        'Send a text message to Anthropic Claude AI and get response',
+      ),
+      _providerAiChatTool(
+        'ollama_ai_chat',
+        'Send a text message to Ollama AI and get response',
+      ),
+      _providerAiChatTool(
+        'dial_ai_chat',
+        'Send a text message to Dial AI and get response',
+      ),
+      _providerAiChatTool(
+        'bedrock_ai_chat',
+        'Send a text message to AWS Bedrock AI and get response',
+      ),
+    ];
+
+/// Builds one per-provider `*_ai_chat` tool definition.
+///
+/// All six Java provider tools share the same shape: a single required
+/// `message` string (`@MCPParam(name = "message")` in every Java client).
+ToolDefinition _providerAiChatTool(String name, String description) =>
+    ToolDefinition(
+      name: name,
+      description: description,
+      integration: 'ai',
+      category: 'chat',
+      params: [
+        ToolParam(
+          name: 'message',
+          description: 'Text message to send to AI',
+        ),
+      ],
+    );
 
 /// Single-turn chat tool: `ai_chat`.
 ToolDefinition _aiChatTool() => ToolDefinition(

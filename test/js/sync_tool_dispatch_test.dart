@@ -130,9 +130,9 @@ void _testNoConfig() {
       final d = SyncToolDispatcher(PropertyReader());
       expect(
         jsonDecode(d.execute('github_get_pr', {
-          'owner': 'o',
-          'repo': 'r',
-          'number': 1,
+          'workspace': 'o',
+          'repository': 'r',
+          'pullRequestId': 1,
         })!),
         {'error': 'GitHub not configured'},
       );
@@ -726,9 +726,9 @@ void _testGithubReadTools() {
 
     test('github_get_pr hits pulls endpoint', () {
       final result = dispatcher.execute('github_get_pr', {
-        'owner': 'octo',
-        'repo': 'cat',
-        'number': 42,
+        'workspace': 'octo',
+        'repository': 'cat',
+        'pullRequestId': 42,
       });
       final body = jsonDecode(result!);
       expect(body['method'], 'GET');
@@ -737,9 +737,9 @@ void _testGithubReadTools() {
 
     test('github_get_pr sends Bearer auth header', () {
       final result = dispatcher.execute('github_get_pr', {
-        'owner': 'o',
-        'repo': 'r',
-        'number': 1,
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': 1,
       });
       final body = jsonDecode(result!);
       expect(body['headers']['Authorization'], 'Bearer ghp_testtoken');
@@ -770,9 +770,9 @@ void _testGithubWriteTools() {
 
     test('github_create_comment POSTs to issues comments endpoint', () {
       final result = dispatcher.execute('github_create_comment', {
-        'owner': 'octo',
-        'repo': 'cat',
-        'number': 42,
+        'workspace': 'octo',
+        'repository': 'cat',
+        'pullRequestId': 42,
         'body': 'Nice PR!',
       });
       final body = jsonDecode(result!);
@@ -784,9 +784,9 @@ void _testGithubWriteTools() {
 
     test('number as string is coerced to int', () {
       final result = dispatcher.execute('github_get_pr', {
-        'owner': 'o',
-        'repo': 'r',
-        'number': '7',
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '7',
       });
       final body = jsonDecode(result!);
       expect(body['path'], '/repos/o/r/pulls/7');

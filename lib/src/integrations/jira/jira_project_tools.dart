@@ -23,7 +23,7 @@ List<ToolDefinition> _projectDetailTools() => [
       ),
     ];
 
-/// Project lifecycle tools: clone and delete.
+/// Project lifecycle tools: clone, delete, and restore.
 List<ToolDefinition> _projectLifecycleTools() => [
       _jiraTool(
         name: 'jira_clone_project',
@@ -61,6 +61,19 @@ List<ToolDefinition> _projectLifecycleTools() => [
               name: 'confirmDelete',
               description: 'Must be true to confirm the deletion',
               type: 'boolean',
+              required: true),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_restore_project',
+        description: 'Restore a Jira project that was previously moved to '
+            'trash using jira_delete_project',
+        category: 'project_management',
+        params: [
+          ToolParam(
+              name: 'projectKey',
+              description: 'Key of the trashed Jira project to restore, '
+                  'e.g. TP',
               required: true),
         ],
       ),
@@ -105,6 +118,8 @@ extension _JiraProjectToolExecutor on JiraToolExecutor {
                   a['key'] as String,
                   a['confirmDelete'] as bool,
                 ),
+            'jira_restore_project': (a) =>
+                _client.restoreProject(a['projectKey'] as String),
             'jira_copy_project_structure': (a) => _client.copyProjectStructure(
                   a['source'] as String,
                   a['target'] as String,

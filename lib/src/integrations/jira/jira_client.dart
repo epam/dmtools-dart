@@ -503,6 +503,19 @@ class JiraClient {
     await _http.put('issue/$key', body: jsonEncode(jsonParams));
   }
 
+  /// `jira_update_ticket_parent` — PUT `issue/{key}` with the parent field.
+  ///
+  /// Sets the parent of [key] to [parentKey]; usable for epic relationships
+  /// and parent-child relationships for subtasks. Mirrors Java
+  /// `updateTicketParent`.
+  Future<void> updateTicketParent(String key, String parentKey) async {
+    await updateTicket(key, {
+      'fields': {
+        'parent': {'key': parentKey}
+      }
+    });
+  }
+
   /// `jira_create_ticket_with_json` — POST `issue` with raw fields JSON.
   ///
   /// Merges [fieldsJson] over the mandatory `project` field, mirroring the

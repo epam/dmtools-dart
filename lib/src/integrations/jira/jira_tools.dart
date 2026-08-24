@@ -329,6 +329,10 @@ class JiraToolExecutor {
                   a['key'] as String,
                   a['jsonParams'] as Map<String, dynamic>,
                 ),
+            'jira_update_ticket_parent': (a) => _client.updateTicketParent(
+                  a['key'] as String,
+                  a['parentKey'] as String,
+                ),
           };
 
   /// Dispatch entries for the issue-link tools (Java

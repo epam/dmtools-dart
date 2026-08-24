@@ -400,7 +400,7 @@ List<ToolDefinition> _fieldsByNameTools() => [
       ),
     ];
 
-/// Raw update tool: `jira_update_ticket`.
+/// Raw update tools: `jira_update_ticket` + `jira_update_ticket_parent`.
 List<ToolDefinition> _rawUpdateTools() => [
       _jiraTool(
         name: 'jira_update_ticket',
@@ -411,6 +411,20 @@ List<ToolDefinition> _rawUpdateTools() => [
             name: 'jsonParams',
             description: 'Raw JSON object to send as the update body',
             type: 'object',
+            required: true,
+          ),
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_update_ticket_parent',
+        description: 'Update the parent of a Jira ticket. Can be used for '
+            'setting up epic relationships and parent-child relationships '
+            'for subtasks',
+        params: [
+          _keyParam,
+          ToolParam(
+            name: 'parentKey',
+            description: 'The key of the new parent ticket',
             required: true,
           ),
         ],

@@ -6,7 +6,8 @@ import 'package:test/test.dart';
 import 'jira_test_support.dart';
 
 /// Ticket-update tests: setFixVersion, setPriority, getSubtasks,
-/// updateDescription, createTicketWithParent — plus executor dispatch.
+/// updateDescription, createTicketWithParent, updateTicketParent — plus
+/// executor dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
   setFixVersionTests();
@@ -14,6 +15,7 @@ void main() {
   getSubtasksTests();
   updateDescriptionTests();
   createTicketWithParentTests();
+  updateTicketParentTests();
   ticketUpdatesExecutorDispatchTests();
 }
 
@@ -133,6 +135,23 @@ void createTicketWithParentTests() {
   });
 }
 
+/// `jira_update_ticket_parent` — PUT `issue/{key}` with the parent field.
+void updateTicketParentTests() {
+  group('JiraClient.updateTicketParent', () {
+    test('PUTs the parent field', () async {
+      final f = mockJira((o) => '{}');
+      await f.client.updateTicketParent('PROJ-2', 'PROJ-1');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'PUT');
+      expect(call.path, endsWith('/issue/PROJ-2'));
+      final decoded = jsonDecode(call.data as String) as Map<String, dynamic>;
+      final fields = decoded['fields'] as Map<String, dynamic>;
+      expect(fields['parent'], {'key': 'PROJ-1'});
+      expect(fields.keys, ['parent']);
+    });
+  });
+}
+
 /// [JiraToolExecutor.execute] routes ticket-update tool names correctly.
 void ticketUpdatesExecutorDispatchTests() {
   group('JiraToolExecutor.execute (ticket updates)', () {
@@ -178,6 +197,14 @@ void ticketUpdatesExecutorDispatchTests() {
       expect(spy.calls, ['createTicketWithParent:PROJ:Task:Title:PROJ-1']);
     });
 
+    test('routes jira_update_ticket_parent with key and parentKey', () async {
+      await executor.execute('jira_update_ticket_parent', {
+        'key': 'PROJ-2',
+        'parentKey': 'PROJ-1',
+      });
+      expect(spy.calls, ['updateTicketParent:PROJ-2:PROJ-1']);
+    });
+
     test('routes jira_get_subtasks with key', () async {
       await executor.execute('jira_get_subtasks', {'key': 'PROJ-1'});
       expect(spy.calls, ['getSubtasks:PROJ-1']);
@@ -213,6 +240,12 @@ class _SpyJiraClient extends JiraClient {
   Future<void> updateDescription(String key, String description) {
     calls.add('updateDescription:$key:$description');
     return super.updateDescription(key, description);
+  }
+
+  @override
+  Future<void> updateTicketParent(String key, String parentKey) {
+    calls.add('updateTicketParent:$key:$parentKey');
+    return super.updateTicketParent(key, parentKey);
   }
 
   @override

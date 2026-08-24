@@ -13,6 +13,23 @@ extension JiraProjectClient on JiraClient {
     await _http.delete('project/$key');
   }
 
+  /// `jira_restore_project` — POST `project/{key}/restore`.
+  ///
+  /// Restores a trashed project; reports its key, id, and name from the
+  /// restore response, falling back to [key] when the body omits them.
+  /// Mirrors Java `restoreProject`.
+  Future<Map<String, dynamic>> restoreProject(String key) async {
+    final body = await _http.post('project/$key/restore', body: '');
+    final result = _decodeMap(body);
+    return {
+      'success': true,
+      'projectKey': result['key'] ?? key,
+      'projectId': result['id'] ?? '',
+      'projectName': result['name'] ?? '',
+      'message': 'Project restored successfully',
+    };
+  }
+
   /// `jira_copy_project_structure` — copy components + versions.
   ///
   /// Reads the components and versions of [source] and recreates them in

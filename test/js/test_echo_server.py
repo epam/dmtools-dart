@@ -63,6 +63,23 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(encoded)
             return
+        # Java-parity fixtures for 2xx-with-empty-body responses: a
+        # transitions POST (dt-move) and a ticket DELETE (dt-del) answer
+        # 204 No Content. The sync layer must hand JS the empty string /
+        # "Success" like Java, never an error envelope. The dt-move GET
+        # still echoes with a transitions list for the id lookup.
+        if "dt-move" in self.path and self.command == "POST":
+            self.send_response(204)
+            self.end_headers()
+            return
+        if "dt-del" in self.path and self.command == "DELETE":
+            self.send_response(204)
+            self.end_headers()
+            return
+        if "dt-move" in self.path:
+            payload["transitions"] = [
+                {"id": "31", "name": "Done", "to": {"name": "Done"}}
+            ]
         # Recorded DELETE paths, so tests can assert which deletions the
         # client performed against this server instance.
         if self.path == "/__delete_log":

@@ -1,6 +1,6 @@
 ---
 wave: W1
-status: open   # open | in-progress | done
+status: in-progress   # open | in-progress | done
 blocked-by: [W6]
 blocks: []
 items: 18
@@ -9,7 +9,7 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 
 # Phase 6 W1 — Jira sync executor (18 items)
 
-- [ ] **P6-JSY-01** 2xx empty/non-JSON body flagged as `{"error":...}` while
+- [x] **P6-JSY-01** 2xx empty/non-JSON body flagged as `{"error":...}` while
       Java returns raw body (`""` for 204; deleteTicket `"Success"`) — dart
       jira_sync_tools.dart:646 / java JiraClient.java:2852-3010 — S
 - [ ] **P6-JSY-02** fields-omitted default must be Java

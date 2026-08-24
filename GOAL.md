@@ -337,7 +337,7 @@ record — update a wave's `status:` header AND this table together.
 | Wave | File | Items | Status | Blocked by | Blocks |
 |------|------|-------|--------|------------|--------|
 | W0 | `phases/phase6-w0-owner-regressions.md` | 2 | **done** | — | — |
-| W1 | `phases/phase6-w1-jira-sync.md` | 18 | open | W6 | — |
+| W1 | `phases/phase6-w1-jira-sync.md` | 18 | in-progress | W6 | — |
 | W2 | `phases/phase6-w2-config.md` | 13 | open | — | W3 |
 | W3 | `phases/phase6-w3-runners-cli.md` | 28 | open | W2 | — |
 | W4 | `phases/phase6-w4-vcs-sync.md` | 23 | open | W6 | — |
@@ -363,6 +363,8 @@ file's `status:` header and this table) → `done` (all items `[x]` and the
 full gate sequence green; unblock dependents in this table).
 
 #### Phase 6 session log (append-only)
+
+- **2026-08-24 (session 1, CI follow-up):** PR #13 integration (jira) exposed two latent contract bugs. (1) The smoke test decoded the sync search result as a map — now reads Java's bare issues list. (2) `_bodyOrError` flagged 2xx empty bodies (204) as errors while Java returns the raw string (`""` for transitions POST, `"Success"` for deleteTicket) — main silently swallowed real HTTP failures the same way. P6-JSY-01 closed; W1 in-progress.
 
 - **2026-08-24 (session 1):** Owner directive: strict Java parity, no
   deviations. Closed W0 (P6-W00-01, P6-W00-02) after the user-reported

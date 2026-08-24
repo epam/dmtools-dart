@@ -353,13 +353,16 @@ class JiraSyncTools {
       });
 
   /// `jira_delete_ticket` — DELETE `issue/{key}`.
+  ///
+  /// Java `deleteTicket`: an empty (204) response reports `"Success"`;
+  /// any other body is returned as-is.
   String _deleteTicket(Map<String, dynamic> args) => _run((config) {
-        return _bodyOrError(
-          SyncHttpClient.delete(
-            '${config.baseUrl}/issue/${_asStr(args['key'])}',
-            headers: config.headers,
-          ),
+        final resp = SyncHttpClient.delete(
+          '${config.baseUrl}/issue/${_asStr(args['key'])}',
+          headers: config.headers,
         );
+        if (resp.isOk && resp.body.isEmpty) return jsonEncode('Success');
+        return _bodyOrError(resp);
       });
 
   /// `jira_create_ticket_basic` (alias `jira_create_ticket`) — POST `issue`.
@@ -738,19 +741,18 @@ String _putBody(_JiraSyncConfig config, String url, String body) =>
       SyncHttpClient.put(url, headers: config.headers, body: body),
     );
 
-/// Returns the response body, or an error JSON when the request failed.
+/// Returns the 2xx body verbatim, or the body re-encoded as a JSON string
+/// when it is not valid JSON.
 ///
-/// The JS host boundary must always return valid JSON (the QuickJS bridge
-/// JSON-parses every host-callback result): a curl failure, a non-2xx
-/// status, or a 2xx body that does not parse as JSON becomes
-/// `{"error": …}` with the status code and a short body snippet.
+/// Java parity (`GenericRequest.execute`): a 2xx body that is empty (204
+/// No Content) or plain text reaches the JS layer as the raw string —
+/// `""` for 204, the text otherwise. Re-encoding non-JSON bodies keeps
+/// the QuickJS JSON boundary yielding that same JS string. Failures
+/// (curl exit, non-2xx status) become `{"error": …}`.
 String _bodyOrError(SyncHttpResponse resp) {
   if (resp.statusCode == 0) return _err('HTTP request failed: ${resp.body}');
   if (!resp.isOk) return _err(_failureDetail('HTTP ${resp.statusCode}', resp));
-  if (_tryDecode(resp.body) == resp.body) {
-    return _err(
-        _failureDetail('HTTP ${resp.statusCode} returned non-JSON', resp));
-  }
+  if (_tryDecode(resp.body) == resp.body) return jsonEncode(resp.body);
   return resp.body;
 }
 

@@ -58,10 +58,20 @@ class ToolWrapperGenerator {
     return _paramWrapper(name, params, dispatchAs);
   }
 
+  /// The call log statement emitted into every wrapper — Java
+  /// `JobJavaScriptBridge.exposeToolToJS` parity:
+  /// `console.log('Calling tool <name> with args:', JSON.stringify(args));`
+  /// placed after args assembly, right before dispatch.
+  String _callLog(String name) =>
+      "  console.log('Calling tool $name with args:', "
+      'JSON.stringify(args));\n';
+
   /// Wrapper for a tool that takes no parameters.
-  static String _noArgWrapper(String name, [String? dispatchAs]) =>
+  String _noArgWrapper(String name, [String? dispatchAs]) =>
       'globalThis.$name = function() {\n'
-      "  return executeToolViaJava('${dispatchAs ?? name}', {});\n"
+      '  var args = {};\n'
+      '${_callLog(name)}'
+      "  return executeToolViaJava('${dispatchAs ?? name}', args);\n"
       '};\n';
 
   /// Wrapper for a tool with positional [params].
@@ -87,6 +97,7 @@ class ToolWrapperGenerator {
         '  } else {\n'
         '$assignments\n'
         '  }\n'
+        '${_callLog(name)}'
         "  return executeToolViaJava('${dispatchAs ?? name}', args);\n"
         '};\n';
   }

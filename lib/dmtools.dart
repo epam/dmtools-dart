@@ -76,6 +76,7 @@ export 'src/integrations/kb/kb_tools.dart';
 export 'src/integrations/mermaid/mermaid_tools.dart';
 export 'src/js/job_runner.dart';
 export 'src/js/sync_http_client.dart';
+export 'src/js/sync_http_bridge.dart';
 export 'src/js/sync_tool_dispatcher.dart';
 export 'src/js/tool_bridge.dart';
 export 'src/js/tool_wrapper_generator.dart';

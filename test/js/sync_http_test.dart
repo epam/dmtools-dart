@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/src/js/sync_http_bridge.dart';
 import 'package:dmtools/src/js/sync_http_client.dart';
 import 'package:test/test.dart';
 
@@ -19,7 +20,65 @@ void main() {
   _testIsOk();
   if (hasPython3()) {
     _testLiveHttp();
+    _testSyncHttpBridge();
   }
+}
+
+/// [SyncHttpBridge] — the pooled-isolate transport behind [SyncHttpClient].
+///
+/// Boots the bridge explicitly so these tests exercise the worker-isolate
+/// path (the plain live tests above run whatever transport is ready).
+void _testSyncHttpBridge() {
+  group('SyncHttpBridge (pooled isolate transport)', () {
+    late EchoServer server;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+      await SyncHttpBridge.shared.boot();
+    });
+
+    tearDownAll(() {
+      server.stop();
+      SyncHttpBridge.shared.dispose();
+    });
+
+    test('boot is idempotent and ready', () async {
+      expect(SyncHttpBridge.shared.ready, isTrue);
+      await SyncHttpBridge.shared.boot(); // second call is a no-op
+      expect(SyncHttpBridge.shared.ready, isTrue);
+    });
+
+    test('request returns status and body via the worker isolate', () {
+      final resp = SyncHttpBridge.shared.request(
+        'GET',
+        'http://127.0.0.1:${server.port}/bridge',
+      );
+      expect(resp.statusCode, 200);
+      expect(jsonDecode(resp.body)['path'], '/bridge');
+    });
+
+    test('request carries headers and fixed-length bodies', () {
+      final resp = SyncHttpBridge.shared.request(
+        'POST',
+        'http://127.0.0.1:${server.port}/bridge',
+        headers: {'X-Custom': 'abc123'},
+        body: '{"k":1}',
+      );
+      final body = jsonDecode(resp.body);
+      // Caller header case survives the isolate hop (no lowercasing).
+      expect(body['headers']['X-Custom'], 'abc123');
+      expect(body['headers']['content-length'], '7');
+      expect(body['body'], '{"k":1}');
+    });
+
+    test('transport failure surfaces as status 0', () {
+      final resp =
+          SyncHttpBridge.shared.request('GET', 'http://127.0.0.1:1/nope');
+      expect(resp.statusCode, 0);
+      expect(resp.isOk, isFalse);
+    });
+  });
 }
 
 void _testBuildArgs() {

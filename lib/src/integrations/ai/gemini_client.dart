@@ -5,8 +5,6 @@
 /// extracts the text from the first candidate's first part.
 library;
 
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 
 import '../../config/property_reader.dart';
@@ -68,7 +66,7 @@ class GeminiClient implements AiChatClient {
         '$_basePath/$model:generateContent?key=$_apiKey',
         body,
         jsonHeaders(),
-        _extractText,
+        extractGeminiText,
       );
 
   /// Generates an embedding via Gemini's `embedContent` endpoint.
@@ -126,18 +124,6 @@ class GeminiClient implements AiChatClient {
           {'text': message['content'] ?? ''},
         ],
       };
-
-  /// Extracts text from `candidates[0].content.parts[0].text`.
-  ///
-  /// Returns an empty string when the response has no candidates or parts.
-  static String _extractText(String body) {
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    final candidate = firstBlock(decoded, 'candidates');
-    if (candidate == null) return '';
-    final content = candidate['content'] as Map<String, dynamic>? ?? {};
-    final part = firstBlock(content, 'parts');
-    return part == null ? '' : part['text'] as String? ?? '';
-  }
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

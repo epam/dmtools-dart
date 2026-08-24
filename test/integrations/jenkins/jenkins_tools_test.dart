@@ -26,7 +26,7 @@ void toolCatalogTests() {
   group('jenkinsTools catalog', () {
     final tools = jenkinsTools();
 
-    test('registers the thirteen tools in declaration order', () {
+    test('registers the fourteen tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'jenkins_test',
         'jenkins_get_jobs',
@@ -41,6 +41,7 @@ void toolCatalogTests() {
         'jenkins_get_queue',
         'jenkins_cancel_build',
         'jenkins_get_job_config',
+        'jenkins_get_job_info',
       ]);
     });
 

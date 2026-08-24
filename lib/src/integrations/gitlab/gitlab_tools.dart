@@ -8,6 +8,8 @@ library;
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'gitlab_client.dart';
+part 'gitlab_project_tools.dart';
+part 'gitlab_release_tools.dart';
 
 /// Returns all GitLab MCP tool definitions.
 ///
@@ -15,6 +17,8 @@ import 'gitlab_client.dart';
 List<ToolDefinition> gitlabTools() => [
       ..._systemTools(),
       ..._mergeRequestTools(),
+      ..._agentMergeRequestTools(),
+      ..._agentMrReviewTools(),
       ..._issueTools(),
       ..._repositoryTools(),
       ..._pipelineTools(),
@@ -23,6 +27,10 @@ List<ToolDefinition> gitlabTools() => [
       ..._projectTools(),
       ..._mrPipelineTools(),
       ..._projectHookTools(),
+      ..._ciTools(),
+      ..._ciPipelineTools(),
+      ..._releaseTools(),
+      ..._releaseAssetTools(),
     ];
 
 /// Shared `project` param — numeric id or `group/project` path.
@@ -31,6 +39,27 @@ const ToolParam _projectParam = ToolParam(
   description: 'Project id or group/project path',
   required: true,
 );
+
+/// Shared `workspace` param — GitLab group or namespace (Java parity).
+const ToolParam _workspaceParam = ToolParam(
+  name: 'workspace',
+  description: 'GitLab group or namespace',
+  required: true,
+);
+
+/// Shared `repository` param — repository name within the workspace.
+const ToolParam _repositoryParam = ToolParam(
+  name: 'repository',
+  description: 'Repository name',
+  required: true,
+);
+
+/// Shared `pullRequestId` param — merge request IID (Java parity).
+ToolParam _pullRequestIdParam() => ToolParam(
+      name: 'pullRequestId',
+      description: 'Merge request IID',
+      required: true,
+    );
 
 /// Shared `iid` param for a numbered entity (merge request or issue).
 ToolParam _iidParam(String entity) => ToolParam(
@@ -77,6 +106,223 @@ List<ToolDefinition> _mergeRequestTools() => [
       _getMrDiscussionsTool(),
       _triggerMrDiscussionResolveTool(),
     ];
+
+/// Agent-facing merge-request tools ported from the Java `GitLab` client.
+///
+/// These take the Java `workspace`/`repository`/`pullRequestId` argument
+/// names that agent scripts (js/common/scm.js) pass.
+///
+/// Comment tools: `gitlab_add_mr_comment`, `gitlab_get_mr_comments`,
+/// `gitlab_get_mr_diff_text`, `gitlab_reply_to_mr_thread`,
+/// `gitlab_resolve_mr_thread`.
+/// Agent-facing merge-request tools ported from the Java `GitLab` client.
+///
+/// These take the Java `workspace`/`repository`/`pullRequestId` argument
+/// names that agent scripts (js/common/scm.js) pass: `gitlab_add_mr_comment`,
+/// `gitlab_get_mr_comments`, `gitlab_get_mr_diff_text`,
+/// `gitlab_reply_to_mr_thread`, `gitlab_resolve_mr_thread`.
+List<ToolDefinition> _agentMergeRequestTools() => [
+      _addMrCommentTool(),
+      _getMrCommentsTool(),
+      _getMrDiffTextTool(),
+      _replyToMrThreadTool(),
+      _resolveMrThreadTool(),
+    ];
+
+/// Agent-facing merge-request review tools (continuation of
+/// [_agentMergeRequestTools]; split for the method-size gate):
+/// `gitlab_add_inline_mr_comment`, `gitlab_create_mr`, `gitlab_rebase_mr`,
+/// `gitlab_add_mr_label`, `gitlab_remove_mr_label`.
+List<ToolDefinition> _agentMrReviewTools() => [
+      _addInlineMrCommentTool(),
+      _createMrTool(),
+      _rebaseMrTool(),
+      _addMrLabelTool(),
+      _removeMrLabelTool(),
+    ];
+
+/// MR comment tool: `gitlab_add_mr_comment` (Java `addPullRequestComment`).
+ToolDefinition _addMrCommentTool() => ToolDefinition(
+      name: 'gitlab_add_mr_comment',
+      description: 'Add a general discussion comment to a GitLab merge '
+          'request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(name: 'text', description: 'Comment text'),
+      ],
+    );
+
+/// MR comments tool: `gitlab_get_mr_comments` (Java `pullRequestComments`).
+ToolDefinition _getMrCommentsTool() => ToolDefinition(
+      name: 'gitlab_get_mr_comments',
+      description: 'Get all comments for a GitLab merge request, including '
+          'inline code review comments and general discussion notes; '
+          'system-generated notes are excluded',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_workspaceParam, _repositoryParam, _pullRequestIdParam()],
+    );
+
+/// MR diff-text tool: `gitlab_get_mr_diff_text` (Java
+/// `getPullRequestDiffText`).
+ToolDefinition _getMrDiffTextTool() => ToolDefinition(
+      name: 'gitlab_get_mr_diff_text',
+      description: 'Get the raw unified diff text for a GitLab merge request '
+          '(suitable for locating file/line positions for inline review '
+          'comments)',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_workspaceParam, _repositoryParam, _pullRequestIdParam()],
+    );
+
+/// MR thread-reply tool: `gitlab_reply_to_mr_thread` (Java
+/// `replyToPullRequestComment`).
+ToolDefinition _replyToMrThreadTool() => ToolDefinition(
+      name: 'gitlab_reply_to_mr_thread',
+      description: 'Reply to an existing discussion thread in a GitLab merge '
+          'request; use the discussion id from gitlab_get_mr_discussions',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(
+          name: 'discussionId',
+          description: 'Discussion thread ID',
+          aliases: ['threadId'],
+        ),
+        ToolParam(name: 'text', description: 'Reply text'),
+      ],
+    );
+
+/// MR thread-resolve tool: `gitlab_resolve_mr_thread` (Java
+/// `resolveReviewThread`).
+ToolDefinition _resolveMrThreadTool() => ToolDefinition(
+      name: 'gitlab_resolve_mr_thread',
+      description: 'Resolve (close) a review discussion thread in a GitLab '
+          'merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(
+          name: 'discussionId',
+          description: 'Discussion thread ID to resolve',
+          aliases: ['threadId'],
+        ),
+      ],
+    );
+
+/// MR inline-comment tool: `gitlab_add_inline_mr_comment` (Java
+/// `addInlineReviewComment`).
+ToolDefinition _addInlineMrCommentTool() => ToolDefinition(
+      name: 'gitlab_add_inline_mr_comment',
+      description: 'Create an inline code review comment on a specific file '
+          'and line in a GitLab merge request; requires the base, head, and '
+          'start SHAs from the MR diff refs',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(
+          name: 'filePath',
+          description: 'Path to the file to comment on',
+        ),
+        ToolParam(
+          name: 'line',
+          description: 'Line number in the new file to comment on',
+          type: 'number',
+        ),
+        ToolParam(name: 'text', description: 'Comment text'),
+        ToolParam(
+            name: 'baseSha',
+            description: 'Base commit SHA from MR '
+                'diff refs'),
+        ToolParam(
+            name: 'headSha',
+            description: 'Head commit SHA from MR '
+                'diff refs'),
+        ToolParam(
+            name: 'startSha',
+            description: 'Start commit SHA from MR '
+                'diff refs'),
+      ],
+    );
+
+/// MR create tool: `gitlab_create_mr` (Java `createMergeRequest`).
+ToolDefinition _createMrTool() => ToolDefinition(
+      name: 'gitlab_create_mr',
+      description: 'Create a GitLab merge request from a source branch into '
+          'a target branch',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        ToolParam(name: 'sourceBranch', description: 'Source branch name'),
+        ToolParam(name: 'targetBranch', description: 'Target branch name'),
+        ToolParam(name: 'title', description: 'Merge request title'),
+        ToolParam(
+          name: 'description',
+          description: 'Merge request description',
+          required: false,
+        ),
+        ToolParam(
+          name: 'removeSourceBranch',
+          description: 'Remove source branch after merge',
+          type: 'boolean',
+          required: false,
+        ),
+      ],
+    );
+
+/// MR rebase tool: `gitlab_rebase_mr` (Java `rebaseMergeRequest`).
+ToolDefinition _rebaseMrTool() => ToolDefinition(
+      name: 'gitlab_rebase_mr',
+      description: 'Ask GitLab to rebase a merge request source branch with '
+          'its target branch',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [_workspaceParam, _repositoryParam, _pullRequestIdParam()],
+    );
+
+/// MR add-label tool: `gitlab_add_mr_label` (Java `addPullRequestLabel`).
+ToolDefinition _addMrLabelTool() => ToolDefinition(
+      name: 'gitlab_add_mr_label',
+      description: 'Add a label to a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(name: 'label', description: 'Label to add'),
+      ],
+    );
+
+/// MR remove-label tool: `gitlab_remove_mr_label` (Java
+/// `removePullRequestLabel`).
+ToolDefinition _removeMrLabelTool() => ToolDefinition(
+      name: 'gitlab_remove_mr_label',
+      description: 'Remove a label from a GitLab merge request',
+      integration: 'gitlab',
+      category: 'merge_requests',
+      params: [
+        _workspaceParam,
+        _repositoryParam,
+        _pullRequestIdParam(),
+        ToolParam(name: 'label', description: 'Label to remove'),
+      ],
+    );
 
 /// Issue tools: `gitlab_get_issue`, `gitlab_create_issue`,
 /// `gitlab_list_issues`.
@@ -126,386 +372,73 @@ List<ToolDefinition> _groupTools() => [
       ),
     ];
 
-/// Project tools: `gitlab_get_project_details`,
-/// `gitlab_get_project_variables`.
-List<ToolDefinition> _projectTools() => [
-      _getProjectDetailsTool(),
-      _getProjectVariablesTool(),
-    ];
-
-/// Merge-request read tool: `gitlab_get_mr`.
-ToolDefinition _getMrTool() => ToolDefinition(
-      name: 'gitlab_get_mr',
-      description: 'Get a GitLab merge request by project and iid',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request list tool: `gitlab_list_mrs`.
-ToolDefinition _listMrsTool() => ToolDefinition(
-      name: 'gitlab_list_mrs',
-      description: 'List merge requests in a GitLab project',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'state',
-          description: 'Filter by MR state (opened, closed, merged, all)',
-          required: false,
-        ),
-      ],
-    );
-
-/// Merge-request note tool: `gitlab_create_mr_note`.
-ToolDefinition _createMrNoteTool() => ToolDefinition(
-      name: 'gitlab_create_mr_note',
-      description: 'Create a note (comment) on a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [
-        _projectParam,
-        _iidParam('merge request'),
-        ToolParam(
-          name: 'body',
-          description: 'The note body text',
-          required: true,
-        ),
-      ],
-    );
-
-/// Merge-request merge tool: `gitlab_merge_mr`.
-ToolDefinition _mergeMrTool() => ToolDefinition(
-      name: 'gitlab_merge_mr',
-      description: 'Merge a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request close tool: `gitlab_close_mr`.
-ToolDefinition _closeMrTool() => ToolDefinition(
-      name: 'gitlab_close_mr',
-      description: 'Close a GitLab merge request without merging',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request diff tool: `gitlab_get_mr_diff`.
-ToolDefinition _getMrDiffTool() => ToolDefinition(
-      name: 'gitlab_get_mr_diff',
-      description: 'Get the diffs (changes) of a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request approve tool: `gitlab_approve_mr`.
-ToolDefinition _approveMrTool() => ToolDefinition(
-      name: 'gitlab_approve_mr',
-      description: 'Approve a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request unapprove tool: `gitlab_unapprove_mr`.
-ToolDefinition _unapproveMrTool() => ToolDefinition(
-      name: 'gitlab_unapprove_mr',
-      description: 'Unapprove a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request notes tool: `gitlab_get_mr_notes`.
-ToolDefinition _getMrNotesTool() => ToolDefinition(
-      name: 'gitlab_get_mr_notes',
-      description: 'List the notes (comments) of a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request approvals tool: `gitlab_get_mr_approvals`.
-ToolDefinition _getMrApprovalsTool() => ToolDefinition(
-      name: 'gitlab_get_mr_approvals',
-      description: 'Get the approval state of a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request discussions tool: `gitlab_get_mr_discussions`.
-ToolDefinition _getMrDiscussionsTool() => ToolDefinition(
-      name: 'gitlab_get_mr_discussions',
-      description: 'List the discussions (threads) of a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [_projectParam, _iidParam('merge request')],
-    );
-
-/// Merge-request discussion resolve tool: `gitlab_trigger_mr_discussion_resolve`.
-ToolDefinition _triggerMrDiscussionResolveTool() => ToolDefinition(
-      name: 'gitlab_trigger_mr_discussion_resolve',
-      description:
-          'Resolve or unresolve a discussion on a GitLab merge request',
-      integration: 'gitlab',
-      category: 'merge_requests',
-      params: [
-        _projectParam,
-        _iidParam('merge request'),
-        ToolParam(
-          name: 'discussion_id',
-          description: 'The discussion (thread) id',
-          required: true,
-        ),
-        ToolParam(
-          name: 'resolved',
-          description: 'true to resolve, false to unresolve the discussion',
-          type: 'boolean',
-          required: true,
-        ),
-      ],
-    );
-
-/// Issue-read tool: `gitlab_get_issue`.
-ToolDefinition _getIssueTool() => ToolDefinition(
-      name: 'gitlab_get_issue',
-      description: 'Get a GitLab issue by project and iid',
-      integration: 'gitlab',
-      category: 'issues',
-      params: [_projectParam, _iidParam('issue')],
-    );
-
-/// Issue-create tool: `gitlab_create_issue`.
-ToolDefinition _createIssueTool() => ToolDefinition(
-      name: 'gitlab_create_issue',
-      description: 'Create an issue in a GitLab project',
-      integration: 'gitlab',
-      category: 'issues',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'title',
-          description: 'The issue title',
-          required: true,
-        ),
-        ToolParam(
-          name: 'description',
-          description: 'The issue description',
-          required: false,
-        ),
-      ],
-    );
-
-/// Issue-list tool: `gitlab_list_issues`.
-ToolDefinition _listIssuesTool() => ToolDefinition(
-      name: 'gitlab_list_issues',
-      description: 'List issues in a GitLab project',
-      integration: 'gitlab',
-      category: 'issues',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'state',
-          description: 'Filter by issue state (opened, closed, all)',
-          required: false,
-        ),
-      ],
-    );
-
-/// Branch-create tool: `gitlab_create_branch`.
-ToolDefinition _createBranchTool() => ToolDefinition(
-      name: 'gitlab_create_branch',
-      description: 'Create a branch in a GitLab project repository',
-      integration: 'gitlab',
-      category: 'repository',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'branch',
-          description: 'The name of the branch to create',
-          required: true,
-        ),
-        ToolParam(
-          name: 'ref',
-          description: 'The branch, tag, or commit to create the branch from',
-          required: true,
-        ),
-      ],
-    );
-
-/// File-content tool: `gitlab_get_file_content`.
-ToolDefinition _getFileContentTool() => ToolDefinition(
-      name: 'gitlab_get_file_content',
-      description: 'Get the contents of a file in a GitLab project repository',
-      integration: 'gitlab',
-      category: 'repository',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'file_path',
-          description: 'The path of the file inside the repository',
-          required: true,
-        ),
-        ToolParam(
-          name: 'ref',
-          description: 'The name of branch, tag or commit to read from',
-          required: false,
-        ),
-      ],
-    );
-
-/// Tag-create tool: `gitlab_create_tag`.
-ToolDefinition _createTagTool() => ToolDefinition(
-      name: 'gitlab_create_tag',
-      description: 'Create a tag in a GitLab project repository',
-      integration: 'gitlab',
-      category: 'repository',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'tag_name',
-          description: 'The name of the tag to create',
-          required: true,
-        ),
-        ToolParam(
-          name: 'ref',
-          description: 'The branch, tag, or commit to create the tag from',
-          required: true,
-        ),
-      ],
-    );
-
-/// Tag-list tool: `gitlab_get_tags`.
-ToolDefinition _getTagsTool() => ToolDefinition(
-      name: 'gitlab_get_tags',
-      description: 'List the tags of a GitLab project repository',
-      integration: 'gitlab',
-      category: 'repository',
-      params: [_projectParam],
-    );
-
-/// Branch-list tool: `gitlab_get_branches`.
-ToolDefinition _getBranchesTool() => ToolDefinition(
-      name: 'gitlab_get_branches',
-      description: 'List the branches of a GitLab project repository',
-      integration: 'gitlab',
-      category: 'repository',
-      params: [_projectParam],
-    );
-
-/// Pipeline-list tool: `gitlab_get_pipelines`.
-ToolDefinition _getPipelinesTool() => ToolDefinition(
-      name: 'gitlab_get_pipelines',
-      description: 'List the pipelines of a GitLab project',
-      integration: 'gitlab',
-      category: 'pipelines',
-      params: [_projectParam],
-    );
-
-/// Pipeline-trigger tool: `gitlab_trigger_pipeline`.
-ToolDefinition _triggerPipelineTool() => ToolDefinition(
-      name: 'gitlab_trigger_pipeline',
-      description: 'Trigger a new pipeline for a GitLab project ref',
-      integration: 'gitlab',
-      category: 'pipelines',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'ref',
-          description: 'The branch or tag to run the pipeline for',
-          required: true,
-        ),
-      ],
-    );
-
-/// Pipeline-read tool: `gitlab_get_pipeline`.
-ToolDefinition _getPipelineTool() => ToolDefinition(
-      name: 'gitlab_get_pipeline',
-      description: 'Get a GitLab project pipeline by id',
-      integration: 'gitlab',
-      category: 'pipelines',
-      params: [
-        _projectParam,
-        ToolParam(
-          name: 'pipeline_id',
-          description: 'The pipeline id',
-          type: 'number',
-          required: true,
-        ),
-      ],
-    );
-
-/// Project-details tool: `gitlab_get_project_details`.
-ToolDefinition _getProjectDetailsTool() => ToolDefinition(
-      name: 'gitlab_get_project_details',
-      description: 'Get details of a GitLab project',
-      integration: 'gitlab',
-      category: 'projects',
-      params: [_projectParam],
-    );
-
-/// Project-variables tool: `gitlab_get_project_variables`.
-ToolDefinition _getProjectVariablesTool() => ToolDefinition(
-      name: 'gitlab_get_project_variables',
-      description: 'List the CI/CD variables of a GitLab project',
-      integration: 'gitlab',
-      category: 'projects',
-      params: [_projectParam],
-    );
-
-/// MR-pipelines tool: `gitlab_get_mr_pipelines`.
-List<ToolDefinition> _mrPipelineTools() => [
+/// CI tools ported from the Java `GitLab` client (category `ci`) —
+/// statuses and job logs: `gitlab_get_commit_statuses`,
+/// `gitlab_get_job_logs`.
+List<ToolDefinition> _ciTools() => [
       ToolDefinition(
-        name: 'gitlab_get_mr_pipelines',
-        description: 'List pipelines for a GitLab merge request',
+        name: 'gitlab_get_commit_statuses',
+        description: 'Get CI/CD statuses for a commit SHA in a GitLab '
+            'project; when the same status name was reported more than once '
+            'for the commit, only the most recent report per name is '
+            'returned',
         integration: 'gitlab',
-        category: 'merge_requests',
-        params: [_projectParam, _iidParam('merge request')],
-      ),
-    ];
-
-/// Project-hook tools: `gitlab_get_project_hooks`, `gitlab_add_project_hook`.
-List<ToolDefinition> _projectHookTools() => [
-      ToolDefinition(
-        name: 'gitlab_get_project_hooks',
-        description: 'List webhooks of a GitLab project',
-        integration: 'gitlab',
-        category: 'projects',
-        params: [_projectParam],
-      ),
-      ToolDefinition(
-        name: 'gitlab_add_project_hook',
-        description: 'Add a webhook to a GitLab project',
-        integration: 'gitlab',
-        category: 'projects',
+        category: 'ci',
         params: [
-          _projectParam,
+          _workspaceParam,
+          _repositoryParam,
           ToolParam(
-            name: 'url',
-            description: 'The webhook callback URL',
-            required: true,
+            name: 'commitSha',
+            description: 'The commit SHA to get statuses for',
           ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'gitlab_get_job_logs',
+        description: 'Get GitLab CI job trace logs',
+        integration: 'gitlab',
+        category: 'ci',
+        params: [
+          _workspaceParam,
+          _repositoryParam,
+          ToolParam(
+              name: 'jobId', description: 'GitLab job ID', type: 'number'),
         ],
       ),
     ];
 
-/// Parses a JSON `iid` argument into an int (accepts int or numeric string).
-int _toInt(Object? value) {
-  if (value is int) return value;
-  return int.parse(value.toString());
-}
-
-/// Parses a JSON `resolved` argument into a bool (accepts bool, int, or string).
-bool _toBool(Object? value) {
-  if (value is bool) return value;
-  if (value is int) return value != 0;
-  return value.toString().toLowerCase() == 'true';
-}
+/// CI pipeline tool ported from the Java `GitLab` client (category `ci`):
+/// `gitlab_list_pipeline_runs`. (`gitlab_trigger_pipeline` already exists
+/// in the pipeline group above.)
+List<ToolDefinition> _ciPipelineTools() => [
+      ToolDefinition(
+        name: 'gitlab_list_pipeline_runs',
+        description: 'List recent GitLab CI pipelines, optionally filtered '
+            'by status, ref, and limit',
+        integration: 'gitlab',
+        category: 'ci',
+        params: [
+          _workspaceParam,
+          _repositoryParam,
+          ToolParam(
+            name: 'status',
+            description: 'Pipeline status filter',
+            required: false,
+          ),
+          ToolParam(
+            name: 'ref',
+            description: 'Branch or tag ref',
+            required: false,
+          ),
+          ToolParam(
+            name: 'limit',
+            description: 'Maximum number of pipelines to return',
+            type: 'number',
+            required: false,
+          ),
+        ],
+      ),
+    ];
 
 /// Executes GitLab MCP tools by dispatching to [GitlabClient].
 class GitlabToolExecutor {

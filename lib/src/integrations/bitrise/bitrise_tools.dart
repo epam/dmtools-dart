@@ -5,6 +5,8 @@
 /// call.
 library;
 
+import 'dart:convert';
+
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'bitrise_client.dart';
@@ -16,6 +18,8 @@ List<ToolDefinition> bitriseTools() => [
       ..._systemTools(),
       ..._appTools(),
       ..._buildTools(),
+      ..._javaParityBuildTools(),
+      ..._artifactTools(),
     ];
 
 /// Connectivity-check tool: `bitrise_test`.
@@ -42,14 +46,13 @@ List<ToolDefinition> _appTools() => [
     ];
 
 /// Build tools: `bitrise_get_builds`, `bitrise_get_build_detail`,
-/// `bitrise_trigger_build`, `bitrise_trigger_build_with_params`,
-/// `bitrise_get_artifacts`, `bitrise_get_artifact_detail`.
+/// `bitrise_trigger_build_with_params`, `bitrise_get_workflows`,
+/// `bitrise_get_artifacts`, `bitrise_get_artifact_detail` (plus the
+/// Java-parity build tools in [_javaParityBuildTools]).
 List<ToolDefinition> _buildTools() => [
       _getBuildsTool(),
       _getBuildDetailTool(),
-      _triggerBuildTool(),
       _triggerBuildWithParamsTool(),
-      _abortBuildTool(),
       _getWorkflowsTool(),
       _getArtifactsTool(),
       _getArtifactDetailTool(),
@@ -90,21 +93,6 @@ ToolDefinition _getBuildDetailTool() => ToolDefinition(
       ],
     );
 
-/// Build-trigger tool: `bitrise_trigger_build`.
-ToolDefinition _triggerBuildTool() => ToolDefinition(
-      name: 'bitrise_trigger_build',
-      description: 'Trigger a new build for a Bitrise app by app slug',
-      integration: 'bitrise',
-      category: 'builds',
-      params: [
-        ToolParam(
-          name: 'app_slug',
-          description: 'The Bitrise app slug',
-          required: true,
-        ),
-      ],
-    );
-
 /// Parameterized build-trigger tool: `bitrise_trigger_build_with_params`.
 ToolDefinition _triggerBuildWithParamsTool() => ToolDefinition(
       name: 'bitrise_trigger_build_with_params',
@@ -127,26 +115,6 @@ ToolDefinition _triggerBuildWithParamsTool() => ToolDefinition(
           description: 'Environment variable objects for the build',
           type: 'array',
           required: false,
-        ),
-      ],
-    );
-
-/// Build-abort tool: `bitrise_abort_build`.
-ToolDefinition _abortBuildTool() => ToolDefinition(
-      name: 'bitrise_abort_build',
-      description: 'Abort an in-progress Bitrise build',
-      integration: 'bitrise',
-      category: 'builds',
-      params: [
-        ToolParam(
-          name: 'app_slug',
-          description: 'The Bitrise app slug',
-          required: true,
-        ),
-        ToolParam(
-          name: 'build_slug',
-          description: 'The Bitrise build slug',
-          required: true,
         ),
       ],
     );
@@ -213,6 +181,170 @@ ToolDefinition _getArtifactDetailTool() => ToolDefinition(
       ],
     );
 
+/// Java-parity build tools (Java `Bitrise.java` @MCPTool names the agent
+/// scripts call): `bitrise_list_builds`, `bitrise_trigger_build`,
+/// `bitrise_abort_build`.
+List<ToolDefinition> _javaParityBuildTools() => [
+      _javaListBuildsTool(),
+      _javaTriggerBuildTool(),
+      _javaAbortBuildTool(),
+    ];
+
+/// Build-list tool (Java name): `bitrise_list_builds`.
+ToolDefinition _javaListBuildsTool() => ToolDefinition(
+      name: 'bitrise_list_builds',
+      description: 'List builds for a Bitrise app. Optionally filter by '
+          'workflow, branch or status. Status codes: not_started, '
+          'in_progress, success, failed, aborted',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'appSlug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'workflowId',
+          description: 'Filter by workflow ID / name',
+          required: false,
+        ),
+        ToolParam(
+          name: 'branch',
+          description: 'Filter by branch name',
+          required: false,
+        ),
+        ToolParam(
+          name: 'status',
+          description: 'Filter by status: not_started | in_progress | success '
+              '| failed | aborted',
+          required: false,
+        ),
+        ToolParam(
+          name: 'limit',
+          description: 'Max results to return (default 20, max 100)',
+          type: 'number',
+          required: false,
+        ),
+        ToolParam(
+          name: 'next',
+          description: 'Pagination cursor from previous response paging.next',
+          required: false,
+        ),
+      ],
+    );
+
+/// Build-trigger tool (Java name): `bitrise_trigger_build`.
+ToolDefinition _javaTriggerBuildTool() => ToolDefinition(
+      name: 'bitrise_trigger_build',
+      description: 'Trigger a new Bitrise workflow build for an app. Supports '
+          'custom branch, environment variables, and workflow selection',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'appSlug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'workflowId',
+          description: "Workflow ID to trigger (e.g. 'primary', 'deploy')",
+          required: true,
+        ),
+        ToolParam(
+          name: 'branch',
+          description: 'Branch to build (defaults to main/master)',
+          required: false,
+        ),
+        ToolParam(
+          name: 'commitMessage',
+          description: 'Commit message for the build',
+          required: false,
+        ),
+        ToolParam(
+          name: 'envVars',
+          description: 'JSON array of env var objects: '
+              '[{"mapped_to":"KEY","value":"val","is_expand":true}]',
+          required: false,
+        ),
+      ],
+    );
+
+/// Build-abort tool (Java name): `bitrise_abort_build`.
+ToolDefinition _javaAbortBuildTool() => ToolDefinition(
+      name: 'bitrise_abort_build',
+      description: 'Abort a running Bitrise build with an optional reason '
+          'message',
+      integration: 'bitrise',
+      category: 'builds',
+      params: [
+        ToolParam(
+          name: 'appSlug',
+          description: 'The Bitrise app slug',
+          required: true,
+        ),
+        ToolParam(
+          name: 'buildSlug',
+          description: 'The build slug to abort',
+          required: true,
+        ),
+        ToolParam(
+          name: 'reason',
+          description: 'Human-readable reason for aborting the build',
+          required: false,
+        ),
+      ],
+    );
+
+/// Artifact tools (Java `Bitrise.java` names): `bitrise_list_build_artifacts`
+/// / `bitrise_get_build_artifact`.
+List<ToolDefinition> _artifactTools() => [
+      ToolDefinition(
+        name: 'bitrise_list_build_artifacts',
+        description: 'List all artifacts produced by a Bitrise build (APKs, '
+            'IPAs, logs, test results, etc.)',
+        integration: 'bitrise',
+        category: 'artifacts',
+        params: [
+          ToolParam(
+            name: 'appSlug',
+            description: 'The Bitrise app slug',
+            required: true,
+          ),
+          ToolParam(
+            name: 'buildSlug',
+            description: 'The build slug',
+            required: true,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'bitrise_get_build_artifact',
+        description: 'Get details and expiring download URL for a specific '
+            'Bitrise build artifact',
+        integration: 'bitrise',
+        category: 'artifacts',
+        params: [
+          ToolParam(
+            name: 'appSlug',
+            description: 'The Bitrise app slug',
+            required: true,
+          ),
+          ToolParam(
+            name: 'buildSlug',
+            description: 'The build slug',
+            required: true,
+          ),
+          ToolParam(
+            name: 'artifactSlug',
+            description: 'The artifact slug',
+            required: true,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes Bitrise MCP tools by dispatching to [BitriseClient].
 class BitriseToolExecutor {
   final BitriseClient _client;
@@ -237,20 +369,25 @@ class BitriseToolExecutor {
     'bitrise_test': (_) => _client.testConnection(),
     'bitrise_get_apps': (_) => _client.getApps(),
     'bitrise_get_builds': (a) => _client.getBuilds(a['app_slug'] as String),
+    'bitrise_list_builds': (a) =>
+        _client.getBuilds((a['appSlug'] ?? a['app_slug']) as String),
     'bitrise_get_build_detail': (a) => _client.getBuildDetail(
           a['app_slug'] as String,
           a['build_slug'] as String,
         ),
-    'bitrise_trigger_build': (a) =>
-        _client.triggerBuild(a['app_slug'] as String),
+    'bitrise_trigger_build': (a) => _client.triggerBuildWithParams(
+          (a['appSlug'] ?? a['app_slug']) as String,
+          (a['workflowId'] ?? a['workflow'] ?? '') as String,
+          _optionalEnvList(a, 'environments') ?? _envVarsList(a['envVars']),
+        ),
     'bitrise_trigger_build_with_params': (a) => _client.triggerBuildWithParams(
           a['app_slug'] as String,
           a['workflow'] as String,
           _optionalEnvList(a, 'environments'),
         ),
     'bitrise_abort_build': (a) => _client.abortBuild(
-          a['app_slug'] as String,
-          a['build_slug'] as String,
+          (a['appSlug'] ?? a['app_slug']) as String,
+          (a['buildSlug'] ?? a['build_slug']) as String,
         ),
     'bitrise_get_workflows': (a) =>
         _client.getWorkflows(a['app_slug'] as String),
@@ -258,12 +395,41 @@ class BitriseToolExecutor {
           a['app_slug'] as String,
           a['build_slug'] as String,
         ),
+    'bitrise_list_build_artifacts': (a) => _client.getArtifacts(
+          (a['appSlug'] ?? a['app_slug']) as String,
+          (a['buildSlug'] ?? a['build_slug']) as String,
+        ),
     'bitrise_get_artifact_detail': (a) => _client.getArtifactDetail(
           a['app_slug'] as String,
           a['build_slug'] as String,
           a['artifact_slug'] as String,
         ),
+    'bitrise_get_build_artifact': (a) => _client.getArtifactDetail(
+          (a['appSlug'] ?? a['app_slug']) as String,
+          (a['buildSlug'] ?? a['build_slug']) as String,
+          (a['artifactSlug'] ?? a['artifact_slug']) as String,
+        ),
   };
+}
+
+/// Parses a JSON-array `envVars` string into environments, or `null`.
+List<Map<String, dynamic>>? _envVarsList(dynamic envVars) {
+  if (envVars is List) return _coerceEnvList(envVars);
+  if (envVars is String && envVars.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(envVars);
+      if (decoded is List) return _coerceEnvList(decoded);
+    } on FormatException {
+      // Unparsable envVars are ignored (Java logs and continues).
+    }
+  }
+  return null;
+}
+
+/// Maps decoded entries to environment maps, dropping non-map items.
+List<Map<String, dynamic>>? _coerceEnvList(List decoded) {
+  final items = decoded.whereType<Map>().map(Map<String, dynamic>.from);
+  return items.isEmpty ? null : items.toList();
 }
 
 /// Extracts an optional environments list from [args], or `null`.

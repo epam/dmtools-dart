@@ -12,6 +12,7 @@ void main() {
   _testObjectArgPassthrough();
   _testMultipleTools();
   _testSingleParamTool();
+  _testAliasWrappers();
 }
 
 ToolRegistry _registryWith(ToolDefinition tool) =>
@@ -114,6 +115,54 @@ void _testSingleParamTool() {
 
       expect(code, contains('function(path)'));
       expect(code, contains('args.path = arguments[0]'));
+    });
+  });
+}
+
+void _testAliasWrappers() {
+  group('alias wrappers', () {
+    test('emits a global per alias dispatching under the canonical name', () {
+      final registry = _registryWith(ToolDefinition(
+        name: 'jira_create_ticket',
+        description: 'Create ticket',
+        integration: 'jira',
+        aliases: const ['jira_create_ticket_basic', 'tracker_create_ticket'],
+        params: [
+          ToolParam(name: 'summary', description: 'Summary'),
+          ToolParam(name: 'description', description: 'Description'),
+        ],
+      ));
+      final code = const ToolWrapperGenerator().generate(registry);
+
+      // Canonical wrapper dispatches under its own name.
+      expect(code, contains('globalThis.jira_create_ticket ='));
+      expect(code, contains("executeToolViaJava('jira_create_ticket', args)"));
+      // Each alias gets a global that dispatches the canonical tool name —
+      // Java parity: the schema registry exposes aliases as dispatchable
+      // tools, so scripts may call either name.
+      expect(code, contains('globalThis.jira_create_ticket_basic ='));
+      expect(code, contains('globalThis.tracker_create_ticket ='));
+      expect(
+        code,
+        isNot(contains("executeToolViaJava('jira_create_ticket_basic'")),
+      );
+      expect(
+        code,
+        isNot(contains("executeToolViaJava('tracker_create_ticket'")),
+      );
+    });
+
+    test('alias of a no-param tool dispatches with empty object', () {
+      final registry = _registryWith(ToolDefinition(
+        name: 'system_info',
+        description: 'Get system info',
+        integration: 'jira',
+        aliases: const ['sys_info'],
+      ));
+      final code = const ToolWrapperGenerator().generate(registry);
+
+      expect(code, contains('globalThis.sys_info = function()'));
+      expect(code, contains("executeToolViaJava('system_info', {})"));
     });
   });
 }

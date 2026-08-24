@@ -85,30 +85,29 @@ If crap4dart is missing: `dart pub global activate crap4dart`.
 
 ## 5. Current status & next work
 
-**All 5 phases implemented.** 328 MCP tools across 17 integrations (100% of the
-329 Java @MCPTool set incl. testrail_get_sections from Java PR #462). QuickJS runtime via dart:ffi with sync callbacks —
-dmtools-agents suite passes unmodified (751 tests green; upstream fixed the
-former 4 failures). CliAgent lifecycle fully
-ported. `dmtools run`, `list`, `doctor`, `--version`, `--help`, `--list-jobs`
-all functional.
+**All 5 phases implemented.** 387 canonical MCP tools across 17 integrations
+(no dmtools-agents tool call remains uncovered; the Java↔Dart gap snapshot in
+`test/fixtures/java_mcp_tool_gaps.txt` tracks the remaining non-agent names).
+QuickJS runtime via dart:ffi with sync callbacks — dmtools-agents suite passes
+unmodified (751 tests green). CliAgent lifecycle fully
+ported (incl. timer/error/line JS actions). `dmtools run`, `list`, `doctor`,
+`--version`, `--help`, `--list-jobs` all functional.
+
+**Sync dispatch** (`executeToolViaJava`): `SyncToolDispatcher` routes by
+prefix to self-contained per-integration classes in `lib/src/js/sync_tools/`
+(jira, github, gitlab, ado, confluence, bitrise, jenkins) plus per-provider
+`<provider>_ai_chat` — HTTP via curl subprocess inside NativeCallable
+callbacks, `file_*`/`cli_*` via `SyncToolDispatcher.nonHttpHandler`. The
+JS bridge (`JobJavaScriptBridge` parity): CommonJS `require` loader
+(`require_loader.dart`), JSRunner context (`ticket`/`response`/`initiator`/
+`inputJql`/`metadata`), inline/URL/file jsPath, action() contract, JS-visible
+host-fn validation errors (`__jsError` sentinel), alias tool wrappers.
 
 **Remaining work** (diminishing returns, in priority order):
-1. Sync HTTP dispatch expanded — [SyncHttpClient] + [SyncToolDispatcher] route
-   `jira_*` and `github_*` tool calls via curl subprocess within
-   NativeCallable callbacks. Jira tools: `jira_get_ticket`,
-   `jira_post_comment`, `jira_search_by_jql`, `jira_add_label`,
-   `jira_remove_label`, `jira_move_to_status`, `jira_get_comments`,
-   `jira_update_field`, `jira_update_description`, `jira_get_transitions`,
-   `jira_assign_to` (alias `jira_assign`), `jira_get_my_profile`,
-   `jira_delete_ticket`, `jira_create_ticket_basic` (alias
-   `jira_create_ticket`). GitHub tools: `github_get_pr`,
-   `github_create_comment`. File-system (`file_*`) and CLI (`cli_*`) tools
-   delegate to the host bridge via `SyncToolDispatcher.nonHttpHandler`.
-2. CliAgent timer/error/line JS actions, InstructionProcessor
-3. CI: agents suite job wired (quality.yml updated, continues-on-error until
-   sync HTTP dispatch lands)
-4. Integration test layer (L2 contract tests, L3 live integration)
-5. Tool catalog CI comparison check against Java fixtures
+1. InstructionProcessor
+2. Integration test layer (L2 contract tests, L3 live integration)
+3. Re-extract `test/fixtures/java_mcp_tool_names.txt` when Java gains new
+   @MCPTools and port what the gap snapshot then reports
 
 Phase checkboxes live in GOAL.md — tick them as you complete items and keep the
 file current when a decision changes the plan.

@@ -9,6 +9,15 @@ import 'dart:convert';
 
 import 'confluence_http_client.dart';
 
+/// The mutable page fields of an update (Java `updatePage` params).
+typedef _PageUpdateSpec = ({
+  String title,
+  String parentId,
+  String body,
+  String space,
+  String historyComment,
+});
+
 /// Confluence Cloud API methods exposed to the MCP tool runtime.
 class ConfluenceClient {
   final ConfluenceHttpClient _http;
@@ -90,34 +99,67 @@ class ConfluenceClient {
         },
       };
 
-  /// `confluence_update_page` — PUT `content/{id}`.
+  /// `confluence_update_page` — PUT `content/{id}` with a bumped version.
   ///
-  /// Updates the page with [id], bumping its version to [version].
+  /// Ports the Java `updatePage`: the current version is fetched first and
+  /// re-sent as `current + 1`; the page is re-parented under [parentId] and
+  /// kept in [space]. An optional [historyComment] lands in the version
+  /// message (Java `confluence_update_page_with_history`).
   Future<Map<String, dynamic>> updatePage(
-    String id,
+    String contentId,
     String title,
+    String parentId,
     String body,
-    int version,
-  ) async {
+    String space, [
+    String historyComment = '',
+  ]) async {
+    final current = await _fetchVersion(contentId);
     final responseBody = await _http.put(
-      'content/$id',
-      body: jsonEncode(_updatePayload(id, title, body, version)),
+      'content/$contentId',
+      body: jsonEncode(_updatePayload(
+        contentId,
+        (
+          title: title,
+          parentId: parentId,
+          body: body,
+          space: space,
+          historyComment: historyComment,
+        ),
+        current + 1,
+      )),
     );
     return jsonDecode(responseBody) as Map<String, dynamic>;
   }
 
-  /// Builds the page update payload including the version number.
+  /// Fetches the current version number of [contentId] (Java `updatePage`).
+  Future<int> _fetchVersion(String contentId) async {
+    final body = await _http.get('content/$contentId', queryParams: {
+      'expand': 'version',
+    });
+    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    final version = decoded['version'] as Map<String, dynamic>?;
+    return (version?['number'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Builds the page update payload including the bumped version number.
   Map<String, dynamic> _updatePayload(
     String id,
-    String title,
-    String body,
+    _PageUpdateSpec page,
     int version,
-  ) {
-    final payload = _pagePayload('', title, body);
-    payload['id'] = id;
-    payload['version'] = {'number': version};
-    return payload;
-  }
+  ) =>
+      {
+        'id': id,
+        'type': 'page',
+        'title': page.title,
+        'ancestors': [
+          {'id': page.parentId},
+        ],
+        'space': {'key': page.space},
+        'version': {'number': version, 'message': page.historyComment},
+        'body': {
+          'storage': {'value': page.body, 'representation': 'storage'},
+        },
+      };
 
   /// `confluence_search` — GET `content/search?cql=`.
   ///
@@ -154,13 +196,17 @@ class ConfluenceClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
-  /// `confluence_get_page_by_id` — GET `content/{id}?expand=body.storage,version`.
+  /// `confluence_get_page_by_id` / `confluence_content_by_id` — GET
+  /// `content/{id}?expand=body.storage,body.export_view,ancestors,version`.
   ///
-  /// Returns the page with [id] including its storage body and version.
+  /// Returns the page with [id] including its storage body, export view,
+  /// ancestors, and version (the Java `contentById` expand list).
   Future<Map<String, dynamic>> getPageById(String id) async {
     final body = await _http.get(
       'content/$id',
-      queryParams: {'expand': 'body.storage,version'},
+      queryParams: {
+        'expand': 'body.storage,body.export_view,ancestors,version'
+      },
     );
     return jsonDecode(body) as Map<String, dynamic>;
   }

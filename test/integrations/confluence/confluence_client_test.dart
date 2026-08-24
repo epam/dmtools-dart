@@ -143,26 +143,37 @@ void createPageTests() {
   });
 }
 
-/// `confluence_update_page` — PUT `content/{id}`.
+/// `confluence_update_page` — GET current version, PUT `content/{id}`.
 void updatePageTests() {
   group('ConfluenceClient.updatePage', () {
-    test('PUTs the update payload with version number', () async {
-      final f =
-          mockConfluence((o) => routeByPath({'/content/42': _updatedPage}, o));
+    test('fetches the version, then PUTs the bumped update payload', () async {
+      final f = mockConfluence(
+        (o) => routeByPath({'/content/42': _updatedPage}, o),
+      );
       final page = await f.client.updatePage(
         '42',
         'Updated Title',
+        '7',
         '<p>updated</p>',
-        3,
+        'ENG',
       );
       expect(page['id'], '42');
-      final call = f.adapter.calls.single;
-      expect(call.method, 'PUT');
-      expect(call.path, endsWith('/content/42'));
-      final sent = jsonDecode(call.data as String) as Map<String, dynamic>;
+      expect(f.adapter.calls.length, 2);
+      final get = f.adapter.calls.first;
+      expect(get.method, 'GET');
+      expect(get.path, endsWith('/content/42'));
+      expect(get.queryParameters['expand'], 'version');
+      final put = f.adapter.calls.last;
+      expect(put.method, 'PUT');
+      expect(put.path, endsWith('/content/42'));
+      final sent = jsonDecode(put.data as String) as Map<String, dynamic>;
       expect(sent['id'], '42');
       expect(sent['title'], 'Updated Title');
-      expect(sent['version'], {'number': 3});
+      expect(sent['ancestors'], [
+        {'id': '7'},
+      ]);
+      expect(sent['space'], {'key': 'ENG'});
+      expect(sent['version'], {'number': 3, 'message': ''});
       final storage = (sent['body'] as Map<String, dynamic>)['storage']
           as Map<String, dynamic>;
       expect(storage['value'], '<p>updated</p>');
@@ -211,7 +222,8 @@ final _getPageBody = jsonEncode({
 const _createdPage = '{"id":"99","title":"New Page"}';
 
 /// Canned updated page response.
-const _updatedPage = '{"id":"42","title":"Updated Title"}';
+const _updatedPage =
+    '{"id":"42","title":"Updated Title","version":{"number":2}}';
 
 /// Canned search response body.
 final _searchBody = jsonEncode({

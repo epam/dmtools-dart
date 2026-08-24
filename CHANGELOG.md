@@ -17,12 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional `section_id` that falls back to the project's default section
   (creating a "Test Cases" section when the project has none). Markdown
   tables in text fields convert to TestRail `|||:Col|Col` format or HTML for
-  the Steps template. Catalog grows to 328 tools; the Java↔Dart gap snapshot
-  shrinks to 210. The L3 suite exercises the new tools against the TestRail
-  sandbox (sections read + create/delete round-trips per flavour, resolving
-  the project id → name via the Java-parity `getProjects` envelope), the
-  nightly integration job gains the missing `DMTOOLS_IT_TESTRAIL_SUITE`
-  wiring, and `integration-pr.yml` gains a `testrail` matrix leg.
+  the Steps template. The L3 suite exercises the new tools against the
+  TestRail sandbox (sections read + create/delete round-trips per flavour,
+  resolving the project id → name via the Java-parity `getProjects`
+  envelope), the nightly integration job gains the missing
+  `DMTOOLS_IT_TESTRAIL_SUITE` wiring, and `integration-pr.yml` gains a
+  `testrail` matrix leg.
 - Generic named tool arguments on the CLI: `dmtools <tool> --key value` and
   `--key=value` map onto the tool's arguments (merged over a positional JSON
   blob), porting the Java `McpCliHandler.parseToolArguments` change from the
@@ -50,6 +50,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout plus macOS quarantine stripping and an ad-hoc re-sign
   (flutter_agent_harness installer pattern). macOS/Linux; Windows remains
   on the prebuilt installer.
+- Sync tool dispatch for the full agent-used surface — the dispatcher
+  (`lib/src/js/sync_tool_dispatcher.dart`) now routes by prefix to
+  self-contained per-integration classes in `lib/src/js/sync_tools/`
+  (mirroring the Java integration clients):
+  - **Jira** (`jira_sync_tools.dart`): the previous 16 tools plus
+    `jira_link_issues`, `jira_attach_file_to_ticket` (multipart),
+    `jira_create_ticket_with_parent`, `jira_set_priority`,
+    `jira_assign_ticket_to`, `jira_create_ticket_with_json`,
+    `jira_get_field_custom_code`; `jira_create_ticket_basic` restored as the
+    canonical name (Java `JiraClient` parity) with
+    `tracker_create_ticket`/`jira_create_ticket` aliases.
+  - **GitHub** (`github_sync_tools.dart` + workflow-log and release-asset
+    helpers): 23 executors — PR comments/labels/threads/diff/merge, workflow
+    runs (302+ZIP log resolution), draft releases, binary asset upload.
+    Existing `github_get_pr`/`github_create_comment` args fixed to the Java
+    `workspace`/`repository`/`pullRequestId`/`text` names (agents passed
+    these; the old `owner`/`repo`/`number` shape produced
+    `GET repos///pulls/0`).
+  - **GitLab** (`gitlab_sync_tools.dart`): MR comments/threads/labels/diff/
+    merge/rebase, pipelines, statuses, discussions, releases with binary
+    asset transfer, accepts both Java (`workspace`/`repository`/
+    `pullRequestId`) and legacy (`project`/`iid`/`body`) args.
+  - **ADO** (`ado_sync_tools.dart`): PR comments/threads/labels/diff/merge,
+    pipelines (list/runs/logs/trigger) alongside the moved work-item tools.
+  - **Confluence** (`confluence_sync_tools.dart` + `confluence_markdown.dart`
+    + `markdown_confluence_sync.dart`): search/pages/children/update plus the
+    full Markdown→storage directory sync engine (`confluence_sync_markdown_
+    directory`, port of Java `MarkdownConfluenceSync`) with multipart
+    attachments.
+  - **Bitrise** (`bitrise_sync_tools.dart`): builds/artifacts with the
+    `BITRISE_ALLOW_WRITES` write guard (same knob as the async client).
+  - **Jenkins** (`jenkins_sync_tools.dart`): job info + build logs
+    (`toApiJobPath` ported 1:1).
+  - **AI** (`ai_sync_tools.dart`): per-provider `gemini_ai_chat`,
+    `openai_ai_chat`, `anthropic_ai_chat`, `ollama_ai_chat`,
+    `dial_ai_chat`, `bedrock_ai_chat` (Java exposes one @MCPTool per
+    provider; the dmtools-agents `aiChat.js` helper resolves
+    `globalThis[provider + '_ai_chat']` dynamically and falls through on
+    error — failures surface as JS errors via the `__jsError` sentinel).
+  Canonical tool catalog: 328 → 387 definitions; the Java↔Dart gap snapshot
+  shrinks 210 → 159 entries (no agent-script tool call remains uncovered).
+- Tool wrappers for aliases — the wrapper generator emits a JS global per
+  alias dispatching the canonical name (Java's schema registry exposes
+  aliases as dispatchable tools; scripts call e.g.
+  `jira_create_ticket_basic` directly).
+- CommonJS `require()` loader (`lib/src/js/require_loader.dart`) — 1:1 port
+  of the Java `JobJavaScriptBridge` module loader (`RequireProxy` /
+  `loadModule` / `resolveModulePath` / `setCurrentScriptDirectory`).
+  Implemented as a JS bootstrap prelude over the `file_read` host function
+  and `eval()` so module exports can carry functions (the FFI JSON marshaling
+  cannot). Java-parity semantics: `./`/`../` resolution against the current
+  script directory with `..` normalization, module cache keyed by resolved
+  path with a placeholder cached before eval (circular requires terminate),
+  the exact Java module wrapper, script-directory save/set/restore in
+  `try`/`finally`, `Failed to require module: <path>` on failure with the
+  `JavaScript file not found` cause preserved, and the
+  `require() expects exactly one argument (module path)` validation.
+- JSRunner job context forwarding (`lib/src/agents/agent_factory.dart`) —
+  `ticket`, `response`, `initiator`, `inputJql`, `metadata` from the job
+  params block now land in the JS `params` object exactly as Java
+  `JSRunner.runJobImpl` + `JavaScriptExecutor.withJobContext()`/`.with()`
+  place them; missing/blank `jsPath` fails with the Java message
+  `jsPath parameter is required`, and script failures return
+  `{'success': false, 'error': …}` instead of crashing (Java
+  `JavaScriptExecutor.execute()` error-result parity).
+- Script source resolution parity (`lib/src/js/job_runner.dart`) — Java
+  `loadJavaScriptCode` semantics: http(s) `jsPath` fetches the source
+  synchronously (curl-backed [SyncHttpClient]), inline JS (`function`-prefixed,
+  `action`-containing, or non-path non-`.js` strings) executes directly, and
+  file paths that are missing fail with
+  `JavaScript file not found in resources or filesystem: <path>`.
+- Action contract and error surfacing — scripts without `action(params)`
+  fail with the Java-parity
+  `JavaScript code must define an 'action' function` (Java CliAgent JS
+  actions use the same `JavaScriptExecutor` contract, so it is enforced on
+  both the JSRunner and CliAgent paths); script/action eval exceptions now
+  surface as `JavaScript execution failed: <message>` instead of a silent
+  `null` result.
+- Host-function argument validation with JS-visible errors — FFI host
+  functions cannot throw into JS, so `executeToolViaJava` /
+  `set_env_variable` validation failures return a `{'__jsError': …}`
+  sentinel that a JS bootstrap wrapper rethrows as a real `Error`, matching
+  the Java `IllegalArgumentException` messages
+  (`executeToolViaJava requires at least 1 argument: toolName`,
+  `set_env_variable requires 2 arguments: propertyName, envVarName`).
+  `executeToolViaJava(toolName)` with no args object now executes with empty
+  args, as in Java.
 - Community files ported from the Java [dm.ai](https://github.com/epam/dm.ai)
   repository: `LICENSE` (Apache-2.0), `SECURITY.md` (vulnerability disclosure
   policy, repo links adapted), `CODE_OF_CONDUCT.md` (Contributor Covenant

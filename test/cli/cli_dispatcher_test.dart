@@ -162,14 +162,19 @@ void _testRun() {
 
 void _testRunJsFile() {
   group('run <file>.js', () {
-    test('runs a simple JS expression file', () async {
-      final jsFile = File('${_tmp.path}/hello.js')..writeAsStringSync('1 + 2');
+    test('runs a JS file with an action(params) function', () async {
+      // Note: the file name must not contain "action" — Java
+      // loadJavaScriptCode parity treats such paths as inline code.
+      final jsFile = File('${_tmp.path}/fn.js')
+        ..writeAsStringSync(
+          "function action(params) { return 1 + 2; }",
+        );
       expect(await _dispatcher.dispatch(['run', jsFile.path]), 0);
       expect(_lines.last, '3');
     });
 
-    test('runs a JS file with an action(params) function', () async {
-      final jsFile = File('${_tmp.path}/action.js')
+    test('runs a JS file returning an object from action(params)', () async {
+      final jsFile = File('${_tmp.path}/greet.js')
         ..writeAsStringSync(
           "function action(params) { return { greeting: 'hello' }; }",
         );
@@ -180,12 +185,21 @@ void _testRunJsFile() {
 
     test('passes --key overrides as jobParams', () async {
       final jsFile = File('${_tmp.path}/params.js')
-        ..writeAsStringSync('params.jobParams.name');
+        ..writeAsStringSync(
+          'function action(params) { return params.jobParams.name; }',
+        );
       expect(
         await _dispatcher.dispatch(['run', jsFile.path, '--name', 'world']),
         0,
       );
       expect(jsonDecode(_lines.last), 'world');
+    });
+
+    test('fails for a script without an action function (Java parity)',
+        () async {
+      final jsFile = File('${_tmp.path}/plain.js')..writeAsStringSync('1 + 2');
+      expect(await _dispatcher.dispatch(['run', jsFile.path]), 1);
+      expect(_lines.last, contains("must define an 'action' function"));
     });
   });
 }

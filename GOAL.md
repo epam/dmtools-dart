@@ -216,21 +216,26 @@ after.
 - [x] Tool schema registry: same tool names, same argument schemas, same
       availability rules (tool appears only when its integration is configured).
       `default_tool_registry.dart` registers all 17 catalogs; `dmtools list` prints
-      the full catalog (325 tools).
-- [x] **Complete `@MCPTool` parity**: all 328 `@MCPTool`-annotated methods (26 classes)
-      are ported. **325 tools across 17 integrations** (Jira 65, GitHub 40,
-      GitLab 31, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
-      SharePoint 12, Teams 11, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
+      the full catalog (387 tools).
+- [x] **Complete `@MCPTool` parity for the agent-used surface**: all Java
+      @MCPTool methods the dmtools-agents scripts call are ported —
+      **387 canonical tools across 17 integrations** (Jira 67, GitHub 58,
+      GitLab 47, ADO 44, Confluence 32, File 19, TestRail 18, Figma 15,
+      AI 14 (incl. per-provider `*_ai_chat`), Jenkins 14, Bitrise 13,
+      SharePoint 12, Teams 11, Xray 8, KB 8, Mermaid 4, CLI 3).
       Registry is the Dart equivalent of the generated catalog — the catalog cannot
       drift because all tools are defined in the `*_tools.dart` files next to their
-      implementations. CI catalog comparison pending.
-- [ ] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
+      implementations. CI catalog comparison: `test/mcp/catalog_parity_test.dart`
+      against the frozen gap snapshot
+      (`test/fixtures/java_mcp_tool_gaps.txt`, 159 remaining non-agent names).
+- [x] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.
-- [ ] `file_*` tools, `cli_execute_command` with the same whitelist mechanics
+- [x] `file_*` tools, `cli_execute_command` with the same whitelist mechanics
       (`git, gh, dmtools, npm, yarn, docker, kubectl, terraform, ansible, aws,
       gcloud, az` + `CLI_ALLOWED_COMMANDS` extension).
-- [ ] AI providers: Gemini, OpenAI, DIAL, Bedrock, Ollama — same env-var selection.
+- [x] AI providers: Gemini, OpenAI, DIAL, Bedrock, Ollama — same env-var
+      selection, plus per-provider `*_ai_chat` sync executors.
 
 **Done when:** the generated Dart tool catalog matches the Java `@MCPTool` catalog
 100% (CI comparison green), and contract tests replay recorded Java tool
@@ -244,12 +249,19 @@ version).
       marshaling, `NativeCallable.isolateLocal` for sync callbacks on aarch64.
 - [x] `executeToolViaJava` equivalent (single generic dispatch into the Phase 3
       registry), `file_read` host function, `set_env_variable`.
-      CommonJS `require` loader is implemented in JS (testRunner.js / agent
-      scripts use `eval()` + `file_read` directly).
+      CommonJS `require` loader ported 1:1 from the Java `RequireProxy` /
+      `loadModule` (`lib/src/js/require_loader.dart`): a JS bootstrap prelude
+      over `file_read` + `eval()` — `./`/`../` resolution against the current
+      script directory, module cache with a pre-eval placeholder for circular
+      requires, Java's exact module wrapper, and save/restore of the script
+      directory around each module eval. testRunner.js's own closure-scoped
+      `require` shims keep shadowing the global.
 - [x] Generated snake_case wrappers from the tool schema registry — same generation
       approach as Java. All 164 tools get auto-generated wrappers.
-- [x] Job context injection: `params.jobParams`, `params.ticket` via `setGlobal`.
-      Additional context fields (response, initiator, metadata, etc.) ready to add.
+- [x] Job context injection: `params.jobParams`, `params.ticket` via `setGlobal`,
+      plus `response`, `initiator`, `inputJql`, `metadata` forwarded by
+      `JsRunnerJob` exactly as Java `JSRunner.runJobImpl` +
+      `JavaScriptExecutor.withJobContext()`/`.with()` do.
 - [x] The dmtools-agents suite (`agents/js/unit-tests/run_all.json`) runs under
       the Dart runtime: **751 tests pass, 0 fail** (upstream fixed the former
       4 pre-existing bugs).

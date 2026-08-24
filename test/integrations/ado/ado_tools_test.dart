@@ -62,6 +62,19 @@ void catalogOrderTests() {
         'ado_get_repo_file',
         'ado_get_builds',
         'ado_trigger_build',
+        'ado_get_pr_comments',
+        'ado_add_pr_comment',
+        'ado_reply_to_pr_thread',
+        'ado_resolve_pr_thread',
+        'ado_add_inline_comment',
+        'ado_merge_pr',
+        'ado_add_pr_label',
+        'ado_remove_pr_label',
+        'ado_get_pr_diff',
+        'ado_list_pipelines',
+        'ado_list_pipeline_runs',
+        'ado_trigger_pipeline',
+        'ado_get_pipeline_logs',
       ]);
     });
   });

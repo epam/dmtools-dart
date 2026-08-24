@@ -37,6 +37,32 @@ List<ToolDefinition> jenkinsTools() => [
       ..._buildTools(),
       ..._queueTools(),
       ..._configTools(),
+      ..._javaParityBuildTools(),
+    ];
+
+/// Java-parity build tools (Java `Jenkins.java` @MCPTool names the agent
+/// scripts call): `jenkins_get_job_info`.
+List<ToolDefinition> _javaParityBuildTools() => [
+      ToolDefinition(
+        name: 'jenkins_get_job_info',
+        description: 'Get details of a specific Jenkins build by job path and '
+            'build number',
+        integration: 'jenkins',
+        category: 'builds',
+        params: [
+          ToolParam(
+            name: 'jobPath',
+            description: 'Jenkins job path, e.g. folder/job-name',
+            required: true,
+          ),
+          ToolParam(
+            name: 'buildNumber',
+            description: 'Build number',
+            type: 'number',
+            required: true,
+          ),
+        ],
+      ),
     ];
 
 /// Connectivity-check tool: `jenkins_test`.
@@ -237,8 +263,12 @@ class JenkinsToolExecutor {
           a['name'] as String,
           requiredInt(a, 'buildNumber'),
         ),
+    'jenkins_get_job_info': (a) => _client.getBuild(
+          (a['jobPath'] ?? a['name']) as String,
+          requiredInt(a, 'buildNumber'),
+        ),
     'jenkins_get_build_log': (a) => _client.getBuildLog(
-          a['name'] as String,
+          (a['jobPath'] ?? a['name']) as String,
           requiredInt(a, 'buildNumber'),
         ),
     'jenkins_get_console_output': (a) => _client.getConsoleOutput(

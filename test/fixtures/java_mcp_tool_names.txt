@@ -318,6 +318,7 @@ testrail_get_cases_by_refs
 testrail_get_label
 testrail_get_labels
 testrail_get_projects
+testrail_get_sections
 testrail_get_suites
 testrail_link_to_requirement
 testrail_search_cases

@@ -12,8 +12,9 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
    runs `crap4dart check --staged`; CI runs `check --all` + `analyze` on every push.
    Never commit on red, never weaken a gate to make code pass. Known
    exemptions live in `crap4dart.yaml` with comments (Java-parity client
-   classes → class_size warning; test_assertions parser bug with trailing
-   `skip:` args).
+   classes → class_size warning; testrail_create_case* Java-parity
+   @MCPParam signatures → method_size max_params override; test_assertions
+   parser bug with trailing `skip:` args).
 2. **Signature parity with Java DMTools.** Config JSON keys, tool names
    (snake_case), env variables, CLI commands — identical to the Java version.
    A config or `dmtools.env` that works with Java must work unchanged here.

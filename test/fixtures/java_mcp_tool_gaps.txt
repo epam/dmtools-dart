@@ -145,9 +145,6 @@ teams_recent_chats
 teams_search_user_drive_files
 teams_send_message_by_id
 teams_send_myself_message
-testrail_create_case
-testrail_create_case_detailed
-testrail_create_case_steps
 testrail_get_all_cases
 testrail_get_cases_by_refs
 testrail_get_label

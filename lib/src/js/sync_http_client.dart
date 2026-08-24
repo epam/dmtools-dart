@@ -1,12 +1,13 @@
-/// Synchronous HTTP client using curl subprocess.
+/// Synchronous HTTP client for the JS tool bridge.
 ///
-/// Used by the JS tool bridge for making blocking HTTP calls within
-/// [NativeCallable] callbacks, where Dart's event loop is not running and
-/// async [Future]s (e.g. dio requests) can never complete. Each call spawns a
-/// curl process (~10-50ms overhead) — acceptable for agent scripts making
-/// tool calls.
+/// Primary transport is [SyncHttpBridge] — a pooled async `HttpClient` in a
+/// worker isolate, served synchronously over native mailboxes (Java-bridge
+/// performance profile: TLS handshake once, then connection reuse). Until
+/// the bridge has booted (it must complete while the event loop is alive;
+/// the CLI awaits it at startup), requests fall back to the curl subprocess
+/// transport below.
 ///
-/// Security/robustness properties:
+/// Security/robustness properties of the curl fallback:
 /// - Every request carries `--connect-timeout`/`--max-time` so a hung
 ///   endpoint cannot freeze the isolate inside a QuickJS callback forever.
 /// - Headers and bodies travel in 0700-mode temp files (`-H @file`,
@@ -15,12 +16,15 @@
 ///   argv size limit (`E2BIG`).
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'sync_http_bridge.dart';
+
 /// Response from a sync HTTP request.
 class SyncHttpResponse {
-  /// The HTTP status code (`0` when curl failed to obtain a response).
+  /// The HTTP status code (`0` when the transport failed).
   final int statusCode;
 
   /// The response body text (UTF-8 decoded).
@@ -33,7 +37,7 @@ class SyncHttpResponse {
   bool get isOk => statusCode >= 200 && statusCode < 300;
 }
 
-/// Synchronous HTTP client backed by `curl` subprocess calls.
+/// Synchronous HTTP client: pooled-isolate transport with a curl fallback.
 class SyncHttpClient {
   /// curl exit code for `--max-time` / `--connect-timeout` expiry.
   static const _curlExitTimedOut = 28;
@@ -49,7 +53,7 @@ class SyncHttpClient {
 
   /// Performs a synchronous GET request.
   static SyncHttpResponse get(String url, {Map<String, String>? headers}) =>
-      _request('GET', url, headers: headers);
+      _dispatch('GET', url, headers: headers);
 
   /// Performs a synchronous POST request.
   static SyncHttpResponse post(
@@ -57,7 +61,7 @@ class SyncHttpClient {
     Map<String, String>? headers,
     String? body,
   }) =>
-      _request('POST', url, headers: headers, body: body);
+      _dispatch('POST', url, headers: headers, body: body);
 
   /// Performs a synchronous PUT request.
   static SyncHttpResponse put(
@@ -65,11 +69,28 @@ class SyncHttpClient {
     Map<String, String>? headers,
     String? body,
   }) =>
-      _request('PUT', url, headers: headers, body: body);
+      _dispatch('PUT', url, headers: headers, body: body);
 
   /// Performs a synchronous DELETE request.
   static SyncHttpResponse delete(String url, {Map<String, String>? headers}) =>
-      _request('DELETE', url, headers: headers);
+      _dispatch('DELETE', url, headers: headers);
+
+  /// Routes a request through the pooled-isolate bridge when booted, the
+  /// curl subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
+  /// so later requests (after any event-loop turn) use the pool.
+  static SyncHttpResponse _dispatch(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    String? body,
+  }) {
+    final bridge = SyncHttpBridge.shared;
+    if (!bridge.ready) {
+      unawaited(bridge.boot());
+      return _curlRequest(method, url, headers: headers, body: body);
+    }
+    return bridge.request(method, url, headers: headers, body: body);
+  }
 
   /// Builds the curl argument list for a request.
   ///
@@ -136,8 +157,11 @@ class SyncHttpClient {
     return SyncHttpResponse(statusCode, responseBody);
   }
 
-  /// Runs curl for a request, staging headers/body in a 0700 temp dir.
-  static SyncHttpResponse _request(
+  /// Curl fallback transport: stages headers/body in a 0700 temp dir and
+  /// spawns curl (`Process.runSync`) — used before the isolate bridge has
+  /// booted, and kept as the reference transport for the staged-binary
+  /// helpers in `sync_request_helpers.dart`.
+  static SyncHttpResponse _curlRequest(
     String method,
     String url, {
     Map<String, String>? headers,

@@ -4,7 +4,7 @@
 /// invocation are live. `run` resolves a job config via
 /// [RunCommandProcessor], then dispatches to [AgentFactory] (for `cliagent`)
 /// or [JsJobRunner] (for `jsrunner`/`.js` scripts) and prints the result.
-/// Direct tool invocation (`dmtools <tool> '<json>'`) dispatches through
+/// Direct tool invocation (`dmtools <tool> [args...]`) dispatches through
 /// [ToolBridge]. Interactive mode remains a stub pending Phase 4.
 library;
 
@@ -18,6 +18,7 @@ import '../config/property_reader.dart';
 import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
+import '../mcp/tool_param.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'run_command_processor.dart';
@@ -198,13 +199,19 @@ class CliDispatcher {
     return 1;
   }
 
-  /// Dispatches a direct tool invocation: `dmtools <tool> '<json>'`.
+  /// Dispatches a direct tool invocation: `dmtools <tool> [args...]`.
   ///
-  /// Resolves the tool name through the default registry, parses args from a
-  /// positional JSON string, `--data`, or STDIN, then executes via
-  /// [ToolBridge] and prints the JSON result. Returns `0` on success, `1`
-  /// when the tool is unknown, args are invalid, or the result is an error.
+  /// Java `processMcpCommand` order: output-format flags are stripped from
+  /// the tool args first, a `--help`/`-h` among them shows the tool's
+  /// schema (the tools list filtered by tool name), otherwise the tool
+  /// executes with arguments built Java-style (see [_buildToolArgs]) and
+  /// the JSON result is printed. Returns `0` on success, `1` when the
+  /// tool is unknown or the result is an error.
   Future<int> _toolDispatch(String toolName, List<String> rest) async {
+    final cleaned = _extractFormatFlags(rest);
+    if (cleaned.any(_isHelpFlag)) {
+      return _listTools([toolName]);
+    }
     final registry = createDefaultToolRegistry();
     if (!registry.hasTool(toolName)) {
       _writer('Error: unknown tool: $toolName');
@@ -212,96 +219,208 @@ class CliDispatcher {
       return 1;
     }
     try {
-      final argsJson = await _resolveToolArgs(rest);
-      final args = _parseToolArgs(argsJson, namedArgs: _parseNamedArgs(rest));
+      final params = registry.getTool(toolName)?.params ?? const <ToolParam>[];
+      final args = _buildToolArgs(params, cleaned);
       final result = ToolBridge(registry: registry).execute(toolName, args);
       _writer(result);
       return _isToolError(result) ? 1 : 0;
-    } on FormatException catch (e) {
-      _writer('Error: invalid JSON arguments — ${e.message}');
-      return 1;
     } catch (e) {
       _writer('Error: $e');
       return 1;
     }
   }
 
-  /// Resolves tool arguments from `--data`, a positional JSON string, or
-  /// STDIN (non-TTY only). Returns `null` when no args are available.
-  ///
-  /// Tokens consumed as values of named arguments (see [_splitToolArgs]) are
-  /// not treated as positionals, and STDIN is only consulted when no named
-  /// arguments were given.
-  Future<String?> _resolveToolArgs(List<String> rest) async {
-    final parts = _splitToolArgs(rest);
-    final dataIdx = rest.indexOf('--data');
-    if (dataIdx != -1 && dataIdx + 1 < rest.length) {
-      return rest[dataIdx + 1];
+  /// Builds the tool arguments map, Java `parseToolArguments`-style:
+  /// tokens are processed in order (`--data`/`--stdin-data` JSON merge
+  /// with a failure falling back to `data`, `--format`, `--md`, ignored
+  /// shell flags, `--key value`/`--key=value`, bare `key=value`), then
+  /// positional arguments are mapped onto the tool's [params] LAST so
+  /// they override same-named earlier keys.
+  Map<String, dynamic> _buildToolArgs(
+      List<ToolParam> params, List<String> tokens) {
+    final arguments = <String, dynamic>{};
+    final positional = _parseToolArguments(tokens, arguments);
+    if (positional.isNotEmpty) {
+      _mapPositionalArguments(arguments, params, positional);
     }
-    if (parts.positional.isNotEmpty) return parts.positional.first;
-    if (parts.named.isEmpty && !stdin.hasTerminal) {
-      final data = await stdin.transform(utf8.decoder).join();
-      if (data.isNotEmpty) return data;
-    }
-    return null;
+    return arguments;
   }
 
-  /// Splits tool-invocation args into positionals and named arguments.
+  /// Parses tool-argument [tokens] into [arguments] in token order,
+  /// collecting positional arguments (mapped onto the schema later).
   ///
-  /// Ports the Java `McpCliHandler.parseToolArguments` named-argument
-  /// support: shell-level flags (`--verbose`, `--debug`, `--file`) and
-  /// `--data` are reserved; any other `--key value` or `--key=value` flag
-  /// maps onto the tool argument of the same name, consuming its value so it
-  /// is not mistaken for a positional. A trailing flag without a value is
-  /// ignored.
-  static ({List<String> positional, Map<String, String> named}) _splitToolArgs(
-      List<String> rest) {
+  /// Ports the Java `parseToolArguments` token loop: `--data`/`--stdin-data`
+  /// merge a JSON object (a parse failure stores the raw string under
+  /// `data`), `--format`/`--md` set `format`, shell-level flags
+  /// (`--verbose`, `--debug`) are ignored, any other `--key value` /
+  /// `--key=value` names an argument (there is no `--file` special case —
+  /// Java has none), and a bare `key=value` token with a valid identifier
+  /// before `=` names an argument too. Everything else is positional.
+  static List<String> _parseToolArguments(
+      List<String> tokens, Map<String, dynamic> arguments) {
     final positional = <String>[];
-    final named = <String, String>{};
+    var i = 0;
+    while (i < tokens.length) {
+      final arg = tokens[i++];
+      if (_isValueFlag(arg)) {
+        i = _consumeValueFlag(arg, tokens, i, arguments);
+      } else if (arg == '--md') {
+        arguments['format'] = 'md';
+      } else if (_shellFlags.contains(arg)) {
+        // Shell-level flags handled by the wrapper script; ignored.
+      } else {
+        i = _consumeFlagOrPositional(arg, tokens, i, arguments, positional);
+      }
+    }
+    return positional;
+  }
+
+  /// Dispatches one non-value token: a generic `--key` flag, a bare
+  /// `key=value` named token, or a positional. Returns the next [i].
+  static int _consumeFlagOrPositional(String arg, List<String> tokens, int i,
+      Map<String, dynamic> arguments, List<String> positional) {
+    if (arg.startsWith('--')) {
+      return _consumeNamedFlag(arguments, arg, tokens, i);
+    }
+    if (_namedTokenPattern.hasMatch(arg)) {
+      _consumeNamedToken(arguments, arg);
+    } else {
+      positional.add(arg);
+    }
+    return i;
+  }
+
+  /// Whether [arg] is a flag whose next token is its value.
+  static bool _isValueFlag(String arg) =>
+      arg == '--data' || arg == '--stdin-data' || arg == '--format';
+
+  /// Consumes the value token of a `--data`/`--stdin-data`/`--format`
+  /// flag ([i] already points past the flag token); a valueless trailing
+  /// flag is ignored — the Java loop skips it the same way.
+  static int _consumeValueFlag(
+      String arg, List<String> tokens, int i, Map<String, dynamic> arguments) {
+    if (i >= tokens.length) return i;
+    final value = tokens[i++];
+    if (arg == '--format') {
+      arguments['format'] = value;
+    } else {
+      _parseJsonIntoArguments(value, arguments);
+    }
+    return i;
+  }
+
+  /// Stores a bare `key=value` token as a named argument.
+  static void _consumeNamedToken(Map<String, dynamic> arguments, String arg) {
+    final eq = arg.indexOf('=');
+    arguments[arg.substring(0, eq)] = arg.substring(eq + 1);
+  }
+
+  /// Parses [json] and merges its keys into [arguments]; anything that is
+  /// not a JSON object (a parse failure included) stores the raw string
+  /// under `data` (Java `parseJsonIntoArguments` — never an error).
+  static void _parseJsonIntoArguments(
+      String json, Map<String, dynamic> arguments) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map<String, dynamic>) {
+        arguments.addAll(decoded);
+        return;
+      }
+    } on FormatException {
+      // fall through to the raw-string fallback
+    }
+    arguments['data'] = json;
+  }
+
+  /// Strips output-format flags from tool args, Java `extractFormatFlag`
+  /// (:219-253): `--toon`, `--mini`, `--output <v>` (consuming the value),
+  /// and `--output=<v>` never reach the tool arguments. Every position
+  /// counts — these sit after the tool name, i.e. Java positions ≥ 2.
+  ///
+  /// The captured format selects Java's output formatter, which this port
+  /// lacks, so it is dropped; only the stripping is observable. A
+  /// trailing `--output` without a value stays (Java keeps it, and the
+  /// valueless flag is then ignored).
+  static List<String> _extractFormatFlags(List<String> rest) {
+    final cleaned = <String>[];
     for (var i = 0; i < rest.length; i++) {
       final arg = rest[i];
-      if (!arg.startsWith('--') || _shellFlags.contains(arg)) {
-        if (!arg.startsWith('--')) positional.add(arg);
+      if (arg == '--toon' || arg == '--mini' || arg.startsWith('--output=')) {
         continue;
       }
-      final key = arg.substring(2);
-      final eq = key.indexOf('=');
-      if (eq >= 0) {
-        named[key.substring(0, eq)] = key.substring(eq + 1);
-      } else if (i + 1 < rest.length) {
-        named[key] = rest[++i]; // the next token was consumed as the value
+      if (arg == '--output' && i + 1 < rest.length) {
+        i++; // skip the consumed format value
+        continue;
       }
+      cleaned.add(arg);
     }
-    return (positional: positional, named: named);
+    return cleaned;
   }
 
-  /// Extracts the named `--key value` / `--key=value` tool arguments.
-  static Map<String, String> _parseNamedArgs(List<String> rest) =>
-      _splitToolArgs(rest).named;
+  /// Whether [arg] requests a tool's schema instead of execution.
+  static bool _isHelpFlag(String arg) => arg == '--help' || arg == '-h';
+
+  /// Maps positionals onto the schema [params] in declaration order,
+  /// mirroring Java `mapPositionalArguments` (which runs AFTER token
+  /// parsing, so mapped values override same-named earlier keys): a
+  /// trailing array param collects every remaining positional; a mid-list
+  /// array param reserves one positional per trailing param; regular
+  /// params take one value each; extra positionals are ignored. Tools
+  /// without params fall back to `arg0`, `arg1`, …
+  static void _mapPositionalArguments(
+      Map<String, dynamic> args, List<ToolParam> params, List<String> pos) {
+    if (params.isEmpty) {
+      for (var i = 0; i < pos.length; i++) {
+        args['arg$i'] = pos[i];
+      }
+      return;
+    }
+    var argIndex = 0;
+    for (var i = 0; i < params.length && argIndex < pos.length; i++) {
+      final param = params[i];
+      if (param.type != 'array') {
+        args[param.name] = pos[argIndex++];
+      } else if (i == params.length - 1) {
+        args[param.name] = pos.sublist(argIndex); // trailing array: the rest
+        return;
+      } else {
+        argIndex =
+            _assignMidArray(args, param, params.length - i - 1, pos, argIndex);
+      }
+    }
+  }
+
+  /// Assigns a mid-list array [param], reserving one positional per
+  /// [trailing] param; returns the next unmapped positional index.
+  static int _assignMidArray(Map<String, dynamic> args, ToolParam param,
+      int trailing, List<String> pos, int argIndex) {
+    var arrayEnd = pos.length - trailing;
+    if (arrayEnd < argIndex) arrayEnd = argIndex;
+    args[param.name] = pos.sublist(argIndex, arrayEnd);
+    return arrayEnd;
+  }
+
+  /// Consumes a `--key value` / `--key=value` flag into [arguments].
+  ///
+  /// A trailing flag without a value is ignored. Returns the next
+  /// unconsumed token index.
+  static int _consumeNamedFlag(
+      Map<String, dynamic> arguments, String arg, List<String> tokens, int i) {
+    final key = arg.substring(2);
+    final eq = key.indexOf('=');
+    if (eq >= 0) {
+      arguments[key.substring(0, eq)] = key.substring(eq + 1);
+    } else if (i < tokens.length) {
+      arguments[key] = tokens[i++]; // the next token was consumed as the value
+    }
+    return i;
+  }
 
   /// Shell-level flags handled elsewhere and never treated as named args.
-  static const _shellFlags = {'--data', '--verbose', '--debug', '--file'};
+  static const _shellFlags = {'--verbose', '--debug'};
 
-  /// Parses [argsJson] into a tool arguments map, overlaid with [namedArgs].
-  ///
-  /// Returns an empty map when [argsJson] is `null`/blank; named arguments
-  /// (`--key value`) take precedence over the JSON blob's values.
-  static Map<String, dynamic> _parseToolArgs(
-    String? argsJson, {
-    Map<String, String> namedArgs = const {},
-  }) {
-    final args = <String, dynamic>{};
-    if (argsJson != null && argsJson.trim().isNotEmpty) {
-      final decoded = jsonDecode(argsJson);
-      if (decoded is Map<String, dynamic>) {
-        args.addAll(decoded);
-      } else {
-        throw FormatException('expected a JSON object');
-      }
-    }
-    args.addAll(namedArgs);
-    return args;
-  }
+  /// Bare `key=value` positional tokens that name an argument.
+  static final _namedTokenPattern = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*=.*');
 
   /// Returns `true` when [result] is a JSON object containing an `error` key.
   static bool _isToolError(String result) {

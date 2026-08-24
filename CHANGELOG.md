@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TestRail section-aware case creation, porting Java PR
+  [epam/dm.ai#462](https://github.com/epam/dm.ai/pull/462):
+  `testrail_get_sections` (`project_name` + optional `suite_id`, paginated,
+  always fetched fresh) and the `testrail_create_case`,
+  `testrail_create_case_detailed`, `testrail_create_case_steps` tools with an
+  optional `section_id` that falls back to the project's default section
+  (creating a "Test Cases" section when the project has none). Markdown
+  tables in text fields convert to TestRail `|||:Col|Col` format or HTML for
+  the Steps template. Catalog grows to 328 tools; the Java↔Dart gap snapshot
+  shrinks to 210. The L3 suite exercises the new tools against the TestRail
+  sandbox (sections read + create/delete round-trips per flavour, resolving
+  the project id → name via the Java-parity `getProjects` envelope), the
+  nightly integration job gains the missing `DMTOOLS_IT_TESTRAIL_SUITE`
+  wiring, and `integration-pr.yml` gains a `testrail` matrix leg.
+- Generic named tool arguments on the CLI: `dmtools <tool> --key value` and
+  `--key=value` map onto the tool's arguments (merged over a positional JSON
+  blob), porting the Java `McpCliHandler.parseToolArguments` change from the
+  same PR.
 - `make install` — build and install the CLI from a source checkout into
   `~/.local/bin` (override with `PREFIX=…`): a `dmtools` launcher plus the
   AOT binary (`dmtools.bin`) and the QuickJS shared library in

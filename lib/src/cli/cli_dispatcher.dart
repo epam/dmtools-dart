@@ -213,7 +213,7 @@ class CliDispatcher {
     }
     try {
       final argsJson = await _resolveToolArgs(rest);
-      final args = _parseToolArgs(argsJson);
+      final args = _parseToolArgs(argsJson, namedArgs: _parseNamedArgs(rest));
       final result = ToolBridge(registry: registry).execute(toolName, args);
       _writer(result);
       return _isToolError(result) ? 1 : 0;
@@ -228,28 +228,79 @@ class CliDispatcher {
 
   /// Resolves tool arguments from `--data`, a positional JSON string, or
   /// STDIN (non-TTY only). Returns `null` when no args are available.
+  ///
+  /// Tokens consumed as values of named arguments (see [_splitToolArgs]) are
+  /// not treated as positionals, and STDIN is only consulted when no named
+  /// arguments were given.
   Future<String?> _resolveToolArgs(List<String> rest) async {
+    final parts = _splitToolArgs(rest);
     final dataIdx = rest.indexOf('--data');
     if (dataIdx != -1 && dataIdx + 1 < rest.length) {
       return rest[dataIdx + 1];
     }
-    final positional = rest.where((a) => !a.startsWith('--')).toList();
-    if (positional.isNotEmpty) return positional.first;
-    if (!stdin.hasTerminal) {
+    if (parts.positional.isNotEmpty) return parts.positional.first;
+    if (parts.named.isEmpty && !stdin.hasTerminal) {
       final data = await stdin.transform(utf8.decoder).join();
       if (data.isNotEmpty) return data;
     }
     return null;
   }
 
-  /// Parses [argsJson] into a tool arguments map; empty when `null`/blank.
-  static Map<String, dynamic> _parseToolArgs(String? argsJson) {
-    if (argsJson == null || argsJson.trim().isEmpty) {
-      return <String, dynamic>{};
+  /// Splits tool-invocation args into positionals and named arguments.
+  ///
+  /// Ports the Java `McpCliHandler.parseToolArguments` named-argument
+  /// support: shell-level flags (`--verbose`, `--debug`, `--file`) and
+  /// `--data` are reserved; any other `--key value` or `--key=value` flag
+  /// maps onto the tool argument of the same name, consuming its value so it
+  /// is not mistaken for a positional. A trailing flag without a value is
+  /// ignored.
+  static ({List<String> positional, Map<String, String> named}) _splitToolArgs(
+      List<String> rest) {
+    final positional = <String>[];
+    final named = <String, String>{};
+    for (var i = 0; i < rest.length; i++) {
+      final arg = rest[i];
+      if (!arg.startsWith('--') || _shellFlags.contains(arg)) {
+        if (!arg.startsWith('--')) positional.add(arg);
+        continue;
+      }
+      final key = arg.substring(2);
+      final eq = key.indexOf('=');
+      if (eq >= 0) {
+        named[key.substring(0, eq)] = key.substring(eq + 1);
+      } else if (i + 1 < rest.length) {
+        named[key] = rest[++i]; // the next token was consumed as the value
+      }
     }
-    final decoded = jsonDecode(argsJson);
-    if (decoded is Map<String, dynamic>) return decoded;
-    throw FormatException('expected a JSON object');
+    return (positional: positional, named: named);
+  }
+
+  /// Extracts the named `--key value` / `--key=value` tool arguments.
+  static Map<String, String> _parseNamedArgs(List<String> rest) =>
+      _splitToolArgs(rest).named;
+
+  /// Shell-level flags handled elsewhere and never treated as named args.
+  static const _shellFlags = {'--data', '--verbose', '--debug', '--file'};
+
+  /// Parses [argsJson] into a tool arguments map, overlaid with [namedArgs].
+  ///
+  /// Returns an empty map when [argsJson] is `null`/blank; named arguments
+  /// (`--key value`) take precedence over the JSON blob's values.
+  static Map<String, dynamic> _parseToolArgs(
+    String? argsJson, {
+    Map<String, String> namedArgs = const {},
+  }) {
+    final args = <String, dynamic>{};
+    if (argsJson != null && argsJson.trim().isNotEmpty) {
+      final decoded = jsonDecode(argsJson);
+      if (decoded is Map<String, dynamic>) {
+        args.addAll(decoded);
+      } else {
+        throw FormatException('expected a JSON object');
+      }
+    }
+    args.addAll(namedArgs);
+    return args;
   }
 
   /// Returns `true` when [result] is a JSON object containing an `error` key.

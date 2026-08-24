@@ -88,6 +88,7 @@ jobs:
           TESTRAIL_USERNAME: ${{ secrets.TESTRAIL_USERNAME }}
           TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
           DMTOOLS_IT_TESTRAIL_PROJECT: ${{ secrets.DMTOOLS_IT_TESTRAIL_PROJECT }}
+          DMTOOLS_IT_TESTRAIL_SUITE: ${{ secrets.DMTOOLS_IT_TESTRAIL_SUITE }}
 
           # Bitrise
           BITRISE_TOKEN: ${{ secrets.BITRISE_TOKEN }}

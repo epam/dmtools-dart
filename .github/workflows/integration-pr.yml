@@ -2,8 +2,8 @@ name: Integration (PR)
 
 # L3 live integration smoke tests on every PR. Unlike the nightly
 # integration.yml, this runs the fast sandbox-backed subset (Jira, GitHub,
-# GitLab, Confluence, ADO, Bitrise) so a broken client fails the PR that
-# broke it. Non-sensitive config comes from repository *variables*;
+# GitLab, Confluence, ADO, Bitrise, TestRail) so a broken client fails the
+# PR that broke it. Non-sensitive config comes from repository *variables*;
 # credentials from repository *secrets*. Missing config fails loud
 # (DMTOOLS_IT_REQUIRE_CREDS).
 #
@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        integration: [jira, github, gitlab, confluence, ado, bitrise]
+        integration: [jira, github, gitlab, confluence, ado, bitrise, testrail]
     concurrency:
       group: pr-integration-${{ matrix.integration }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false
@@ -69,6 +69,13 @@ jobs:
           ADO_PROJECT: ${{ vars.ADO_PROJECT }}
           ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
           DMTOOLS_IT_ADO_PROJECT: ${{ vars.ADO_PROJECT }}
+
+          # TestRail (sandbox creds + target are all secrets — see PR #8)
+          TESTRAIL_BASE_PATH: ${{ secrets.TESTRAIL_BASE_PATH }}
+          TESTRAIL_USERNAME: ${{ secrets.TESTRAIL_USERNAME }}
+          TESTRAIL_API_KEY: ${{ secrets.TESTRAIL_API_KEY }}
+          DMTOOLS_IT_TESTRAIL_PROJECT: ${{ secrets.DMTOOLS_IT_TESTRAIL_PROJECT }}
+          DMTOOLS_IT_TESTRAIL_SUITE: ${{ secrets.DMTOOLS_IT_TESTRAIL_SUITE }}
 
           # Bitrise (reads only — BITRISE_ALLOW_WRITES is deliberately unset)
           BITRISE_TOKEN: ${{ secrets.BITRISE_TOKEN }}

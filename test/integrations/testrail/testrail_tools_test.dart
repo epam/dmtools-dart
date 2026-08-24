@@ -9,10 +9,12 @@ void main() {
   toolCatalogShapeTests();
   toolCatalogParamTests();
   runSectionCaseCatalogParamTests();
+  caseCreateCatalogParamTests();
   milestonePlanRunCatalogParamTests();
   metadataCatalogParamTests();
   executorDispatchTests();
   runSectionCaseDispatchTests();
+  caseCreateDispatchTests();
   milestonePlanRunDispatchTests();
   metadataDispatchTests();
   caseDeletionAndMetadataDispatchTests();
@@ -27,7 +29,7 @@ void toolCatalogShapeTests() {
   group('testrailTools catalog', () {
     final tools = testrailTools();
 
-    test('registers the eighteen tools in declaration order', () {
+    test('registers the twenty-one tools in declaration order', () {
       expect(tools.map((t) => t.name), [
         'testrail_test',
         'testrail_get_case',
@@ -35,6 +37,9 @@ void toolCatalogShapeTests() {
         'testrail_add_case',
         'testrail_update_case',
         'testrail_delete_case',
+        'testrail_create_case',
+        'testrail_create_case_detailed',
+        'testrail_create_case_steps',
         'testrail_add_result',
         'testrail_get_runs',
         'testrail_get_sections',
@@ -125,12 +130,72 @@ void runSectionCaseCatalogParamTests() {
     expect(tool.params.single.required, isTrue);
   });
 
-  test('testrail_get_sections requires a numeric suiteId', () {
+  test('testrail_get_sections takes project_name and an optional suite_id', () {
     final tool = toolNamed('testrail_get_sections');
     expect(tool.category, 'sections');
-    expect(tool.params.single.name, 'suiteId');
-    expect(tool.params.single.type, 'number');
-    expect(tool.params.single.required, isTrue);
+    expect(tool.params.map((p) => p.name), ['project_name', 'suite_id']);
+    expect(tool.params[0].required, isTrue);
+    expect(tool.params[1].required, isFalse);
+    expect(tool.params.every((p) => p.type == 'string'), isTrue);
+  });
+}
+
+/// Catalog params for the section-aware case-creation tools.
+void caseCreateCatalogParamTests() {
+  test('testrail_create_case exposes Java-parity params', () {
+    final tool = toolNamed('testrail_create_case');
+    expect(tool.category, 'test_cases');
+    expect(tool.params.map((p) => p.name), [
+      'project_name',
+      'title',
+      'description',
+      'priority_id',
+      'refs',
+      'section_id',
+    ]);
+    expect(
+      tool.params.where((p) => p.required).map((p) => p.name),
+      ['project_name', 'title'],
+    );
+  });
+
+  test('testrail_create_case_detailed exposes Java-parity params', () {
+    final tool = toolNamed('testrail_create_case_detailed');
+    expect(tool.params.map((p) => p.name), [
+      'project_name',
+      'title',
+      'preconditions',
+      'steps',
+      'expected',
+      'priority_id',
+      'type_id',
+      'refs',
+      'label_ids',
+      'section_id',
+    ]);
+    expect(
+      tool.params.where((p) => p.required).map((p) => p.name),
+      ['project_name', 'title'],
+    );
+  });
+
+  test('testrail_create_case_steps exposes Java-parity params', () {
+    final tool = toolNamed('testrail_create_case_steps');
+    expect(tool.params.map((p) => p.name), [
+      'project_name',
+      'title',
+      'preconditions',
+      'steps_json',
+      'priority_id',
+      'type_id',
+      'refs',
+      'label_ids',
+      'section_id',
+    ]);
+    expect(
+      tool.params.where((p) => p.required).map((p) => p.name),
+      ['project_name', 'title', 'steps_json'],
+    );
   });
 }
 
@@ -190,7 +255,13 @@ void runSectionCaseDispatchTests() {
     late TestRailToolExecutor executor;
 
     setUp(() {
-      spy = _SpyTestRailClient(mockTestRailHttp((o) => '{}').http);
+      spy = _SpyTestRailClient(
+        mockTestRailHttp(
+          (o) => routeByPath({
+            'get_projects': '{"projects":[{"id":5,"name":"My Project"}]}',
+          }, o),
+        ).http,
+      );
       executor = TestRailToolExecutor(spy);
     });
 
@@ -199,9 +270,13 @@ void runSectionCaseDispatchTests() {
       expect(spy.calls, ['getRuns:5']);
     });
 
-    test('routes testrail_get_sections with suiteId', () async {
-      await executor.execute('testrail_get_sections', {'suiteId': 7});
-      expect(spy.calls, ['getSections:7']);
+    test('routes testrail_get_sections with project_name and suite_id',
+        () async {
+      await executor.execute('testrail_get_sections', {
+        'project_name': 'My Project',
+        'suite_id': '7',
+      });
+      expect(spy.calls, ['getSectionsByProjectName:My Project:7']);
     });
 
     test('routes testrail_add_case with sectionId and title', () async {
@@ -254,6 +329,62 @@ void milestonePlanRunCatalogParamTests() {
     expect(tool.params.map((p) => p.name), ['runId', 'name']);
     expect(tool.params[0].type, 'number');
     expect(tool.params.every((p) => p.required), isTrue);
+  });
+}
+
+/// Dispatch tests for the section-aware case-creation tools.
+void caseCreateDispatchTests() {
+  group('TestRailToolExecutor.execute (case creation)', () {
+    late _SpyTestRailClient spy;
+    late TestRailToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyTestRailClient(
+        mockTestRailHttp(
+          (o) => routeByPath({
+            'get_projects': '{"projects":[{"id":5,"name":"My Project"}]}',
+          }, o),
+        ).http,
+      );
+      executor = TestRailToolExecutor(spy);
+    });
+
+    test('routes testrail_create_case with section_id', () async {
+      await executor.execute('testrail_create_case', {
+        'project_name': 'My Project',
+        'title': 'New case',
+        'section_id': '42',
+      });
+      expect(spy.calls, ['createCase:My Project:New case:42']);
+    });
+
+    test('routes testrail_create_case_detailed with optional fields', () async {
+      await executor.execute('testrail_create_case_detailed', {
+        'project_name': 'My Project',
+        'title': 'Detailed',
+        'priority_id': '3',
+      });
+      expect(spy.calls, ['createCaseDetailed:My Project:Detailed:3']);
+    });
+
+    test('routes testrail_create_case_steps with steps_json', () async {
+      await executor.execute('testrail_create_case_steps', {
+        'project_name': 'My Project',
+        'title': 'Steps',
+        'steps_json': '[{"content":"a"}]',
+      });
+      expect(spy.calls.last, 'createCaseSteps:My Project:Steps');
+    });
+
+    test('throws ArgumentError when steps_json is missing', () {
+      expect(
+        () => executor.execute('testrail_create_case_steps', {
+          'project_name': 'My Project',
+          'title': 'Steps',
+        }),
+        throwsArgumentError,
+      );
+    });
   });
 }
 
@@ -437,9 +568,86 @@ class _SpyTestRailClient extends TestRailClient {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getSections(int suiteId) {
-    calls.add('getSections:$suiteId');
-    return super.getSections(suiteId);
+  Future<List<Map<String, dynamic>>> getSectionsByProjectName(
+    String projectName, {
+    String? suiteId,
+  }) {
+    calls.add('getSectionsByProjectName:$projectName:$suiteId');
+    return super.getSectionsByProjectName(projectName, suiteId: suiteId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createCase(
+    String projectName,
+    String title, {
+    String? description,
+    String? priorityId,
+    String? refs,
+    String? sectionId,
+  }) {
+    calls.add('createCase:$projectName:$title:$sectionId');
+    return super.createCase(
+      projectName,
+      title,
+      description: description,
+      priorityId: priorityId,
+      refs: refs,
+      sectionId: sectionId,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> createCaseDetailed(
+    String projectName,
+    String title, {
+    String? preconditions,
+    String? steps,
+    String? expected,
+    String? priorityId,
+    String? typeId,
+    String? refs,
+    String? labelIds,
+    String? sectionId,
+  }) {
+    calls.add('createCaseDetailed:$projectName:$title:$priorityId');
+    return super.createCaseDetailed(
+      projectName,
+      title,
+      preconditions: preconditions,
+      steps: steps,
+      expected: expected,
+      priorityId: priorityId,
+      typeId: typeId,
+      refs: refs,
+      labelIds: labelIds,
+      sectionId: sectionId,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>> createCaseSteps(
+    String projectName,
+    String title, {
+    String? preconditions,
+    required String stepsJson,
+    String? priorityId,
+    String? typeId,
+    String? refs,
+    String? labelIds,
+    String? sectionId,
+  }) {
+    calls.add('createCaseSteps:$projectName:$title');
+    return super.createCaseSteps(
+      projectName,
+      title,
+      preconditions: preconditions,
+      stepsJson: stepsJson,
+      priorityId: priorityId,
+      typeId: typeId,
+      refs: refs,
+      labelIds: labelIds,
+      sectionId: sectionId,
+    );
   }
 
   @override

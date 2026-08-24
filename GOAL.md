@@ -298,6 +298,84 @@ Reference: `dmtools-core/.../cliagent/CliAgent.java`, `cliagent/CliAgentParams.j
 with identical observable behavior (files created, commands executed, JS actions
 fired in order).
 
+### Phase 6 — Java parity completion (2026-08-24 audit; owner mandate)
+
+**Owner mandate (2026-08-24):** the port must behave EXACTLY like the Java
+original — zero deviations, zero simplifications, zero "equivalents". The Java
+source (`/tmp/dm.ai` clone of github.com/epam/dm.ai, always re-clone fresh) is
+the ONLY spec. Where Dart and Java differ, Java wins — always. This phase
+closes every gap found by the 2026-08-24 eight-sector audit (config, JS
+bridge, sync executors ×4, runners/CLI/doctor, registry metadata, integrations
+layer).
+
+**Tracking rules (cross-session):**
+
+- Every item has a stable ID `P6-<SECTOR>-<NN>`. Never renumber; close or
+  split with new IDs.
+- `- [ ]` open · `- [~]` in progress · `- [x]` done and verified.
+- An item is `[x]` ONLY after: Java reference re-read, fix landed, targeted
+  tests added/updated, and the full gate sequence green
+  (`dart format --set-exit-if-changed .` → `dart analyze` → `dart test` →
+  coverage ≥ 80% → `crap4dart check --all` → `crap4dart analyze` → agents
+  suite 763/763 via `dart run bin/run_agents_suite.dart <dmtools-agents>`).
+- Log every working session in the Phase 6 session log below.
+
+**Fitness function** (progress = closed Phase 6 items):
+
+```bash
+scripts/parity_progress.sh   # prints {"score": N, "max": M, "open": M-N}
+```
+
+Baseline 2026-08-24: score 2 / 221.
+
+#### Phase 6 wave tracker (items live in `phases/`)
+
+Each wave is a separate file in `phases/` with its item ledger, status
+header, and blocked-by/blocks metadata. This table is the global state of
+record — update a wave's `status:` header AND this table together.
+
+| Wave | File | Items | Status | Blocked by | Blocks |
+|------|------|-------|--------|------------|--------|
+| W0 | `phases/phase6-w0-owner-regressions.md` | 2 | **done** | — | — |
+| W1 | `phases/phase6-w1-jira-sync.md` | 18 | open | W6 | — |
+| W2 | `phases/phase6-w2-config.md` | 13 | open | — | W3 |
+| W3 | `phases/phase6-w3-runners-cli.md` | 28 | open | W2 | — |
+| W4 | `phases/phase6-w4-vcs-sync.md` | 23 | open | W6 | — |
+| W5 | `phases/phase6-w5-ci-docs-sync.md` | 35 | open | W6 | — |
+| W6 | `phases/phase6-w6-js-bridge.md` | 13 | open | — | W1, W4, W5 |
+| W7 | `phases/phase6-w7-integrations.md` | 29 | open | — | W9 |
+| W8 | `phases/phase6-w8-rewrites.md` | 9 | open | — | W9 |
+| W9 | `phases/phase6-w9-registry.md` | 51 | open | W7, W8 | — |
+
+Dependency notes:
+
+- **W6 gates the sync-executor error surfaces** (W1/W4/W5): land
+  `P6-BRG-02` (Java's thrown-Error contract via the `__jsError` sentinel)
+  before the error-path items of those waves; their non-error items may
+  proceed in parallel.
+- **W2 gates W3** (doctor/CLI text settles after the config chain is final).
+- **W9 runs last**: the registry must reflect the final toolsets produced by
+  W7/W8; `P6-REG-51` regenerates the gaps fixture from a fresh Java clone.
+- Parallel-safe starting set: **W2, W6, W7, W8**.
+
+Wave lifecycle: `open` → `in-progress` (first item claimed; set BOTH the
+file's `status:` header and this table) → `done` (all items `[x]` and the
+full gate sequence green; unblock dependents in this table).
+
+#### Phase 6 session log (append-only)
+
+- **2026-08-24 (session 1):** Owner directive: strict Java parity, no
+  deviations. Closed W0 (P6-W00-01, P6-W00-02) after the user-reported
+  Jira Server search and CLI positional-args failures. Eight-sector audit
+  produced the 219-item ledger (split into `phases/phase6-w*-*.md`);
+  baseline score 2/221. Gates green:
+  format/analyze/tests/coverage/crap4dart (Max CRAP 8.00)/agents suite
+  763/763.
+
+**Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
+the catalog parity test reports zero gaps against a fresh Java clone, and
+all standing gates stay green.
+
 ### Later phases (out of initial scope, listed for direction)
 
 Teammate, JSRunner, TestCasesGenerator and the remaining JobRunner jobs; MCP server

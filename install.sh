@@ -150,10 +150,13 @@ if fetch "$download_base/dmtools-checksums.sha256" "$checksums" 2>/dev/null &&
 fi
 
 # ── 5. Install binary + QuickJS library ─────────────────────────────────────
-# The AOT binary resolves libquickjs_bridge.so at
-# <exe-dir>/native/quickjs/libquickjs_bridge.so (or JSR_QUICKJS_LIB), so the
-# archive layout — dmtools + native/quickjs/… — is copied verbatim into the
-# bin directory.
+# The AOT binary cannot reliably resolve libquickjs_bridge.so relative to
+# itself (the runtime's "exe-relative" fallback uses Platform.script, which
+# does not resolve to the installed executable in AOT builds), so the
+# installer places the library under native/quickjs/ and a small `dmtools`
+# launcher beside it that exports JSR_QUICKJS_LIB — the runtime's first
+# lookup candidate. The launcher self-locates, so the install dir can be
+# moved without breaking.
 install_root="${DMTOOLS_INSTALL_DIR:-$HOME/.dmtools}"
 install_bin="$install_root/bin"
 mkdir -p "$install_bin"
@@ -169,11 +172,39 @@ if [ ! -f "$src/$BINARY" ] || [ ! -f "$src/native/quickjs/libquickjs_bridge.so" 
 fi
 
 rm -rf "$install_bin/native"
-cp "$src/$BINARY" "$install_bin/$BINARY"
-chmod +x "$install_bin/$BINARY"
+cp "$src/$BINARY" "$install_bin/$BINARY.bin"
+chmod +x "$install_bin/$BINARY.bin"
 mkdir -p "$install_bin/native/quickjs"
 cp "$src/native/quickjs/libquickjs_bridge.so" \
   "$install_bin/native/quickjs/libquickjs_bridge.so"
+
+# Launcher: sets JSR_QUICKJS_LIB to the absolute library path, then execs
+# the real binary. CWD-independent — works from any directory.
+cat > "$install_bin/$BINARY" <<LAUNCHER
+#!/bin/sh
+# dmtools launcher — points the QuickJS runtime at the library installed
+# beside this script (JSR_QUICKJS_LIB is the runtime's first lookup
+# candidate; the exe-relative fallback cannot be relied on in AOT builds).
+DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
+export JSR_QUICKJS_LIB="\$DIR/native/quickjs/libquickjs_bridge.so"
+exec "\$DIR/dmtools.bin" "\$@"
+LAUNCHER
+chmod +x "$install_bin/$BINARY"
+
+# macOS quarantine / signature hardening (as in the flutter_agent_harness
+# installer): downloaded executables are tagged by Gatekeeper and killed on
+# launch unless the quarantine attribute is removed; an ad-hoc re-sign
+# makes the binary runnable from any directory on Apple Silicon.
+if [ "$(uname -s)" = "Darwin" ]; then
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -dr com.apple.quarantine "$install_bin/$BINARY" 2>/dev/null || true
+    xattr -dr com.apple.quarantine "$install_bin/$BINARY.bin" 2>/dev/null || true
+    xattr -dr com.apple.quarantine "$install_bin/native" 2>/dev/null || true
+  fi
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --sign - "$install_bin/$BINARY.bin" 2>/dev/null || true
+  fi
+fi
 
 # Record the installed version for idempotency/debugging.
 printf '%s\n' "$display_version" > "$install_root/version.txt"

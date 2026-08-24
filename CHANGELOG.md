@@ -39,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every tool call — repeated tool calls no longer re-read `dmtools.env`
   from disk per call.
 
+- `make install` — build and install the CLI from a source checkout into
+  `~/.local/bin` (override with `PREFIX=…`): a `dmtools` launcher plus the
+  AOT binary (`dmtools.bin`) and the QuickJS shared library in
+  `native/quickjs/` beside them. The launcher exports `JSR_QUICKJS_LIB`
+  with the absolute library path — the runtime's exe-relative fallback uses
+  `Platform.script`, which does not resolve to the installed executable in
+  AOT builds, so without it `dmtools run` fails with a dlopen error from
+  any directory outside the checkout. `install.sh` gained the same launcher
+  layout plus macOS quarantine stripping and an ad-hoc re-sign
+  (flutter_agent_harness installer pattern). macOS/Linux; Windows remains
+  on the prebuilt installer.
 - Community files ported from the Java [dm.ai](https://github.com/epam/dm.ai)
   repository: `LICENSE` (Apache-2.0), `SECURITY.md` (vulnerability disclosure
   policy, repo links adapted), `CODE_OF_CONDUCT.md` (Contributor Covenant

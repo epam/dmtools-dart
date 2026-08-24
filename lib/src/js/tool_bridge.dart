@@ -95,17 +95,50 @@ class ToolBridge {
   /// `ExecuteToolProxy` parity: at least the tool name is required (a bare
   /// tool name executes with empty args); fewer surfaces the `__jsError`
   /// sentinel.
+  ///
+  /// Tool-execution failures also surface as the `__jsError` sentinel (rethrown
+  /// as a JS `Error` by the bootstrap) — Java `JobJavaScriptBridge` parity: a
+  /// failed call throws into the script, which agent scripts catch and react
+  /// to; it never resolves to a value a script could mistake for tool data.
   String _dispatchToolCall(String argsJson) {
     final parsed = _decodeArgs(argsJson);
     if (parsed is String) {
-      return _execute(parsed, const {});
+      return _toolCallResult(() => _execute(parsed, const {}));
     }
     if (parsed is List && parsed.length >= 2 && parsed[0] is String) {
-      return _execute(parsed[0] as String, _castArgs(parsed[1]));
+      return _toolCallResult(
+        () => _execute(parsed[0] as String, _castArgs(parsed[1])),
+      );
     }
     return _jsError(
       'executeToolViaJava requires at least 1 argument: toolName',
     );
+  }
+
+  /// Runs one tool call for the `executeToolViaJava` host function and
+  /// converts failures into the `__jsError` sentinel.
+  ///
+  /// Failures arrive two ways: a Dart exception thrown by an executor, or a
+  /// single-key `{"error": …}` envelope (the [SyncToolDispatcher] failure
+  /// convention — unconfigured integration, unknown tool, transport error).
+  /// Both become `Tool execution failed: <message>`, the wording the Java
+  /// bridge uses. Successful results pass through untouched; a multi-key
+  /// object that happens to carry an `error` field is a remote API body and
+  /// passes through too.
+  String _toolCallResult(String Function() run) {
+    final String result;
+    try {
+      result = run();
+    } catch (e) {
+      return _jsError('Tool execution failed: $e');
+    }
+    final decoded = _decodeArgs(result);
+    final isErrorEnvelope =
+        decoded is Map && decoded.length == 1 && decoded['error'] != null;
+    if (isErrorEnvelope) {
+      return _jsError('Tool execution failed: ${decoded['error']}');
+    }
+    return result;
   }
 
   /// Handles direct `file_read({path})` calls from JS test scripts.
@@ -114,10 +147,16 @@ class ToolBridge {
   /// unmarshals it back to a JS string), or JS `null` when the file cannot
   /// be read — the Java bridge contract testRunner.js and configLoader.js
   /// depend on (`content && content.trim()`).
+  ///
+  /// Logs the call args first, like every other tool: in Java `file_read`
+  /// is a generated wrapper that logs its call, but here the direct host
+  /// replaces that wrapper.
   String _fileReadHost(String argsJson) {
     final parsed = _decodeArgs(argsJson);
     String? path;
     if (parsed is Map) path = parsed['path'] as String?;
+    stdout.writeln('Calling tool file_read with args: '
+        '${jsonEncode(parsed is Map ? parsed : const {})}');
     if (path == null) return 'null';
     try {
       return jsonEncode(File(_resolve(path)).readAsStringSync());

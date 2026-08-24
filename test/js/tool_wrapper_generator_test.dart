@@ -13,6 +13,7 @@ void main() {
   _testMultipleTools();
   _testSingleParamTool();
   _testAliasWrappers();
+  _testToolCallLogging();
 }
 
 ToolRegistry _registryWith(ToolDefinition tool) =>
@@ -43,7 +44,7 @@ void _testMultiParamTools() {
 
 void _testNoParamTools() {
   group('no-param tools', () {
-    test('generates empty-arg wrapper calling with empty object', () {
+    test('generates empty-arg wrapper calling with empty args object', () {
       final registry = _registryWith(ToolDefinition(
         name: 'system_info',
         description: 'Get system info',
@@ -52,12 +53,52 @@ void _testNoParamTools() {
       final code = const ToolWrapperGenerator().generate(registry);
 
       expect(code, contains('globalThis.system_info = function()'));
-      expect(code, contains("executeToolViaJava('system_info', {})"));
+      expect(code, contains("executeToolViaJava('system_info', args)"));
     });
 
     test('starts with auto-generated header comment', () {
       final code = const ToolWrapperGenerator().generate(ToolRegistry());
       expect(code, startsWith('// Auto-generated MCP tool wrappers'));
+    });
+  });
+}
+
+void _testToolCallLogging() {
+  group('tool call logging (Java bridge parity)', () {
+    test('wrapper logs call args before dispatch', () {
+      final registry = _registryWith(ToolDefinition(
+        name: 'jira_post_comment',
+        description: 'Post a comment',
+        integration: 'jira',
+        params: [ToolParam(name: 'key', description: 'Ticket key')],
+      ));
+      final code = const ToolWrapperGenerator().generate(registry);
+
+      expect(
+        code,
+        contains("console.log('Calling tool jira_post_comment with args:', "
+            'JSON.stringify(args));'),
+      );
+      // The log statement sits after args assembly, before dispatch.
+      expect(
+        code.indexOf('JSON.stringify(args)'),
+        lessThan(code.indexOf("executeToolViaJava('jira_post_comment'")),
+      );
+    });
+
+    test('no-param wrappers log their empty args too', () {
+      final registry = _registryWith(ToolDefinition(
+        name: 'system_info',
+        description: 'Get system info',
+        integration: 'jira',
+      ));
+      final code = const ToolWrapperGenerator().generate(registry);
+
+      expect(
+        code,
+        contains("console.log('Calling tool system_info with args:', "
+            'JSON.stringify(args));'),
+      );
     });
   });
 }
@@ -162,7 +203,7 @@ void _testAliasWrappers() {
       final code = const ToolWrapperGenerator().generate(registry);
 
       expect(code, contains('globalThis.sys_info = function()'));
-      expect(code, contains("executeToolViaJava('system_info', {})"));
+      expect(code, contains("executeToolViaJava('system_info', args)"));
     });
   });
 }

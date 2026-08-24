@@ -89,16 +89,197 @@ class JiraSyncTools {
         );
       });
 
-  /// `jira_search_by_jql` — GET `search/jql?jql={jql}&fields={fields}`.
+  /// `jira_search_by_jql` — GET `search/jql` (Cloud) or `search` (Server).
   ///
-  /// Single page (no cursor pagination); the first page covers the common
-  /// agent-script case of scanning a bounded result set.
+  /// Mirrors Java `searchAndPerform`: Cloud instances page through
+  /// `nextPageToken`; Jira Server (which lacks the Cloud-only `search/jql`
+  /// route) pages through `startAt`/`maxResults`/`total` like Java's
+  /// `legacyServerJiraSearch`. Returns the bare issues array as JSON —
+  /// the Java tool returns `List<Ticket>`, so the JS side receives an
+  /// array, not the `{issues: …}` envelope.
   String _searchByJql(Map<String, dynamic> args) => _run((config) {
-        final url = '${config.baseUrl}/search/jql'
-            '?jql=${Uri.encodeQueryComponent(_asStr(args['jql']))}'
-            '&fields=${Uri.encodeQueryComponent(_joinFields(args['fields']))}';
-        return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+        final jql = Uri.encodeQueryComponent(_asStr(args['jql']));
+        final fields = Uri.encodeQueryComponent(_joinFields(args['fields']));
+        return _isCloudJira(config)
+            ? _cloudSearchPages(config, jql, fields)
+            : _serverSearchPages(config, jql, fields);
       });
+
+  /// Cloud pagination: walk `search/jql` pages by `nextPageToken`.
+  ///
+  /// Mirrors the Java `searchAndPerform` cloud branch: a failed, null, or
+  /// error-carrying first page surfaces as an error before the walk; the
+  /// walk itself then follows Java's break order per page.
+  String _cloudSearchPages(_JiraSyncConfig config, String jql, String fields) {
+    final page =
+        _fetchSearchPage(config, _searchJqlUrl(config, jql, fields, ''));
+    if (page is String) return page;
+    final firstError = _firstPageError(page);
+    if (firstError != null) return firstError;
+    return _cloudWalk(config, jql, fields, page as Map<String, dynamic>);
+  }
+
+  /// Walks cloud pages from [firstPage] in Java's loop order: stop on an
+  /// empty/absent issues list, then on `isLast`, then on a missing next
+  /// token; a failed follow-up fetch surfaces as a pagination error and a
+  /// null follow-up page ends the walk.
+  String _cloudWalk(
+    _JiraSyncConfig config,
+    String jql,
+    String fields,
+    Map<String, dynamic> firstPage,
+  ) {
+    final issues = <dynamic>[];
+    dynamic page = firstPage;
+    while (true) {
+      final pageIssues = page['issues'] as List?;
+      if (pageIssues == null || pageIssues.isEmpty) break;
+      issues.addAll(pageIssues);
+      // ponytail: Java reads `isLast` off the SearchResult model
+      // (optBoolean, absent = false); the raw JSON field carries the same
+      // value, so absent/false simply keeps paging like Java.
+      if (page['isLast'] == true) break;
+      final token = _asStr(page['nextPageToken']);
+      if (token.isEmpty) break;
+      page = _fetchSearchPage(
+        config,
+        _searchJqlUrl(config, jql, fields, token),
+      );
+      if (page is String) {
+        return _err('Pagination failed: ${_errorOf(page)}');
+      }
+      if (page == null) break;
+    }
+    return jsonEncode(issues);
+  }
+
+  /// Server pagination: walk legacy `search` pages by `startAt`.
+  ///
+  /// Mirrors Java `legacyServerJiraSearch`: a failed or error-carrying
+  /// first page surfaces as an error, `total == 0` returns early, and the
+  /// walk follows Java's loop conditions with per-page counter refresh.
+  String _serverSearchPages(_JiraSyncConfig config, String jql, String fields) {
+    final page =
+        _fetchSearchPage(config, _legacySearchUrl(config, jql, fields, 0));
+    if (page is String) return page;
+    final firstError = _firstPageError(page);
+    if (firstError != null) return firstError;
+    final maxResults = page['maxResults'] as int? ?? 0;
+    final total = page['total'] as int? ?? 0;
+    if (total == 0) return jsonEncode(const <dynamic>[]);
+    return _serverWalk(
+      config,
+      jql,
+      fields,
+      page as Map<String, dynamic>,
+      maxResults,
+      total,
+    );
+  }
+
+  /// Walks server pages from [firstPage] in Java's loop order: advance
+  /// `startAt` by the current page size, collect the current page, break
+  /// when `total < maxResults || startAt > total`, otherwise fetch the
+  /// next page and refresh the paging counters from it.
+  String _serverWalk(
+    _JiraSyncConfig config,
+    String jql,
+    String fields,
+    Map<String, dynamic> firstPage,
+    int maxResults,
+    int total,
+  ) {
+    final issues = <dynamic>[];
+    dynamic page = firstPage;
+    var pageSize = maxResults;
+    var remaining = total;
+    var startAt = 0;
+    while (startAt == 0 || startAt < remaining) {
+      startAt += pageSize;
+      issues.addAll(page['issues'] as List? ?? const []);
+      if (remaining < pageSize || startAt > remaining) break;
+      page = _fetchSearchPage(
+        config,
+        _legacySearchUrl(config, jql, fields, startAt),
+      );
+      if (page is String) return page;
+      if (page == null) break;
+      pageSize = page['maxResults'] as int? ?? 0;
+      remaining = page['total'] as int? ?? 0;
+    }
+    return jsonEncode(issues);
+  }
+
+  /// Validates a first search page like Java's pre-loop checks: a null
+  /// page (Java's defensive null `SearchResult`) or a non-empty
+  /// `errorMessages` list yields an error result, otherwise `null`.
+  String? _firstPageError(dynamic page) {
+    if (page == null) return _err('Search returned null results');
+    final messages = page['errorMessages'] as List?;
+    if (messages != null && messages.isNotEmpty) {
+      return _err('Search failed: ${jsonEncode(messages)}');
+    }
+    return null;
+  }
+
+  /// GETs and decodes one search page.
+  ///
+  /// Returns the page map on success, `null` when the body is JSON `null`
+  /// (Java's null `SearchResult`), or the error result string produced by
+  /// [_bodyOrError] (curl error, non-2xx status, or a non-JSON body) so
+  /// callers can map it to the Java exception paths.
+  dynamic _fetchSearchPage(_JiraSyncConfig config, String url) {
+    final result =
+        _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+    final decoded = _tryDecode(result);
+    if (decoded == null) return null;
+    return decoded is Map<String, dynamic> && !decoded.containsKey('error')
+        ? decoded
+        : result;
+  }
+
+  /// Builds a `search/jql` URL, omitting an empty [token] like Java.
+  String _searchJqlUrl(
+    _JiraSyncConfig config,
+    String jql,
+    String fields,
+    String token,
+  ) =>
+      '${config.baseUrl}/search/jql?jql=$jql&fields=$fields'
+      '${token.isEmpty ? '' : '&nextPageToken=${Uri.encodeQueryComponent(token)}'}';
+
+  /// Builds a legacy `search` URL at [startAt].
+  String _legacySearchUrl(
+    _JiraSyncConfig config,
+    String jql,
+    String fields,
+    int startAt,
+  ) =>
+      '${config.baseUrl}/search?jql=$jql&fields=$fields&startAt=$startAt';
+
+  /// Deployment-detection cache, keyed by Jira base path.
+  ///
+  /// Java memoizes via CacheManager for the process lifetime; the key here
+  /// is the base path because tests point the client at different servers.
+  static final Map<String, bool> _cloudByBasePath = {};
+
+  /// Whether the configured Jira is a Cloud instance.
+  ///
+  /// Mirrors Java `isCloudJira`: `serverInfo.deploymentType == "Cloud"`
+  /// decides; a missing field or a failed probe falls back to the
+  /// `atlassian.net` URL pattern.
+  bool _isCloudJira(_JiraSyncConfig config) =>
+      _cloudByBasePath[config.basePath] ??= _detectCloudJira(config);
+
+  /// Probes `serverInfo` once; falls back to the URL pattern on any doubt.
+  bool _detectCloudJira(_JiraSyncConfig config) {
+    final info = _getJson(config, '${config.baseUrl}/serverInfo');
+    final deploymentType = info?['deploymentType'];
+    if (deploymentType != null) {
+      return deploymentType.toString().toLowerCase() == 'cloud';
+    }
+    return config.basePath.contains('atlassian.net');
+  }
 
   /// `jira_add_label` — fetches labels, appends, PUTs the full set.
   ///
@@ -461,6 +642,7 @@ class JiraSyncTools {
     if (token == null || token.isEmpty) return null;
     final authType = reader.getJiraAuthType() ?? 'Basic';
     return (
+      basePath: basePath,
       baseUrl: '$basePath/rest/api/latest',
       headers: {
         'Authorization': '$authType $token',
@@ -509,7 +691,11 @@ class JiraSyncTools {
 }
 
 /// Connection config for the sync Jira executors.
-typedef _JiraSyncConfig = ({String baseUrl, Map<String, String> headers});
+typedef _JiraSyncConfig = ({
+  String basePath,
+  String baseUrl,
+  Map<String, String> headers
+});
 
 /// Media type for JSON request/response bodies.
 const _jsonContentType = 'application/json';
@@ -522,6 +708,10 @@ dynamic _tryDecode(String body) {
     return body;
   }
 }
+
+/// Unwraps the message inside a `{"error": …}` envelope.
+String _errorOf(String errorEnvelope) =>
+    _asStr((_tryDecode(errorEnvelope) as Map?)?['error']);
 
 /// GETs a JSON object, returning `null` on failure or non-object body.
 Map<String, dynamic>? _getJson(_JiraSyncConfig config, String url) {
@@ -548,10 +738,27 @@ String _putBody(_JiraSyncConfig config, String url, String body) =>
       SyncHttpClient.put(url, headers: config.headers, body: body),
     );
 
-/// Returns the response body, or an error JSON when curl failed.
+/// Returns the response body, or an error JSON when the request failed.
+///
+/// The JS host boundary must always return valid JSON (the QuickJS bridge
+/// JSON-parses every host-callback result): a curl failure, a non-2xx
+/// status, or a 2xx body that does not parse as JSON becomes
+/// `{"error": …}` with the status code and a short body snippet.
 String _bodyOrError(SyncHttpResponse resp) {
   if (resp.statusCode == 0) return _err('HTTP request failed: ${resp.body}');
+  if (!resp.isOk) return _err(_failureDetail('HTTP ${resp.statusCode}', resp));
+  if (_tryDecode(resp.body) == resp.body) {
+    return _err(
+        _failureDetail('HTTP ${resp.statusCode} returned non-JSON', resp));
+  }
   return resp.body;
+}
+
+/// Formats a failure message with a short body snippet.
+String _failureDetail(String reason, SyncHttpResponse resp) {
+  final snippet =
+      resp.body.length > 120 ? resp.body.substring(0, 120) : resp.body;
+  return '$reason: $snippet';
 }
 
 /// Joins a `fields` argument (list or comma string) into a query value.

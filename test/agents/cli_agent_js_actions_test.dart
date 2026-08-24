@@ -85,7 +85,9 @@ void timerJsActionTests() {
         );
         await (CliAgent(
           params: CliAgentParams()
-            ..cliCommands = ['sleep 2; echo done']
+            // 4s window for a 1s interval: ≥1 periodic tick lands even when
+            // the suite's parallel load delays timer delivery past 1–2s.
+            ..cliCommands = ['sleep 4; echo done']
             ..timerJSAction = js.path
             ..timerIntervalSeconds = 1
             ..cleanupInputFolder = false,

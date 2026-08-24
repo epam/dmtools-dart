@@ -31,6 +31,16 @@ const _expectedToolOrder = [
   'gitlab_get_mr_approvals',
   'gitlab_get_mr_discussions',
   'gitlab_trigger_mr_discussion_resolve',
+  'gitlab_add_mr_comment',
+  'gitlab_get_mr_comments',
+  'gitlab_get_mr_diff_text',
+  'gitlab_reply_to_mr_thread',
+  'gitlab_resolve_mr_thread',
+  'gitlab_add_inline_mr_comment',
+  'gitlab_create_mr',
+  'gitlab_rebase_mr',
+  'gitlab_add_mr_label',
+  'gitlab_remove_mr_label',
   'gitlab_get_issue',
   'gitlab_create_issue',
   'gitlab_list_issues',
@@ -49,6 +59,12 @@ const _expectedToolOrder = [
   'gitlab_get_mr_pipelines',
   'gitlab_get_project_hooks',
   'gitlab_add_project_hook',
+  'gitlab_get_commit_statuses',
+  'gitlab_get_job_logs',
+  'gitlab_list_pipeline_runs',
+  'gitlab_get_or_create_release',
+  'gitlab_upload_release_asset',
+  'gitlab_download_release_asset',
 ];
 
 /// Catalog shape: tool count, order, integration, params.
@@ -56,7 +72,7 @@ void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the thirty-one tools in declaration order', () {
+    test('registers the forty-seven tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 

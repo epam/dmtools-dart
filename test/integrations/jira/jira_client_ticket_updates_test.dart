@@ -115,6 +115,14 @@ void createTicketWithParentTests() {
       expect(fields['issuetype'], {'name': 'Sub-task'});
     });
 
+    test('includes the description when provided', () async {
+      final f = mockJira((o) => routeByPath({'/issue': _createdBody}, o));
+      await f.client
+          .createTicketWithParent('PROJ', 'Sub-task', 'Title', 'PROJ-1', 'D');
+      final decoded = jsonDecode(f.adapter.calls.single.data as String);
+      expect(decoded['fields']['description'], 'D');
+    });
+
     test('returns an empty map when the body is not an object', () async {
       final f = mockJira((o) => '[]');
       expect(
@@ -212,10 +220,17 @@ class _SpyJiraClient extends JiraClient {
     String project,
     String issueType,
     String summary,
-    String parentKey,
-  ) {
+    String parentKey, [
+    String? description,
+  ]) {
     calls.add('createTicketWithParent:$project:$issueType:$summary:$parentKey');
-    return super.createTicketWithParent(project, issueType, summary, parentKey);
+    return super.createTicketWithParent(
+      project,
+      issueType,
+      summary,
+      parentKey,
+      description,
+    );
   }
 }
 

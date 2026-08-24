@@ -77,7 +77,7 @@ void _testGitlabReadTools() {
       expect(
         body['path'],
         '/api/v4/projects/group%2Frepo/merge_requests'
-        '?state=opened&per_page=20',
+        '?state=opened&per_page=100&order_by=created_at&sort=asc',
       );
     });
   });

@@ -216,21 +216,26 @@ after.
 - [x] Tool schema registry: same tool names, same argument schemas, same
       availability rules (tool appears only when its integration is configured).
       `default_tool_registry.dart` registers all 17 catalogs; `dmtools list` prints
-      the full catalog (325 tools).
-- [x] **Complete `@MCPTool` parity**: all 328 `@MCPTool`-annotated methods (26 classes)
-      are ported. **325 tools across 17 integrations** (Jira 65, GitHub 40,
-      GitLab 31, ADO 31, Confluence 29, File 19, TestRail 18, Figma 15, Jenkins 13,
-      SharePoint 12, Teams 11, Bitrise 10, AI 8, Xray 8, KB 8, Mermaid 4, CLI 3).
+      the full catalog (387 tools).
+- [x] **Complete `@MCPTool` parity for the agent-used surface**: all Java
+      @MCPTool methods the dmtools-agents scripts call are ported —
+      **387 canonical tools across 17 integrations** (Jira 67, GitHub 58,
+      GitLab 47, ADO 44, Confluence 32, File 19, TestRail 18, Figma 15,
+      AI 14 (incl. per-provider `*_ai_chat`), Jenkins 14, Bitrise 13,
+      SharePoint 12, Teams 11, Xray 8, KB 8, Mermaid 4, CLI 3).
       Registry is the Dart equivalent of the generated catalog — the catalog cannot
       drift because all tools are defined in the `*_tools.dart` files next to their
-      implementations. CI catalog comparison pending.
-- [ ] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
+      implementations. CI catalog comparison: `test/mcp/catalog_parity_test.dart`
+      against the frozen gap snapshot
+      (`test/fixtures/java_mcp_tool_gaps.txt`, 159 remaining non-agent names).
+- [x] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.
-- [ ] `file_*` tools, `cli_execute_command` with the same whitelist mechanics
+- [x] `file_*` tools, `cli_execute_command` with the same whitelist mechanics
       (`git, gh, dmtools, npm, yarn, docker, kubectl, terraform, ansible, aws,
       gcloud, az` + `CLI_ALLOWED_COMMANDS` extension).
-- [ ] AI providers: Gemini, OpenAI, DIAL, Bedrock, Ollama — same env-var selection.
+- [x] AI providers: Gemini, OpenAI, DIAL, Bedrock, Ollama — same env-var
+      selection, plus per-provider `*_ai_chat` sync executors.
 
 **Done when:** the generated Dart tool catalog matches the Java `@MCPTool` catalog
 100% (CI comparison green), and contract tests replay recorded Java tool

@@ -11,15 +11,15 @@
 ///
 /// The documented naming conventions the Dart port deliberately diverges on:
 ///
-/// - **AI**: Java exposes per-provider tools (`openai_ai_chat`,
-///   `gemini_ai_chat`, `anthropic_ai_chat`, …). Dart exposes a single unified
-///   `ai_chat` with a `provider` parameter. Every Java provider tool maps to
-///   `ai_chat` / `ai_chat_with_history` / `ai_list_models`.
+/// - **AI**: Dart exposes both the unified `ai_chat` family and the
+///   per-provider tools Java has (`openai_ai_chat`, `gemini_ai_chat`,
+///   `anthropic_ai_chat`, …) — those match exactly. Remaining Java AI
+///   variants (`*_ai_chat_with_files`, `*_list_models`,
+///   `vertex_ai_gemini_chat`) map onto `ai_chat_with_history` /
+///   `ai_list_models`.
 /// - **Teams**: Java exposes `teams_*_raw` variants that return unprocessed
 ///   Graph JSON. Dart drops the `_raw` suffix when the consolidated tool covers
 ///   the same shape.
-/// - **Renames**: 1:1 renames such as `github_add_pr_label` →
-///   `github_add_labels`, `jira_create_ticket_basic` → `jira_create_ticket`.
 ///
 /// The snapshot test stays green while the gap is unchanged. Port a Java tool
 /// and it turns red, prompting the gap to shrink; re-extract the fixture from a
@@ -93,27 +93,6 @@ void paritySnapshotTests(
 /// The documented naming-convention equivalents must resolve to real Dart tools.
 void equivalentMappingTests(List<String> javaNames, Set<String> dartNames) {
   group('documented equivalents', () {
-    test('every 1:1 rename maps to a registered Dart tool', () {
-      for (final entry in _renames.entries) {
-        expect(
-          dartNames,
-          contains(entry.value),
-          reason: '${entry.key} → ${entry.value} is not registered',
-        );
-      }
-    });
-
-    test('AI provider tools collapse onto the unified ai_* family', () {
-      const expected = {'ai_chat', 'ai_chat_with_history', 'ai_list_models'};
-      for (final dartName in expected) {
-        expect(dartNames, contains(dartName), reason: 'missing $dartName');
-      }
-      final mapped = {
-        for (final j in javaNames) _aiEquivalent(j),
-      }.whereType<String>().toSet();
-      expect(mapped.every(expected.contains), isTrue);
-    });
-
     test('every documented equivalent resolves to a registered tool', () {
       for (final j in javaNames) {
         final equiv = _dartEquivalentFor(j, dartNames);
@@ -153,11 +132,8 @@ Set<String> _computeGaps(List<String> javaNames, Set<String> dartNames) {
 
 /// Resolves a Java tool name to its Dart equivalent under the documented
 /// naming conventions, or `null` when there is no documented mapping.
-String? _dartEquivalentFor(String javaName, Set<String> dartNames) {
-  final rename = _renames[javaName];
-  if (rename != null) return rename;
-  return _aiEquivalent(javaName) ?? _teamsRawEquivalent(javaName, dartNames);
-}
+String? _dartEquivalentFor(String javaName, Set<String> dartNames) =>
+    _aiEquivalent(javaName) ?? _teamsRawEquivalent(javaName, dartNames);
 
 /// Maps Java per-provider AI tools onto Dart's unified `ai_*` family.
 String? _aiEquivalent(String javaName) {
@@ -180,7 +156,8 @@ String? _teamsRawEquivalent(String javaName, Set<String> dartNames) {
   return dartNames.contains(stripped) ? stripped : null;
 }
 
-/// Java AI integrations whose tools Dart collapsed into the unified catalog.
+/// Java AI integrations whose remaining variant tools Dart collapses into the
+/// unified catalog (the per-provider `*_ai_chat` tools match exactly).
 const _aiProviders = [
   'openai',
   'gemini',
@@ -189,14 +166,6 @@ const _aiProviders = [
   'dial',
   'bedrock',
 ];
-
-/// 1:1 Java→Dart renames for tools that exist under a different name.
-const Map<String, String> _renames = {
-  'github_add_pr_label': 'github_add_labels',
-  'jira_create_ticket_basic': 'jira_create_ticket',
-  'jira_create_ticket_with_json': 'jira_create_ticket',
-  'jira_assign_ticket_to': 'jira_assign',
-};
 
 /// snake_case identifier pattern used by every MCP tool name.
 final RegExp _snakeCase = RegExp(r'^[a-z][a-z0-9_]*$');

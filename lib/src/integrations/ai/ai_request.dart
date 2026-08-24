@@ -110,6 +110,18 @@ String extractMessageContent(String body) {
   return message['content'] as String? ?? '';
 }
 
+/// Extracts `candidates[0].content.parts[0].text` (Gemini).
+///
+/// Returns an empty string when the response has no candidates or parts.
+String extractGeminiText(String body) {
+  final decoded = jsonDecode(body) as Map<String, dynamic>;
+  final candidate = firstBlock(decoded, 'candidates');
+  if (candidate == null) return '';
+  final content = candidate['content'] as Map<String, dynamic>? ?? {};
+  final part = firstBlock(content, 'parts');
+  return part == null ? '' : part['text'] as String? ?? '';
+}
+
 /// Extracts `content[0].text` (Anthropic).
 String extractContentBlockText(String body) {
   final decoded = jsonDecode(body) as Map<String, dynamic>;

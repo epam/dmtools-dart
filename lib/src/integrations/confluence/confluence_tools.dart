@@ -30,6 +30,8 @@ List<ToolDefinition> confluenceTools() => [
       ..._groupTools(),
       ..._userTools(),
       ..._watcherTools(),
+      ..._contentRetrievalTools(),
+      ..._markdownSyncTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -106,18 +108,25 @@ List<ToolDefinition> _pageWriteTools() => [
       ),
       ToolDefinition(
         name: 'confluence_update_page',
-        description: 'Update an existing Confluence page by id',
+        description: 'Update an existing Confluence page with new title, '
+            'parent, body content, and space. Returns the updated content '
+            'object',
         integration: 'confluence',
         category: 'page_management',
         params: [
           ToolParam(
-            name: 'id',
-            description: 'The Confluence page id',
+            name: 'contentId',
+            description: 'The ID of the page to update',
             required: true,
           ),
           ToolParam(
             name: 'title',
-            description: 'The page title',
+            description: 'The new title for the page',
+            required: true,
+          ),
+          ToolParam(
+            name: 'parentId',
+            description: 'The ID of the new parent page',
             required: true,
           ),
           ToolParam(
@@ -126,9 +135,8 @@ List<ToolDefinition> _pageWriteTools() => [
             required: true,
           ),
           ToolParam(
-            name: 'version',
-            description: 'The new version number (current + 1)',
-            type: 'number',
+            name: 'space',
+            description: 'The space key where the page is located',
             required: true,
           ),
         ],
@@ -553,6 +561,99 @@ List<ToolDefinition> _watcherTools() => [
       ),
     ];
 
+/// Content-retrieval tools (Java `Confluence.java`): `confluence_content_by_id`
+/// / `confluence_get_children_by_id`.
+List<ToolDefinition> _contentRetrievalTools() => [
+      ToolDefinition(
+        name: 'confluence_content_by_id',
+        description: 'Get Confluence content by its unique content ID. Returns '
+            'detailed content information including body, version, and '
+            'metadata. Use format=md to convert body.storage.value to Markdown',
+        integration: 'confluence',
+        category: 'content_retrieval',
+        params: [
+          ToolParam(
+            name: 'contentId',
+            description: 'The unique content ID of the Confluence page',
+            required: true,
+          ),
+          ToolParam(
+            name: 'format',
+            description: "Output format for the page body. Use 'md' or "
+                "'markdown' to convert Confluence storage format to Markdown",
+            required: false,
+          ),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_get_children_by_id',
+        description: 'Get child pages of a Confluence page by content ID. '
+            'Returns a list of child content objects. Use format=md to '
+            'convert body.storage.value to Markdown',
+        integration: 'confluence',
+        category: 'content_retrieval',
+        params: [
+          ToolParam(
+            name: 'contentId',
+            description: 'The content ID of the parent page',
+            required: true,
+          ),
+          ToolParam(
+            name: 'format',
+            description: "Output format for the page body. Use 'md' or "
+                "'markdown' to convert Confluence storage format to Markdown",
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
+/// Markdown-sync tool (Java `Confluence.java`):
+/// `confluence_sync_markdown_directory`.
+List<ToolDefinition> _markdownSyncTools() => [
+      ToolDefinition(
+        name: 'confluence_sync_markdown_directory',
+        description: 'Synchronize a local Markdown directory tree to a '
+            'Confluence page subtree. Markdown files become child pages, '
+            'images and other files become attachments. Links between '
+            'Markdown files are rewritten to Confluence page links. Returns a '
+            'JSON summary',
+        integration: 'confluence',
+        category: 'page_management',
+        params: [
+          ToolParam(
+            name: 'directory',
+            description: 'The local directory containing Markdown files and '
+                'attachments',
+            required: true,
+          ),
+          ToolParam(
+            name: 'parentId',
+            description: 'The content ID of the parent Confluence page',
+            required: true,
+          ),
+          ToolParam(
+            name: 'space',
+            description: 'The space key where the pages should be created',
+            required: true,
+          ),
+          ToolParam(
+            name: 'deleteOrphans',
+            description: 'Whether to delete child pages not present in the '
+                'directory tree',
+            type: 'boolean',
+            required: false,
+          ),
+          ToolParam(
+            name: 'attachmentsDir',
+            description: 'Optional directory containing referenced '
+                "attachments. Defaults to the Markdown file's directory",
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
 /// Executes Confluence MCP tools by dispatching to [ConfluenceClient].
 class ConfluenceToolExecutor {
   final ConfluenceClient _client;
@@ -585,11 +686,16 @@ class ConfluenceToolExecutor {
           a['body'] as String,
         ),
     'confluence_update_page': (a) => _client.updatePage(
-          a['id'] as String,
+          a['contentId'] as String,
           a['title'] as String,
+          a['parentId'] as String,
           a['body'] as String,
-          (a['version'] as num).toInt(),
+          a['space'] as String,
         ),
+    'confluence_content_by_id': (a) =>
+        _client.getPageById(a['contentId'] as String),
+    'confluence_get_children_by_id': (a) =>
+        _client.getContentChildren(a['contentId'] as String),
     'confluence_search': (a) => _client.search(a['cql'] as String),
     'confluence_get_page_by_id': (a) => _client.getPageById(a['id'] as String),
     'confluence_delete_page': (a) => _client.deletePage(a['id'] as String),

@@ -146,7 +146,7 @@ void _testHostFunctions() {
 
 void _testErrorDispatch() {
   group('error dispatch', () {
-    test('executeToolViaJava returns error for HTTP tools', () {
+    test('executeToolViaJava throws for failed HTTP tool calls', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_http');
       PropertyReader.setOverrides({
         'JIRA_BASE_PATH': '',
@@ -156,8 +156,13 @@ void _testErrorDispatch() {
       });
       try {
         final script = _writeScript(dir, 'test.js', '''
-          var r = executeToolViaJava('jira_get_ticket', {key: 'T-1'});
-          function action(params) { return r.error; }
+          var msg = 'no-error';
+          try {
+            executeToolViaJava('jira_get_ticket', {key: 'T-1'});
+          } catch (e) {
+            msg = e.message;
+          }
+          function action(params) { return msg; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -165,7 +170,7 @@ void _testErrorDispatch() {
         );
         expect(
           jsonDecode(result!) as String,
-          contains('Jira not configured'),
+          contains('Tool execution failed: Jira not configured'),
         );
       } finally {
         PropertyReader.clearOverrides();
@@ -173,19 +178,24 @@ void _testErrorDispatch() {
       }
     });
 
-    test('executeToolViaJava returns error for unknown tool', () {
+    test('executeToolViaJava throws for unknown tool', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_unknown');
       try {
         final script = _writeScript(
             dir,
             'test.js',
-            "var r = executeToolViaJava('nonexistent', {}); "
-                'function action(params) { return r.error; }');
+            "var msg = 'no-error'; "
+                "try { executeToolViaJava('nonexistent', {}); } "
+                'catch (e) { msg = e.message; } '
+                'function action(params) { return msg; }');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
         );
-        expect(jsonDecode(result!) as String, contains('Unknown tool'));
+        expect(
+          jsonDecode(result!) as String,
+          contains('Tool execution failed: Unknown tool'),
+        );
       } finally {
         dir.deleteSync(recursive: true);
       }
@@ -195,7 +205,7 @@ void _testErrorDispatch() {
 
 void _testWrapperDispatch() {
   group('tool dispatch', () {
-    test('generated wrapper dispatches to executeToolViaJava', () {
+    test('generated wrapper throws for failed tool calls', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_wrap');
       PropertyReader.setOverrides({
         'JIRA_BASE_PATH': '',
@@ -205,8 +215,13 @@ void _testWrapperDispatch() {
       });
       try {
         final script = _writeScript(dir, 'test.js', '''
-          var result = jira_get_ticket({key: 'TEST-1'});
-          function action(params) { return result.error; }
+          var msg = 'no-error';
+          try {
+            jira_get_ticket({key: 'TEST-1'});
+          } catch (e) {
+            msg = e.message;
+          }
+          function action(params) { return msg; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
@@ -214,7 +229,7 @@ void _testWrapperDispatch() {
         );
         expect(
           jsonDecode(result!) as String,
-          contains('Jira not configured'),
+          contains('Tool execution failed: Jira not configured'),
         );
       } finally {
         PropertyReader.clearOverrides();
@@ -359,18 +374,26 @@ void _testCliExecuteDispatch() {
       }
     });
 
-    test('returns error when command is missing', () {
+    test('throws when command is missing', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_nocmd');
       try {
         final script = _writeScript(dir, 'test.js', '''
-          var res = executeToolViaJava('cli_execute_command', {});
-          function action(params) { return res.error; }
+          var msg = 'no-error';
+          try {
+            executeToolViaJava('cli_execute_command', {});
+          } catch (e) {
+            msg = e.message;
+          }
+          function action(params) { return msg; }
         ''');
         final result = const JsJobRunner().runScript(
           scriptPath: script.path,
           jobParams: {},
         );
-        expect(jsonDecode(result!) as String, contains('missing command'));
+        expect(
+          jsonDecode(result!) as String,
+          contains('Tool execution failed: missing command'),
+        );
       } finally {
         dir.deleteSync(recursive: true);
       }

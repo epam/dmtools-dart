@@ -21,6 +21,7 @@ export 'src/config/property_reader.dart';
 export 'src/config/property_reader_ai_getters.dart';
 export 'src/config/property_reader_getters.dart';
 export 'src/integrations/cli/cli_tools.dart';
+export 'src/integrations/integration_clients.dart';
 export 'src/integrations/ai/ai_http.dart';
 export 'src/integrations/ai/ai_messages.dart';
 export 'src/integrations/ai/ai_request.dart';

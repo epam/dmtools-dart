@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--key=value` map onto the tool's arguments (merged over a positional JSON
   blob), porting the Java `McpCliHandler.parseToolArguments` change from the
   same PR.
+- `IntegrationClients` — process-wide per-integration client singletons
+  (mirroring the Java `getInstance()` pattern): one Jira/GitHub/GitLab/
+  Confluence/ADO/TestRail/Bitrise/Jenkins/Figma/Xray client (and its `Dio`
+  transport with the connection pool) per process, built lazily through the
+  standard factories. Unconfigured integrations throw and are not cached.
+  Guards against the many-client socket-churn/timeout failure mode the Java
+  side hit elsewhere.
+- `ToolBridge` now holds a single `SyncToolDispatcher` (with its
+  `PropertyReader`) for the bridge lifetime instead of constructing both on
+  every tool call — repeated tool calls no longer re-read `dmtools.env`
+  from disk per call.
+
 - Community files ported from the Java [dm.ai](https://github.com/epam/dm.ai)
   repository: `LICENSE` (Apache-2.0), `SECURITY.md` (vulnerability disclosure
   policy, repo links adapted), `CODE_OF_CONDUCT.md` (Contributor Covenant

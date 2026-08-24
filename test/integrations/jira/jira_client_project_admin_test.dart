@@ -12,6 +12,7 @@ import 'jira_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   deleteProjectTests();
+  restoreProjectTests();
   getProjectBoardConfigTests();
   issueTypeSchemeTests();
   workflowSchemeTests();
@@ -41,6 +42,33 @@ void deleteProjectTests() {
       final f = mockJira((o) => '{}');
       await f.client.deleteProject('PROJ', false);
       expect(f.adapter.calls, isEmpty);
+    });
+  });
+}
+
+/// `jira_restore_project` — POST `project/{key}/restore`.
+void restoreProjectTests() {
+  group('JiraClient.restoreProject', () {
+    test('POSTs to the restore endpoint and reports the project', () async {
+      final f =
+          mockJira((o) => '{"key":"PROJ","id":"10000","name":"My Project"}');
+      final result = await f.client.restoreProject('PROJ');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/project/PROJ/restore'));
+      expect(result['success'], isTrue);
+      expect(result['projectKey'], 'PROJ');
+      expect(result['projectId'], '10000');
+      expect(result['projectName'], 'My Project');
+      expect(result['message'], 'Project restored successfully');
+    });
+
+    test('falls back to the given key when the body omits fields', () async {
+      final f = mockJira((o) => '{}');
+      final result = await f.client.restoreProject('PROJ');
+      expect(result['projectKey'], 'PROJ');
+      expect(result['projectId'], '');
+      expect(result['projectName'], '');
     });
   });
 }
@@ -275,6 +303,13 @@ void projectAdminExecutorDispatchSetupTests() {
           'jira_delete_project', {'key': 'PROJ', 'confirmDelete': true});
       expect(f.adapter.calls.single.method, 'DELETE');
       expect(f.adapter.calls.single.path, endsWith('/project/PROJ'));
+    });
+
+    test('routes jira_restore_project', () async {
+      final f = mockJira((o) => '{"key":"PROJ","id":"10000","name":"P"}');
+      await executor(f).execute('jira_restore_project', {'projectKey': 'PROJ'});
+      expect(f.adapter.calls.single.method, 'POST');
+      expect(f.adapter.calls.single.path, endsWith('/project/PROJ/restore'));
     });
 
     test('routes jira_setup_project_workflow', () async {

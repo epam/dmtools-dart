@@ -104,13 +104,16 @@ void _registerReadTests(
   });
 
   test('search: jira_search_by_jql returns issues in the sandbox project', () {
-    final result = _decode(bridge().execute('jira_search_by_jql', {
+    // Java contract: the sync tool returns the bare issues list
+    // (List<Ticket>); failures surface as {"error": …} maps.
+    final decoded = jsonDecode(bridge().execute('jira_search_by_jql', {
       'jql': 'project = $project',
       'fields': ['summary'],
     }));
-    _expectNoError(result, context: 'search_by_jql');
-    final issues = result['issues'] as List? ?? const [];
-    expect(issues, isNotEmpty, reason: 'sandbox project has no issues');
+    expect(decoded, isA<List>(),
+        reason: 'search_by_jql dispatcher error: $decoded');
+    expect(decoded as List, isNotEmpty,
+        reason: 'sandbox project has no issues');
   });
 }
 

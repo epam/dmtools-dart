@@ -45,6 +45,13 @@ void main() {
   _testInteractive();
   _testDirectTool();
   _testDirectToolNamedArgs();
+  _testDirectToolNamedArgsPrecedence();
+  _testDirectToolJavaArgs();
+  _testDirectToolJavaArgForms();
+  _testDirectToolJavaFlags();
+  _testDirectToolJavaFlagStripping();
+  _testDirectToolJavaDataFlags();
+  _testDirectToolHelp();
   _testNoArgs();
   _testDefaults();
 }
@@ -282,18 +289,13 @@ void _testInteractive() {
 
 void _testDirectTool() {
   group('direct tool invocation', () {
-    test('executes a file tool with JSON args', () async {
-      final testFile = File('${_tmp.path}/hello.txt')
-        ..writeAsStringSync('hello world');
-      expect(
-        await _dispatcher.dispatch([
-          'file_read',
-          jsonEncode({'path': testFile.path}),
-        ]),
-        0,
-      );
+    test('a positional JSON string is an ordinary positional value', () async {
+      // Java parseToolArguments never parses a bare positional as JSON:
+      // the blob maps onto the first schema param as a plain string.
+      final blob = jsonEncode({'path': '/nonexistent/positional.txt'});
+      expect(await _dispatcher.dispatch(['file_read', blob]), 1);
       final result = jsonDecode(_lines.last) as Map<String, dynamic>;
-      expect(result['content'], 'hello world');
+      expect(result['error'], contains(blob));
     });
 
     test('executes a file tool with --data flag', () async {
@@ -316,10 +318,13 @@ void _testDirectTool() {
       expect(_lines.first, contains('unknown tool'));
       expect(_lines.last, contains('dmtools list'));
     });
-
-    test('reports invalid JSON arguments', () async {
-      expect(await _dispatcher.dispatch(['file_read', 'not-json']), 1);
-      expect(_lines.first, contains('invalid JSON arguments'));
+    test('a malformed object blob is an ordinary positional, not an error',
+        () async {
+      // No '{'-prefix special case in Java: '{"broken"' is a value.
+      expect(await _dispatcher.dispatch(['file_read', '{"broken"']), 1);
+      expect(_lines.join('\n'), isNot(contains('invalid JSON arguments')));
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['error'], contains('{"broken"'));
     });
 
     test('returns an error for an unconfigured integration tool', () async {
@@ -331,6 +336,228 @@ void _testDirectTool() {
       );
       final result = jsonDecode(_lines.last) as Map<String, dynamic>;
       expect(result['error'], contains('not configured'));
+    });
+  });
+}
+
+/// Java `parseToolArguments` parity: positional args mapped onto the
+/// tool's schema parameters.
+void _testDirectToolJavaArgs() {
+  group('direct tool invocation (Java-style args)', () {
+    test('maps a bare positional onto the first schema param', () async {
+      final testFile = File('${_tmp.path}/schema.txt')
+        ..writeAsStringSync('schema content');
+      expect(await _dispatcher.dispatch(['file_read', testFile.path]), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'schema content');
+    });
+
+    test('collects remaining positionals into a trailing array param',
+        () async {
+      expect(
+        await _dispatcher
+            .dispatch(['jira_get_ticket', 'CM-3574', 'summary,description']),
+        1,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      // Proves the args parsed: key mapped, fields collected as the array.
+      expect(result['error'], contains('not configured'));
+    });
+  });
+}
+
+/// Java `parseToolArguments` parity: mid-list array reservation and the
+/// bare argument forms (`key=value`, paramless tools, extras).
+void _testDirectToolJavaArgForms() {
+  group('direct tool invocation (Java-style arg forms)', () {
+    test('reserves one positional per param after a mid-list array', () async {
+      // cli_execute_command_with_env: command, args[], env_vars — the
+      // array reserves 'world' for env_vars, so echo receives ['hello'].
+      expect(
+        await _dispatcher.dispatch(
+            ['cli_execute_command_with_env', 'echo', 'hello', 'world']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['stdout'], 'hello\n');
+    });
+
+    test('a mid-list array with no room is empty, not an error', () async {
+      expect(
+        await _dispatcher.dispatch(['cli_execute_command_with_env', 'echo']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['stdout'], '\n');
+    });
+
+    test('treats a bare key=value token as a named argument', () async {
+      final testFile = File('${_tmp.path}/kv.txt')
+        ..writeAsStringSync('kv content');
+      expect(
+        await _dispatcher.dispatch(['file_read', 'path=${testFile.path}']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'kv content');
+    });
+
+    test('a tool without params maps positionals to arg0, arg1', () async {
+      // mermaid_list_types has no schema params: the bare positional must
+      // map to arg0 and reach the executor — not die as invalid JSON.
+      expect(
+        await _dispatcher.dispatch(['mermaid_list_types', 'ignored-pos']),
+        1,
+      );
+      expect(_lines.first, isNot(contains('invalid JSON arguments')));
+      expect(jsonDecode(_lines.last), isA<Map<String, dynamic>>());
+    });
+
+    test('extra positionals beyond the schema are ignored', () async {
+      final testFile = File('${_tmp.path}/extra.txt')
+        ..writeAsStringSync('extra content');
+      expect(
+        await _dispatcher
+            .dispatch(['file_read', testFile.path, 'junk1', 'junk2']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'extra content');
+    });
+  });
+}
+
+/// Java parity: the flag surface — `--format`/`--md`, output-format
+/// stripping (`extractFormatFlag`), shell flags, and valueless trailers.
+void _testDirectToolJavaFlags() {
+  group('direct tool invocation (Java-style flags)', () {
+    test('--format sets the format argument', () async {
+      expect(
+        await _dispatcher
+            .dispatch(['file_read', '--format', 'json', '--data', '{}']),
+        1,
+      );
+      // format is accepted; the failure is the missing path, not parsing.
+      expect(_lines.join('\n'), isNot(contains('invalid JSON arguments')));
+    });
+
+    test('--md sets format to md', () async {
+      expect(
+        await _dispatcher.dispatch(['file_read', '--md', '--data', '{}']),
+        1,
+      );
+      expect(_lines.join('\n'), isNot(contains('invalid JSON arguments')));
+    });
+
+    test('output-format flags are stripped, not named args', () async {
+      final testFile = File('${_tmp.path}/stripped.txt')
+        ..writeAsStringSync('stripped content');
+      final flagForms = [
+        ['--toon'],
+        ['--mini'],
+        ['--output', 'json'],
+        ['--output=json'],
+      ];
+      for (final flags in flagForms) {
+        _lines.clear();
+        expect(
+          await _dispatcher
+              .dispatch(['file_read', ...flags, '--path', testFile.path]),
+          0,
+        );
+        final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+        expect(result['content'], 'stripped content');
+      }
+    });
+    // Remaining flag-surface cases live in _testDirectToolJavaFlagStripping.
+  });
+}
+
+/// Java parity: output-format stripping and shell-flag passthrough.
+void _testDirectToolJavaFlagStripping() {
+  group('direct tool invocation (Java-style flag stripping)', () {
+    test('shell flags are ignored without touching named args', () async {
+      final testFile = File('${_tmp.path}/verbose.txt')
+        ..writeAsStringSync('verbose content');
+      expect(
+        await _dispatcher
+            .dispatch(['file_read', '--verbose', '--path', testFile.path]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'verbose content');
+    });
+
+    test('a trailing --output without a value stays and is ignored', () async {
+      final testFile = File('${_tmp.path}/trailing.txt')
+        ..writeAsStringSync('trailing content');
+      expect(
+        await _dispatcher
+            .dispatch(['file_read', '--path', testFile.path, '--output']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'trailing content');
+    });
+
+    test('--output consumes the next token, so --output --help is no help',
+        () async {
+      // Java extractFormatFlag runs before the --help scan: --help is
+      // eaten as the format value, leaving no arguments for file_read.
+      expect(
+          await _dispatcher.dispatch(['file_read', '--output', '--help']), 1);
+      expect(_lines.join('\n'), isNot(contains('"tools"')));
+    });
+  });
+}
+
+/// Java `parseToolArguments` parity: the data-flag surface — `--data`
+/// fallback, `--stdin-data`, and valueless trailers.
+void _testDirectToolJavaDataFlags() {
+  group('direct tool invocation (Java-style data flags)', () {
+    test('--data with a non-JSON value falls back to the data string',
+        () async {
+      expect(
+        await _dispatcher.dispatch(['file_read', '--data', 'notjson']),
+        1,
+      );
+      expect(_lines.join('\n'), isNot(contains('invalid JSON arguments')));
+    });
+
+    test('--stdin-data merges like --data', () async {
+      final testFile = File('${_tmp.path}/stdin-data.txt')
+        ..writeAsStringSync('stdin-data content');
+      expect(
+        await _dispatcher.dispatch(
+            ['file_read', '--stdin-data', '{"path":"${testFile.path}"}']),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'stdin-data content');
+    });
+
+    test('--file names a plain argument; no file is read', () async {
+      // Java parseToolArguments has no --file branch: it falls into the
+      // generic named-arg branch, so the JSON blob is never loaded and
+      // `path` stays missing.
+      final testFile = File('${_tmp.path}/from-file.txt')
+        ..writeAsStringSync('from-file content');
+      final paramsFile = File('${_tmp.path}/params.json')
+        ..writeAsStringSync('{"path":"${testFile.path}"}');
+      expect(
+        await _dispatcher.dispatch(['file_read', '--file', paramsFile.path]),
+        1,
+      );
+      expect(_lines.join('\n'), isNot(contains('from-file content')));
+    });
+
+    test('a trailing flag without a value is ignored', () async {
+      expect(
+        await _dispatcher.dispatch(['file_read', '--data', '--path']),
+        1,
+      );
+      // '--path' becomes the --data value; no named arg is synthesized.
+      expect(_lines.join('\n'), isNot(contains('invalid JSON arguments')));
     });
   });
 }
@@ -359,24 +586,7 @@ void _testDirectToolNamedArgs() {
       expect(result['content'], 'eq content');
     });
 
-    test('named args override the positional JSON blob', () async {
-      final testFile = File('${_tmp.path}/over.txt')
-        ..writeAsStringSync('override content');
-      expect(
-        await _dispatcher.dispatch([
-          'file_read',
-          jsonEncode({'path': '/nonexistent/first.txt'}),
-          '--path',
-          testFile.path,
-        ]),
-        0,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
-      expect(result['content'], 'override content');
-    });
-
-    test('named arg values are not mistaken for the positional JSON blob',
-        () async {
+    test('named arg values are not mistaken for a JSON positional', () async {
       final testFile = File('${_tmp.path}/pos.txt')
         ..writeAsStringSync('positional content');
       expect(
@@ -388,9 +598,52 @@ void _testDirectToolNamedArgs() {
         isNot(contains('invalid JSON arguments')),
       );
     });
+    // Precedence cases live in _testDirectToolNamedArgsPrecedence.
   });
 }
 
+/// Java parity: positional mapping runs LAST, overriding same-named
+/// `--key` flags and `--data` blob keys.
+void _testDirectToolNamedArgsPrecedence() {
+  group('direct tool invocation (named arg precedence)', () {
+    test('positional mapping overrides a same-named --key (Java order)',
+        () async {
+      // Java mapPositionalArguments runs LAST, after the named flags, so
+      // the positional wins over the earlier --path.
+      final testFile = File('${_tmp.path}/over.txt')
+        ..writeAsStringSync('override content');
+      expect(
+        await _dispatcher.dispatch([
+          'file_read',
+          testFile.path,
+          '--path',
+          '/nonexistent/first.txt',
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'override content');
+    });
+
+    test('positional mapping overrides a --data key (Java order)', () async {
+      final testFile = File('${_tmp.path}/over-data.txt')
+        ..writeAsStringSync('override-data content');
+      expect(
+        await _dispatcher.dispatch([
+          'file_read',
+          '--data',
+          jsonEncode({'path': '/nonexistent/data.txt'}),
+          testFile.path,
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'override-data content');
+    });
+  });
+}
+
+/// No-argument dispatch: help text and the TTY interactive stub.
 void _testNoArgs() {
   group('no arguments', () {
     test('prints help when stdout is not a terminal', () async {
@@ -406,6 +659,28 @@ void _testNoArgs() {
       );
       expect(await tty.dispatch([]), 1);
       expect(_lines, ['Interactive mode requires Phase 4 (terminal picker)']);
+    });
+  });
+}
+
+/// Java `processMcpCommand` parity: `--help`/`-h` among tool args shows
+/// the tool's schema (the tools list filtered by tool name).
+void _testDirectToolHelp() {
+  group('direct tool invocation (help)', () {
+    test('--help shows the tool schema instead of executing', () async {
+      expect(await _dispatcher.dispatch(['file_read', '--help']), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final tools = (result['tools'] as List)
+          .cast<Map<String, dynamic>>()
+          .map((t) => t['name'] as String);
+      expect(tools, isNotEmpty);
+      expect(tools.every((name) => name.contains('file_read')), isTrue);
+    });
+
+    test('-h shows the tool schema instead of executing', () async {
+      expect(await _dispatcher.dispatch(['file_read', '-h']), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect((result['tools'] as List), isNotEmpty);
     });
   });
 }

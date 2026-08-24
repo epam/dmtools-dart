@@ -260,14 +260,14 @@ void _testJiraReadTools() {
       expect(body['path'], contains('fields='));
     });
 
-    test('jira_search_by_jql encodes JQL in query string', () {
+    test('jira_search_by_jql returns the bare issues array', () {
       final result = dispatcher.execute('jira_search_by_jql', {
         'jql': 'project = PROJ',
       });
-      final body = jsonDecode(result!);
-      expect(body['path'].startsWith('/rest/api/latest/search/jql'), isTrue);
-      expect(body['path'], contains('jql='));
-      expect(body['method'], 'GET');
+      final issues = jsonDecode(result!) as List;
+      expect(issues.map((i) => i['key']), ['S-0a', 'S-0b', 'S-2']);
+      expect(issues.first['jql'], 'project = PROJ');
+      expect(issues.first['fields'], '*navigable');
     });
   });
 }

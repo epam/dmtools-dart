@@ -53,6 +53,13 @@ const _testConfig = {
   'XRAY_CLIENT_SECRET': 'secret-456',
 };
 
+/// The Jira config injected for fixtures built by [mockXrayWithJira].
+const _testJiraConfig = {
+  'JIRA_BASE_PATH': 'https://jira.example.com',
+  'JIRA_EMAIL': 'dev@example.com',
+  'JIRA_API_TOKEN': 'tok-123',
+};
+
 /// Builds an [XrayClient] over a mocked [Dio] routed by [router].
 ///
 /// The router maps each incoming [RequestOptions] to the response body the
@@ -75,6 +82,37 @@ MockXrayHttpFixture mockXrayHttp(
   );
 }
 
+/// A mocked [XrayClient] plus the adapters serving its Xray and Jira
+/// requests.
+typedef MockXrayJiraFixture = ({
+  XrayClient client,
+  RoutingAdapter xray,
+  RoutingAdapter jira,
+});
+
+/// Builds an [XrayClient] whose Xray and Jira transports are both mocked.
+///
+/// [xrayRouter] serves `/api/v2/` requests and [jiraRouter] serves
+/// `/rest/api/latest/` requests; served requests land in the matching
+/// adapter's `calls`. For the tools that create or search Jira issues
+/// (Java's dual Jira/Xray configuration).
+MockXrayJiraFixture mockXrayWithJira(
+  String Function(RequestOptions options) xrayRouter,
+  String Function(RequestOptions options) jiraRouter,
+) {
+  PropertyReader.setOverrides({..._testConfig, ..._testJiraConfig});
+  final xray = RoutingAdapter(xrayRouter);
+  final jira = RoutingAdapter(jiraRouter);
+  final http = XrayHttpClient(
+    PropertyReader(),
+    dio: Dio()..httpClientAdapter = xray,
+  );
+  final jiraClient = JiraClient(
+    JiraHttpClient(PropertyReader(), dio: Dio()..httpClientAdapter = jira),
+  );
+  return (client: XrayClient(http, jira: jiraClient), xray: xray, jira: jira);
+}
+
 /// Routes by request-path suffix, defaulting to [fallback].
 ///
 /// Paths match with `endsWith` against the full request URL, so `'/tests'`
@@ -86,6 +124,20 @@ String routeByPath(
 }) {
   for (final entry in routes.entries) {
     if (options.path.endsWith(entry.key)) return entry.value;
+  }
+  return fallback;
+}
+
+/// Routes GraphQL calls by sniffing the request body for a marker string.
+String routeGraphQL(
+  Map<String, String> markers,
+  RequestOptions options, {
+  String fallback = '{}',
+}) {
+  if (options.path.endsWith('graphql')) {
+    for (final entry in markers.entries) {
+      if ((options.data as String).contains(entry.key)) return entry.value;
+    }
   }
   return fallback;
 }

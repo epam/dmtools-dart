@@ -48,6 +48,7 @@ const _expectedToolNames = [
   'jira_get_field_custom_code',
   'jira_update_all_fields_with_name',
   'jira_update_ticket',
+  'jira_update_ticket_parent',
   'jira_link_issues',
   'jira_get_issue_link_types',
   'jira_execute_request',
@@ -60,6 +61,7 @@ const _expectedToolNames = [
   'jira_download_attachment',
   'jira_clone_project',
   'jira_delete_project',
+  'jira_restore_project',
   'jira_setup_project_workflow',
   'jira_sync_project_workflow',
   'jira_copy_project_structure',
@@ -92,7 +94,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the sixty-eight tools in declaration order', () {
+    test('registers the seventy tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 

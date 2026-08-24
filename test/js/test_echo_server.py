@@ -51,6 +51,35 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             encoded = b'function action(params) { return "from-url"; }'
             self._send(encoded, "text/javascript")
             return
+        # Jira 404-HTML fixture: any request under a dt-html base path
+        # answers 404 with an HTML body, like a Jira Server that lacks the
+        # Cloud-only search route (regression guard: the sync client must
+        # surface this as JSON, never raw HTML).
+        if "dt-html" in self.path:
+            encoded = b"<html><body><h1>404 Not Found</h1></body></html>"
+            self.send_response(404)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        # Java-parity fixtures for 2xx-with-empty-body responses: a
+        # transitions POST (dt-move) and a ticket DELETE (dt-del) answer
+        # 204 No Content. The sync layer must hand JS the empty string /
+        # "Success" like Java, never an error envelope. The dt-move GET
+        # still echoes with a transitions list for the id lookup.
+        if "dt-move" in self.path and self.command == "POST":
+            self.send_response(204)
+            self.end_headers()
+            return
+        if "dt-del" in self.path and self.command == "DELETE":
+            self.send_response(204)
+            self.end_headers()
+            return
+        if "dt-move" in self.path:
+            payload["transitions"] = [
+                {"id": "31", "name": "Done", "to": {"name": "Done"}}
+            ]
         # Recorded DELETE paths, so tests can assert which deletions the
         # client performed against this server instance.
         if self.path == "/__delete_log":
@@ -143,6 +172,178 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["value"] = [
                 {"id": 7, "fields": {"System.Title": "T"}}
             ]
+        # Jira deployment-detection fixture: /serverInfo answers by marker —
+        # dt-server → "Server", dt-cloud → "Cloud", dt-missing → no field,
+        # dt-error → 500 (both force the atlassian.net URL fallback).
+        if self.path.endswith("/serverInfo"):
+            if "dt-error" in self.path:
+                encoded = b"<html><body>server error</body></html>"
+                self.send_response(500)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            payload.clear()
+            if "dt-cloud" in self.path:
+                payload["deploymentType"] = "Cloud"
+            elif "dt-missing" not in self.path:
+                payload["deploymentType"] = "Server"
+        # Jira search fixtures: the Cloud endpoint pages by nextPageToken,
+        # the legacy Server endpoint pages by startAt (issue keys echo the
+        # page's startAt / jql / fields so tests can assert the query).
+        # Path prefixes stay Jira-specific so Confluence's
+        # /content/search route keeps its bare echo.
+        elif (
+            self.command == "GET"
+            and "/rest/api/latest/search/jql" in self.path
+        ):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            token = query.get("nextPageToken", [""])[0]
+            if "dt-cloudnull" in self.path:
+                self._send(b"null")
+                return
+            if "dt-cloudhtml" in self.path:
+                encoded = b"<html><body>gone</body></html>"
+                self.send_response(404)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            payload.clear()
+            if "dt-clouderr" in self.path:
+                payload["errorMessages"] = ["boom cloud"]
+            elif "dt-cloudempty" in self.path:
+                # tok2 page is empty but still tokens on: an empty issues
+                # page must stop the walk before that token is followed.
+                if token == "tok2":
+                    payload["issues"] = []
+                    payload["nextPageToken"] = "tok3"
+                elif token == "tok3":
+                    payload["issues"] = [{"key": "CE-3"}]
+                else:
+                    payload["issues"] = [{"key": "CE-1"}]
+                    payload["nextPageToken"] = "tok2"
+            elif "dt-cloudnoissues" in self.path:
+                # tok2 page omits issues entirely (Java: null tickets).
+                if token == "tok2":
+                    payload["nextPageToken"] = "tok3"
+                elif token == "tok3":
+                    payload["issues"] = [{"key": "CI-3"}]
+                else:
+                    payload["issues"] = [{"key": "CI-1"}]
+                    payload["nextPageToken"] = "tok2"
+            elif "dt-cloudlast" in self.path:
+                if token:
+                    payload["issues"] = [{"key": "CL-2"}]
+                else:
+                    payload["issues"] = [{"key": "CL-1"}]
+                    payload["nextPageToken"] = "tok2"
+                    payload["isLast"] = True
+            elif "dt-cloudpnull" in self.path:
+                if token:
+                    self._send(b"null")
+                    return
+                payload["issues"] = [{"key": "CN-1"}]
+                payload["nextPageToken"] = "tok2"
+            elif "dt-cloudfail" in self.path:
+                if token:
+                    encoded = b"<html><body>exploded</body></html>"
+                    self.send_response(500)
+                    self.send_header("Content-Type", "text/html")
+                    self.send_header("Content-Length", str(len(encoded)))
+                    self.end_headers()
+                    self.wfile.write(encoded)
+                    return
+                payload["issues"] = [{"key": "CF-1"}]
+                payload["nextPageToken"] = "tok2"
+            elif token:
+                payload["issues"] = [{"key": "C-2"}]
+            else:
+                payload["issues"] = [{"key": "C-1"}]
+                payload["nextPageToken"] = "tok2"
+        elif (
+            self.command == "GET"
+            and "/rest/api/latest/search?" in self.path
+        ):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            payload.clear()
+            if "dt-servererr" in self.path:
+                payload["errorMessages"] = ["bad jql"]
+            elif "dt-servertotal0" in self.path:
+                payload["issues"] = []
+                payload["maxResults"] = 2
+                payload["total"] = 0
+            elif "dt-serverrefresh" in self.path:
+                # Page 2 halves maxResults (4 -> 2) with total 9: the walk
+                # must advance by the refreshed value, so the pages at
+                # startAt 6 and 8 are both fetched and included.
+                start = int(query.get("startAt", ["0"])[0])
+                if start == 0:
+                    payload["issues"] = [
+                        {"key": k} for k in ("R-0a", "R-0b", "R-0c", "R-0d")
+                    ]
+                    payload["maxResults"] = 4
+                elif start == 4:
+                    payload["issues"] = [
+                        {"key": k} for k in ("R-4a", "R-4b", "R-4c", "R-4d")
+                    ]
+                    payload["maxResults"] = 2
+                else:
+                    payload["issues"] = [{"key": "R-%d" % start}]
+                    payload["maxResults"] = 2
+                payload["total"] = 9
+            elif "dt-serverexact" in self.path:
+                # startAt == total is NOT a break in Java: the page at
+                # startAt 4 is fetched, and its refreshed total (6) keeps
+                # the loop alive so E-4 is still performed.
+                start = int(query.get("startAt", ["0"])[0])
+                payload["issues"] = [{"key": "E-%d" % start}]
+                payload["maxResults"] = 2
+                payload["total"] = 6 if start >= 4 else 4
+            elif "dt-serveronepage" in self.path:
+                start = int(query.get("startAt", ["0"])[0])
+                payload["issues"] = [{"key": "O-%d" % start}]
+                payload["maxResults"] = 5
+                payload["total"] = 3
+            elif "dt-serverpnull" in self.path:
+                start = int(query.get("startAt", ["0"])[0])
+                if start == 0:
+                    payload["issues"] = [{"key": "SN-0"}]
+                    payload["maxResults"] = 2
+                    payload["total"] = 4
+                else:
+                    self._send(b"null")
+                    return
+            elif "dt-serverperr" in self.path:
+                start = int(query.get("startAt", ["0"])[0])
+                if start == 0:
+                    payload["issues"] = [{"key": "SF-0"}, {"key": "SF-1"}]
+                    payload["maxResults"] = 2
+                    payload["total"] = 4
+                else:
+                    encoded = b"<html><body>boom</body></html>"
+                    self.send_response(500)
+                    self.send_header("Content-Type", "text/html")
+                    self.send_header("Content-Length", str(len(encoded)))
+                    self.end_headers()
+                    self.wfile.write(encoded)
+                    return
+            else:
+                start = int(query.get("startAt", ["0"])[0])
+                keys = ["S-0a", "S-0b"] if start == 0 else ["S-%d" % start]
+                payload["issues"] = [
+                    {
+                        "key": k,
+                        "jql": query.get("jql", [""])[0],
+                        "fields": query.get("fields", [""])[0],
+                    }
+                    for k in keys
+                ]
+                payload["startAt"] = start
+                payload["maxResults"] = 2
+                payload["total"] = 3
         # Jira label-fetch fixture: a normal ?fields=labels GET answers the
         # ticket's current labels; __jira_fail=1 marks the GET as a transient
         # 5xx (regression guard: a failed fetch must abort, never PUT an

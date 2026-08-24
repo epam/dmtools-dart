@@ -17,6 +17,7 @@ List<ToolDefinition> testrailTools() => [
       ..._systemTools(),
       ..._caseTools(),
       ..._caseWriteTools(),
+      ..._caseCreateTools(),
       ..._resultTools(),
       ..._runTools(),
       ..._milestoneTools(),
@@ -172,18 +173,185 @@ List<ToolDefinition> _runTools() => [
       ),
       ToolDefinition(
         name: 'testrail_get_sections',
-        description: 'Get TestRail sections for a suite',
+        description: 'Get all test sections for a TestRail project and '
+            'optional suite. Sections define the hierarchy used to organize '
+            'test cases.',
         integration: 'testrail',
         category: 'sections',
         params: [
           ToolParam(
-            name: 'suiteId',
-            description: 'The test suite ID',
-            type: 'number',
+            name: 'project_name',
+            description: 'Project name to get sections from',
             required: true,
+          ),
+          ToolParam(
+            name: 'suite_id',
+            description: 'Suite ID to filter by (optional). Required for '
+                'projects with multiple suites.',
+            required: false,
           ),
         ],
       ),
+    ];
+
+/// Section-aware case-creation tools: `testrail_create_case`,
+/// `testrail_create_case_detailed`, `testrail_create_case_steps`.
+///
+/// Ports the Java PR "testrail-sections-and-section-aware-case-creation":
+/// every tool takes an optional `section_id` and falls back to the project's
+/// default section when it is omitted.
+List<ToolDefinition> _caseCreateTools() => [
+      _createCaseTool(),
+      _createCaseDetailedTool(),
+      _createCaseStepsTool(),
+    ];
+
+/// `testrail_create_case` — the basic case-creation tool.
+ToolDefinition _createCaseTool() => ToolDefinition(
+      name: 'testrail_create_case',
+      description: 'Create a new test case in TestRail',
+      integration: 'testrail',
+      category: 'test_cases',
+      params: [
+        _projectNameParam(),
+        _titleParam(),
+        ToolParam(
+          name: 'description',
+          description: 'Test case description/steps (optional)',
+          required: false,
+        ),
+        _priorityIdParam(),
+        _refsParam(),
+        _sectionIdParam(),
+      ],
+    );
+
+/// `testrail_create_case_detailed` — text-template case with full fields.
+ToolDefinition _createCaseDetailedTool() => ToolDefinition(
+      name: 'testrail_create_case_detailed',
+      description: 'Create a new test case in TestRail with detailed fields '
+          '(preconditions, steps, expected results, labels, type). Note: '
+          'TestRail uses its own table format in text fields: '
+          '|||:Col 1|:Col 2|:Col 3\\n||val1|val2|val3. Standard Markdown '
+          'tables (| Col | Col |) will be auto-converted to TestRail format.',
+      integration: 'testrail',
+      category: 'test_cases',
+      params: [
+        _projectNameParam(),
+        _titleParam(),
+        ToolParam(
+          name: 'preconditions',
+          description: 'Preconditions (optional). For tables use TestRail '
+              'format: |||:Col1|:Col2\\n||val1|val2',
+          required: false,
+        ),
+        ToolParam(
+          name: 'steps',
+          description: 'Test steps separated by double newline (optional)',
+          required: false,
+        ),
+        ToolParam(
+          name: 'expected',
+          description: 'Expected results (optional)',
+          required: false,
+        ),
+        ..._caseMetaParams(),
+        _sectionIdParam(),
+      ],
+    );
+
+/// `testrail_create_case_steps` — Steps-template (template_id=2) case.
+ToolDefinition _createCaseStepsTool() => ToolDefinition(
+      name: 'testrail_create_case_steps',
+      description: "Create a TestRail test case using the 'Test Case "
+          "(Steps)' template (template_id=2). Steps are provided as a JSON "
+          'array: [{"content":"step text","expected":"expected result"}, '
+          '...]. Markdown tables in step content or expected are '
+          'auto-converted to HTML tables. Use testrail_get_case_types for '
+          'type_id, testrail_get_labels for label_ids.',
+      integration: 'testrail',
+      category: 'test_cases',
+      params: [
+        _projectNameParam(),
+        _titleParam(),
+        ToolParam(
+          name: 'preconditions',
+          description: 'Preconditions text (optional)',
+          required: false,
+        ),
+        ToolParam(
+          name: 'steps_json',
+          description: 'JSON array of step objects: '
+              '[{"content":"step","expected":"result"}, ...]. Markdown '
+              'tables are auto-converted to HTML.',
+          required: true,
+        ),
+        ..._caseMetaParams(),
+        _sectionIdParam(),
+      ],
+    );
+
+/// The optional `section_id` parameter shared by the case-creation tools.
+ToolParam _sectionIdParam() => ToolParam(
+      name: 'section_id',
+      description: 'Section ID where the case should be created (optional). '
+          "Uses the project's default section when omitted.",
+      required: false,
+    );
+
+/// The `project_name` parameter shared by the case-creation tools.
+ToolParam _projectNameParam() => ToolParam(
+      name: 'project_name',
+      description: 'Project name',
+      required: true,
+    );
+
+/// The `title` parameter shared by the case-creation tools.
+ToolParam _titleParam() => ToolParam(
+      name: 'title',
+      description: 'Test case title/summary',
+      required: true,
+    );
+
+/// The `priority_id` parameter shared by the case-creation tools.
+ToolParam _priorityIdParam() => ToolParam(
+      name: 'priority_id',
+      description:
+          'Priority ID: 1=Low, 2=Medium, 3=High, 4=Critical (optional, '
+          'default=2)',
+      required: false,
+    );
+
+/// The `type_id` parameter shared by the case-creation tools.
+ToolParam _typeIdParam() => ToolParam(
+      name: 'type_id',
+      description: 'Case type ID (optional). Use testrail_get_case_types to '
+          'get available types.',
+      required: false,
+    );
+
+/// The `refs` parameter shared by the case-creation tools.
+ToolParam _refsParam() => ToolParam(
+      name: 'refs',
+      description: 'Reference to requirement (e.g., JIRA key)',
+      required: false,
+    );
+
+/// The `label_ids` parameter shared by the case-creation tools.
+ToolParam _labelIdsParam() => ToolParam(
+      name: 'label_ids',
+      description: 'Comma-separated label IDs (optional). Use '
+          'testrail_get_labels to find IDs.',
+      required: false,
+    );
+
+/// The priority/type/refs/labels tail shared by the detailed and steps
+/// create tools.
+List<ToolParam> _caseMetaParams() => [
+      _priorityIdParam(),
+      _typeIdParam(),
+      _refsParam(),
+      _labelIdsParam(),
     ];
 
 /// Milestone and plan tools: `testrail_get_milestones`, `testrail_get_plans`.
@@ -344,8 +512,41 @@ class TestRailToolExecutor {
           a['comment'] as String,
         ),
     'testrail_get_runs': (a) => _client.getRuns(requiredInt(a, 'projectId')),
-    'testrail_get_sections': (a) =>
-        _client.getSections(requiredInt(a, 'suiteId')),
+    'testrail_get_sections': (a) => _client.getSectionsByProjectName(
+          requiredString(a, 'project_name'),
+          suiteId: _optionalString(a, 'suite_id'),
+        ),
+    'testrail_create_case': (a) => _client.createCase(
+          requiredString(a, 'project_name'),
+          requiredString(a, 'title'),
+          description: _optionalString(a, 'description'),
+          priorityId: _optionalString(a, 'priority_id'),
+          refs: _optionalString(a, 'refs'),
+          sectionId: _optionalString(a, 'section_id'),
+        ),
+    'testrail_create_case_detailed': (a) => _client.createCaseDetailed(
+          requiredString(a, 'project_name'),
+          requiredString(a, 'title'),
+          preconditions: _optionalString(a, 'preconditions'),
+          steps: _optionalString(a, 'steps'),
+          expected: _optionalString(a, 'expected'),
+          priorityId: _optionalString(a, 'priority_id'),
+          typeId: _optionalString(a, 'type_id'),
+          refs: _optionalString(a, 'refs'),
+          labelIds: _optionalString(a, 'label_ids'),
+          sectionId: _optionalString(a, 'section_id'),
+        ),
+    'testrail_create_case_steps': (a) => _client.createCaseSteps(
+          requiredString(a, 'project_name'),
+          requiredString(a, 'title'),
+          preconditions: _optionalString(a, 'preconditions'),
+          stepsJson: requiredString(a, 'steps_json'),
+          priorityId: _optionalString(a, 'priority_id'),
+          typeId: _optionalString(a, 'type_id'),
+          refs: _optionalString(a, 'refs'),
+          labelIds: _optionalString(a, 'label_ids'),
+          sectionId: _optionalString(a, 'section_id'),
+        ),
     'testrail_add_case': (a) => _client.addCase(
           requiredInt(a, 'sectionId'),
           a['title'] as String,
@@ -374,4 +575,17 @@ class TestRailToolExecutor {
         _client.getReferences(requiredInt(a, 'projectId')),
     'testrail_get_templates': (_) => _client.getTemplates(),
   };
+}
+
+/// Reads a required string argument, rejecting null and non-strings.
+String requiredString(Map<String, dynamic> args, String key) {
+  final value = args[key];
+  if (value is String && value.isNotEmpty) return value;
+  throw ArgumentError('Missing required parameter: $key');
+}
+
+/// Reads an optional string argument; `null` when absent.
+String? _optionalString(Map<String, dynamic> args, String key) {
+  final value = args[key];
+  return value is String ? value : null;
 }

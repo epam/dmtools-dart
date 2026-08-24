@@ -57,6 +57,7 @@ export 'src/integrations/jira/jira_tools.dart';
 export 'src/integrations/jira/jira_utils.dart';
 export 'src/integrations/testrail/testrail_client.dart';
 export 'src/integrations/testrail/testrail_http_client.dart';
+export 'src/integrations/testrail/testrail_markdown.dart';
 export 'src/integrations/testrail/testrail_tools.dart';
 export 'src/integrations/xray/xray_client.dart';
 export 'src/integrations/xray/xray_tools.dart';

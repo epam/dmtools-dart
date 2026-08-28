@@ -23,14 +23,11 @@ jobs:
           - gitlab
           - confluence
           - ado
-          - figma
+          # figma, jenkins, teams: re-add once their *_* secrets/vars exist —
+          # with DMTOOLS_IT_REQUIRE_CREDS=true and no injected config the leg
+          # is guaranteed red (review round 3).
           - testrail
           - bitrise
-          - jenkins
-          - teams
-          # sharepoint: re-add once SHAREPOINT_* secrets/vars exist — with
-          # DMTOOLS_IT_REQUIRE_CREDS=true and no injected config the leg is
-          # guaranteed red (review round 3).
     # Serialize per integration so two runs never write to the same sandbox at
     # once; a manual dispatch queues behind (does not cancel) a running nightly.
     concurrency:
@@ -53,35 +50,35 @@ jobs:
           # skipping — see test/integration/README.md → Skip-or-fail.
           DMTOOLS_IT_REQUIRE_CREDS: 'true'
 
-          # Jira
-          JIRA_BASE_PATH: ${{ secrets.JIRA_BASE_PATH }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          # Jira — non-secret endpoints/identities are repo VARIABLES, only
+          # tokens are secrets (mismatch made every nightly leg fail at load).
+          JIRA_BASE_PATH: ${{ vars.JIRA_BASE_PATH }}
+          JIRA_EMAIL: ${{ vars.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          DMTOOLS_IT_JIRA_PROJECT: ${{ secrets.DMTOOLS_IT_JIRA_PROJECT }}
+          DMTOOLS_IT_JIRA_PROJECT: ${{ vars.DMTOOLS_IT_JIRA_PROJECT }}
 
           # GitHub
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-          DMTOOLS_IT_GITHUB_REPO: ${{ secrets.DMTOOLS_IT_GITHUB_REPO }}
+          DMTOOLS_IT_GITHUB_REPO: ${{ vars.DMTOOLS_IT_GITHUB_REPO }}
 
           # GitLab
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           GITLAB_BASE_PATH: ${{ vars.GITLAB_BASE_PATH }}
-          DMTOOLS_IT_GITLAB_PROJECT: ${{ secrets.DMTOOLS_IT_GITLAB_PROJECT }}
+          DMTOOLS_IT_GITLAB_PROJECT: ${{ vars.DMTOOLS_IT_GITLAB_PROJECT }}
 
           # Confluence
-          CONFLUENCE_BASE_PATH: ${{ secrets.CONFLUENCE_BASE_PATH }}
-          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_BASE_PATH: ${{ vars.CONFLUENCE_BASE_PATH }}
+          CONFLUENCE_EMAIL: ${{ vars.CONFLUENCE_EMAIL }}
           CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
-          DMTOOLS_IT_CONFLUENCE_SPACE: ${{ secrets.DMTOOLS_IT_CONFLUENCE_SPACE }}
+          DMTOOLS_IT_CONFLUENCE_SPACE: ${{ vars.DMTOOLS_IT_CONFLUENCE_SPACE }}
 
           # Azure DevOps
-          ADO_ORGANIZATION: ${{ secrets.ADO_ORGANIZATION }}
-          ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
+          ADO_ORGANIZATION: ${{ vars.ADO_ORGANIZATION }}
+          ADO_PROJECT: ${{ vars.ADO_PROJECT }}
           ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
-
-          # Figma
-          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
-          DMTOOLS_IT_FIGMA_FILE: ${{ secrets.DMTOOLS_IT_FIGMA_FILE }}
+          # Sandbox gate var the test's fail-loud check reads (repo var is
+          # named ADO_PROJECT; the gate expects the DMTOOLS_IT_ prefix).
+          DMTOOLS_IT_ADO_PROJECT: ${{ vars.ADO_PROJECT }}
 
           # TestRail
           TESTRAIL_BASE_PATH: ${{ secrets.TESTRAIL_BASE_PATH }}
@@ -90,16 +87,6 @@ jobs:
           DMTOOLS_IT_TESTRAIL_PROJECT: ${{ secrets.DMTOOLS_IT_TESTRAIL_PROJECT }}
           DMTOOLS_IT_TESTRAIL_SUITE: ${{ secrets.DMTOOLS_IT_TESTRAIL_SUITE }}
 
-          # Bitrise
+          # Bitrise — app slug lives in the DMTOOLS_IT_BITRISE_APP_SLUG var
           BITRISE_TOKEN: ${{ secrets.BITRISE_TOKEN }}
-          BITRISE_APP_SLUG: ${{ secrets.BITRISE_APP_SLUG }}
-
-          # Jenkins
-          JENKINS_BASE_PATH: ${{ secrets.JENKINS_BASE_PATH }}
-          JENKINS_USER: ${{ secrets.JENKINS_USER }}
-          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
-
-          # Microsoft Teams
-          TEAMS_CLIENT_ID: ${{ secrets.TEAMS_CLIENT_ID }}
-          TEAMS_TENANT_ID: ${{ secrets.TEAMS_TENANT_ID }}
-          TEAMS_REFRESH_TOKEN: ${{ secrets.TEAMS_REFRESH_TOKEN }}
+          BITRISE_APP_SLUG: ${{ vars.DMTOOLS_IT_BITRISE_APP_SLUG }}

@@ -76,6 +76,9 @@ jobs:
           ADO_ORGANIZATION: ${{ vars.ADO_ORGANIZATION }}
           ADO_PROJECT: ${{ vars.ADO_PROJECT }}
           ADO_PAT_TOKEN: ${{ secrets.ADO_PAT_TOKEN }}
+          # Sandbox gate var the test's fail-loud check reads (repo var is
+          # named ADO_PROJECT; the gate expects the DMTOOLS_IT_ prefix).
+          DMTOOLS_IT_ADO_PROJECT: ${{ vars.ADO_PROJECT }}
 
           # TestRail
           TESTRAIL_BASE_PATH: ${{ secrets.TESTRAIL_BASE_PATH }}

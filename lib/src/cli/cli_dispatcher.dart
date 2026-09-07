@@ -14,6 +14,7 @@ import 'dart:io';
 
 import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
+import '../agents/teammate_job.dart';
 import '../config/property_reader.dart';
 import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
@@ -147,6 +148,11 @@ class CliDispatcher {
     }
     final agent = AgentFactory.create(name, params);
     if (agent is CliAgent) {
+      final result = await agent.run();
+      _writer(jsonEncode(result));
+      return result['success'] == true ? 0 : 1;
+    }
+    if (agent is TeammateJob) {
       final result = await agent.run();
       _writer(jsonEncode(result));
       return result['success'] == true ? 0 : 1;

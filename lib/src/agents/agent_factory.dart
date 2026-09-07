@@ -8,6 +8,7 @@ library;
 import '../js/job_runner.dart';
 import 'cli_agent.dart';
 import 'cli_agent_params.dart';
+import 'teammate_job.dart';
 
 /// Creates job instances by name (case-insensitive).
 ///
@@ -25,6 +26,8 @@ class AgentFactory {
     switch (name.toLowerCase()) {
       case 'cliagent':
         return CliAgent(params: CliAgentParams.fromJson(params));
+      case 'teammate':
+        return TeammateJob(params: params);
       case 'jsrunner':
         return JsRunnerJob(params);
       default:

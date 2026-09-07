@@ -230,6 +230,35 @@ void _testRunCliAgent() {
       expect(result['success'], isTrue);
     });
   });
+
+  group('run <teammate-config>.json', () {
+    test('executes a teammate job without inputJql as a no-op success',
+        () async {
+      final configFile = File('${_tmp.path}/teammate.json')
+        ..writeAsStringSync(jsonEncode({
+          'name': 'Teammate',
+          'params': {
+            'cliCommands': ['echo done'],
+          },
+        }));
+      final code = await _dispatcher.dispatch(['run', configFile.path]);
+      expect(code, 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['success'], isTrue);
+      expect(result['results'], isEmpty);
+    });
+
+    test('runs the teammate config case-insensitively', () async {
+      final configFile = File('${_tmp.path}/teammate2.json')
+        ..writeAsStringSync(jsonEncode({
+          'name': 'teammate',
+          'params': {
+            'cliCommands': ['echo done']
+          },
+        }));
+      expect(await _dispatcher.dispatch(['run', configFile.path]), 0);
+    });
+  });
 }
 
 void _testList() {

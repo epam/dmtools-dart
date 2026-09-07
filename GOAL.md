@@ -410,6 +410,39 @@ full gate sequence green; unblock dependents in this table).
   tests/coverage/crap4dart (Max CRAP 8.00); agents suite unchanged 903/14
   (all remaining failures agents-repo-side).
 
+- **2026-09-07 (session 4):** Ported the Teammate job (Java
+  `teammate/Teammate.java`, ticket-driven mode only) — new
+  `TeammateJob` (`lib/src/agents/teammate_job.dart`) dispatched by
+  `AgentFactory` (`teammate`, case-insensitive) and the CLI dispatcher.
+  Scope decision recorded: Java Teammate's internal AI-processing branch
+  (`ContextOrchestrator`/`RequestDecompositionAgent`/LLM providers) is
+  NOT ported — dmtools-agents Teammate configs run with
+  `skipAIProcessing: true` and delegate the AI work to the CLI agent via
+  `cliCommands`; the job reuses [CliAgent] under the hood for the full
+  lifecycle (setup → preJSAction → input folder → preCliJSAction →
+  cliCommands → postJSAction → cache → reset) with `metadata.contextId`
+  pinned to the ticket key (input folder `input/<ticketKey>/`, Java
+  `TicketInputContextBuilder` parity). Ticket selection: `inputJql` →
+  default Jira source (jira_search_by_jql → jira_get_ticket +
+  jira_get_comments hydration; empty `inputJql` = no-op success, matching
+  Java "skipping ticket processing"). `run-teammate-local.sh` contract
+  works out of the box: `--inputJql "key = P-1"` lands in `params` via
+  the existing override merge, `--ciRunUrl` + comments gate
+  (`alwaysPostComments` / `outputType != none`) post the Java trace
+  comment `[<contextId>|<agentId>] Processing started. CI Run: <url>`
+  (AbstractJob.agentNamePrefix/shouldPostComments parity). Gates green:
+  format/analyze/2311 tests/coverage 97.4%/crap4dart (20 gates, Max CRAP
+  8.00); agents suite 882/882 fully green (see next entry).
+
+- **2026-09-07 (session 4, L4 gate restored):** The agents/ submodule
+  moved to 432cd4c (upstream "test(suite): fix 14 broken/failing unit
+  tests") and the Dart runtime passes the FULL dmtools-agents suite:
+  **882 passed / 0 failed**. The `continue-on-error` fuse on the
+  quality.yml agents-suite job has been removed — the gate is blocking
+  again (per the standing rule: fuse only while the runtime lags
+  upstream). Suite output shape `{"success":true,"passed":882,
+  "failed":0}` is the new baseline.
+
 **Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
 the catalog parity test reports zero gaps against a fresh Java clone, and
 all standing gates stay green.

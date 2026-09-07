@@ -387,6 +387,29 @@ full gate sequence green; unblock dependents in this table).
   format/analyze/2260 tests/coverage 97.5%/crap4dart (Max CRAP 8.00)/
   agents suite 898 passed / 14 failed (unchanged upstream-gap baseline).
 
+- **2026-09-07 (session 3):** Closed P6-BRG-04 + P6-REG-05 (W6/W9).
+  `cli_execute_command` through the JS bridge now matches Java
+  `CliCommandExecutor` exactly (tool_bridge.dart): full command LINE with
+  first-token whitelist (base 12 + CLI_ALLOWED_COMMANDS), temp shell
+  script (`/bin/sh`, cmd.exe /c) with stdout+stderr merged via `2>&1`
+  group, trimmed combined output returned as a plain STRING (JSON-encoded
+  for the FFI marshal), `workingDirectory` resolution per
+  `resolveWorkingDirectory` (explicit dir validated within allowed bases
+  — job dir / its git root / tmpdir — else git root, else job base), env
+  injection per `loadEnvironmentVariables` (GIT_PAGER=cat,
+  GIT_TERMINAL_PROMPT=0, PATH extension, dmtools.env from the working
+  directory, PropertyReader overrides on top). Registry schema changed
+  from invented [command, args[]] to Java-real [command,
+  workingDirectory]. Root-caused the 14 agents-suite failures: only the
+  cli_execute_command deviation was ours; the other 13 red tests + the
+  docs drift now failing agentDocsCoverage are agents-repo bugs
+  (test_workingDir.js stale makeRequire map missing baseBranchMarker x5,
+  testRunner.js missing assert.doesNotThrow x2, checkWipLabel.js
+  swallowing the ticket-not-found guard x3, smAgent x3, docs regenerated
+  x1) — upstream fixes go via PR. Gates green: format/analyze/2286
+  tests/coverage/crap4dart (Max CRAP 8.00); agents suite unchanged 903/14
+  (all remaining failures agents-repo-side).
+
 **Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
 the catalog parity test reports zero gaps against a fresh Java clone, and
 all standing gates stay green.

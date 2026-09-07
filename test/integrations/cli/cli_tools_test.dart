@@ -27,16 +27,15 @@ void toolCatalogTests() {
       expect(tool.category, 'system');
     });
 
-    test('cli_execute_command declares command and optional args', () {
+    test('cli_execute_command declares command and workingDirectory', () {
       final tool = tools.first;
-      expect(tool.params.map((p) => p.name), ['command', 'args']);
+      expect(tool.params.map((p) => p.name), ['command', 'workingDirectory']);
       expect(
         tool.params.firstWhere((p) => p.name == 'command').required,
         isTrue,
       );
-      final argsParam = tool.params.firstWhere((p) => p.name == 'args');
-      expect(argsParam.required, isFalse);
-      expect(argsParam.type, 'array');
+      final wd = tool.params.firstWhere((p) => p.name == 'workingDirectory');
+      expect(wd.required, isFalse);
     });
   });
 }

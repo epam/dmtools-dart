@@ -36,11 +36,18 @@ List<ToolDefinition> cliTools() => [
         integration: 'cli',
         category: 'system',
         params: [
-          ToolParam(name: 'command', description: 'The CLI command to run'),
           ToolParam(
-            name: 'args',
-            description: 'Arguments to pass to the command',
-            type: 'array',
+            name: 'command',
+            description: 'CLI command to execute. Must start with a '
+                'whitelisted command. Extend the whitelist via '
+                'CLI_ALLOWED_COMMANDS in dmtools.env.',
+            required: true,
+          ),
+          ToolParam(
+            name: 'workingDirectory',
+            description: 'Working directory for command execution. Defaults '
+                'to repository root if not specified. Use absolute path or '
+                'path relative to current directory.',
             required: false,
           ),
         ],

@@ -31,7 +31,7 @@ note: Registry reflects final toolsets; regenerate the gaps fixture last (P6-REG
       regen, not by alias metadata.
 - [x] **P6-REG-04** remove Dart-only aliases (jira_assign, jira_assign_to,
       jira_create_ticket) — dart jira_ticket_tools.dart:122 — S
-- [ ] **P6-REG-05** cli_execute_command params [command, workingDirectory] —
+- [x] **P6-REG-05** cli_execute_command params [command, workingDirectory] —
       dart cli_tools.dart:34 / java CliCommandExecutor.java:81 — M
 - [ ] **P6-REG-06** teams_send_message params [chatName, content,
       contentType] — dart teams_tools.dart:40 / java

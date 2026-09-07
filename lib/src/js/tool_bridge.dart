@@ -19,7 +19,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../config/env_file_parser.dart';
 import '../config/property_reader.dart';
+import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'sync_tool_dispatcher.dart';
@@ -47,6 +49,10 @@ class ToolBridge {
     PropertyReader(),
     nonHttpHandler: _dispatchNonHttp,
   );
+
+  /// CLI executor for the JS-bridge `cli_execute_command` path: supplies the
+  /// base whitelist plus the `CLI_ALLOWED_COMMANDS` extension.
+  late final CliToolExecutor _cliExecutor = CliToolExecutor(PropertyReader());
 
   /// Registers `executeToolViaJava`, `file_read`, `set_env_variable`, and
   /// the `console` object as globals on [runtime].
@@ -216,7 +222,7 @@ class ToolBridge {
       case 'file':
         return _executeFileTool(toolName, args);
       case 'cli':
-        return _executeCliTool(args);
+        return _executeCliTool(toolName, args);
       default:
         return _err('Unsupported non-HTTP integration: ${tool.integration}');
     }
@@ -228,12 +234,51 @@ class ToolBridge {
     return fn != null ? fn(args) : _err('Unknown file tool: $name');
   }
 
-  /// Executes `cli_execute_command` via [Process.runSync].
-  String _executeCliTool(Map<String, dynamic> args) {
+  /// Executes JS-bridge CLI tools. `cli_execute_command` follows Java
+  /// `CliCommandExecutor` parity exactly: the command is a full command LINE
+  /// whose first token is whitelisted (base set + `CLI_ALLOWED_COMMANDS`);
+  /// the line runs through a shell temp script (`/bin/sh`; `cmd.exe /c` on
+  /// Windows) and trimmed stdout is returned as a plain string. Non-zero
+  /// exit, spawn failure, or a whitelist violation surfaces as the
+  /// `__jsError` sentinel (Java SecurityException / CliCommandFailedException
+  /// parity) and is rethrown as a JS `Error`. The Dart-only extras
+  /// (`cli_execute_command_with_env`) keep their legacy `command` + `args`
+  /// array semantics.
+  String _executeCliTool(String toolName, Map<String, dynamic> args) {
+    if (toolName != 'cli_execute_command') {
+      return _executeLegacyCliTool(args);
+    }
+    final command = (args['command'] as String?)?.trim();
+    if (command == null || command.isEmpty) {
+      return _err('Command cannot be null or empty');
+    }
+    final firstWord = command.split(RegExp(r'\s+')).first.toLowerCase();
+    final allowed = _cliExecutor.allowedCommands.toList()..sort();
+    if (!allowed.contains(firstWord)) {
+      return _err(
+          'Command not allowed. Whitelisted commands: ${allowed.join(', ')}');
+    }
+    try {
+      final workDir =
+          _resolveCliWorkingDir(args['workingDirectory'] as String?);
+      return _runCommandLine(command, workDir);
+    } catch (e) {
+      // SecurityException parity for the allowed-base validation failure.
+      return _err(e.toString());
+    }
+  }
+
+  /// Legacy executor for the Dart-only `cli_execute_command_with_env`:
+  /// [args] carry a `command` executable plus a separate `args` array.
+  /// Returns a `{stdout, stderr, exitCode}` JSON object (pre-parity shape,
+  /// kept so the Dart-only tool surface does not regress).
+  String _executeLegacyCliTool(Map<String, dynamic> args) {
     final command = args['command'] as String?;
     if (command == null) return _err('missing command argument');
     try {
-      final cliArgs = _castList(args['args']);
+      final cliArgs = args['args'] is List
+          ? (args['args'] as List).cast<String>().toList()
+          : const <String>[];
       final result = Process.runSync(command, cliArgs);
       return jsonEncode({
         'stdout': result.stdout.toString(),
@@ -243,6 +288,142 @@ class ToolBridge {
     } catch (e) {
       return _err(e.toString());
     }
+  }
+
+  /// Runs the whitelisted [command] line through a shell and returns its
+  /// trimmed stdout.
+  ///
+  /// Java `CommandLineUtils.runCommand` parity: the line is written to a temp
+  /// script (avoids shell-escaping issues) and executed with `/bin/sh`, the
+  /// real exit code is propagated, and a non-zero exit fails the call.
+  String _runCommandLine(String command, String? workDir) {
+    final env = _cliProcessEnv(workDir);
+    try {
+      final result = Platform.isWindows
+          ? Process.runSync('cmd.exe', ['/c', '$command 2>&1'],
+              workingDirectory: workDir, environment: env)
+          : _runShellScript(command, workDir, env);
+      // Java merges stdout and stderr (`redirectErrorStream(true)`), so the
+      // script redirects the whole command group into stdout.
+      final output = result.stdout.toString().trim();
+      if (result.exitCode != 0) {
+        return _err('Command execution failed (exit code '
+            '${result.exitCode}): $output');
+      }
+      // The FFI host callback marshals through JSON, so a plain-string
+      // result (Java `executeCommand` parity) is returned JSON-encoded and
+      // surfaces to JS as an unquoted string.
+      return jsonEncode(output);
+    } catch (e) {
+      return _err('Command execution failed: $e');
+    }
+  }
+
+  /// Writes [command] to a temp shell script and runs it with `/bin/sh`.
+  ProcessResult _runShellScript(
+      String command, String? workDir, Map<String, String> env) {
+    final script = File('${Directory.systemTemp.path}/dmtools_cli_'
+        '${DateTime.now().microsecondsSinceEpoch}.sh');
+    script.writeAsStringSync('{\n$command\n} 2>&1\n');
+    try {
+      return Process.runSync('/bin/sh', [script.path],
+          workingDirectory: workDir, environment: env);
+    } finally {
+      try {
+        script.deleteSync();
+      } catch (_) {}
+    }
+  }
+
+  /// Resolves the working directory per Java `resolveWorkingDirectory`:
+  /// an explicit [workingDirectory] that exists wins (validated within the
+  /// allowed bases); otherwise the git root of the job base directory, then
+  /// the base itself — the Dart stand-in for the process cwd a Java CLI
+  /// launched from that directory would inherit. Relative paths resolve
+  /// against the base.
+  String _resolveCliWorkingDir(String? workingDirectory) {
+    final base = _workingDirectory ?? Directory.current.path;
+    if (workingDirectory != null && workingDirectory.trim().isNotEmpty) {
+      final specified = Directory(workingDirectory.trim());
+      final resolved = specified.isAbsolute
+          ? specified
+          : Directory('$base/${specified.path}');
+      if (resolved.existsSync()) {
+        _validateWithinAllowedBase(resolved.absolute.path, base);
+        return resolved.path;
+      }
+    }
+    return _cliGitRoot(base) ?? base;
+  }
+
+  /// Java `validateWithinAllowedBase` parity: the canonical [dirPath] must
+  /// sit inside the job base directory (Java's `user.dir`), its git root,
+  /// or the system temp dir — otherwise the call fails (SecurityException
+  /// parity, rethrown as a JS `Error`).
+  void _validateWithinAllowedBase(String dirPath, String base) {
+    String canonical(String p) {
+      try {
+        return Directory(p).resolveSymbolicLinksSync();
+      } catch (_) {
+        return p;
+      }
+    }
+
+    final dir = canonical(dirPath);
+    bool within(String? candidate) {
+      if (candidate == null) return false;
+      final c = canonical(candidate);
+      return dir == c || dir.startsWith('$c/');
+    }
+
+    if (within(base) || within(_cliGitRoot(base))) return;
+    if (within(Directory.systemTemp.path)) return;
+    throw Exception('Working directory is outside allowed base paths '
+        '(user.dir, git root, tmpdir): $dirPath');
+  }
+
+  /// Detects the git repository root containing [base], or `null` when
+  /// [base] is not inside a repository (Java `resolveWorkingDirectory`
+  /// git-root detection parity).
+  String? _cliGitRoot(String base) {
+    try {
+      final result = Process.runSync(
+          'git', const ['rev-parse', '--show-toplevel'],
+          workingDirectory: base);
+      final root = result.stdout.toString().trim();
+      if (result.exitCode == 0 &&
+          root.isNotEmpty &&
+          Directory(root).existsSync()) {
+        return root;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Java `loadEnvironmentVariables` parity: non-interactive git defaults,
+  /// a PATH extended with common tool installation directories,
+  /// `dmtools.env` from the resolved working directory, and job-level
+  /// overrides on top.
+  Map<String, String> _cliProcessEnv(String? workDir) {
+    final env = <String, String>{
+      'GIT_PAGER': 'cat',
+      'GIT_TERMINAL_PROMPT': '0',
+    };
+    var path = Platform.environment['PATH'] ?? '';
+    for (final dir in const [
+      '/usr/local/bin',
+      '/opt/homebrew/bin',
+      '/usr/bin',
+      '/bin'
+    ]) {
+      if (!path.contains(dir)) path = '$path:$dir';
+    }
+    env['PATH'] = path;
+    if (workDir != null) {
+      env.addAll(parseEnvFile('$workDir/dmtools.env'));
+    }
+    env.addAll(PropertyReader.getOverrides());
+    return env;
   }
 
   // ── Synchronous file operations ────────────────────────────────────────
@@ -488,9 +669,6 @@ dynamic _decodeArgs(String argsJson) {
     return null;
   }
 }
-
-List<String> _castList(dynamic value) =>
-    value is List ? value.cast<String>() : const [];
 
 String _err(String message) => jsonEncode({'error': message});
 

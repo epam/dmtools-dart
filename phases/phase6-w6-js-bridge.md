@@ -22,7 +22,7 @@ note: Gates W1/W4/W5 error surfaces — land P6-BRG-02 early.
       regex, env present, override store, GitHub client refresh, returns
       true) — dart tool_bridge.dart:129 / java
       JobJavaScriptBridge.java:628 — M
-- [ ] **P6-BRG-04** `cli_execute_command` Java contract: single command
+- [x] **P6-BRG-04** `cli_execute_command` Java contract: single command
       STRING + workingDirectory, 12-command whitelist + CLI_ALLOWED_COMMANDS,
       git-root resolution, env injection, combined-output STRING return,
       SecurityException into JS — dart tool_bridge.dart:192 / java

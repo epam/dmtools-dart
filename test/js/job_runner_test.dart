@@ -22,6 +22,8 @@ void main() {
   _testRegistryFiltering();
   _testFileDeleteDispatch();
   _testCliExecuteDispatch();
+  _testCliExecuteDispatchErrors();
+  _testCliExecuteDispatchWorkingDir();
 }
 
 File _writeScript(Directory dir, String name, String content) {
@@ -350,50 +352,158 @@ void _testFileDeleteDispatch() {
   });
 }
 
+Future<Object?> _runCliToolScript(String js,
+    {Map<String, String> overrides = const {}, Directory? scriptDir}) async {
+  final dir = scriptDir ?? Directory.systemTemp.createTempSync('dmtools_cli');
+  final ownsDir = scriptDir == null;
+  try {
+    final script = _writeScript(dir, 'test.js', js);
+    Object? result;
+    await PropertyReader.runWithOverrides(overrides, () async {
+      result = const JsJobRunner().runScript(
+        scriptPath: script.path,
+        jobParams: {},
+        workingDirectory: dir.path,
+      );
+    });
+    return jsonDecode(result! as String);
+  } finally {
+    if (ownsDir) dir.deleteSync(recursive: true);
+  }
+}
+
 void _testCliExecuteDispatch() {
   group('cli_execute_command dispatch', () {
-    test('runs echo via executeToolViaJava', () {
-      final dir = Directory.systemTemp.createTempSync('dmtools_cli');
+    test('returns trimmed stdout as a plain string', () async {
+      final result = await _runCliToolScript('''
+        var res = executeToolViaJava('cli_execute_command',
+            {command: 'echo hello'});
+        function action(params) { return res; }
+      ''', overrides: {'CLI_ALLOWED_COMMANDS': 'echo'});
+      expect(result, 'hello');
+    });
+
+    test('interprets the full command line via shell', () async {
+      final result = await _runCliToolScript('''
+        var res = executeToolViaJava('cli_execute_command',
+            {command: 'echo "a b"'});
+        function action(params) { return res; }
+      ''', overrides: {'CLI_ALLOWED_COMMANDS': 'echo'});
+      expect(result, 'a b');
+    });
+
+    test('runs inside workingDirectory when it exists', () async {
+      final dir = Directory.systemTemp.createTempSync(
+          'dmtools_wd_${DateTime.now().microsecondsSinceEpoch}');
+      Process.runSync('git', ['init', '-q', dir.path]);
       try {
-        final script = _writeScript(dir, 'test.js', '''
-          var res = executeToolViaJava(
-            'cli_execute_command',
-            {command: 'echo', args: ['hello']}
-          );
-          function action(params) {
-            return res.exitCode + ':' + res.stdout.trim();
-          }
+        final result = await _runCliToolScript('''
+          var res = executeToolViaJava('cli_execute_command',
+              {command: 'git rev-parse --show-toplevel',
+               workingDirectory: '${dir.path}'});
+          function action(params) { return res; }
         ''');
-        final result = const JsJobRunner().runScript(
-          scriptPath: script.path,
-          jobParams: {},
-        );
-        expect(jsonDecode(result!), '0:hello');
+        expect(result as String, contains(dir.path));
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+void _testCliExecuteDispatchErrors() {
+  group('cli_execute_command dispatch errors', () {
+    test('throws when command is missing', () async {
+      final result = await _runCliToolScript('''
+        var msg = 'no-error';
+        try {
+          executeToolViaJava('cli_execute_command', {});
+        } catch (e) {
+          msg = e.message;
+        }
+        function action(params) { return msg; }
+      ''');
+      expect(result as String, contains('Command cannot be null or empty'));
+    });
+
+    test('throws SecurityException text for non-whitelisted commands',
+        () async {
+      final result = await _runCliToolScript('''
+        var msg = 'no-error';
+        try {
+          executeToolViaJava('cli_execute_command', {command: 'rm -rf /'});
+        } catch (e) {
+          msg = e.message;
+        }
+        function action(params) { return msg; }
+      ''');
+      expect(result as String,
+          contains('Command not allowed. Whitelisted commands:'));
+    });
+
+    test('surfaces non-zero exit as an error (exit code propagated)', () async {
+      final result = await _runCliToolScript('''
+        var msg = 'no-error';
+        try {
+          executeToolViaJava('cli_execute_command',
+              {command: 'git status --bogus-flag-xyz'});
+        } catch (e) {
+          msg = e.message;
+        }
+        function action(params) { return msg; }
+      ''');
+      expect(result as String, contains('Command execution failed (exit code'));
+    });
+  });
+}
+
+/// Java `resolveWorkingDirectory` / `loadEnvironmentVariables` parity tests:
+/// git-root fallback, allowed-base validation, and env injection.
+void _testCliExecuteDispatchWorkingDir() {
+  group('cli_execute_command working directory', () {
+    test('falls back to the git root of the job directory', () async {
+      final dir = Directory.systemTemp.createTempSync(
+          'dmtools_gitroot_${DateTime.now().microsecondsSinceEpoch}');
+      Process.runSync('git', ['init', '-q', dir.path]);
+      try {
+        final result = await _runCliToolScript('''
+          var res = executeToolViaJava('cli_execute_command',
+              {command: 'git rev-parse --show-toplevel'});
+          function action(params) { return res; }
+        ''', scriptDir: dir);
+        expect(result as String, contains(dir.path));
       } finally {
         dir.deleteSync(recursive: true);
       }
     });
 
-    test('throws when command is missing', () {
-      final dir = Directory.systemTemp.createTempSync('dmtools_nocmd');
+    test('rejects a workingDirectory outside the allowed bases', () async {
+      final result = await _runCliToolScript('''
+        var msg = 'no-error';
+        try {
+          executeToolViaJava('cli_execute_command',
+              {command: 'git rev-parse --show-toplevel', workingDirectory: '/'});
+        } catch (e) {
+          msg = e.message;
+        }
+        function action(params) { return msg; }
+      ''');
+      expect(result as String, contains('outside allowed base paths'));
+    });
+
+    test('injects dmtools.env from the working directory', () async {
+      final dir = Directory.systemTemp.createTempSync(
+          'dmtools_envfile_${DateTime.now().microsecondsSinceEpoch}');
+      Process.runSync('git', ['init', '-q', dir.path]);
+      File('${dir.path}/dmtools.env').writeAsStringSync(
+          'GIT_AUTHOR_NAME=docsbot\nGIT_AUTHOR_EMAIL=docsbot@example.com\n');
       try {
-        final script = _writeScript(dir, 'test.js', '''
-          var msg = 'no-error';
-          try {
-            executeToolViaJava('cli_execute_command', {});
-          } catch (e) {
-            msg = e.message;
-          }
-          function action(params) { return msg; }
-        ''');
-        final result = const JsJobRunner().runScript(
-          scriptPath: script.path,
-          jobParams: {},
-        );
-        expect(
-          jsonDecode(result!) as String,
-          contains('Tool execution failed: missing command'),
-        );
+        final result = await _runCliToolScript('''
+          var res = executeToolViaJava('cli_execute_command',
+              {command: 'git var GIT_AUTHOR_IDENT'});
+          function action(params) { return res; }
+        ''', scriptDir: dir);
+        expect(result as String, contains('docsbot <docsbot@example.com>'));
       } finally {
         dir.deleteSync(recursive: true);
       }

@@ -686,8 +686,7 @@ void _testNonHttpDelegation() {
     test('delegates cli_execute_command to the handler', () {
       expect(
           _expectDelegated('cli_execute_command', {
-            'command': 'git',
-            'args': ['status'],
+            'command': 'git status',
           }),
           'cli_execute_command');
     });

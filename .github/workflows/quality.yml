@@ -109,11 +109,9 @@ jobs:
       # Pinned via the agents/ submodule instead of a floating clone so the
       # suite state is reproducible per commit.
       #
-      # continue-on-error: upstream added tests our runtime does not satisfy
-      # yet (868/882 at agents@ee67a5a: checkWipLabel error fidelity x3,
-      # preCliDevelopmentSetup workingDir x5, smAgent skip/limit/local x3,
-      # ticket-key validation x2, docs coverage x1). Non-blocking until the
-      # runtime catches up — must be blocking again after that lands.
+      # Blocking: the suite is fully green again (882/882 at
+      # agents@432cd4c — upstream fixed the 14 formerly-failing tests and
+      # the Dart runtime satisfies them; the continue-on-error fuse has
+      # been restored to hard-gate).
       - name: Run agents test suite (agents/ submodule)
-        continue-on-error: true
         run: dart run bin/run_agents_suite.dart agents

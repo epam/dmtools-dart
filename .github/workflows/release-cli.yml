@@ -135,7 +135,10 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, platform: linux, arch: x64 }
-          - { os: macos-13, platform: macos, arch: x64 }
+          # macos-15-intel is GitHub's last x86_64 image (sunsets Aug 2027);
+          # macos-13 was retired 2025-12-04 and its label queues forever.
+          # After 2027-08: build x64 via Rosetta on arm64 or a self-hosted Mac.
+          - { os: macos-15-intel, platform: macos, arch: x64 }
           - { os: macos-latest, platform: macos, arch: arm64 }
 
     steps:

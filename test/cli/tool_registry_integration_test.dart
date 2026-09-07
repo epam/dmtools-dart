@@ -1,6 +1,6 @@
 /// Integration test: the default registry wires every tool catalog together.
 ///
-/// Guards the wiring contract of [createDefaultToolRegistry]: all 17
+/// Guards the wiring contract of [createDefaultToolRegistry]: all 18
 /// integration catalogs registered, no duplicate tool names, and a stable
 /// total count that changes only when a catalog deliberately grows.
 library;
@@ -39,6 +39,7 @@ void _testCatalogMembership() {
         'jira_xray',
         'kb',
         'mermaid',
+        'tracker',
       };
       expect(_registry.availableIntegrations.length, expected.length);
       expect(_registry.availableIntegrations, containsAll(expected));

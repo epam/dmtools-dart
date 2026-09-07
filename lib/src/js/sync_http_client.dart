@@ -75,6 +75,14 @@ class SyncHttpClient {
   static SyncHttpResponse delete(String url, {Map<String, String>? headers}) =>
       _dispatch('DELETE', url, headers: headers);
 
+  /// Performs a synchronous PATCH request (GitHub issue state updates).
+  static SyncHttpResponse patch(
+    String url, {
+    Map<String, String>? headers,
+    String? body,
+  }) =>
+      _dispatch('PATCH', url, headers: headers, body: body);
+
   /// Routes a request through the pooled-isolate bridge when booted, the
   /// curl subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
   /// so later requests (after any event-loop turn) use the pool.

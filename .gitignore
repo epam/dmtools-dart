@@ -18,3 +18,8 @@ native/quickjs/*.dylib
 
 # fa harness session artifacts
 .fah/
+
+# local dmtools run artifacts
+.dmtools-logs/
+input/
+outputs/

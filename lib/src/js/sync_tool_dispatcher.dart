@@ -32,6 +32,7 @@ import 'sync_tools/github_sync_tools.dart';
 import 'sync_tools/gitlab_sync_tools.dart';
 import 'sync_tools/jenkins_sync_tools.dart';
 import 'sync_tools/jira_sync_tools.dart';
+import 'sync_tools/tracker_sync_tools.dart';
 
 /// Executor for a non-HTTP (file/CLI) tool call: receives the raw [toolName]
 /// and [args], returns the JSON result string.
@@ -75,6 +76,10 @@ class SyncToolDispatcher {
   /// Per-provider AI chat tools; built lazily on first `<provider>_ai_chat`.
   late final AiSyncTools _ai = AiSyncTools(_reader);
 
+  /// Tracker-generic tools; resolves the backend per call via `TRACKER_TYPE`
+  /// (jira | github | ado).
+  late final TrackerSyncTools _tracker = TrackerSyncTools();
+
   /// Prefix routes to the self-contained sync-tools classes.
   late final List<MapEntry<String, _PrefixDispatch>> _routes = [
     MapEntry('jira_', JiraSyncTools().dispatch),
@@ -84,6 +89,7 @@ class SyncToolDispatcher {
     MapEntry('ado_', _viaHandlers('ADO', _adoHandlers)),
     MapEntry('bitrise_', _bitrise.dispatch),
     MapEntry('jenkins_', _jenkins.dispatch),
+    MapEntry('tracker_', _viaHandlers('Tracker', _tracker.handlers)),
   ];
 
   /// GitHub executors, mirroring [GitHubSyncTools.handlers].

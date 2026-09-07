@@ -22,6 +22,7 @@ import '../integrations/sharepoint/sharepoint_tools.dart';
 import '../integrations/teams/teams_tools.dart';
 import '../integrations/testrail/testrail_tools.dart';
 import '../integrations/xray/xray_tools.dart';
+import '../integrations/tracker/tracker_tools.dart';
 import 'tool_definition.dart';
 import 'tool_registry.dart';
 
@@ -47,6 +48,7 @@ List<ToolDefinition> defaultToolCatalog() => [
       ...xrayTools(),
       ...kbTools(),
       ...mermaidTools(),
+      ...trackerTools(),
     ];
 
 /// Creates a [ToolRegistry] with every integration catalog registered.

@@ -15,6 +15,7 @@ List<ToolDefinition> _projectTools() => [
 /// Merge-request read tool: `gitlab_get_mr`.
 ToolDefinition _getMrTool() => ToolDefinition(
       name: 'gitlab_get_mr',
+      aliases: ['source_code_get_pr'],
       description: 'Get a GitLab merge request by project and iid',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -24,6 +25,7 @@ ToolDefinition _getMrTool() => ToolDefinition(
 /// Merge-request list tool: `gitlab_list_mrs`.
 ToolDefinition _listMrsTool() => ToolDefinition(
       name: 'gitlab_list_mrs',
+      aliases: ['source_code_list_prs'],
       description: 'List merge requests in a GitLab project',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -57,6 +59,7 @@ ToolDefinition _createMrNoteTool() => ToolDefinition(
 /// Merge-request merge tool: `gitlab_merge_mr`.
 ToolDefinition _mergeMrTool() => ToolDefinition(
       name: 'gitlab_merge_mr',
+      aliases: ['source_code_merge_pr'],
       description: 'Merge a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -75,6 +78,7 @@ ToolDefinition _closeMrTool() => ToolDefinition(
 /// Merge-request diff tool: `gitlab_get_mr_diff`.
 ToolDefinition _getMrDiffTool() => ToolDefinition(
       name: 'gitlab_get_mr_diff',
+      aliases: ['source_code_get_pr_diff'],
       description: 'Get the diffs (changes) of a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -120,6 +124,7 @@ ToolDefinition _getMrApprovalsTool() => ToolDefinition(
 /// Merge-request discussions tool: `gitlab_get_mr_discussions`.
 ToolDefinition _getMrDiscussionsTool() => ToolDefinition(
       name: 'gitlab_get_mr_discussions',
+      aliases: ['source_code_get_pr_discussions'],
       description: 'List the discussions (threads) of a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -289,6 +294,7 @@ ToolDefinition _getPipelinesTool() => ToolDefinition(
 /// Pipeline-trigger tool: `gitlab_trigger_pipeline`.
 ToolDefinition _triggerPipelineTool() => ToolDefinition(
       name: 'gitlab_trigger_pipeline',
+      aliases: ['source_code_trigger_workflow'],
       description: 'Trigger a new pipeline for a GitLab project ref',
       integration: 'gitlab',
       category: 'pipelines',

@@ -159,6 +159,7 @@ List<ToolDefinition> _issueTools() => [
 List<ToolDefinition> _issueReadTools() => [
       ToolDefinition(
         name: 'github_get_issue',
+        aliases: ['source_code_get_issue'],
         description: 'Get a GitHub issue by number',
         integration: 'github',
         category: 'issues',

@@ -144,6 +144,7 @@ List<ToolDefinition> _agentMrReviewTools() => [
 /// MR comment tool: `gitlab_add_mr_comment` (Java `addPullRequestComment`).
 ToolDefinition _addMrCommentTool() => ToolDefinition(
       name: 'gitlab_add_mr_comment',
+      aliases: ['source_code_add_pr_comment'],
       description: 'Add a general discussion comment to a GitLab merge '
           'request',
       integration: 'gitlab',
@@ -159,6 +160,7 @@ ToolDefinition _addMrCommentTool() => ToolDefinition(
 /// MR comments tool: `gitlab_get_mr_comments` (Java `pullRequestComments`).
 ToolDefinition _getMrCommentsTool() => ToolDefinition(
       name: 'gitlab_get_mr_comments',
+      aliases: ['source_code_get_pr_comments'],
       description: 'Get all comments for a GitLab merge request, including '
           'inline code review comments and general discussion notes; '
           'system-generated notes are excluded',
@@ -183,6 +185,7 @@ ToolDefinition _getMrDiffTextTool() => ToolDefinition(
 /// `replyToPullRequestComment`).
 ToolDefinition _replyToMrThreadTool() => ToolDefinition(
       name: 'gitlab_reply_to_mr_thread',
+      aliases: ['source_code_reply_to_pr_thread'],
       description: 'Reply to an existing discussion thread in a GitLab merge '
           'request; use the discussion id from gitlab_get_mr_discussions',
       integration: 'gitlab',
@@ -204,6 +207,7 @@ ToolDefinition _replyToMrThreadTool() => ToolDefinition(
 /// `resolveReviewThread`).
 ToolDefinition _resolveMrThreadTool() => ToolDefinition(
       name: 'gitlab_resolve_mr_thread',
+      aliases: ['source_code_resolve_pr_thread'],
       description: 'Resolve (close) a review discussion thread in a GitLab '
           'merge request',
       integration: 'gitlab',
@@ -224,6 +228,7 @@ ToolDefinition _resolveMrThreadTool() => ToolDefinition(
 /// `addInlineReviewComment`).
 ToolDefinition _addInlineMrCommentTool() => ToolDefinition(
       name: 'gitlab_add_inline_mr_comment',
+      aliases: ['source_code_add_inline_comment'],
       description: 'Create an inline code review comment on a specific file '
           'and line in a GitLab merge request; requires the base, head, and '
           'start SHAs from the MR diff refs',
@@ -261,6 +266,7 @@ ToolDefinition _addInlineMrCommentTool() => ToolDefinition(
 /// MR create tool: `gitlab_create_mr` (Java `createMergeRequest`).
 ToolDefinition _createMrTool() => ToolDefinition(
       name: 'gitlab_create_mr',
+      aliases: ['source_code_create_pr'],
       description: 'Create a GitLab merge request from a source branch into '
           'a target branch',
       integration: 'gitlab',
@@ -288,6 +294,7 @@ ToolDefinition _createMrTool() => ToolDefinition(
 /// MR rebase tool: `gitlab_rebase_mr` (Java `rebaseMergeRequest`).
 ToolDefinition _rebaseMrTool() => ToolDefinition(
       name: 'gitlab_rebase_mr',
+      aliases: ['source_code_update_pr_branch'],
       description: 'Ask GitLab to rebase a merge request source branch with '
           'its target branch',
       integration: 'gitlab',
@@ -298,6 +305,7 @@ ToolDefinition _rebaseMrTool() => ToolDefinition(
 /// MR add-label tool: `gitlab_add_mr_label` (Java `addPullRequestLabel`).
 ToolDefinition _addMrLabelTool() => ToolDefinition(
       name: 'gitlab_add_mr_label',
+      aliases: ['source_code_add_pr_label'],
       description: 'Add a label to a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -313,6 +321,7 @@ ToolDefinition _addMrLabelTool() => ToolDefinition(
 /// `removePullRequestLabel`).
 ToolDefinition _removeMrLabelTool() => ToolDefinition(
       name: 'gitlab_remove_mr_label',
+      aliases: ['source_code_remove_pr_label'],
       description: 'Remove a label from a GitLab merge request',
       integration: 'gitlab',
       category: 'merge_requests',
@@ -395,6 +404,7 @@ List<ToolDefinition> _ciTools() => [
       ),
       ToolDefinition(
         name: 'gitlab_get_job_logs',
+        aliases: ['source_code_get_job_logs'],
         description: 'Get GitLab CI job trace logs',
         integration: 'gitlab',
         category: 'ci',
@@ -413,6 +423,7 @@ List<ToolDefinition> _ciTools() => [
 List<ToolDefinition> _ciPipelineTools() => [
       ToolDefinition(
         name: 'gitlab_list_pipeline_runs',
+        aliases: ['source_code_list_workflow_runs'],
         description: 'List recent GitLab CI pipelines, optionally filtered '
             'by status, ref, and limit',
         integration: 'gitlab',

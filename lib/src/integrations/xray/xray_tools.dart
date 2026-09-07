@@ -11,12 +11,14 @@ import 'xray_client.dart';
 /// Builds an Xray tool definition with the `jira_xray` integration.
 ToolDefinition _xrayTool({
   required String name,
+  List<String> aliases = const [],
   required String description,
   String category = 'test_management',
   List<ToolParam> params = const [],
 }) =>
     ToolDefinition(
       name: name,
+      aliases: aliases,
       description: description,
       integration: 'jira_xray',
       category: category,
@@ -42,6 +44,7 @@ List<ToolDefinition> xrayTools() => [
 List<ToolDefinition> _systemTools() => [
       _xrayTool(
         name: 'jira_xray_test',
+        aliases: ['xray_test'],
         description: 'Test Xray connectivity by authenticating with OAuth2',
         category: 'system',
       ),

@@ -125,7 +125,7 @@ List<ToolDefinition> _assignTools() => [
       _jiraTool(
         name: 'jira_assign_ticket_to',
         description: 'Assigns a Jira ticket to user',
-        aliases: ['tracker_assign_ticket', 'jira_assign', 'jira_assign_to'],
+        aliases: ['tracker_assign_ticket'],
         params: [
           _keyParam,
           ToolParam(
@@ -175,7 +175,7 @@ List<ToolDefinition> _fieldTools() => [
 List<ToolDefinition> _createTools() => [
       _jiraTool(
         name: 'jira_create_ticket_basic',
-        aliases: ['tracker_create_ticket', 'jira_create_ticket'],
+        aliases: ['tracker_create_ticket'],
         description:
             'Create a new Jira ticket with basic fields (project, issue '
             'type, summary, description)',

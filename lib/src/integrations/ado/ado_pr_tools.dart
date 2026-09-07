@@ -10,6 +10,7 @@ part of 'ado_tools.dart';
 List<ToolDefinition> _pullRequestTools() => [
       ToolDefinition(
         name: 'ado_list_prs',
+        aliases: ['source_code_list_prs'],
         description: 'List Azure DevOps pull requests in a project',
         integration: 'ado',
         category: 'pull_requests',
@@ -24,6 +25,7 @@ List<ToolDefinition> _pullRequestTools() => [
       ),
       ToolDefinition(
         name: 'ado_get_pr',
+        aliases: ['source_code_get_pr'],
         description: 'Get an Azure DevOps pull request by ID',
         integration: 'ado',
         category: 'pull_requests',
@@ -307,6 +309,7 @@ List<ToolDefinition> _pipelineAgentTools() => [
 /// `getPullRequestThreads`).
 ToolDefinition _getPrCommentsTool() => ToolDefinition(
       name: 'ado_get_pr_comments',
+      aliases: ['source_code_get_pr_comments'],
       description: 'Get all comment threads for an Azure DevOps pull '
           'request; each thread contains comments, file context for inline '
           'comments, and status',
@@ -318,6 +321,7 @@ ToolDefinition _getPrCommentsTool() => ToolDefinition(
 /// PR comment tool: `ado_add_pr_comment` (Java `addPullRequestComment`).
 ToolDefinition _addPrCommentTool() => ToolDefinition(
       name: 'ado_add_pr_comment',
+      aliases: ['source_code_add_pr_comment'],
       description: 'Add a general comment to an Azure DevOps pull request '
           '(creates a new thread); for inline code comments use '
           'ado_add_inline_comment',
@@ -334,6 +338,7 @@ ToolDefinition _addPrCommentTool() => ToolDefinition(
 /// `replyToPullRequestThread`).
 ToolDefinition _replyToPrThreadTool() => ToolDefinition(
       name: 'ado_reply_to_pr_thread',
+      aliases: ['source_code_reply_to_pr_thread'],
       description: 'Reply to an existing comment thread in an Azure DevOps '
           'pull request; use the threadId from ado_get_pr_comments',
       integration: 'ado',
@@ -349,6 +354,7 @@ ToolDefinition _replyToPrThreadTool() => ToolDefinition(
 /// PR thread-resolve tool: `ado_resolve_pr_thread` (Java `resolveThread`).
 ToolDefinition _resolvePrThreadTool() => ToolDefinition(
       name: 'ado_resolve_pr_thread',
+      aliases: ['source_code_resolve_pr_thread'],
       description: "Resolve (close) a comment thread in an Azure DevOps "
           'pull request by setting its status',
       integration: 'ado',
@@ -370,6 +376,7 @@ ToolDefinition _resolvePrThreadTool() => ToolDefinition(
 /// `addInlineComment`).
 ToolDefinition _addInlineCommentTool() => ToolDefinition(
       name: 'ado_add_inline_comment',
+      aliases: ['source_code_add_inline_comment'],
       description: 'Create an inline code comment on a specific file and '
           'line range in an Azure DevOps pull request',
       integration: 'ado',
@@ -408,6 +415,7 @@ ToolDefinition _addInlineCommentTool() => ToolDefinition(
 /// PR merge tool: `ado_merge_pr` (Java `completePullRequest`).
 ToolDefinition _mergePrTool() => ToolDefinition(
       name: 'ado_merge_pr',
+      aliases: ['source_code_merge_pr'],
       description: "Complete (merge) an Azure DevOps pull request; sets "
           "status to 'completed' with the specified merge strategy",
       integration: 'ado',
@@ -471,6 +479,7 @@ ToolDefinition _removePrLabelTool() => ToolDefinition(
 /// PR diff tool: `ado_get_pr_diff` (Java `getPullRequestDiffStat`).
 ToolDefinition _getPrDiffTool() => ToolDefinition(
       name: 'ado_get_pr_diff',
+      aliases: ['source_code_get_pr_diff'],
       description: 'Get the diff/changes for an Azure DevOps pull request: '
           'the list of changed files with change types',
       integration: 'ado',

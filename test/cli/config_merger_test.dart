@@ -11,6 +11,7 @@ void main() {
   _testDeepMerge();
   _testDeepMergeExtra();
   _testMergeEncodedConfig();
+  _testMergeErrorMessages();
 }
 
 void _testDeepMerge() {
@@ -43,6 +44,47 @@ void _testDeepMerge() {
         {
           'outer': {'a': 'base', 'b': 'override', 'c': 'new'}
         },
+      );
+    });
+  });
+}
+
+/// Java-parity error messages for malformed encoded configs.
+void _testMergeErrorMessages() {
+  group('mergeEncodedConfig error messages', () {
+    test('empty base JSON is rejected (Java IAE message)', () {
+      // Java ConfigurationMerger.mergeConfigurations: "File JSON cannot be
+      // null or empty" when the file config is blank.
+      expect(
+          () => mergeEncodedConfig('', '{}'),
+          throwsA(isA<ArgumentError>().having((e) => e.message, 'message',
+              'File JSON cannot be null or empty')));
+    });
+
+    test('invalid base JSON error includes the file content (Java #525)', () {
+      // Java 8e5fc724: the offending JSON string is embedded in the error
+      // so malformed configs are debuggable straight from CI logs.
+      const broken = '{"name": "job",';
+      expect(
+        () => mergeEncodedConfig(broken, '{}'),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(startsWith('Invalid JSON format: '),
+                contains('. File JSON content: $broken')))),
+      );
+    });
+
+    test('invalid override JSON error includes the decoded content', () {
+      const broken = '{"params": ';
+      final encoded = base64.encode(utf8.encode(broken));
+      expect(
+        () => mergeEncodedConfig('{"name": "job"}', encoded),
+        throwsA(isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            allOf(startsWith('Invalid JSON format: '),
+                contains('. Encoded JSON content: $broken')))),
       );
     });
   });

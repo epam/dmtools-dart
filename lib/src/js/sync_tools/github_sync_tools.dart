@@ -73,6 +73,10 @@ class GitHubSyncTools {
             _run(_getOrCreateDraftRelease, args),
         'github_upload_release_asset': (args) =>
             _run(_uploadReleaseAsset, args),
+        'github_get_issue': (args) => _run(_getIssue, args),
+        'github_submit_pr_review': (args) => _run(_submitPrReview, args),
+        'github_list_pr_reviews': (args) => _run(_listPrReviews, args),
+        'github_dismiss_pr_review': (args) => _run(_dismissPrReview, args),
       };
 
   /// Resolves GitHub config, then runs [fn] with it.
@@ -630,6 +634,52 @@ String _repoSeg(Map<String, dynamic> a) =>
 /// `repos/{workspace}/{repository}/pulls/{pullRequestId}` URL.
 String _prUrl(GhSyncConfig c, Map<String, dynamic> a) =>
     '${c.baseUrl}/${_repoSeg(a)}/pulls/${_prId(a)}';
+
+/// `github_get_issue` — GET `repos/{w}/{r}/issues/{issueNumber}`
+/// (Java `GitHub.issue`, #524; the number is carried as a string).
+String _getIssue(GhSyncConfig c, Map<String, dynamic> a) =>
+    syncBodyOrError(SyncHttpClient.get(
+      '${c.baseUrl}/${_repoSeg(a)}/issues/${syncAsStr(a['issueNumber'])}',
+      headers: c.headers,
+    ));
+
+/// `github_submit_pr_review` — POST `repos/{w}/{r}/pulls/{id}/reviews`
+/// (Java #495). The summary `body` is only sent when non-blank.
+String _submitPrReview(GhSyncConfig c, Map<String, dynamic> a) {
+  final payload = <String, dynamic>{'event': syncAsStr(a['event'])};
+  final body = a['body'];
+  if (body != null && syncAsStr(body).trim().isNotEmpty) {
+    payload['body'] = body;
+  }
+  return syncBodyOrError(SyncHttpClient.post(
+    '${_prUrl(c, a)}/reviews',
+    headers: c.headers,
+    body: jsonEncode(payload),
+  ));
+}
+
+/// `github_list_pr_reviews` — GET `repos/{w}/{r}/pulls/{id}/reviews`
+/// (Java #495). An empty response comes back as `[]` (Java parity).
+String _listPrReviews(GhSyncConfig c, Map<String, dynamic> a) {
+  final resp =
+      SyncHttpClient.get('${_prUrl(c, a)}/reviews', headers: c.headers);
+  final body = syncBodyOrError(resp);
+  if (!resp.isOk) return body;
+  return body.trim().isEmpty ? '[]' : body;
+}
+
+/// `github_dismiss_pr_review` — PUT
+/// `repos/{w}/{r}/pulls/{id}/reviews/{reviewId}/dismissals` (Java #495).
+/// Always sends `event: DISMISS` alongside the message.
+String _dismissPrReview(GhSyncConfig c, Map<String, dynamic> a) =>
+    syncBodyOrError(SyncHttpClient.put(
+      '${_prUrl(c, a)}/reviews/${syncAsStr(a['reviewId'])}/dismissals',
+      headers: c.headers,
+      body: jsonEncode({
+        'message': syncAsStr(a['message']),
+        'event': 'DISMISS',
+      }),
+    ));
 
 /// GETs `{base}/{repoSeg}/{suffix}` and returns the response body.
 String _getRepoPath(GhSyncConfig c, Map<String, dynamic> a, String suffix) =>

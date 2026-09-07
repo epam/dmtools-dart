@@ -8,6 +8,7 @@ import '../../mcp/tool_args.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'github_client.dart';
+import '../github_pr_review_tools.dart';
 
 part 'github_actions_tools.dart';
 part 'github_agent_tools.dart';
@@ -41,6 +42,7 @@ List<ToolDefinition> githubTools() => [
       ..._agentPrTools(),
       ..._agentActionsTools(),
       ..._agentReleaseTools(),
+      ...prReviewTools(),
     ];
 
 /// Per-domain catalog functions live in `github_<domain>_tools.dart` part
@@ -160,13 +162,27 @@ List<ToolDefinition> _issueReadTools() => [
       ToolDefinition(
         name: 'github_get_issue',
         aliases: ['source_code_get_issue'],
-        description: 'Get a GitHub issue by number',
+        description: 'Get details of a GitHub issue including title, '
+            'description, state, author, labels, assignees, and comments '
+            'count.',
         integration: 'github',
         category: 'issues',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The issue number'),
+        params: const [
+          ToolParam(
+            name: 'workspace',
+            description: 'The GitHub owner/organization name',
+            required: true,
+          ),
+          ToolParam(
+            name: 'repository',
+            description: 'The GitHub repository name',
+            required: true,
+          ),
+          ToolParam(
+            name: 'issueNumber',
+            description: 'The issue number',
+            required: true,
+          ),
         ],
       ),
       ToolDefinition(
@@ -538,9 +554,28 @@ class GithubToolExecutor {
           (a['body'] ?? a['text']) as String,
         ),
     'github_get_issue': (a) => _client.getIssue(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
+          a['workspace'] as String,
+          a['repository'] as String,
+          a['issueNumber'].toString(),
+        ),
+    'github_submit_pr_review': (a) => _client.submitPullRequestReview(
+          a['workspace'] as String,
+          a['repository'] as String,
+          a['pullRequestId'].toString(),
+          a['event'] as String,
+          a['body'] as String?,
+        ),
+    'github_list_pr_reviews': (a) => _client.listPullRequestReviews(
+          a['workspace'] as String,
+          a['repository'] as String,
+          a['pullRequestId'].toString(),
+        ),
+    'github_dismiss_pr_review': (a) => _client.dismissPullRequestReview(
+          a['workspace'] as String,
+          a['repository'] as String,
+          a['pullRequestId'].toString(),
+          a['reviewId'].toString(),
+          a['message'] as String,
         ),
     'github_create_pr': (a) => _client.createPr(
           a['owner'] as String,

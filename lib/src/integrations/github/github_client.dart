@@ -85,13 +85,73 @@ class GithubClient {
   }
 
   /// `github_get_issue` — GET `/repos/{owner}/{repo}/issues/{number}`.
+  ///
+  /// Java parity (#524): [issueNumber] is carried as a string end to end.
   Future<Map<String, dynamic>> getIssue(
     String owner,
     String repo,
-    int number,
+    String issueNumber,
   ) async {
-    final body = await _http.get('repos/$owner/$repo/issues/$number');
+    final body = await _http.get('repos/$owner/$repo/issues/$issueNumber');
     return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `github_submit_pr_review` — POST
+  /// `/repos/{owner}/{repo}/pulls/{id}/reviews` (Java #495).
+  ///
+  /// [body] is only sent when non-blank (Java parity: the payload omits an
+  /// empty summary so COMMENT-only reviews stay valid).
+  Future<Map<String, dynamic>> submitPullRequestReview(
+    String workspace,
+    String repository,
+    String pullRequestId,
+    String event,
+    String? body,
+  ) async {
+    final payload = <String, dynamic>{'event': event};
+    if (body != null && body.trim().isNotEmpty) {
+      payload['body'] = body;
+    }
+    final response = await _http.post(
+      'repos/$workspace/$repository/pulls/$pullRequestId/reviews',
+      body: jsonEncode(payload),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// `github_list_pr_reviews` — GET
+  /// `/repos/{owner}/{repo}/pulls/{id}/reviews` (Java #495). An empty API
+  /// response comes back as an empty list (Java returns `[]`).
+  Future<List<Map<String, dynamic>>> listPullRequestReviews(
+    String workspace,
+    String repository,
+    String pullRequestId,
+  ) async {
+    final body = await _http
+        .get('repos/$workspace/$repository/pulls/$pullRequestId/reviews');
+    if (body.trim().isEmpty) return const [];
+    final decoded = jsonDecode(body);
+    return decoded is List
+        ? decoded.cast<Map<String, dynamic>>().toList()
+        : const [];
+  }
+
+  /// `github_dismiss_pr_review` — PUT
+  /// `/repos/{owner}/{repo}/pulls/{id}/reviews/{reviewId}/dismissals`
+  /// (Java #495). Always sends `event: DISMISS` alongside the message.
+  Future<Map<String, dynamic>> dismissPullRequestReview(
+    String workspace,
+    String repository,
+    String pullRequestId,
+    String reviewId,
+    String message,
+  ) async {
+    final response = await _http.put(
+      'repos/$workspace/$repository/pulls/$pullRequestId'
+      '/reviews/$reviewId/dismissals',
+      body: jsonEncode({'message': message, 'event': 'DISMISS'}),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
   }
 
   /// `github_create_pr` — POST `/repos/{owner}/{repo}/pulls`.

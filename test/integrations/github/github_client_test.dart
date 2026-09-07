@@ -151,7 +151,7 @@ void getIssueTests() {
   group('GithubClient.getIssue', () {
     test('returns the decoded issue map', () async {
       final f = mockGithub((o) => routeByPath({'/issues/7': _issueBody}, o));
-      final issue = await f.client.getIssue('epm', 'dm.ai', 7);
+      final issue = await f.client.getIssue('epm', 'dm.ai', '7');
       expect(issue['number'], 7);
       expect(issue['title'], 'Reported bug');
       final call = f.adapter.calls.single;

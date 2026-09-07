@@ -134,7 +134,7 @@ void _githubWriteTest(
       () => http().delete('repos/$owner/$repo/issues/comments/$commentId'),
     );
 
-    final issue = await client().getIssue(owner, repo, number);
+    final issue = await client().getIssue(owner, repo, '$number');
 
     expect(issue['number'], number);
     expect(commentId, greaterThan(0));

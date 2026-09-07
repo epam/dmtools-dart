@@ -161,6 +161,10 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._record(body)
             self._respond(200, ISSUE_COMMENTS)
             return
+        if base == "/repos/o/r/issues/42":
+            self._record(body)
+            self._respond(200, FIXTURE_PR)
+            return
         if base.endswith("/pulls/42/reviews"):
             self._record(body)
             self._respond(200, [{"id": 9, "state": "PENDING"}])

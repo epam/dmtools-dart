@@ -10,8 +10,10 @@ void main() {
   catalogOrderTests();
   catalogParamTests();
   catalogIssueParamTests();
+  catalogPrReviewParamTests();
   executorRoutingTests();
   executorMutationTests();
+  executorPrReviewRoutingTests();
   executorEdgeCaseTests();
 }
 
@@ -79,6 +81,9 @@ const _githubToolNames = [
   'github_get_workflow_run_logs',
   'github_get_or_create_draft_release',
   'github_upload_release_asset',
+  'github_submit_pr_review',
+  'github_list_pr_reviews',
+  'github_dismiss_pr_review',
 ];
 
 /// Serves `[]` for the PR-list GET (expects a JSON array), `{}` otherwise.
@@ -92,7 +97,7 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the fifty-eight tools in declaration order', () {
+    test('registers the sixty-one tools in declaration order', () {
       expect(tools.map((t) => t.name), _githubToolNames);
     });
 
@@ -184,14 +189,78 @@ void catalogParamTests() {
   });
 }
 
-/// Catalog shape for the issue tool.
+/// Catalog shape for the issue tool (Java `GitHub.issue`, #524).
 void catalogIssueParamTests() {
   group('github_get_issue', () {
     final tool = toolNamed('github_get_issue');
 
-    test('declares required owner, repo, number', () {
-      expect(tool.params.map((p) => p.name), ['owner', 'repo', 'number']);
+    test('declares workspace, repository, issueNumber as required strings', () {
+      expect(tool.params.map((p) => p.name),
+          ['workspace', 'repository', 'issueNumber']);
+      expect(tool.params.map((p) => p.type), ['string', 'string', 'string']);
       expect(tool.params.every((p) => p.required), isTrue);
+    });
+
+    test('carries the Java description, category, and alias', () {
+      expect(
+        tool.description,
+        'Get details of a GitHub issue including title, description, state, '
+        'author, labels, assignees, and comments count.',
+      );
+      expect(tool.category, 'issues');
+      expect(tool.aliases, ['source_code_get_issue']);
+    });
+  });
+}
+
+/// Catalog shape for the native PR review tools (Java `GitHub` #495).
+void catalogPrReviewParamTests() {
+  group('github_submit_pr_review', () {
+    final tool = toolNamed('github_submit_pr_review');
+
+    test('declares the Java params (body optional)', () {
+      expect(tool.params.map((p) => p.name),
+          ['workspace', 'repository', 'pullRequestId', 'event', 'body']);
+      expect(
+          tool.params.map((p) => p.required), [true, true, true, true, false]);
+      expect(tool.category, 'pull_requests');
+    });
+
+    test('carries the Java description', () {
+      expect(
+          tool.description,
+          startsWith('Submit a formal GitHub pull '
+              'request review'));
+    });
+  });
+
+  group('github_list_pr_reviews', () {
+    final tool = toolNamed('github_list_pr_reviews');
+
+    test('declares the Java params and description', () {
+      expect(tool.params.map((p) => p.name),
+          ['workspace', 'repository', 'pullRequestId']);
+      expect(tool.params.every((p) => p.required), isTrue);
+      expect(tool.category, 'pull_requests');
+      expect(tool.description,
+          startsWith('List all formal reviews (APPROVE/REQUEST_CHANGES/'));
+    });
+  });
+
+  group('github_dismiss_pr_review', () {
+    final tool = toolNamed('github_dismiss_pr_review');
+
+    test('declares the Java params and description', () {
+      expect(tool.params.map((p) => p.name), [
+        'workspace',
+        'repository',
+        'pullRequestId',
+        'reviewId',
+        'message',
+      ]);
+      expect(tool.params.every((p) => p.required), isTrue);
+      expect(tool.category, 'pull_requests');
+      expect(tool.description, startsWith('Dismiss a previously submitted'));
     });
   });
 }
@@ -229,6 +298,46 @@ void executorRoutingTests() {
   });
 }
 
+/// [GithubToolExecutor.execute] routes the native PR review tools (Java #495).
+void executorPrReviewRoutingTests() {
+  late _ExecutorFixture f;
+
+  group('GithubToolExecutor.execute (PR reviews)', () {
+    setUp(() => f = _executorFixture());
+
+    test('routes github_submit_pr_review (Java #495)', () async {
+      await f.executor.execute('github_submit_pr_review', {
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': '74',
+        'event': 'REQUEST_CHANGES',
+        'body': 'blocking issues',
+      });
+      expect(f.spy.calls, ['submitPullRequestReview:epm:dm.ai:74']);
+    });
+
+    test('routes github_list_pr_reviews (Java #495)', () async {
+      await f.executor.execute('github_list_pr_reviews', {
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': '74',
+      });
+      expect(f.spy.calls, ['listPullRequestReviews:epm:dm.ai:74']);
+    });
+
+    test('routes github_dismiss_pr_review (Java #495)', () async {
+      await f.executor.execute('github_dismiss_pr_review', {
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'pullRequestId': '74',
+        'reviewId': '123',
+        'message': 'superseded',
+      });
+      expect(f.spy.calls, ['dismissPullRequestReview:epm:dm.ai:74:123']);
+    });
+  });
+}
+
 /// [GithubToolExecutor.execute] routes mutation/read tool names to client calls.
 void executorMutationTests() {
   late _ExecutorFixture f;
@@ -247,11 +356,12 @@ void executorMutationTests() {
       expect(f.spy.calls, ['createComment:epm:dm.ai:42:hi']);
     });
 
-    test('routes github_get_issue with owner, repo, number', () async {
+    test('routes github_get_issue with workspace, repository, issueNumber',
+        () async {
       await f.executor.execute('github_get_issue', {
-        'owner': 'epm',
-        'repo': 'dm.ai',
-        'number': 7,
+        'workspace': 'epm',
+        'repository': 'dm.ai',
+        'issueNumber': '7',
       });
       expect(f.spy.calls, ['getIssue:epm:dm.ai:7']);
     });
@@ -347,9 +457,50 @@ class _SpyGithubClient extends GithubClient {
   }
 
   @override
-  Future<Map<String, dynamic>> getIssue(String owner, String repo, int number) {
-    calls.add('getIssue:$owner:$repo:$number');
-    return super.getIssue(owner, repo, number);
+  Future<Map<String, dynamic>> getIssue(
+    String owner,
+    String repo,
+    String issueNumber,
+  ) {
+    calls.add('getIssue:$owner:$repo:$issueNumber');
+    return super.getIssue(owner, repo, issueNumber);
+  }
+
+  @override
+  Future<Map<String, dynamic>> submitPullRequestReview(
+    String workspace,
+    String repository,
+    String pullRequestId,
+    String event,
+    String? body,
+  ) {
+    calls.add('submitPullRequestReview:$workspace:$repository:$pullRequestId');
+    return super.submitPullRequestReview(
+        workspace, repository, pullRequestId, event, body);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> listPullRequestReviews(
+    String workspace,
+    String repository,
+    String pullRequestId,
+  ) {
+    calls.add('listPullRequestReviews:$workspace:$repository:$pullRequestId');
+    return super.listPullRequestReviews(workspace, repository, pullRequestId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> dismissPullRequestReview(
+    String workspace,
+    String repository,
+    String pullRequestId,
+    String reviewId,
+    String message,
+  ) {
+    calls.add(
+        'dismissPullRequestReview:$workspace:$repository:$pullRequestId:$reviewId');
+    return super.dismissPullRequestReview(
+        workspace, repository, pullRequestId, reviewId, message);
   }
 
   @override

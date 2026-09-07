@@ -14,9 +14,9 @@ name: Release CLI
 # Trigger is dispatch-only (like dm.ai) — the workflow itself pushes the tag,
 # so a tag-push trigger would double-fire.
 #
-# Platform matrix: linux-x64, macos-x64, macos-arm64. linux-arm64 needs an ARM
-# builder the private repo does not have — install.sh explains the from-source
-# path there. Windows needs MinGW-w64 + a PowerShell installer (follow-up).
+# Platform matrix: linux-x64, macos-x64, macos-arm64. linux-arm64 has no
+# prebuilt asset yet — GitHub's free arm64 runners for public repos would
+# cover it (follow-up). Windows needs MinGW-w64 + a PowerShell installer.
 
 on:
   workflow_dispatch:

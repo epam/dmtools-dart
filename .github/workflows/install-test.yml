@@ -11,8 +11,8 @@ name: Install test
 #   - workflow_dispatch: full matrix, optional `version` input pins the
 #     release under test (default: latest).
 #
-# The repo is private, so the installer needs an authenticated download —
-# DMTOOLS_GITHUB_TOKEN carries the workflow's own GITHUB_TOKEN.
+# The repo is public (no auth needed), but the token is still passed to
+# exercise the authenticated download path and avoid API rate limits.
 
 on:
   pull_request:

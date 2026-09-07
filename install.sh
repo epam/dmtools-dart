@@ -13,14 +13,14 @@
 #   ... | sh -s -- v0.1.0          (or:  sh install.sh 0.1.0)
 #   ... | DMTOOLS_VERSION=v0.1.0 sh
 #
-# The repository is private, so downloads need a token with repo read
-# access:
+# The repository is public — no token needed. DMTOOLS_GITHUB_TOKEN is
+# still honored (optional) for API rate limits or private forks:
 #   export DMTOOLS_GITHUB_TOKEN=ghp_...
 #
 # Environment overrides:
 #   DMTOOLS_INSTALL_DIR   installation root (default: ~/.dmtools)
 #   DMTOOLS_VERSION       version to install (default: latest release)
-#   DMTOOLS_GITHUB_TOKEN  token for GitHub API/download auth (private repo)
+#   DMTOOLS_GITHUB_TOKEN  optional auth token (rate limits / private forks)
 #
 # POSIX sh only (dash-safe): no [[ ]], arrays, or pipefail.
 
@@ -58,7 +58,7 @@ case "$(uname -m)" in
     ;;
 esac
 
-# linux-arm64 has no prebuilt asset yet (no ARM builder for a private repo).
+# linux-arm64 has no prebuilt asset yet.
 if [ "$os" = "linux" ] && [ "$arch" = "arm64" ]; then
   err "no prebuilt binary for linux-arm64 yet — build from source:"
   err "  dart pub get && make native && dart compile exe bin/dmtools.dart -o dmtools"
@@ -117,8 +117,8 @@ archive="$tmpdir/$asset"
 if ! fetch "$download_base/$asset" "$archive"; then
   err "download failed: $download_base/$asset"
   if [ -z "${DMTOOLS_GITHUB_TOKEN:-}" ]; then
-    err "the repository is private — export DMTOOLS_GITHUB_TOKEN with read"
-    err "access to ${REPO} and retry."
+    err "not authenticated — for rate limits or private forks export"
+    err "DMTOOLS_GITHUB_TOKEN and retry."
   elif [ -n "$version" ]; then
     err "check that release ${version} exists and has a ${asset} asset."
   fi

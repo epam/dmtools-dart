@@ -18,12 +18,12 @@ scripting runtime via `dart:ffi`. No JVM, no GraalVM — Dart only.
 ### Install the prebuilt binary (no Dart SDK required)
 
 ```bash
-# The repository is private — a token with read access is required:
-export DMTOOLS_GITHUB_TOKEN=ghp_...
-
 curl -fsSL \
   "https://github.com/epam/dmtools-dart/releases/latest/download/install.sh" | sh
 ```
+
+The repository is public — no token required. (`DMTOOLS_GITHUB_TOKEN` is
+still honored as an optional override for API rate limits or private forks.)
 
 This installs a standalone AOT binary plus the QuickJS shared library it
 loads to `~/.dmtools/bin` and puts it on your `PATH`. Install a specific

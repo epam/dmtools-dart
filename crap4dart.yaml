@@ -157,12 +157,6 @@ gates:
   test_assertions:
     enabled: true
     min_assertions: 1
-    # Parser limitation (crap4dart 0.9.2): a trailing named `skip:`
-    # argument on test() makes the gate miss the body's assertions.
-    # These files' tests DO assert; reported upstream.
-    exclude:
-      - 'test/integration/testrail_integration_test.dart'
-      - 'test/js/agents_suite_test.dart'
   # Flag directories with loose .dart files (flat-file sprawl).
   folder_structure:
     enabled: true

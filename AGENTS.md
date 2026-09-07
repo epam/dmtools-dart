@@ -8,13 +8,12 @@ it is the spec.** This file is the operating manual: rules, commands, layout.
 ## 1. Non-negotiable rules
 
 1. **crap4dart is law.** CRAP threshold **8.0** (`crap4dart.yaml`), tool
-   pinned to **0.9.2** in CI. Pre-commit hook
+   pinned to **0.9.5** in CI (and locally; keep both in sync). Pre-commit hook
    runs `crap4dart check --staged`; CI runs `check --all` + `analyze` on every push.
    Never commit on red, never weaken a gate to make code pass. Known
    exemptions live in `crap4dart.yaml` with comments (Java-parity client
    classes → class_size warning; testrail_create_case* Java-parity
-   @MCPParam signatures → method_size max_params override; test_assertions
-   parser bug with trailing `skip:` args).
+   @MCPParam signatures → method_size max_params override).
 2. **Signature parity with Java DMTools.** Config JSON keys, tool names
    (snake_case), env variables, CLI commands — identical to the Java version.
    A config or `dmtools.env` that works with Java must work unchanged here.

@@ -48,6 +48,7 @@ List<ToolDefinition> _systemTools() => [
 List<ToolDefinition> _workItemTools() => [
       ToolDefinition(
         name: 'ado_get_work_item',
+        aliases: ['tracker_get_ticket'],
         description: 'Get an Azure DevOps work item by ID',
         integration: 'ado',
         category: 'work_item_management',
@@ -55,6 +56,7 @@ List<ToolDefinition> _workItemTools() => [
       ),
       ToolDefinition(
         name: 'ado_create_work_item',
+        aliases: ['tracker_create_ticket'],
         description: 'Create a new Azure DevOps work item',
         integration: 'ado',
         category: 'work_item_management',
@@ -63,11 +65,13 @@ List<ToolDefinition> _workItemTools() => [
             name: 'type',
             description: 'The work item type (Bug, Task, User Story, etc.)',
             required: true,
+            aliases: ['issueType'],
           ),
           ToolParam(
             name: 'title',
             description: 'The work item title',
             required: true,
+            aliases: ['summary'],
           ),
         ],
       ),
@@ -102,6 +106,7 @@ List<ToolDefinition> _workItemTools() => [
 List<ToolDefinition> _workItemLinkTools() => [
       ToolDefinition(
         name: 'ado_create_work_item_link',
+        aliases: ['tracker_link_tickets'],
         description: 'Link two Azure DevOps work items (source → target) with '
             'a relation type',
         integration: 'ado',
@@ -140,7 +145,11 @@ List<ToolDefinition> _workItemQueryTools() => [
         category: 'work_item_management',
         aliases: ['ado_search_by_wiql', 'tracker_search'],
         params: [
-          ToolParam(name: 'wiql', description: 'The WIQL query string'),
+          ToolParam(
+            name: 'wiql',
+            description: 'The WIQL query string',
+            aliases: ['jql', 'searchQueryJQL', 'query'],
+          ),
           ToolParam(
             name: 'fields',
             description: 'Optional array of fields to include',
@@ -161,7 +170,7 @@ List<ToolDefinition> _workItemQueryTools() => [
 List<ToolDefinition> _commentTools() => [
       ToolDefinition(
         name: 'ado_get_work_item_comments',
-        aliases: ['ado_get_comments'],
+        aliases: ['ado_get_comments', 'tracker_get_comments'],
         description: 'List the comments on an Azure DevOps work item',
         integration: 'ado',
         category: 'comment_management',
@@ -169,7 +178,7 @@ List<ToolDefinition> _commentTools() => [
       ),
       ToolDefinition(
         name: 'ado_add_work_item_comment',
-        aliases: ['ado_post_comment'],
+        aliases: ['ado_post_comment', 'tracker_post_comment'],
         description: 'Add a comment to an Azure DevOps work item',
         integration: 'ado',
         category: 'comment_management',

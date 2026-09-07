@@ -38,6 +38,24 @@ class ToolDefinition {
   List<String> get requiredParams =>
       params.where((p) => p.required).map((p) => p.name).toList();
 
+  /// Returns [args] with Java parameter aliases normalized onto the
+  /// canonical parameter names (`MCPSchemaGenerator` executor parity:
+  /// "check parameter X and its aliases"). Alias keys are preserved —
+  /// handlers read canonical keys only.
+  Map<String, dynamic> applyParamAliases(Map<String, dynamic> args) {
+    var out = args;
+    for (final p in params) {
+      if (p.aliases.isEmpty || out.containsKey(p.name)) continue;
+      for (final alias in p.aliases) {
+        if (out.containsKey(alias)) {
+          out = {...out, p.name: out[alias]};
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   /// Converts to MCP protocol JSON.
   ///
   /// Matches the Java `MCPSchemaGenerator` output: a tool object with

@@ -40,22 +40,19 @@ class ToolWrapperGenerator {
     final buffer = StringBuffer()
       ..writeln('// Auto-generated MCP tool wrappers');
     for (final tool in registry.allTools) {
+      // Canonical names only: the Java JS surface
+      // (JobJavaScriptBridge.exposeMCPToolsUsingGenerated) exposes one
+      // global per canonical schema — aliases are CLI-resolution metadata
+      // (McpCliHandler.resolveToolAlias) and never become JS globals.
       buffer.writeln(_wrapperFor(tool.name, tool.params));
-      for (final alias in tool.aliases) {
-        buffer.writeln(_wrapperFor(alias, tool.params, dispatchAs: tool.name));
-      }
     }
     return buffer.toString();
   }
 
   /// Returns the wrapper JS for a single [tool].
-  String _wrapperFor(
-    String name,
-    List<ToolParam> params, {
-    String? dispatchAs,
-  }) {
-    if (params.isEmpty) return _noArgWrapper(name, dispatchAs);
-    return _paramWrapper(name, params, dispatchAs);
+  String _wrapperFor(String name, List<ToolParam> params) {
+    if (params.isEmpty) return _noArgWrapper(name);
+    return _paramWrapper(name, params);
   }
 
   /// The call log statement emitted into every wrapper — Java
@@ -67,22 +64,17 @@ class ToolWrapperGenerator {
       'JSON.stringify(args));\n';
 
   /// Wrapper for a tool that takes no parameters.
-  String _noArgWrapper(String name, [String? dispatchAs]) =>
-      'globalThis.$name = function() {\n'
+  String _noArgWrapper(String name) => 'globalThis.$name = function() {\n'
       '  var args = {};\n'
       '${_callLog(name)}'
-      "  return executeToolViaJava('${dispatchAs ?? name}', args);\n"
+      "  return executeToolViaJava('$name', args);\n"
       '};\n';
 
   /// Wrapper for a tool with positional [params].
   ///
   /// Accepts either positional arguments or a single object argument that
   /// passes through directly.
-  String _paramWrapper(
-    String name,
-    List<ToolParam> params, [
-    String? dispatchAs,
-  ]) {
+  String _paramWrapper(String name, List<ToolParam> params) {
     final paramList = params.map((p) => p.name).join(', ');
     final assignments = [
       for (var i = 0; i < params.length; i++)
@@ -98,7 +90,7 @@ class ToolWrapperGenerator {
         '$assignments\n'
         '  }\n'
         '${_callLog(name)}'
-        "  return executeToolViaJava('${dispatchAs ?? name}', args);\n"
+        "  return executeToolViaJava('$name', args);\n"
         '};\n';
   }
 }

@@ -197,14 +197,14 @@ class ToolBridge {
   /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI
   /// tools delegate back to [_dispatchNonHttp] for direct `dart:io` execution.
   String _execute(String toolName, Map<String, dynamic> args) {
+    // Canonical names only: the Java JS surface exposes and resolves
+    // canonical schemas (MCPSchemaGenerator); tracker_*/source_code_*
+    // alias resolution is a CLI concern (McpCliHandler.resolveToolAlias).
     final tool = _registry.getTool(toolName);
-    if (tool == null) {
+    if (tool == null || tool.name != toolName) {
       return _err('Unknown tool: $toolName');
     }
-    // Dispatch under the canonical name so Java-side aliases (e.g.
-    // `ado_search_by_wiql` -> `ado_list_work_items`) route to the same
-    // executor entry.
-    return dispatcher.execute(tool.name, args) ??
+    return dispatcher.execute(tool.name, tool.applyParamAliases(args)) ??
         _err('Tool not available: $toolName');
   }
 

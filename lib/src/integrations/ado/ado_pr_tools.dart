@@ -245,6 +245,9 @@ ToolParam _numberParam(String name, String description) => ToolParam(
       description: description,
       type: 'number',
       required: true,
+      // Java bridges `key` onto the numeric `id` parameter of the tracker
+      // carrier tools (executor alias map).
+      aliases: name == 'id' ? const ['key'] : const [],
     );
 
 /// Shared `project` parameter naming the target Azure DevOps project.

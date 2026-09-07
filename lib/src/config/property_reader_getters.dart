@@ -552,16 +552,4 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// Jenkins API token. Key: `JENKINS_API_TOKEN`.
   String? getJenkinsApiToken() => getValue('JENKINS_API_TOKEN');
-
-  /// Default tracker backend for the `tracker_*` generic tool family.
-  /// Key: `TRACKER_TYPE` (`jira` | `github` | `ado`), default: `jira`.
-  ///
-  /// Mirrors the Java DI module selection (JiraModule vs AdoModule): the
-  /// deployment picks which TrackerClient implementation serves the generic
-  /// tracker calls; unknown values fall back to `jira`.
-  String getTrackerType() {
-    final v = (getValue('TRACKER_TYPE') ?? '').toLowerCase().trim();
-    if (v == 'github' || v == 'ado') return v;
-    return 'jira';
-  }
 }

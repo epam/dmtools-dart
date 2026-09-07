@@ -29,19 +29,24 @@ class CliDispatcher {
   /// Creates a dispatcher.
   ///
   /// [writer] receives every output line (defaults to `print`),
-  /// [propertyReader] backs the `doctor` command, and [isTty] decides the
-  /// no-argument behaviour (interactive stub on a terminal, help otherwise).
+  /// [propertyReader] backs the `doctor` command, [isTty] decides the
+  /// no-argument behaviour (interactive stub on a terminal, help otherwise),
+  /// and [env] backs alias-resolution env reads (defaults to the process
+  /// environment, like Java's `System.getenv` in `McpCliHandler`).
   CliDispatcher({
     void Function(String line)? writer,
     PropertyReader? propertyReader,
     bool Function()? isTty,
+    Map<String, String>? env,
   })  : _writer = writer ?? print,
         _reader = propertyReader ?? PropertyReader(),
-        _isTty = isTty ?? _stdoutIsTty;
+        _isTty = isTty ?? _stdoutIsTty,
+        _env = env ?? Platform.environment;
 
   final void Function(String line) _writer;
   final PropertyReader _reader;
   final bool Function() _isTty;
+  final Map<String, String> _env;
 
   static bool _stdoutIsTty() => stdout.hasTerminal;
 
@@ -213,15 +218,24 @@ class CliDispatcher {
       return _listTools([toolName]);
     }
     final registry = createDefaultToolRegistry();
-    if (!registry.hasTool(toolName)) {
+    // Java `McpCliHandler.resolveToolAlias`: a canonical name passes
+    // through; an alias resolves to its carrier, choosing between
+    // multiple carriers via DEFAULT_TRACKER / DEFAULT_SOURCE_CODE.
+    final resolvedTool = registry.resolveToolAlias(
+      toolName,
+      defaultTracker: _env['DEFAULT_TRACKER'],
+      defaultSourceCode: _env['DEFAULT_SOURCE_CODE'],
+    );
+    if (resolvedTool == null) {
       _writer('Error: unknown tool: $toolName');
       _writer('Run "dmtools list" for available tools');
       return 1;
     }
     try {
-      final params = registry.getTool(toolName)?.params ?? const <ToolParam>[];
+      final params =
+          registry.getTool(resolvedTool)?.params ?? const <ToolParam>[];
       final args = _buildToolArgs(params, cleaned);
-      final result = ToolBridge(registry: registry).execute(toolName, args);
+      final result = ToolBridge(registry: registry).execute(resolvedTool, args);
       _writer(result);
       return _isToolError(result) ? 1 : 0;
     } catch (e) {

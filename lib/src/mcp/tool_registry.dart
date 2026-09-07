@@ -32,12 +32,74 @@ class ToolRegistry {
   bool hasTool(String name) =>
       _tools.containsKey(name) || _aliasToName.containsKey(name);
 
+  /// Returns every tool carrying [alias], in registration order.
+  ///
+  /// Unlike the single-binding [_aliasToName] map this keeps all
+  /// candidates, mirroring the Java generated registry's
+  /// `ALIAS_TO_TOOL_NAMES` multimap (one alias may be carried by several
+  /// integrations, e.g. `tracker_get_ticket` on jira and ado).
+  List<ToolDefinition> toolsByAlias(String alias) =>
+      _tools.values.where((t) => t.aliases.contains(alias)).toList();
+
   /// Resolves a tool name or alias to the canonical tool name.
   ///
   /// Returns `null` when [name] is neither a registered tool nor an alias.
   String? resolveName(String name) {
     if (_tools.containsKey(name)) return name;
     return _aliasToName[name];
+  }
+
+  /// Resolves [name] following the Java `McpCliHandler.resolveToolAlias`
+  /// contract.
+  ///
+  /// A registered canonical name resolves to itself. An alias with exactly
+  /// one carrier resolves to that carrier. An alias carried by several
+  /// integrations picks the carrier matching the configured default
+  /// integration: [defaultTracker] for `tracker_*` aliases and
+  /// [defaultSourceCode] for `source_code_*` aliases (values are trimmed
+  /// and lowercased like Java's env reads; other aliases ignore both).
+  /// Anything unresolved falls back to the first candidate. Returns `null`
+  /// when [name] is unknown.
+  String? resolveToolAlias(
+    String name, {
+    String? defaultTracker,
+    String? defaultSourceCode,
+  }) {
+    if (_tools.containsKey(name)) return name;
+    final candidates = toolsByAlias(name);
+    if (candidates.isEmpty) return null;
+    if (candidates.length == 1) return candidates.first.name;
+    final wanted = _defaultIntegrationFor(
+      name,
+      defaultTracker: defaultTracker,
+      defaultSourceCode: defaultSourceCode,
+    );
+    if (wanted != null) {
+      for (final candidate in candidates) {
+        if (candidate.integration == wanted) return candidate.name;
+      }
+    }
+    return candidates.first.name;
+  }
+
+  /// The integration name configured for [alias]'s prefix, if any.
+  ///
+  /// Java `McpCliHandler.resolveDefaultIntegrationForAlias` reads
+  /// `DEFAULT_TRACKER` for `tracker_*` and `DEFAULT_SOURCE_CODE` for
+  /// `source_code_*`; both are trimmed and lowercased before matching.
+  String? _defaultIntegrationFor(
+    String alias, {
+    String? defaultTracker,
+    String? defaultSourceCode,
+  }) {
+    final raw = alias.startsWith('tracker_')
+        ? defaultTracker
+        : alias.startsWith('source_code_')
+            ? defaultSourceCode
+            : null;
+    if (raw == null) return null;
+    final value = raw.trim().toLowerCase();
+    return value.isEmpty ? null : value;
   }
 
   /// Returns the tool definition for [name], resolving aliases.

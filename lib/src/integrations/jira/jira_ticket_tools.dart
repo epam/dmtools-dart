@@ -32,6 +32,7 @@ List<ToolDefinition> _ticketTools() => [
 List<ToolDefinition> _searchTools() => [
       _jiraTool(
         name: 'jira_search_by_jql',
+        aliases: ['tracker_search'],
         description: 'Search Jira issues by JQL query',
         category: 'search',
         params: _jqlSearchParams,
@@ -42,6 +43,7 @@ List<ToolDefinition> _searchTools() => [
 List<ToolDefinition> _commentTools() => [
       _jiraTool(
         name: 'jira_post_comment',
+        aliases: ['tracker_post_comment'],
         description: 'Post a comment on a Jira ticket',
         params: [
           _keyParam,
@@ -82,6 +84,7 @@ List<ToolDefinition> _labelTools() => [
 List<ToolDefinition> _statusTools() => [
       _jiraTool(
         name: 'jira_move_to_status',
+        aliases: ['tracker_move_to_status'],
         description: 'Transition a Jira ticket to a target status',
         category: 'workflow',
         params: [
@@ -107,6 +110,7 @@ List<String>? _optionalStringList(Map<String, dynamic> args, String key) {
 List<ToolDefinition> _commentReadTools() => [
       _jiraTool(
         name: 'jira_get_comments',
+        aliases: ['tracker_get_comments'],
         description: 'Get all comments on a Jira ticket',
         params: [_keyParam],
       ),

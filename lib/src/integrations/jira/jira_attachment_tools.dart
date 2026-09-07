@@ -22,6 +22,7 @@ List<ToolDefinition> _attachmentTools() => [
       ),
       _jiraTool(
         name: 'jira_download_attachment',
+        aliases: ['tracker_download_attachment'],
         description: 'Download a Jira attachment to a local file',
         category: 'system',
         params: [

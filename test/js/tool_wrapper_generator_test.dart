@@ -162,7 +162,7 @@ void _testSingleParamTool() {
 
 void _testAliasWrappers() {
   group('alias wrappers', () {
-    test('emits a global per alias dispatching under the canonical name', () {
+    test('emits canonical globals only — aliases never become JS globals', () {
       final registry = _registryWith(ToolDefinition(
         name: 'jira_create_ticket',
         description: 'Create ticket',
@@ -178,32 +178,32 @@ void _testAliasWrappers() {
       // Canonical wrapper dispatches under its own name.
       expect(code, contains('globalThis.jira_create_ticket ='));
       expect(code, contains("executeToolViaJava('jira_create_ticket', args)"));
-      // Each alias gets a global that dispatches the canonical tool name —
-      // Java parity: the schema registry exposes aliases as dispatchable
-      // tools, so scripts may call either name.
-      expect(code, contains('globalThis.jira_create_ticket_basic ='));
-      expect(code, contains('globalThis.tracker_create_ticket ='));
-      expect(
-        code,
-        isNot(contains("executeToolViaJava('jira_create_ticket_basic'")),
-      );
-      expect(
-        code,
-        isNot(contains("executeToolViaJava('tracker_create_ticket'")),
-      );
+      // Java parity: the JS surface (JobJavaScriptBridge
+      // .exposeMCPToolsUsingGenerated) exposes exactly one global per
+      // canonical schema — aliases are CLI-resolution metadata
+      // (McpCliHandler.resolveToolAlias), never JS globals.
+      expect(code, isNot(contains('globalThis.jira_create_ticket_basic')));
+      expect(code, isNot(contains('globalThis.tracker_create_ticket')));
     });
 
-    test('alias of a no-param tool dispatches with empty object', () {
-      final registry = _registryWith(ToolDefinition(
-        name: 'system_info',
-        description: 'Get system info',
-        integration: 'jira',
-        aliases: const ['sys_info'],
-      ));
+    test('generates one global per canonical tool', () {
+      final registry = ToolRegistry()
+        ..register(ToolDefinition(
+          name: 'jira_get_ticket',
+          description: 'Get ticket',
+          integration: 'jira',
+          aliases: const ['tracker_get_ticket'],
+        ))
+        ..register(ToolDefinition(
+          name: 'file_read',
+          description: 'Read file',
+          integration: 'file',
+        ));
       final code = const ToolWrapperGenerator().generate(registry);
-
-      expect(code, contains('globalThis.sys_info = function()'));
-      expect(code, contains("executeToolViaJava('system_info', args)"));
+      expect(
+        RegExp(r'globalThis\.\w+ =', multiLine: true).allMatches(code).length,
+        2,
+      );
     });
   });
 }

@@ -44,6 +44,7 @@ void main() {
   _testList();
   _testInteractive();
   _testDirectTool();
+  _testAliasRouting();
   _testDirectToolNamedArgs();
   _testDirectToolNamedArgsPrecedence();
   _testDirectToolJavaArgs();
@@ -336,6 +337,42 @@ void _testDirectTool() {
       );
       final result = jsonDecode(_lines.last) as Map<String, dynamic>;
       expect(result['error'], contains('not configured'));
+    });
+  });
+}
+
+/// Java `McpCliHandler.resolveToolAlias` parity: an alias invocation on
+/// the CLI surface picks the carrier tool via DEFAULT_TRACKER.
+void _testAliasRouting() {
+  group('direct tool invocation (alias routing)', () {
+    test('resolves a tracker_* alias to the jira carrier by default', () async {
+      expect(
+        await _dispatcher.dispatch(
+          ['tracker_get_ticket', '{"key": "DMC-479"}'],
+        ),
+        1,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['error'], contains('Jira not configured'),
+          reason: 'first candidate (jira) when DEFAULT_TRACKER is unset');
+    });
+
+    test('DEFAULT_TRACKER=ado routes the alias to the ado carrier', () async {
+      final adoDispatcher = CliDispatcher(
+        writer: _lines.add,
+        propertyReader: PropertyReader(basePath: _tmp.path),
+        isTty: () => false,
+        env: const {'DEFAULT_TRACKER': 'ado'},
+      );
+      expect(
+        await adoDispatcher.dispatch(
+          ['tracker_get_ticket', '{"key": "4242"}'],
+        ),
+        1,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['error'], contains('ADO not configured'),
+          reason: 'DEFAULT_TRACKER=ado picks the ado carrier');
     });
   });
 }

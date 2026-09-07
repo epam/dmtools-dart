@@ -49,10 +49,13 @@ ToolRegistry populatedRegistry({List<String> jiraAliases = const []}) {
 void main() {
   toolParamTests();
   toolDefinitionTests();
+  applyParamAliasesTests();
   registryLookupTests();
   registryFilteringTests();
   toolsListResponseTests();
   registryEdgeCaseTests();
+  registryAliasResolutionTests();
+  registryAliasDefaultRoutingTests();
 }
 
 /// [ToolParam.toJson] serializes type and description.
@@ -95,6 +98,50 @@ void toolDefinitionTests() {
         'type': 'array',
         'description': 'Optional field expansions',
       });
+    });
+  });
+}
+
+/// [ToolDefinition.applyParamAliases] Java parameter-alias bridging.
+void applyParamAliasesTests() {
+  group('ToolDefinition.applyParamAliases', () {
+    ToolDefinition toolWithAliases() => ToolDefinition(
+          name: 'jira_search_by_jql',
+          description: 'Search',
+          integration: 'jira',
+          params: [
+            const ToolParam(
+              name: 'jql',
+              description: 'JQL',
+              aliases: ['searchQueryJQL', 'query'],
+            ),
+            ToolParam(name: 'limit', description: 'Limit'),
+          ],
+        );
+
+    test('maps an alias value onto the canonical param name', () {
+      final out = toolWithAliases().applyParamAliases({'query': 'project = X'});
+      expect(out['jql'], 'project = X');
+      expect(out.containsKey('query'), isTrue,
+          reason: 'alias keys are preserved, handlers read canonical keys');
+    });
+
+    test('prefers the canonical key when both are present', () {
+      final out = toolWithAliases()
+          .applyParamAliases({'jql': 'canonical', 'searchQueryJQL': 'alias'});
+      expect(out['jql'], 'canonical');
+    });
+
+    test('leaves args untouched when no alias matches', () {
+      final args = {'jql': 'a', 'limit': 5};
+      final out = toolWithAliases().applyParamAliases(args);
+      expect(out, same(args));
+    });
+
+    test('first declared alias wins when several are present', () {
+      final out = toolWithAliases()
+          .applyParamAliases({'query': 'second', 'searchQueryJQL': 'first'});
+      expect(out['jql'], 'first');
     });
   });
 }
@@ -208,6 +255,111 @@ void registryEdgeCaseTests() {
       registry.clear();
       expect(registry.allTools, isEmpty);
       expect(registry.hasTool('tracker_get_ticket'), isFalse);
+    });
+  });
+}
+
+/// Builds an ado tool, for multi-candidate alias resolution tests.
+ToolDefinition adoTool({List<String> aliases = const []}) => ToolDefinition(
+      name: 'ado_get_work_item',
+      description: 'Fetch an ADO work item by id',
+      integration: 'ado',
+      category: 'issues',
+      aliases: aliases,
+    );
+
+/// [ToolRegistry.resolveToolAlias] — Java `McpCliHandler.resolveToolAlias`.
+void registryAliasResolutionTests() {
+  group('alias resolution', () {
+    test('a canonical tool name resolves to itself unchanged', () {
+      final registry = populatedRegistry(jiraAliases: ['tracker_get_ticket']);
+      expect(registry.resolveToolAlias('jira_get_ticket'), 'jira_get_ticket');
+    });
+
+    test('an unknown name resolves to null', () {
+      final registry = populatedRegistry();
+      expect(registry.resolveToolAlias('nope_tool'), isNull);
+    });
+
+    test('a single-candidate alias resolves to its canonical tool', () {
+      final registry = populatedRegistry(jiraAliases: ['tracker_get_ticket']);
+      expect(
+          registry.resolveToolAlias('tracker_get_ticket'), 'jira_get_ticket');
+    });
+
+    test('DEFAULT_TRACKER picks the carrier by integration name', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            defaultTracker: ' ADO '),
+        'ado_get_work_item',
+        reason: 'env values are trimmed and lowercased like Java',
+      );
+    });
+  });
+}
+
+/// [ToolRegistry.resolveToolAlias] default-integration routing
+/// (DEFAULT_TRACKER / DEFAULT_SOURCE_CODE).
+void registryAliasDefaultRoutingTests() {
+  group('alias resolution (default routing)', () {
+    test('unset DEFAULT_TRACKER falls back to the first candidate', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket'),
+        'jira_get_ticket',
+      );
+    });
+
+    test('an unconfigured default falls back to the first candidate', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            defaultTracker: 'rally'),
+        'jira_get_ticket',
+      );
+    });
+
+    test('source_code_* aliases honor DEFAULT_SOURCE_CODE', () {
+      final registry = ToolRegistry()
+        ..register(githubTool(aliases: ['source_code_get_pr']))
+        ..register(
+          ToolDefinition(
+            name: 'gitlab_get_mr',
+            description: 'Fetch a GitLab MR',
+            integration: 'gitlab',
+            aliases: ['source_code_get_pr'],
+          ),
+        );
+      expect(
+        registry.resolveToolAlias(
+          'source_code_get_pr',
+          defaultSourceCode: 'gitlab',
+        ),
+        'gitlab_get_mr',
+      );
+      expect(
+        registry.resolveToolAlias('source_code_get_pr'),
+        'github_create_issue',
+        reason: 'first candidate when the env var is unset',
+      );
+    });
+
+    test('other prefixes ignore both defaults', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['shared_op']))
+        ..register(adoTool(aliases: ['shared_op']));
+      expect(
+        registry.resolveToolAlias('shared_op', defaultTracker: 'ado'),
+        'jira_get_ticket',
+        reason: 'only tracker_*/source_code_* read the default-integration env',
+      );
     });
   });
 }

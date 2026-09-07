@@ -5,6 +5,7 @@ part of 'jira_tools.dart';
 List<ToolDefinition> _userTools() => [
       _jiraTool(
         name: 'jira_get_account_by_email',
+        aliases: ['tracker_get_user_by_email'],
         description: 'Find a Jira user account by email address',
         category: 'user_management',
         params: [
@@ -33,6 +34,7 @@ List<ToolDefinition> _userTools() => [
 List<ToolDefinition> _myProfileTools() => [
       _jiraTool(
         name: 'jira_get_my_profile',
+        aliases: ['tracker_get_my_profile'],
         description: 'Get the current Jira user profile',
         category: 'user_management',
       ),

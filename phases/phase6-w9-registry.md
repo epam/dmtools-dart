@@ -16,10 +16,20 @@ note: Registry reflects final toolsets; regenerate the gaps fixture last (P6-REG
       sharepoint 12, jenkins 10, teams 9, ai 8, kb 8, bitrise 7, mermaid 4,
       cli 2) — owner mandate: no additions beyond the Java catalog — dart
       default_tool_registry.dart:32 / java generated registry — L
-- [ ] **P6-REG-03** restore Java alias sets (tracker_*, source_code_*,
+- [x] **P6-REG-03** restore Java alias sets (tracker_*, source_code_*,
       gitlab MR aliases, xray_test, ado_create/get_work_item) — dart
       tool_registry.dart:19 / java MCPToolProcessor.java:186 — M
-- [ ] **P6-REG-04** remove Dart-only aliases (jira_assign, jira_assign_to,
+      Verified 2026-09-07 against the full @MCPTool aliases map extracted
+      from a fresh dm.ai clone (66 entries): every Java alias with a living
+      Dart carrier is attached (github 11/12, gitlab 19/20, ado PR 9/9,
+      ado tracker via renamed carriers, jira 12/12, xray 1/1). Unattached
+      remainder (ado_assign_work_item, ado_move_to_state,
+      ado_download_attachment, ado_get_my_profile, ado_get_user_by_email,
+      gitlab_get_pipeline_jobs, github_get_pr_activities,
+      gitlab_get_mr_activities) awaits the carrier tools themselves —
+      tracked by the canonical-surface gap items and the REG-51 fixture
+      regen, not by alias metadata.
+- [x] **P6-REG-04** remove Dart-only aliases (jira_assign, jira_assign_to,
       jira_create_ticket) — dart jira_ticket_tools.dart:122 — S
 - [ ] **P6-REG-05** cli_execute_command params [command, workingDirectory] —
       dart cli_tools.dart:34 / java CliCommandExecutor.java:81 — M
@@ -83,7 +93,7 @@ note: Registry reflects final toolsets; regenerate the gaps fixture last (P6-REG
       dart jira_ticket_tools.dart:173 / java JiraClient.java:1248 — S
 - [ ] **P6-REG-28** jira_get_comments 2nd param ticket; statusName renames —
       dart jira_ticket_tools.dart:44 / java JiraClient.java:1026 — S
-- [ ] **P6-REG-29** jira_search_by_jql jql aliases [searchQueryJQL, query] —
+- [x] **P6-REG-29** jira_search_by_jql jql aliases [searchQueryJQL, query] —
       dart jira_ticket_tools.dart:34 / java JiraClient.java:455 — S
 - [ ] **P6-REG-30** jira_search_by_page/with_pagination required flags +
       startAt type number — dart jira_search_tools.dart:7 / java

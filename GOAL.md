@@ -374,6 +374,19 @@ full gate sequence green; unblock dependents in this table).
   format/analyze/tests/coverage/crap4dart (Max CRAP 8.00)/agents suite
   763/763.
 
+- **2026-09-07 (session 2):** Closed P6-REG-03, P6-REG-04, P6-REG-29
+  (W9; score 5/221). Registry alias metadata now mirrors the Java
+  @MCPTool aliases map exactly (extracted from a fresh dm.ai clone,
+  66 entries): Dart-only tracker_* tool family and source_code_*
+  inventions removed (032abf8), the full Java alias set restored with
+  canonical-only JS surface + ToolDefinition.applyParamAliases honoring
+  (a480ba0), Dart-only jira_assign/jira_assign_to/jira_create_ticket
+  removed. Lesson recorded: the 032abf8 removal of source_code_* was
+  wrong — aliases are Java-real CLI metadata; verify against a fresh
+  clone before deleting anything that looks invented. Gates green:
+  format/analyze/2260 tests/coverage 97.5%/crap4dart (Max CRAP 8.00)/
+  agents suite 898 passed / 14 failed (unchanged upstream-gap baseline).
+
 **Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
 the catalog parity test reports zero gaps against a fresh Java clone, and
 all standing gates stay green.

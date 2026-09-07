@@ -22,6 +22,8 @@ void main() {
   });
   if (hasPython3()) {
     _issueToolTest();
+    _issueMutationTests();
+    _createIssueTests();
     _reviewToolTests();
   }
 }
@@ -58,6 +60,87 @@ void _issueToolTest() {
       final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
       expect(sent['method'], 'GET');
       expect(sent['path'], '/repos/o/r/issues/42');
+    });
+  });
+}
+
+/// The issue mutation tools (Dart-side issue family: owner/repo/number):
+/// close, create, add labels, remove label — the surface the trackers.js
+/// github provider drives for status/labels/create operations.
+void _issueMutationTests() {
+  group('GitHubSyncTools issue mutations (fixture)', () {
+    setUp(_startFixture);
+    tearDown(_stopFixture);
+
+    test('github_close_issue PATCHes the issue state', () {
+      tools.handlers['github_close_issue']!({
+        'owner': 'o',
+        'repo': 'r',
+        'number': 42,
+      });
+      final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+      expect(sent['method'], 'PATCH');
+      expect(sent['path'], '/repos/o/r/issues/42');
+      expect(jsonDecode(sent['body'] as String), {'state': 'closed'});
+    });
+
+    test('github_add_labels POSTs the label array', () {
+      tools.handlers['github_add_labels']!({
+        'owner': 'o',
+        'repo': 'r',
+        'number': 42,
+        'labels': ['x', 'y'],
+      });
+      final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+      expect(sent['method'], 'POST');
+      expect(sent['path'], '/repos/o/r/issues/42/labels');
+      expect(jsonDecode(sent['body'] as String), {
+        'labels': ['x', 'y']
+      });
+    });
+
+    test('github_remove_label DELETEs the label resource', () {
+      tools.handlers['github_remove_label']!({
+        'owner': 'o',
+        'repo': 'r',
+        'number': 42,
+        'label': 'wip',
+      });
+      final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+      expect(sent['method'], 'DELETE');
+      expect(sent['path'], '/repos/o/r/issues/42/labels/wip');
+    });
+  });
+}
+
+/// `github_create_issue` request shape (blank body omitted).
+void _createIssueTests() {
+  group('GitHubSyncTools issue creation (fixture)', () {
+    setUp(_startFixture);
+    tearDown(_stopFixture);
+
+    test('github_create_issue POSTs title and omits a blank body', () {
+      tools.handlers['github_create_issue']!({
+        'owner': 'o',
+        'repo': 'r',
+        'title': 'New bug',
+      });
+      var sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+      expect(sent['method'], 'POST');
+      expect(sent['path'], '/repos/o/r/issues');
+      expect(jsonDecode(sent['body'] as String), {'title': 'New bug'});
+
+      tools.handlers['github_create_issue']!({
+        'owner': 'o',
+        'repo': 'r',
+        'title': 'New bug',
+        'body': 'It broke',
+      });
+      sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+      expect(
+        jsonDecode(sent['body'] as String),
+        {'title': 'New bug', 'body': 'It broke'},
+      );
     });
   });
 }

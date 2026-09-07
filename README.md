@@ -79,6 +79,15 @@ nightly and on demand — never per-PR — via
 [integration.yml](.github/workflows/integration.yml); each integration runs in
 its own matrix slot with its own concurrency group.
 
+Repo automation (dm.ai parity): the
+[agents/](agents) submodule pins [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents)
+and feeds the L4 suite; [auto-update-prs.yml](.github/workflows/auto-update-prs.yml)
+re-bases mergeable PRs after every push to main;
+[merge-trigger.yml](.github/workflows/merge-trigger.yml) launches the agents
+merge loop when CI passes (fused off via the `MERGE_TRIGGER_ENABLED` variable
+until the Teammate job is ported); [ai-teammate.yml](.github/workflows/ai-teammate.yml)
+is a reusable (`workflow_call`) runner for dmtools-agents configs.
+
 ## Configuration
 
 Every integration is configured through environment variables resolved in a

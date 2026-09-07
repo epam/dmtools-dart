@@ -15,3 +15,6 @@ native/quickjs/*.dll
 native/quickjs/*.dylib
 /dmtools
 /dmtools.exe
+
+# fa harness session artifacts
+.fah/

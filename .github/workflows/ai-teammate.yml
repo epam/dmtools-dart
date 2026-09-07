@@ -1,0 +1,117 @@
+# Ported from dm.ai (.github/workflows/ai-teammate.yml) for the Dart CLI.
+#
+# Reusable runner for dmtools-agents job configs: one invocation = one agent
+# config executed against one tracker ticket, with per-config concurrency so
+# parallel tickets never interleave their runs.
+#
+# Reuse from another repo:
+#   jobs:
+#     teammate:
+#       uses: epam/dmtools-dart/.github/workflows/ai-teammate.yml@main
+#       with:
+#         config_file: agents/bug_creation.json
+#         concurrency_key: JD-111
+#       secrets: inherit        # tracker/AI credentials are read from THIS repo
+#
+# Scope note: the Dart CLI today executes jsrunner and cliagent configs;
+# Teammate configs (bug_creation.json, retry_merge.json, …) fail with
+# "unsupported agent type" until the Teammate job is ported. The workflow
+# itself is ready and unchanged by that gap.
+#
+# Differences vs dm.ai:
+# - installs the Dart dmtools CLI (epam/dmtools-dart release) instead of the
+#   Java fat jar;
+# - no Copilot CLI bootstrap / setup+codegraph cache steps — dmtools-agents
+#   helpers used by the Java flow are not wired here yet (add back as the
+#   agent tooling lands);
+# - credentials come from the caller repo's secrets/vars via `secrets:
+#   inherit` (same names as every other workflow in this repo).
+
+name: AI Teammate
+
+on:
+  workflow_call:
+    inputs:
+      config_file:
+        description: 'Agent config path (repo-relative), e.g. agents/bug_creation.json'
+        required: true
+        type: string
+      encoded_config:
+        description: 'Encoded config override (optional, dm.ai-style)'
+        required: false
+        type: string
+      concurrency_key:
+        description: 'Unique key for the run (usually the ticket key)'
+        required: true
+        type: string
+      project_key:
+        description: 'Tracker project key for logging (optional)'
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Agent config path (repo-relative), e.g. agents/bug_creation.json'
+        required: true
+        type: string
+      encoded_config:
+        description: 'Encoded config override (optional)'
+        required: false
+        type: string
+      concurrency_key:
+        description: 'Unique key for the run (usually the ticket key)'
+        required: true
+        type: string
+      project_key:
+        description: 'Tracker project key for logging (optional)'
+        required: false
+        type: string
+
+concurrency:
+  # One ticket — one active run; queued runs for the same key execute in order.
+  group: ai-teammate-${{ inputs.concurrency_key }}
+  cancel-in-progress: false
+
+jobs:
+  ai-teammate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true # agents/ — the config being run lives there
+
+      - name: Install DMTools CLI (Dart)
+        run: |
+          curl -fsSL \
+            "https://github.com/epam/dmtools-dart/releases/latest/download/install.sh" \
+            | sh
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Git Author
+        run: |
+          git config --global user.name "dm.ai"
+          git config --global user.email "dm.ai@epam.com"
+
+      - name: Run agent config
+        env:
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CONFIG_FILE: ${{ inputs.config_file }}
+          ENCODED_CONFIG: ${{ inputs.encoded_config }}
+          # Tracker + SCM credentials (caller repo must provide via secrets: inherit)
+          JIRA_EMAIL: ${{ vars.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_PATH: ${{ vars.JIRA_BASE_PATH }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          DMTOOLS_INTEGRATIONS: jira,github,file
+        run: |
+          if [ -n "${ENCODED_CONFIG:-}" ]; then
+            dmtools --debug run "${CONFIG_FILE}" "${ENCODED_CONFIG}" \
+              --ciRunUrl "${CI_RUN_URL}"
+          else
+            dmtools --debug run "${CONFIG_FILE}" --ciRunUrl "${CI_RUN_URL}"
+          fi

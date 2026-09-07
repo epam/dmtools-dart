@@ -1,0 +1,91 @@
+# Ported from dm.ai (.github/workflows/merge-trigger.yml): when CI passes on
+# main, run the dmtools-agents sm_merge JSRunner job — it applies JQL rules to
+# find tickets labeled pr_approved and launches their merge configs. This is
+# the auto-merge half of the dark-factory merge loop (auto-update-prs.yml is
+# the actualization half).
+#
+# SCAFFOLD: sm_merge's rules launch Teammate configs (retry_merge.json …),
+# and the Teammate job is not ported to this Dart CLI yet — `dmtools run`
+# rejects it as an unsupported agent type. The job is therefore gated behind
+# the MERGE_TRIGGER_ENABLED repo variable (Settings → Secrets and variables →
+# Actions → Variables): set it to true only after Teammate lands. Until then
+# the job skips itself, keeping the wiring visible and reviewed.
+#
+# Difference vs dm.ai: triggers on the "Quality" workflow (this repo's unit +
+# agents CI) instead of "Unit Tests"; installs the Dart dmtools CLI from the
+# latest GitHub release via this repo's install.sh; env mapped to the secrets
+# and vars this repo already has (no PAT_TOKEN — GITHUB_TOKEN is read-only for
+# public repos but sufficient for read APIs and gh CLI queries).
+
+name: Merge Trigger
+
+run-name: 'Merge Trigger : CI passed → retry pr_approved merges'
+
+on:
+  workflow_run:
+    workflows: ['Quality']
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  merge-trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Same-repo guard (dm.ai parity): PRs from forks must not trigger merges.
+    # MERGE_TRIGGER_ENABLED var is the scaffold fuse — see the header.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    concurrency:
+      group: merge-trigger-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Gate on MERGE_TRIGGER_ENABLED
+        id: gate
+        env:
+          ENABLED: ${{ vars.MERGE_TRIGGER_ENABLED }}
+        run: |
+          if [ "$ENABLED" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::merge-trigger scaffold is wired but disabled — set the MERGE_TRIGGER_ENABLED repo variable to true (after the Teammate job is ported)."
+          fi
+
+      - name: Checkout repository
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          submodules: true # agents/ (sm_merge.json + JS actions)
+
+      - name: Install DMTools CLI from latest release
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          curl -fsSL \
+            "https://github.com/${{ github.repository }}/releases/latest/download/install.sh" \
+            | sh
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Git Author
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          git config --global user.name "dm.ai"
+          git config --global user.email "dm.ai@epam.com"
+
+      - name: Run Merge Trigger
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          # Tracker + SCM (matches this repo's existing secret/variable names)
+          JIRA_EMAIL: ${{ vars.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_PATH: ${{ vars.JIRA_BASE_PATH }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          DMTOOLS_INTEGRATIONS: jira,github,file
+        run: |
+          dmtools run agents/sm_merge.json --ciRunUrl "${CI_RUN_URL}"

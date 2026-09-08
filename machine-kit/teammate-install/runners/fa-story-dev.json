@@ -1,12 +1,6 @@
 {
-  "name": "CliAgent",
-  "parent": {
-    "path": "../../../agents/bug_development.json"
-  },
+  "parent": { "path": "../../../agents/story_development.json" },
   "params": {
-    "metadata": {
-      "contextId": "fa-code-zai"
-    },
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "zai",

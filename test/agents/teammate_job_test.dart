@@ -78,6 +78,41 @@ void inputJqlGuardTests() {
       }
     });
 
+    test(
+        'no inputJql + prepared input/ticket.md → single CliAgent pass-through',
+        () async {
+      final tmp = await _createTempDir();
+      try {
+        // Caller-prepared ticket (the ai-teammate-issues convention).
+        Directory('${tmp.path}/input').createSync(recursive: true);
+        File('${tmp.path}/input/ticket.md').writeAsStringSync(
+            'Fix the flaky login test\nSteps: run suite twice, watch it fail');
+        final cliCommandsSeen = <String>[];
+        final job = TeammateJob(
+          params: {
+            'metadata': {'contextId': 'bug_development'},
+            'cliCommands': ['echo ticket-done'],
+            // keep the built context around for the assertion below
+            'cleanupInputFolder': false,
+          },
+          workingDirectory: tmp.path,
+        );
+        final result = await job.run();
+        expect(result['success'], isTrue);
+        final results = (result['results'] as List).cast<Map>();
+        expect(results, hasLength(1));
+        expect(results.single['ticket'], 'bug_development');
+        // The canonical per-context input was built from the prepared file.
+        final ctx = File('${tmp.path}/input/bug_development/ticket.md')
+            .readAsStringSync();
+        expect(ctx, contains('Fix the flaky login test'));
+        expect(ctx, contains('Steps: run suite twice'));
+        cliCommandsSeen.add(ctx);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
     test('blank inputJql → success with empty results', () async {
       final tmp = await _createTempDir();
       try {

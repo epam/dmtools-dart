@@ -12,11 +12,12 @@
 #     → agent develops → PR with "Closes #NN"
 #     → merge-trigger-issues.yml: pr_approved label → checks green → squash
 #
-# Runner selection:
+# Runner selection (agent configs run AS-IS — Teammate fills input/ from
+# the issue body and executes the config through CliAgent):
 #   assignee == agent handle (default "ai-teammate") OR label agent:dev
-#     → runners/fa-code-zai.json   (z.ai glm-5.3-flash)
-#   label agent:review
-#     → runners/fa-review-kimi.json (Kimi kimi-k3-256k)
+#     title [BUG]/Bug… or label bug → runners/fa-bug-dev.json   (bug_development)
+#     otherwise                     → runners/fa-story-dev.json (story_development)
+#   label agent:review              → runners/fa-review-kimi.json (pr_review)
 #
 # Keys (workflow-level separation): each runner names its key via
 # FA_PROVIDER_CONFIG.apiKeyEnvVar — configure repo SECRETS with the same
@@ -45,7 +46,8 @@ permissions:
 
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
-  RUNNER_DEV: machine-kit/teammate-install/runners/fa-code-zai.json
+  RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
+  RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
 
 jobs:
@@ -58,6 +60,8 @@ jobs:
       - name: Decide whether this event is for the agent
         id: check
         env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
           ASSIGNEES: ${{ join(github.event.issue.assignees.*.login, ' ') }}
           LABELS: ${{ join(github.event.issue.labels.*.name, ' ') }}
           ACTOR: ${{ github.event.action }}
@@ -67,7 +71,15 @@ jobs:
             runner="$RUNNER_REVIEW"
           elif echo "$ASSIGNEES" | grep -qw "$AGENT_HANDLE" \
             || echo "$LABELS" | grep -qw "agent:dev"; then
-            runner="$RUNNER_DEV"
+            # [BUG]/Bug… titles (or a bug label) go to the bug agent,
+            # everything else to story development.
+            title="$(gh issue view "$NUMBER" --json title -q .title)"
+            if echo "$title" | grep -qiE '^\[?bug\]' \
+              || echo "$LABELS" | grep -qwi "bug"; then
+              runner="$RUNNER_BUG"
+            else
+              runner="$RUNNER_STORY"
+            fi
           fi
           if [ -n "$runner" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"

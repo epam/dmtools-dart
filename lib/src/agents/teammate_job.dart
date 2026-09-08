@@ -17,6 +17,7 @@ import '../config/property_reader.dart';
 import '../js/job_runner.dart';
 import '../js/sync_tool_dispatcher.dart';
 import 'dart:convert';
+import 'dart:io';
 
 import 'cli_agent.dart';
 import 'cli_agent_params.dart';
@@ -77,9 +78,17 @@ class TeammateJob {
   Future<Map<String, dynamic>> run() async {
     final inputJql = (params['inputJql'] as String?)?.trim() ?? '';
     if (inputJql.isEmpty) {
-      // Java Teammate: "No TrackerClient … and no inputJql provided —
-      // skipping ticket processing" → empty result list.
-      return const {'success': true, 'results': []};
+      // Issues-driven pass-through: the caller prepared `input/ticket.md`
+      // (e.g. the ai-teammate-issues workflow wrote the issue body). Run
+      // the config AS-IS through one [CliAgent] with a synthetic ticket —
+      // the canonical `input/<contextId>/` context is built from it.
+      // Without a prepared input this is Java parity: "skipping ticket
+      // processing" → empty result list.
+      final prepared = _preparedInputTicket();
+      if (prepared == null) {
+        return const {'success': true, 'results': []};
+      }
+      return _runSingle(prepared);
     }
     final source = ticketSource ?? jiraTicketSource;
     final tickets = await source(inputJql);
@@ -108,6 +117,57 @@ class TeammateJob {
     }
     final ok = results.isNotEmpty && results.every((r) => r['success'] == true);
     return {'success': ok, 'results': results};
+  }
+
+  /// Runs one [CliAgent] against a single prepared [ticket] (no per-ticket
+  /// contextId override and no Jira trace comment — there is no tracker).
+  Future<Map<String, dynamic>> _runSingle(Map<String, dynamic> ticket) async {
+    final agent = CliAgent(
+      params: CliAgentParams.fromJson(params),
+      workingDirectory: workingDirectory,
+      ticketData: ticket,
+      propertyReader: propertyReader,
+      jsRunner: jsRunner,
+    );
+    final result = await agent.run();
+    final key = _ticketKey(ticket);
+    return {
+      'success': result['success'] == true,
+      'results': [
+        {'ticket': key, 'success': result['success'] == true, ...result}
+      ],
+    };
+  }
+
+  /// The caller-provided ticket at `<workDir>/input/ticket.md`, mapped to
+  /// the raw-tracker shape [CliAgent] understands (first line → summary,
+  /// the rest → description), or null when absent/blank.
+  Map<String, dynamic>? _preparedInputTicket() {
+    final base = workingDirectory ?? Directory.current.path;
+    final file = File('$base/input/ticket.md');
+    if (!file.existsSync()) return null;
+    final content = file.readAsStringSync().trim();
+    if (content.isEmpty) return null;
+    final newline = content.indexOf('\n');
+    final summary =
+        newline < 0 ? content : content.substring(0, newline).trim();
+    final description =
+        newline < 0 ? '' : content.substring(newline + 1).trim();
+    return {
+      'key': _contextId(),
+      'fields': {'summary': summary, 'description': description},
+    };
+  }
+
+  /// The config's `metadata.contextId`, falling back to CliAgent's own
+  /// `'cli-agent'` default.
+  String _contextId() {
+    final md = params['metadata'];
+    if (md is Map) {
+      final contextId = md['contextId'];
+      if (contextId is String && contextId.isNotEmpty) return contextId;
+    }
+    return 'cli-agent';
   }
 
   /// Per-ticket [CliAgentParams]: the shared config with `metadata.contextId`

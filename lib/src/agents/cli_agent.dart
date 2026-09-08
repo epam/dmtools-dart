@@ -212,6 +212,7 @@ class CliAgent {
       jsRunner.runScript(
         scriptPath: actionPath,
         jobParams: _buildJobParams(response, inputFolderPath),
+        ticket: ticketData,
         workingDirectory: workDir,
         config: JsRunConfig(
           extraGlobals: _buildExtraGlobals(response, inputFolderPath, workDir),

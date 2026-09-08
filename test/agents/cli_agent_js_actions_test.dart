@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 void main() {
   lifecycleJsActionTests();
+  ticketContextJsActionTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -60,6 +61,36 @@ void lifecycleJsActionTests() {
           workingDirectory: tmp.path,
         )).run();
         expect((await File(log).readAsString()).trim(), 'ok');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void ticketContextJsActionTests() {
+  group('CliAgent JS actions — ticket context', () {
+    test('JS actions see params.ticket from ticketData', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_ticket.log';
+      try {
+        final js = _actionJs(
+          tmp,
+          'post.js',
+          'file_write({path: "$log", content: params.ticket.key});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+          ticketData: const {
+            'key': 'GH-21',
+            'fields': {'summary': 's'},
+          },
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'GH-21');
       } finally {
         await tmp.delete(recursive: true);
       }

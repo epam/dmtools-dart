@@ -18,6 +18,8 @@
 #     title [BUG]/Bug… or label bug → runners/fa-bug-dev.json   (bug_development)
 #     otherwise                     → runners/fa-story-dev.json (story_development)
 #   label agent:review              → runners/fa-review-kimi.json (pr_review)
+#   label agent:rework              → runners/fa-rework-zai.json  (pr_rework,
+#     glm-5.3-flash; fixes the linked open PR, pushes to the same branch)
 #
 # Keys (workflow-level separation): each runner names its key via
 # FA_PROVIDER_CONFIG.apiKeyEnvVar — configure repo SECRETS with the same
@@ -49,6 +51,7 @@ env:
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
+  RUNNER_REWORK: machine-kit/teammate-install/runners/fa-rework-zai.json
 
 jobs:
   guard:
@@ -67,7 +70,9 @@ jobs:
           ACTOR: ${{ github.event.action }}
         run: |
           runner=""
-          if echo "$LABELS" | grep -qw "agent:review"; then
+          if echo "$LABELS" | grep -qw "agent:rework"; then
+            runner="$RUNNER_REWORK"
+          elif echo "$LABELS" | grep -qw "agent:review"; then
             runner="$RUNNER_REVIEW"
           elif echo "$ASSIGNEES" | grep -qw "$AGENT_HANDLE" \
             || echo "$LABELS" | grep -qw "agent:dev"; then

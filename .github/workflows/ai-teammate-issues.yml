@@ -101,7 +101,7 @@ jobs:
             || echo "$LABELS" | grep -qw "agent:dev"; then
             # [BUG]/Bug… titles (or a bug label) go to the bug agent,
             # everything else to story development.
-            title="$(gh issue view "$NUMBER" --json title -q .title)"
+            title="$(gh issue view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json title -q .title)"
             if echo "$title" | grep -qiE '^\[?bug\]' \
               || echo "$LABELS" | grep -qwi "bug"; then
               runner="$RUNNER_BUG"
@@ -199,7 +199,7 @@ jobs:
           NUMBER: ${{ github.event.issue.number }}
         run: |
           mkdir -p input
-          gh issue view "$NUMBER" --json title,body \
+          gh issue view "$NUMBER" --repo "${{ github.repository }}" --json title,body \
             -q '.title, .body' > input/ticket.md
           echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
 

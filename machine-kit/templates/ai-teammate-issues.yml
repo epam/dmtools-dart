@@ -1,0 +1,255 @@
+# AI Teammate Trigger — GitHub-issues variant (machine-kit).
+#
+# The missing link of the dark-factory chain: a HUMAN creates an issue and
+# assigns it to the agent (or adds a label) — this workflow turns that into
+# an agent run, and the existing merge-trigger-issues.yml closes the loop:
+#
+#   issue created → assigned to ai-teammate (or labeled agent:dev / agent:review)
+#     → THIS workflow: guard → write the issue body to input/ticket.md
+#       → dmtools run machine-kit/teammate-install/runners/<runner>.json
+#         (runner = thin child of a dmtools-agents agent; only envVariables
+#          overridden: AI_AGENT_PROVIDER=fa + FA_PROVIDER_TYPE/CONFIG)
+#     → agent develops → PR with "Closes #NN"
+#     → merge-trigger-issues.yml: pr_approved label → checks green → squash
+#
+# Runner selection (agent configs run AS-IS — Teammate fills input/ from
+# the issue body and executes the config through CliAgent):
+#   assignee == agent handle (default "ai-teammate") OR label agent:dev
+#     title [BUG]/Bug… or label bug → runners/fa-bug-dev.json   (bug_development)
+#     otherwise                     → runners/fa-story-dev.json (story_development)
+#   label agent:review              → runners/fa-review-kimi.json (pr_review)
+#   label agent:rework              → runners/fa-rework-zai.json  (pr_rework,
+#     glm-5.3-flash; fixes the linked open PR, pushes to the same branch)
+#
+# Keys (workflow-level separation): each runner names its key via
+# FA_PROVIDER_CONFIG.apiKeyEnvVar — configure repo SECRETS with the same
+# names as in machine-kit/teammate-install/dmtools.env:
+#   ZAI_CODE_KEY, KIMI_REVIEW_KEY (+ SOURCE_GITHUB_TOKEN for the agent's
+#   git/gh operations, inherited from the rest of the machine).
+#
+# Prerequisites: fa installs up front via agents/setup/install.sh
+#   (idempotent, self-contained — one binary carries every AI backend),
+#   version pinned in workflow env (repo var FA_VERSION overrides) and
+#   cached by version. dmtools-dart runs from source through the Flutter
+#   SDK's Dart (SDK + pub cached by version) — the machine repo dogfoods
+#   its own HEAD, the release binary would lag the branch.
+#
+# Memory: fa's project memory (.fah/memory) is committed to the repo and
+#   pushed after every run — agent knowledge accumulates in the repository
+#   (the checkout already brings the accumulated memory back in).
+#
+# Sessions: run-agent.sh resumes a deterministic named fa session per
+#   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
+#   the ticket's dev conversation; review has its own dev-review), and the
+#   cache steps carry the session directory across CI runs.
+#
+# Self-contained on purpose: unlike the Jira-era reusable ai-teammate.yml,
+# this template must prepare the ticket input (issue body) BEFORE the run,
+# so the reusable workflow_call cannot be used here.
+
+name: 'AI Teammate : issue assigned'
+
+on:
+  issues:
+    types: [assigned, labeled]
+
+concurrency:
+  group: ai-teammate-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+env:
+  AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
+  # Prerequisite versions — pinned (cache-by-version); repo vars override.
+  # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
+  # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
+  FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
+  FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION || '3.44.4' }}
+  RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
+  RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
+  RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
+  RUNNER_REWORK: machine-kit/teammate-install/runners/fa-rework-zai.json
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+      runner: ${{ steps.check.outputs.runner }}
+      config: ${{ steps.check.outputs.config }}
+    steps:
+      - name: Decide whether this event is for the agent
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          ASSIGNEES: ${{ join(github.event.issue.assignees.*.login, ' ') }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ' ') }}
+          ACTOR: ${{ github.event.action }}
+        run: |
+          runner=""
+          if echo "$LABELS" | grep -qw "agent:rework"; then
+            runner="$RUNNER_REWORK"
+          elif echo "$LABELS" | grep -qw "agent:review"; then
+            runner="$RUNNER_REVIEW"
+          elif echo "$ASSIGNEES" | grep -qw "$AGENT_HANDLE" \
+            || echo "$LABELS" | grep -qw "agent:dev"; then
+            # [BUG]/Bug… titles (or a bug label) go to the bug agent,
+            # everything else to story development.
+            title="$(gh issue view "$NUMBER" --json title -q .title)"
+            if echo "$title" | grep -qiE '^\[?bug\]' \
+              || echo "$LABELS" | grep -qwi "bug"; then
+              runner="$RUNNER_BUG"
+            else
+              runner="$RUNNER_STORY"
+            fi
+          fi
+          if [ -n "$runner" ]; then
+            # Parent agent config of the runner — fa-session.sh derives the
+            # session group from it (bug/story/rework share dev-write so a
+            # rework RESUMES the ticket's dev conversation; review is
+            # dev-review).
+            case "$runner" in
+              *fa-bug-dev*)      config="agents/bug_development.json" ;;
+              *fa-story-dev*)    config="agents/story_development.json" ;;
+              *fa-review-kimi*)  config="agents/pr_review.json" ;;
+              *fa-rework-zai*)   config="agents/pr_rework.json" ;;
+              *)                 config="$runner" ;;
+            esac
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "runner=$runner" >> "$GITHUB_OUTPUT"
+            echo "config=$config" >> "$GITHUB_OUTPUT"
+            echo "→ agent run: $runner (event=$ACTOR, labels=$LABELS, assignees=$ASSIGNEES)"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "→ not for the agent (event=$ACTOR, labels=$LABELS, assignees=$ASSIGNEES)"
+          fi
+
+  teammate:
+    needs: guard
+    if: needs.guard.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true # agents/ — inherited agent configs + run-agent.sh
+
+      - name: Export fa session identity + cache keys
+        env:
+          AI_TEAMMATE_CONFIG_FILE: ${{ needs.guard.outputs.config }}
+          # The ticket key of this machine: GH-<issue number> — the same key
+          # the TeammateJob hydration pins as contextId.
+          AI_TEAMMATE_DISPLAY_KEY: GH-${{ github.event.issue.number }}
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ github.event.issue.number }}
+        run: bash agents/setup/cache.sh keys fa-session
+
+      - name: Restore fa session (resume the ticket conversation)
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.FA_SESSION_CACHE_PATH }}
+          key: ${{ env.FA_SESSION_CACHE_KEY }}
+          restore-keys: ${{ env.FA_SESSION_CACHE_RESTORE_KEY }}
+
+      - name: Cache fa CLI (by version)
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.local/bin/fa
+            ~/lib
+          key: fa-${{ env.FA_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Set up Flutter (Dart SDK, cached by version)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install prerequisites (fa; no-op on cache hit)
+        # register_path in the setup script exports PATH immediately and
+        # persists it to GITHUB_PATH — no manual PATH edits needed here.
+        run: bash agents/setup/install.sh "fa:${FA_VERSION}"
+
+      - name: Verify prerequisites
+        run: fa --version
+
+      - name: Build dmtools-dart from source (dogfood this checkout)
+        # The release binary lags this branch (PR #18 features) — the
+        # machine repo always runs its own HEAD. dart resolves the QuickJS
+        # bridge through .dart_tool/package_config.json (same as dart test).
+        run: |
+          dart pub get
+          make native
+
+      - name: Configure Git Author
+        run: |
+          git config --global user.name "dm.ai"
+          git config --global user.email "dm.ai@epam.com"
+
+      - name: Write issue body to the agent input folder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p input
+          gh issue view "$NUMBER" --json title,body \
+            -q '.title, .body' > input/ticket.md
+          echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
+
+      - name: Run agent (fa provider via runner env overrides)
+        env:
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUNNER: ${{ needs.guard.outputs.runner }}
+          # fa provider contract (env preconfig; the runner JSON also pins
+          # these via params.envVariables — job env beats it, this step env
+          # matches it. Keys: workflow-level separation, same names as
+          # machine-kit/teammate-install/dmtools.env).
+          AI_AGENT_PROVIDER: fa
+          # fa session identity (run-agent.sh -> fa-session.sh): deterministic
+          # name fa-<repo>-gh-<n>-<group>-<hash8>, resume-or-create; the cache
+          # steps carry it across CI runs.
+          AI_TEAMMATE_CONFIG_FILE: ${{ needs.guard.outputs.config }}
+          AI_TEAMMATE_DISPLAY_KEY: GH-${{ github.event.issue.number }}
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ github.event.issue.number }}
+          ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+          KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dart run bin/dmtools.dart --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
+
+      - name: Persist fa project memory into the repository
+        # fa stores project memory under <git-root>/.fah/memory (area:
+        # project notes) — committing it makes agent knowledge survive
+        # across runs and share between agents. Best-effort: a protected
+        # default branch rejects the push, the run stays green and the
+        # memory simply lives only in this run.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "dm.ai"
+          git config user.email "dm.ai@epam.com"
+          if [ -d .fah/memory ] && [ -n "$(git status --porcelain -- .fah/memory)" ]; then
+            git add .fah/memory
+            git commit -m "chore(fa): persist agent project memory [skip ci]"
+            git push || echo "::warning::memory push rejected (protected branch?) — kept in run only"
+          else
+            echo "no new fa memory to persist"
+          fi
+
+      - name: Link the run back to the issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          OUTCOME: ${{ job.status }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$NUMBER" --body \
+            "🤖 AI Teammate run ${OUTCOME}: ${CI_RUN_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}"

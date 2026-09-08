@@ -1,0 +1,15 @@
+{
+  "name": "CliAgent",
+  "params": {
+    "contextId": "install-dmtools-fa",
+    "cliCommands": [
+      "./machine-kit/teammate-install/install.sh"
+    ],
+    "envVariables": {
+      "CLI_ALLOWED_COMMANDS": "install.sh,./machine-kit/teammate-install/install.sh,bash,sh,curl,tar,mkdir,cp,chmod,uname,mktemp,rm,grep,sed,cat,ls"
+    },
+    "outputType": "none",
+    "cleanupInputFolder": false,
+    "cleanupOutputsFolder": false
+  }
+}

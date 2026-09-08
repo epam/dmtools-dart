@@ -27,6 +27,11 @@
 #   ZAI_CODE_KEY, KIMI_REVIEW_KEY (+ SOURCE_GITHUB_TOKEN for the agent's
 #   git/gh operations, inherited from the rest of the machine).
 #
+# Sessions: run-agent.sh resumes a deterministic named fa session per
+#   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
+#   the ticket's dev conversation; review has its own dev-review), and the
+#   cache steps carry the session directory across CI runs.
+#
 # Self-contained on purpose: unlike the Jira-era reusable ai-teammate.yml,
 # this template must prepare the ticket input (issue body) BEFORE the run,
 # so the reusable workflow_call cannot be used here.
@@ -59,6 +64,7 @@ jobs:
     outputs:
       run: ${{ steps.check.outputs.run }}
       runner: ${{ steps.check.outputs.runner }}
+      config: ${{ steps.check.outputs.config }}
     steps:
       - name: Decide whether this event is for the agent
         id: check
@@ -87,8 +93,20 @@ jobs:
             fi
           fi
           if [ -n "$runner" ]; then
+            # Parent agent config of the runner — fa-session.sh derives the
+            # session group from it (bug/story/rework share dev-write so a
+            # rework RESUMES the ticket's dev conversation; review is
+            # dev-review).
+            case "$runner" in
+              *fa-bug-dev*)      config="agents/bug_development.json" ;;
+              *fa-story-dev*)    config="agents/story_development.json" ;;
+              *fa-review-kimi*)  config="agents/pr_review.json" ;;
+              *fa-rework-zai*)   config="agents/pr_rework.json" ;;
+              *)                 config="$runner" ;;
+            esac
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "runner=$runner" >> "$GITHUB_OUTPUT"
+            echo "config=$config" >> "$GITHUB_OUTPUT"
             echo "→ agent run: $runner (event=$ACTOR, labels=$LABELS, assignees=$ASSIGNEES)"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -105,6 +123,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true # agents/ — inherited agent configs + run-agent.sh
+
+      - name: Export fa session identity + cache keys
+        env:
+          AI_TEAMMATE_CONFIG_FILE: ${{ needs.guard.outputs.config }}
+          # The ticket key of this machine: GH-<issue number> — the same key
+          # the TeammateJob hydration pins as contextId.
+          AI_TEAMMATE_DISPLAY_KEY: GH-${{ github.event.issue.number }}
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ github.event.issue.number }}
+        run: bash agents/setup/cache.sh keys fa-session
+
+      - name: Restore fa session (resume the ticket conversation)
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.FA_SESSION_CACHE_PATH }}
+          key: ${{ env.FA_SESSION_CACHE_KEY }}
+          restore-keys: ${{ env.FA_SESSION_CACHE_RESTORE_KEY }}
 
       - name: Install DMTools CLI (Dart)
         run: |
@@ -137,6 +171,12 @@ jobs:
           # matches it. Keys: workflow-level separation, same names as
           # machine-kit/teammate-install/dmtools.env).
           AI_AGENT_PROVIDER: fa
+          # fa session identity (run-agent.sh -> fa-session.sh): deterministic
+          # name fa-<repo>-gh-<n>-<group>-<hash8>, resume-or-create; the cache
+          # steps carry it across CI runs.
+          AI_TEAMMATE_CONFIG_FILE: ${{ needs.guard.outputs.config }}
+          AI_TEAMMATE_DISPLAY_KEY: GH-${{ github.event.issue.number }}
+          AI_TEAMMATE_CONCURRENCY_KEY: ${{ github.event.issue.number }}
           ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
           KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}

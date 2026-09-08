@@ -1,0 +1,18 @@
+{
+  "name": "CliAgent",
+  "params": {
+    "contextId": "fa-code-zai",
+    "cliCommands": [
+      "./machine-kit/teammate-install/runners/run-fa.sh"
+    ],
+    "envVariables": {
+      "CLI_ALLOWED_COMMANDS": "run-fa.sh,./machine-kit/teammate-install/runners/run-fa.sh,fa,mkdir,cat,bash",
+      "FA_RUN_NAME": "code",
+      "FA_PROVIDER_TYPE": "zai",
+      "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.z.ai/api/coding/paas/v4\",\"model\":\"glm-5.3-flash\",\"apiKeyEnvVar\":\"ZAI_API_KEY\"}"
+    },
+    "outputType": "none",
+    "cleanupInputFolder": false,
+    "cleanupOutputsFolder": false
+  }
+}

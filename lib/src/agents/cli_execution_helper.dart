@@ -184,7 +184,12 @@ class CliExecutionHelper {
       final result = await _runOne(command, workingDirectory, environment);
       responses.write('CLI Command: $command\n');
       if (result.exitCode != 0) {
-        responses.write('Error: ${result.stderr}\n\n');
+        // Providers print their diagnostics on stdout (run-agent.sh echoes
+        // everything); stderr-only error reports hid the actual failure.
+        final stdout = result.stdout.trim();
+        responses.write('Error: ${result.stderr}\n');
+        if (stdout.isNotEmpty) responses.write('Output:\n$stdout\n');
+        responses.write('\n');
         hasFatal = true;
         exitCode = result.exitCode;
         errorMsg = result.stderr.toString();

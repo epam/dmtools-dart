@@ -31,6 +31,8 @@ on:
   workflow_run:
     workflows: ['@@GATE_WORKFLOW_NAME@@']
     types: [completed]
+  issues:
+    types: [labeled]
 
 permissions:
   contents: write
@@ -44,10 +46,12 @@ jobs:
     timeout-minutes: 10
     # Same-repo guard: PRs from forks must not trigger merges.
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      (github.event_name == 'issues' && github.event.label.name == 'pr_approved') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     concurrency:
-      group: merge-trigger-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+      group: merge-trigger-${{ github.event_name }}-${{ github.event.workflow_run.head_sha || github.event.issue.number }}
       cancel-in-progress: false
     steps:
       - name: Gate on MERGE_TRIGGER_ENABLED

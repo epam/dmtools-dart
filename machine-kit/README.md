@@ -1,11 +1,17 @@
 # machine-kit — the dark-factory merge loop, portable
 
-The CI/automation "machine" proven in dmtools-dart, packaged for other repos:
+The CI/automation "machine" proven in dmtools-dart, packaged for other repos.
+**The tracker is the repo's own GitHub issues** — no Jira, no external services:
 
 ```
-PR → required checks green → Jira label pr_approved → auto-merge
+issue labeled pr_approved → linked PR → required checks green (branch
+protection CLEAN) → squash-merge → label removed → comment on issue
         ↑ branch kept current by auto-update-prs
 ```
+
+Link a PR to its issue either way:
+- `Closes #NN` / `Fixes #NN` / `Resolves #NN` in the PR body, or
+- branch named `NN-…` (e.g. `42-fix-foo`).
 
 ## Components
 
@@ -22,15 +28,15 @@ PR → required checks green → Jira label pr_approved → auto-merge
 
 - `gh` CLI authenticated with **admin** on the target repo.
 - The gate workflow runs on `pull_request` and its **job names** are known
-  (required-check contexts must match exactly, e.g. `quality`, `agents-suite`,
+  (required-check contexts must match exactly, e.g. `quality`,
   `Quality gates`).
-- Secrets/vars (same names as dmtools-dart):
-  - vars: `JIRA_EMAIL`, `JIRA_BASE_PATH`
-  - secrets: `JIRA_API_TOKEN`, `SOURCE_GITHUB_TOKEN`
-  - optional: `PAT_TOKEN` (lets auto-update-prs trigger downstream PR CI;
-    falls back to `github.token` without it)
-- The Jira project's flow must use the `pr_approved` label on tickets whose
-  PRs should auto-merge (rules live in `agents/sm_merge.json`).
+- No secrets required — `github.token` suffices (issues + PR write + merge).
+  Recommended: `PAT_TOKEN` so auto-update-prs re-runs CI on branches it
+  refreshes (pushes made with `github.token` do not trigger workflows;
+  without a PAT, refreshed PRs stay BEHIND until their next commit).
+- Workflow: engineer opens issue → works on `NN-…` branch → PR with
+  `Closes #NN` → CI green → puts `pr_approved` on the **issue** → the
+  machine merges on the next gate run.
 
 ## Runbook
 
@@ -53,10 +59,9 @@ machine-kit/setup.sh protect <owner>/<repo> \
 - `@@GATE_WORKFLOW_NAME@@` is the **workflow** `name:` (what `workflow_run`
   matches), while `--checks` are **job** names (what branch protection
   matches). They are different identifiers on purpose.
-- The dmtools CLI is installed in merge-trigger from
-  `--install-repo` (default `epam/dmtools-dart`) latest release — no local
-  dependency on the repo being configured.
 - Fork PRs never trigger merges (`head_repository` guard), same as dm.ai.
-- Reference implementation: dmtools-dart `.github/workflows/` +
-  `phases/`… history; the fuse was turned on there 2026-09-08 after
-  branch protection landed.
+- History note: the first iteration drove merges from Jira tickets
+  (`agents/sm_merge.json` + `retry_merge.js`, `MERGE_TRIGGER_ENABLED` fuse);
+  it was replaced by this GitHub-issues flow on 2026-09-08 — the fuse
+  variable name carried over. The Jira variant lives in dmtools-dart git
+  history (`.github/workflows/merge-trigger.yml` before the switch).

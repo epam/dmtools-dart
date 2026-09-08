@@ -74,8 +74,8 @@ if [ "$cmd" = "workflows" ]; then
     || die "no admin on $SLUG — branch protection setup will fail"
   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
   mkdir -p .github/workflows
-  render "$HERE/templates/merge-trigger.yml"   .github/workflows/merge-trigger.yml
-  render "$HERE/templates/auto-update-prs.yml" .github/workflows/auto-update-prs.yml
+  render "$HERE/templates/merge-trigger-issues.yml" .github/workflows/merge-trigger.yml
+  render "$HERE/templates/auto-update-prs.yml"      .github/workflows/auto-update-prs.yml
   if [ "$ADD_SUBMODULE" = "1" ] && [ ! -d "agents" ]; then
     git submodule add https://github.com/IstiN/dmtools-agents agents
     git config -f .gitmodules submodule.agents.branch main
@@ -140,14 +140,8 @@ gh api -X PUT "repos/$REPO_SLUG/branches/main/protection" --input - >/dev/null <
 EOF
 echo "branch protection: main ← required [$CHECKS], strict, enforce-admins"
 
-for v in JIRA_EMAIL JIRA_BASE_PATH; do
-  gh api "repos/$REPO_SLUG/actions/variables/$v" --jq .name >/dev/null 2>&1 \
-    || echo "MISSING var: $v (gh variable set $v -b <value> -R $REPO_SLUG)"
-done
-for s in JIRA_API_TOKEN SOURCE_GITHUB_TOKEN; do
-  gh secret list -R "$REPO_SLUG" --jq '.[].name' | grep -qx "$s" \
-    || echo "MISSING secret: $s (gh secret set $s -R $REPO_SLUG)"
-done
+gh secret list -R "$REPO_SLUG" --jq '.[].name' | grep -qx PAT_TOKEN \
+  || echo "optional secret: PAT_TOKEN — lets auto-update-prs re-run CI on refreshed PR branches (github.token cannot trigger workflows)"
 if [ "$ENABLE_FUSE" = "1" ]; then
   gh api -X PATCH "repos/$REPO_SLUG/actions/variables/MERGE_TRIGGER_ENABLED" \
     -f value=true >/dev/null 2>&1 \

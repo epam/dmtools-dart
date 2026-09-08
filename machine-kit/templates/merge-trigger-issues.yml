@@ -1,7 +1,7 @@
 # Merge Trigger — GitHub-issues tracker variant (machine-kit).
 #
 # Placeholder tokens (rendered by machine-kit/setup.sh):
-#   Quality — the workflow whose green run arms the trigger
+#   @@GATE_WORKFLOW_NAME@@ — the workflow whose green run arms the trigger
 #                            (e.g. "Quality" in dmtools-dart, "CI" elsewhere)
 #
 # The tracker is THIS repo's GitHub issues (no Jira, no external services):
@@ -29,7 +29,7 @@ run-name: 'Merge Trigger : CI passed → merge pr_approved issues'
 
 on:
   workflow_run:
-    workflows: ['Quality']
+    workflows: ['@@GATE_WORKFLOW_NAME@@']
     types: [completed]
 
 permissions:

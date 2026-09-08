@@ -64,6 +64,32 @@ void lifecycleJsActionTests() {
         await tmp.delete(recursive: true);
       }
     });
+
+    test('JS actions see params.ticket from ticketData', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_ticket.log';
+      try {
+        final js = _actionJs(
+          tmp,
+          'post.js',
+          'file_write({path: "$log", content: params.ticket.key});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+          ticketData: const {
+            'key': 'GH-21',
+            'fields': {'summary': 's'},
+          },
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'GH-21');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
   });
 }
 

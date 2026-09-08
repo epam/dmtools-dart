@@ -28,7 +28,7 @@
 # this template must prepare the ticket input (issue body) BEFORE the run,
 # so the reusable workflow_call cannot be used here.
 
-name: AI Teammate : issue assigned
+name: 'AI Teammate : issue assigned'
 
 on:
   issues:

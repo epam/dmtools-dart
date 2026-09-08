@@ -4,6 +4,13 @@ import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
 void main() {
+  routingTests();
+  envExpansionTests();
+  fetchTests();
+  singleIssueTests();
+}
+
+void routingTests() {
   group('looksLikeGithubQuery', () {
     test('GitHub search tokens are recognized', () {
       for (final q in [
@@ -23,73 +30,91 @@ void main() {
         expect(looksLikeGithubQuery(q), isFalse, reason: q);
       }
     });
+    test('direct-issue forms route to the GitHub source', () {
+      expect(looksLikeGithubQuery('repo:o/r#42'), isTrue);
+      expect(looksLikeGithubQuery('#42'), isTrue);
+      expect(looksLikeGithubQuery('GH-42'), isTrue);
+      expect(looksLikeGithubQuery('42'), isTrue);
+    });
   });
+}
 
+void envExpansionTests() {
   group('expandEnvRefs', () {
     test('expands env refs from the provided map', () {
       expect(
-        expandEnvRefs('repo:\${GITHUB_REPOSITORY} is:issue',
+        expandEnvRefs(r'repo:${GITHUB_REPOSITORY} is:issue',
             {'GITHUB_REPOSITORY': 'o/r'}),
         'repo:o/r is:issue',
       );
     });
     test('unresolved refs become empty strings', () {
-      expect(expandEnvRefs('repo:\${NOPE_X} is:issue', {}), 'repo: is:issue');
+      expect(expandEnvRefs(r'repo:${NOPE_X} is:issue', {}), 'repo: is:issue');
     });
   });
+}
 
+/// Fake GitHub REST API: records every requested path and answers the
+/// canned search/issue/comments payloads for `o/r` issues 7 and 42.
+Future<Map<String, dynamic>> fakeGithubApi(
+  List<String> calls,
+  String path,
+) async {
+  calls.add(path);
+  if (path.startsWith('/search/issues')) {
+    return {
+      'items': [
+        {'number': 7, 'repository_url': 'https://api.github.com/repos/o/r'},
+      ],
+    };
+  }
+  if (path == '/repos/o/r/issues/7') {
+    return {
+      'title': '[BUG] login flaky',
+      'body': 'Fails intermittently',
+      'state': 'open',
+      'labels': [
+        {'name': 'bug'},
+      ],
+    };
+  }
+  if (path == '/repos/o/r/issues/7/comments') {
+    return {
+      'comments': [
+        {
+          'user': {'login': 'dev1'},
+          'created_at': '2026-09-08T10:00:00Z',
+          'body': 'Reproduced on main',
+        },
+      ],
+    };
+  }
+  if (path == '/repos/o/r/issues/42') {
+    return {
+      'number': 42,
+      'title': 'Fix flaky login',
+      'body': 'Body',
+      'state': 'open'
+    };
+  }
+  if (path == '/repos/o/r/issues/42/comments') return {'comments': []};
+  fail('unexpected path: $path');
+}
+
+void fetchTests() {
   group('GithubIssueSource.fetch', () {
     test('search, hydrate, Teammate ticket shape', () async {
       final calls = <String>[];
-      Future<Map<String, dynamic>> getJson(String path) async {
-        calls.add(path);
-        if (path.startsWith('/search/issues')) {
-          return {
-            'items': [
-              {
-                'number': 7,
-                'repository_url': 'https://api.github.com/repos/o/r',
-              },
-            ],
-          };
-        }
-        if (path == '/repos/o/r/issues/7') {
-          return {
-            'title': '[BUG] login flaky',
-            'body': 'Fails intermittently',
-            'state': 'open',
-            'labels': [
-              {'name': 'bug'},
-            ],
-          };
-        }
-        if (path == '/repos/o/r/issues/7/comments') {
-          return {
-            'comments': [
-              {
-                'user': {'login': 'dev1'},
-                'created_at': '2026-09-08T10:00:00Z',
-                'body': 'Reproduced on main',
-              },
-            ],
-          };
-        }
-        fail('unexpected path: $path');
-      }
-
       final source = GithubIssueSource(
-        getJson: getJson,
+        getJson: (path) => fakeGithubApi(calls, path),
         env: {'GITHUB_REPOSITORY': 'o/r'},
       );
       final tickets = await source
-          .fetch('repo:\${GITHUB_REPOSITORY} is:issue is:open label:bug');
+          .fetch(r'repo:${GITHUB_REPOSITORY} is:issue is:open label:bug');
 
       expect(
         calls,
-        containsAll([
-          '/repos/o/r/issues/7',
-          '/repos/o/r/issues/7/comments',
-        ]),
+        containsAll(['/repos/o/r/issues/7', '/repos/o/r/issues/7/comments']),
       );
       expect(tickets, hasLength(1));
       final t = tickets.single;
@@ -118,25 +143,16 @@ void main() {
       );
     });
   });
+}
 
+void singleIssueTests() {
   group('single-issue inputJql', () {
     test('repo:o/r#42 fetches the issue directly, no search call', () async {
       final calls = <String>[];
-      Future<Map<String, dynamic>> getJson(String path) async {
-        calls.add(path);
-        if (path == '/repos/o/r/issues/42') {
-          return {
-            'number': 42,
-            'title': 'Fix flaky login',
-            'body': 'Body',
-            'state': 'open',
-          };
-        }
-        if (path == '/repos/o/r/issues/42/comments') return {'comments': []};
-        fail('unexpected path: $path');
-      }
-
-      final source = GithubIssueSource(getJson: getJson, env: const {});
+      final source = GithubIssueSource(
+        getJson: (path) => fakeGithubApi(calls, path),
+        env: const {},
+      );
       final tickets = await source.fetch('repo:o/r#42');
 
       expect(calls, ['/repos/o/r/issues/42', '/repos/o/r/issues/42/comments']);
@@ -166,13 +182,6 @@ void main() {
         env: const {},
       );
       expect(() => source.fetch('#42'), throwsA(isA<StateError>()));
-    });
-
-    test('routing recognizes the direct forms', () {
-      expect(looksLikeGithubQuery('repo:o/r#42'), isTrue);
-      expect(looksLikeGithubQuery('#42'), isTrue);
-      expect(looksLikeGithubQuery('GH-42'), isTrue);
-      expect(looksLikeGithubQuery('42'), isTrue);
     });
   });
 }

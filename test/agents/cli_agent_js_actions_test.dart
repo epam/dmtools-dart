@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 void main() {
   lifecycleJsActionTests();
+  ticketContextJsActionTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -64,7 +65,11 @@ void lifecycleJsActionTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void ticketContextJsActionTests() {
+  group('CliAgent JS actions — ticket context', () {
     test('JS actions see params.ticket from ticketData', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/js_ticket.log';

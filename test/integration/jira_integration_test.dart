@@ -167,7 +167,7 @@ String _createTicket(
   String issueType,
   String runId,
 ) {
-  final result = _decode(bridge.execute('jira_create_ticket', {
+  final result = _decode(bridge.execute('jira_create_ticket_basic', {
     'project': project,
     'issueType': issueType,
     'summary': 'it-$runId-smoke',

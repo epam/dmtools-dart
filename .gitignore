@@ -16,8 +16,12 @@ native/quickjs/*.dylib
 /dmtools
 /dmtools.exe
 
-# fa harness session artifacts
-.fah/
+# fa harness: project memory is REPO CONTENT (committed, shared across
+# agents and runs — fa stores it under <git-root>/.fah/memory); everything
+# else under .fah is per-session junk.
+.fah/*
+!.fah/memory/
+.fah/memory/.last_maintenance
 
 # local dmtools run artifacts
 .dmtools-logs/

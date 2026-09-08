@@ -34,6 +34,10 @@
 #   SDK's Dart (SDK + pub cached by version) — the machine repo dogfoods
 #   its own HEAD, the release binary would lag the branch.
 #
+# Memory: fa's project memory (.fah/memory) is committed to the repo and
+#   pushed after every run — agent knowledge accumulates in the repository
+#   (the checkout already brings the accumulated memory back in).
+#
 # Sessions: run-agent.sh resumes a deterministic named fa session per
 #   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
 #   the ticket's dev conversation; review has its own dev-review), and the
@@ -218,6 +222,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           dart run bin/dmtools.dart --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
+
+      - name: Persist fa project memory into the repository
+        # fa stores project memory under <git-root>/.fah/memory (area:
+        # project notes) — committing it makes agent knowledge survive
+        # across runs and share between agents. Best-effort: a protected
+        # default branch rejects the push, the run stays green and the
+        # memory simply lives only in this run.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "dm.ai"
+          git config user.email "dm.ai@epam.com"
+          if [ -d .fah/memory ] && [ -n "$(git status --porcelain -- .fah/memory)" ]; then
+            git add .fah/memory
+            git commit -m "chore(fa): persist agent project memory [skip ci]"
+            git push || echo "::warning::memory push rejected (protected branch?) — kept in run only"
+          else
+            echo "no new fa memory to persist"
+          fi
 
       - name: Link the run back to the issue
         if: always()

@@ -27,10 +27,12 @@
 #   ZAI_CODE_KEY, KIMI_REVIEW_KEY (+ SOURCE_GITHUB_TOKEN for the agent's
 #   git/gh operations, inherited from the rest of the machine).
 #
-# Prerequisites: fa + kimi CLIs install up front via agents/setup/install.sh
-#   (idempotent), versions pinned in workflow env (repo vars FA_VERSION /
-#   KIMI_VERSION override) and cached by version — a cache hit makes the
-#   install a fast no-op. Same pattern as the IstiN/dmtools ai-teammate.yml.
+# Prerequisites: fa installs up front via agents/setup/install.sh
+#   (idempotent, self-contained — one binary carries every AI backend),
+#   version pinned in workflow env (repo var FA_VERSION overrides) and
+#   cached by version. dmtools-dart runs from source through the Flutter
+#   SDK's Dart (SDK + pub cached by version) — the machine repo dogfoods
+#   its own HEAD, the release binary would lag the branch.
 #
 # Sessions: run-agent.sh resumes a deterministic named fa session per
 #   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
@@ -59,8 +61,10 @@ permissions:
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
   # Prerequisite versions — pinned (cache-by-version); repo vars override.
+  # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
+  # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
   FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
-  KIMI_VERSION: ${{ vars.KIMI_VERSION || '' }}   # empty = installer default
+  FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION || '3.44.4' }}
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
@@ -139,7 +143,7 @@ jobs:
           # the TeammateJob hydration pins as contextId.
           AI_TEAMMATE_DISPLAY_KEY: GH-${{ github.event.issue.number }}
           AI_TEAMMATE_CONCURRENCY_KEY: ${{ github.event.issue.number }}
-        run: bash agents/setup/cache.sh keys fa-session kimi
+        run: bash agents/setup/cache.sh keys fa-session
 
       - name: Restore fa session (resume the ticket conversation)
         uses: actions/cache@v6
@@ -156,29 +160,27 @@ jobs:
             ~/lib
           key: fa-${{ env.FA_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
-      - name: Cache kimi CLI (by version)
-        uses: actions/cache@v6
+      - name: Set up Flutter (Dart SDK, cached by version)
+        uses: subosito/flutter-action@v2
         with:
-          path: ${{ env.KIMI_CACHE_PATH }}
-          key: ${{ env.KIMI_CACHE_KEY }}
-          restore-keys: kimi-
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
-      - name: Install prerequisites (fa + kimi; no-op on cache hit)
-        # register_path in each setup script exports PATH immediately and
+      - name: Install prerequisites (fa; no-op on cache hit)
+        # register_path in the setup script exports PATH immediately and
         # persists it to GITHUB_PATH — no manual PATH edits needed here.
-        run: bash agents/setup/install.sh "fa:${FA_VERSION}" kimi
+        run: bash agents/setup/install.sh "fa:${FA_VERSION}"
 
       - name: Verify prerequisites
-        run: |
-          fa --version
-          kimi --version || echo "kimi: version check failed"
+        run: fa --version
 
-      - name: Install DMTools CLI (Dart)
+      - name: Build dmtools-dart from source (dogfood this checkout)
+        # The release binary lags this branch (PR #18 features) — the
+        # machine repo always runs its own HEAD. dart resolves the QuickJS
+        # bridge through .dart_tool/package_config.json (same as dart test).
         run: |
-          curl -fsSL \
-            "https://github.com/epam/dmtools-dart/releases/latest/download/install.sh" \
-            | sh
-          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+          dart pub get
+          make native
 
       - name: Configure Git Author
         run: |
@@ -215,7 +217,7 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          dmtools --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
+          dart run bin/dmtools.dart --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
 
       - name: Link the run back to the issue
         if: always()

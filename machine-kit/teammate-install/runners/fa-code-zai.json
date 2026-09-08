@@ -1,8 +1,12 @@
 {
-  "name": "Teammate",
-  "parent": { "path": "../../../agents/bug_development.json" },
+  "name": "CliAgent",
+  "parent": {
+    "path": "../../../agents/bug_development.json"
+  },
   "params": {
-    "metadata": { "contextId": "fa-code-zai" },
+    "metadata": {
+      "contextId": "fa-code-zai"
+    },
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "zai",

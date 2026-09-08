@@ -1,0 +1,139 @@
+# AI Teammate Trigger — GitHub-issues variant (machine-kit).
+#
+# The missing link of the dark-factory chain: a HUMAN creates an issue and
+# assigns it to the agent (or adds a label) — this workflow turns that into
+# an agent run, and the existing merge-trigger-issues.yml closes the loop:
+#
+#   issue created → assigned to ai-teammate (or labeled agent:dev / agent:review)
+#     → THIS workflow: guard → write the issue body to input/ticket.md
+#       → dmtools run machine-kit/teammate-install/runners/<runner>.json
+#         (runner = thin child of a dmtools-agents agent; only envVariables
+#          overridden: AI_AGENT_PROVIDER=fa + FA_PROVIDER_TYPE/CONFIG)
+#     → agent develops → PR with "Closes #NN"
+#     → merge-trigger-issues.yml: pr_approved label → checks green → squash
+#
+# Runner selection:
+#   assignee == agent handle (default "ai-teammate") OR label agent:dev
+#     → runners/fa-code-zai.json   (z.ai glm-5.3-flash)
+#   label agent:review
+#     → runners/fa-review-kimi.json (Kimi kimi-k3-256k)
+#
+# Keys (workflow-level separation): each runner names its key via
+# FA_PROVIDER_CONFIG.apiKeyEnvVar — configure repo SECRETS with the same
+# names as in machine-kit/teammate-install/dmtools.env:
+#   ZAI_CODE_KEY, KIMI_REVIEW_KEY (+ SOURCE_GITHUB_TOKEN for the agent's
+#   git/gh operations, inherited from the rest of the machine).
+#
+# Self-contained on purpose: unlike the Jira-era reusable ai-teammate.yml,
+# this template must prepare the ticket input (issue body) BEFORE the run,
+# so the reusable workflow_call cannot be used here.
+
+name: AI Teammate : issue assigned
+
+on:
+  issues:
+    types: [assigned, labeled]
+
+concurrency:
+  group: ai-teammate-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+env:
+  AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
+  RUNNER_DEV: machine-kit/teammate-install/runners/fa-code-zai.json
+  RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+      runner: ${{ steps.check.outputs.runner }}
+    steps:
+      - name: Decide whether this event is for the agent
+        id: check
+        env:
+          ASSIGNEES: ${{ join(github.event.issue.assignees.*.login, ' ') }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ' ') }}
+          ACTOR: ${{ github.event.action }}
+        run: |
+          runner=""
+          if echo "$LABELS" | grep -qw "agent:review"; then
+            runner="$RUNNER_REVIEW"
+          elif echo "$ASSIGNEES" | grep -qw "$AGENT_HANDLE" \
+            || echo "$LABELS" | grep -qw "agent:dev"; then
+            runner="$RUNNER_DEV"
+          fi
+          if [ -n "$runner" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "runner=$runner" >> "$GITHUB_OUTPUT"
+            echo "→ agent run: $runner (event=$ACTOR, labels=$LABELS, assignees=$ASSIGNEES)"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "→ not for the agent (event=$ACTOR, labels=$LABELS, assignees=$ASSIGNEES)"
+          fi
+
+  teammate:
+    needs: guard
+    if: needs.guard.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true # agents/ — inherited agent configs + run-agent.sh
+
+      - name: Install DMTools CLI (Dart)
+        run: |
+          curl -fsSL \
+            "https://github.com/epam/dmtools-dart/releases/latest/download/install.sh" \
+            | sh
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Git Author
+        run: |
+          git config --global user.name "dm.ai"
+          git config --global user.email "dm.ai@epam.com"
+
+      - name: Write issue body to the agent input folder
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p input
+          gh issue view "$NUMBER" --json title,body \
+            -q '.title, .body' > input/ticket.md
+          echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
+
+      - name: Run agent (fa provider via runner env overrides)
+        env:
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUNNER: ${{ needs.guard.outputs.runner }}
+          # fa provider contract (env preconfig; the runner JSON also pins
+          # these via params.envVariables — job env beats it, this step env
+          # matches it. Keys: workflow-level separation, same names as
+          # machine-kit/teammate-install/dmtools.env).
+          AI_AGENT_PROVIDER: fa
+          ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+          KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dmtools --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
+
+      - name: Link the run back to the issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          OUTCOME: ${{ job.status }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$NUMBER" --body \
+            "🤖 AI Teammate run ${OUTCOME}: ${CI_RUN_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}"

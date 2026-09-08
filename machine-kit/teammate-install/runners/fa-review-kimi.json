@@ -1,8 +1,12 @@
 {
-  "name": "Teammate",
-  "parent": { "path": "../../../agents/pr_review.json" },
+  "name": "CliAgent",
+  "parent": {
+    "path": "../../../agents/pr_review.json"
+  },
   "params": {
-    "metadata": { "contextId": "fa-review-kimi" },
+    "metadata": {
+      "contextId": "fa-review-kimi"
+    },
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "kimi",

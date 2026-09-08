@@ -60,7 +60,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  issues: read
+  issues: write
 
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to

@@ -71,9 +71,24 @@ jobs:
         run: |
           set -euo pipefail
           repo="${{ github.repository }}"
+          # Candidates come from BOTH sides: the issue label (human/bot)
+          # and the PR label (pr_review approves via scm.addLabel on the
+          # PR) — map PR labels back to their linked issues.
           issues=$(gh issue list --repo "$repo" --label "$LABEL" --state open \
             --json number --jq '.[].number')
-          if [ -z "$issues" ]; then
+          prs_labeled=$(gh pr list --repo "$repo" --label "$LABEL" --state open \
+            --json number,body,headRefName --jq '.[] | "\(.number)\t\(.body // "")\t\(.headRefName)"')
+          while IFS=$'\t' read -r prn body branch; do
+            [ -n "$prn" ] || continue
+            n=$(echo "$body" | grep -oiE '\b(closes|fixes|resolves)\s+#[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
+            [ -n "$n" ] || n=$(echo "$branch" | grep -oE '^[0-9]+' || true)
+            if [ -n "$n" ]; then
+              open=$(gh issue view "$n" --repo "$repo" --json state --jq .state 2>/dev/null || true)
+              [ "$open" = "OPEN" ] && issues="$issues $n"
+            fi
+          done < <(printf '%s\n' "$prs_labeled")
+          issues=$(echo $issues | tr ' ' '\n' | sort -u | tr '\n' ' ')
+          if [ -z "${issues// /}" ]; then
             echo "no issues labeled '$LABEL' — nothing to merge"
             exit 0
           fi
@@ -101,6 +116,7 @@ jobs:
                 if err=$(gh pr merge "$pr" --repo "$repo" --squash 2>&1); then
                   merged=$((merged+1))
                   gh issue edit "$n" --repo "$repo" --remove-label "$LABEL" || true
+                  gh pr edit "$pr" --repo "$repo" --remove-label "$LABEL" || true
                   gh issue comment "$n" --repo "$repo" \
                     --body "🔀 Merged #$pr (CI: ${CI_RUN_URL:-run})" || true
                   echo "✅ merged #$pr for issue #$n"

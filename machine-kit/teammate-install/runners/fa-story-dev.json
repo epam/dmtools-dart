@@ -1,10 +1,13 @@
 {
-  "parent": { "path": "../../../agents/story_development.json" },
+  "parent": {
+    "path": "../../../agents/story_development.json"
+  },
   "params": {
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "zai",
       "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.z.ai/api/coding/paas/v4\",\"model\":\"glm-5.3-flash\",\"apiKeyEnvVar\":\"ZAI_CODE_KEY\"}"
-    }
+    },
+    "inputJql": "repo:${GITHUB_REPOSITORY} is:issue is:open -label:bug"
   }
 }

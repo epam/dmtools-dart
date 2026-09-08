@@ -1,10 +1,13 @@
 {
-  "parent": { "path": "../../../agents/pr_review.json" },
+  "parent": {
+    "path": "../../../agents/pr_review.json"
+  },
   "params": {
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "kimi",
       "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.kimi.com/coding/v1\",\"model\":\"kimi-k3-256k\",\"apiKeyEnvVar\":\"KIMI_REVIEW_KEY\"}"
-    }
+    },
+    "inputJql": "repo:${GITHUB_REPOSITORY} is:issue is:open label:agent:review"
   }
 }

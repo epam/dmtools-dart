@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'cli_agent.dart';
+import 'github_ticket_source.dart';
 import 'cli_agent_params.dart';
 
 /// Fetches the hydrated tickets for [inputJql]: each ticket is a raw tracker
@@ -90,7 +91,10 @@ class TeammateJob {
       }
       return _runSingle(prepared);
     }
-    final source = ticketSource ?? jiraTicketSource;
+    final github = looksLikeGithubQuery(inputJql);
+    _sourceIsGithub = github;
+    final source =
+        ticketSource ?? (github ? githubIssueTicketSource : jiraTicketSource);
     final tickets = await source(inputJql);
     final results = <Map<String, dynamic>>[];
     for (final ticket in tickets) {
@@ -183,7 +187,7 @@ class TeammateJob {
   /// enabled (`alwaysPostComments` or non-`none` `outputType`).
   Future<void> _postTraceComment(String key) async {
     final ciRunUrl = (params['ciRunUrl'] as String?)?.trim() ?? '';
-    if (ciRunUrl.isEmpty || !_shouldPostComments) return;
+    if (ciRunUrl.isEmpty || !_shouldPostComments || _sourceIsGithub) return;
     final poster = commentPoster ?? _jiraCommentPoster;
     await poster(
         key,
@@ -198,6 +202,10 @@ class TeammateJob {
     final outputType = (params['outputType'] as String?)?.trim().toLowerCase();
     return outputType != null && outputType.isNotEmpty && outputType != 'none';
   }
+
+  /// Whether the resolved ticket source is the GitHub-issues one — trace
+  /// comments are Jira-specific and are skipped in that mode.
+  bool _sourceIsGithub = false;
 
   /// Java `AbstractJob.agentNamePrefix`: `[<contextId>|<agentId>] ` or `''`.
   String _agentNamePrefix() {

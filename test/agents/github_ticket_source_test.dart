@@ -118,4 +118,61 @@ void main() {
       );
     });
   });
+
+  group('single-issue inputJql', () {
+    test('repo:o/r#42 fetches the issue directly, no search call', () async {
+      final calls = <String>[];
+      Future<Map<String, dynamic>> getJson(String path) async {
+        calls.add(path);
+        if (path == '/repos/o/r/issues/42') {
+          return {
+            'number': 42,
+            'title': 'Fix flaky login',
+            'body': 'Body',
+            'state': 'open',
+          };
+        }
+        if (path == '/repos/o/r/issues/42/comments') return {'comments': []};
+        fail('unexpected path: $path');
+      }
+
+      final source = GithubIssueSource(getJson: getJson, env: const {});
+      final tickets = await source.fetch('repo:o/r#42');
+
+      expect(calls, ['/repos/o/r/issues/42', '/repos/o/r/issues/42/comments']);
+      expect(tickets.single['key'], 'GH-42');
+      expect((tickets.single['fields'] as Map)['summary'], 'Fix flaky login');
+    });
+
+    test('#42 and GH-42 resolve the repo from GITHUB_REPOSITORY', () async {
+      var fetches = 0;
+      Future<Map<String, dynamic>> getJson(String path) async {
+        if (path.startsWith('/repos/o/r/issues/9')) fetches++;
+        return {'comments': []};
+      }
+
+      final source = GithubIssueSource(
+        getJson: getJson,
+        env: {'GITHUB_REPOSITORY': 'o/r'},
+      );
+      expect((await source.fetch('#9')).single['key'], 'GH-9');
+      expect((await source.fetch('GH-9')).single['key'], 'GH-9');
+      expect(fetches, 4);
+    });
+
+    test('#42 without GITHUB_REPOSITORY fails', () async {
+      final source = GithubIssueSource(
+        getJson: (_) async => {'comments': []},
+        env: const {},
+      );
+      expect(() => source.fetch('#42'), throwsA(isA<StateError>()));
+    });
+
+    test('routing recognizes the direct forms', () {
+      expect(looksLikeGithubQuery('repo:o/r#42'), isTrue);
+      expect(looksLikeGithubQuery('#42'), isTrue);
+      expect(looksLikeGithubQuery('GH-42'), isTrue);
+      expect(looksLikeGithubQuery('42'), isTrue);
+    });
+  });
 }

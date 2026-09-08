@@ -13,6 +13,16 @@
 /// [looksLikeGithubQuery] — anything with GitHub search tokens routes to
 /// this source, everything else stays Jira JQL (Java parity).
 ///
+/// A single issue is addressed directly — no search round-trip:
+///
+/// ```json
+/// {"params": {"inputJql": "repo:owner/name#42"}}
+/// ```
+///
+/// `#42` and `GH-42` also work when `GITHUB_REPOSITORY` is set — the form
+/// an issue-triggered workflow passes after resolving
+/// `github.event.issue.number`.
+///
 /// The fetched issues hydrate into the same raw-tracker shape the Jira
 /// source produces (`key`, `fields.summary`, `fields.description`,
 /// `fields.status.name`, `fields.comment.comments[].author.displayName`
@@ -37,7 +47,12 @@ bool looksLikeGithubQuery(String inputJql) {
     'state:',
     'type:issue',
   ];
-  return markers.any(t.contains);
+  if (markers.any(t.contains)) return true;
+  // Direct-issue forms: `repo:o/r#42`, `#42`, `gh-42`, `42`.
+  return RegExp(
+    r'^(repo:[\w./-]+#\d+|#\d+|gh-\d+|\d+)$',
+    caseSensitive: false,
+  ).hasMatch(inputJql.trim());
 }
 
 /// Expands `${VAR}` refs from [env] (defaults to the process environment);
@@ -68,10 +83,14 @@ class GithubIssueSource {
   final Future<Map<String, dynamic>> Function(String path) _getJson;
   final Map<String, String> _env;
 
-  /// Search + hydrate the issues matching [query].
+  /// Search + hydrate the issues matching [query]. A single-issue form
+  /// (`repo:o/r#42`, `#42`, `GH-42`, `42` — see [_parseSingleIssue]) skips
+  /// the search round-trip and fetches the issue directly.
   Future<List<Map<String, dynamic>>> fetch(String query) async {
     final effective = expandEnvRefs(query, _env).trim();
     if (effective.isEmpty) return const [];
+    final single = _parseSingleIssue(effective);
+    if (single != null) return [await _fetchIssue(single.$1, single.$2)];
     final repo = _resolveRepo(effective);
     final searchPath =
         '/search/issues?per_page=50&q=${Uri.encodeQueryComponent(effective)}';
@@ -81,13 +100,38 @@ class GithubIssueSource {
     for (final item in items) {
       final coords = _issueCoords(item, repo);
       if (coords == null) continue;
-      final (apiBase, numberStr) = coords;
-      final number = int.parse(numberStr);
-      final issue = await _getJson('$apiBase/issues/$number');
-      final comments = await _getJson('$apiBase/issues/$number/comments');
-      tickets.add(_toTicket(issue, comments, number));
+      tickets.add(await _fetchIssue(coords.$1, int.parse(coords.$2)));
     }
     return tickets;
+  }
+
+  /// Single-issue forms with their repo resolved: `repo:owner/name#42`
+  /// carries the repo inline; `#42`, `GH-42` and bare `42` resolve against
+  /// `GITHUB_REPOSITORY` (a failure when unset — the number alone is
+  /// ambiguous). Returns `null` when [effective] is a search query.
+  (String, int)? _parseSingleIssue(String effective) {
+    final inline = RegExp(r'^repo:([\w.-]+/[\w.-]+)#(\d+)$')
+        .firstMatch(effective)
+        ?.groups(const [1, 2]);
+    if (inline != null) return (inline[0]!, int.parse(inline[1]!));
+    final bare =
+        RegExp(r'^(?:#|[Gg][Hh]-)?(\d+)$').firstMatch(effective)?.group(1);
+    if (bare == null) return null;
+    final repo = _env['GITHUB_REPOSITORY'];
+    if (repo == null || !repo.contains('/')) {
+      throw StateError(
+        'inputJql "$effective" needs the GITHUB_REPOSITORY env '
+        '(or the repo:owner/name#<number> form)',
+      );
+    }
+    return (repo, int.parse(bare));
+  }
+
+  /// Issue + comments hydration for one issue number.
+  Future<Map<String, dynamic>> _fetchIssue(String repo, int number) async {
+    final issue = await _getJson('/repos/$repo/issues/$number');
+    final comments = await _getJson('/repos/$repo/issues/$number/comments');
+    return _toTicket(issue, comments, number);
   }
 
   /// Repo qualifier resolution: explicit `repo:owner/name` in the query,
@@ -104,9 +148,9 @@ class GithubIssueSource {
     );
   }
 
-  /// Extracts the REST base (`/repos/owner/name`) and the issue number
-  /// from a search item (falls back to the resolved repo for older
-  /// payloads that omit `repository_url`).
+  /// Extracts the repo (`owner/name`) and the issue number from a search
+  /// item (falls back to the resolved repo for older payloads that omit
+  /// `repository_url`).
   (String, String)? _issueCoords(Map item, String repo) {
     final number = item['number'];
     if (number is! int) return null;
@@ -114,8 +158,7 @@ class GithubIssueSource {
     final match = url == null
         ? null
         : RegExp(r'/repos/([\w.-]+/[\w.-]+)$').firstMatch(url);
-    final base = match == null ? '/repos/$repo' : '/repos/${match.group(1)}';
-    return (base, '$number');
+    return (match?.group(1) ?? repo, '$number');
   }
 
   /// Maps the issue + comments payloads into the raw-tracker shape

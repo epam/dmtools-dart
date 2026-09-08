@@ -223,7 +223,7 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          dart run bin/dmtools.dart --debug run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}"
+          dart run bin/dmtools.dart run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}" --debug
 
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:

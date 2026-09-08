@@ -102,3 +102,15 @@ dart run bin/dmtools.dart doctor    # configuration presence report
 The full per-integration variable matrix (auth secrets plus sandbox-target
 `DMTOOLS_IT_*` variables) lives in
 [test/integration/README.md](test/integration/README.md).
+
+## Machine
+
+This repo runs its own dark-factory loop — GitHub issues drive AI teammates
+(bug/story development, PR review, PR rework), and PRs merge automatically
+when reviewed and green. Teammates are installed from runner configs in
+[machine-kit/teammate-install/runners/](machine-kit/teammate-install/runners):
+
+- `fa-bug-dev.json` — bug-development teammate (z.ai GLM) driven from bug tickets
+- `fa-story-dev.json` — story-development teammate (z.ai GLM) driven from story tickets
+- `fa-review-kimi.json` — PR-review teammate (Kimi) that reviews open pull requests
+- `fa-rework-zai.json` — PR-rework teammate (z.ai GLM) that addresses review feedback

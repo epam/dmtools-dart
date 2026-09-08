@@ -46,6 +46,7 @@ case "$cmd" in
 esac
 
 need git; need gh
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # ---------------------------------------------------------------- workflows
 if [ "$cmd" = "workflows" ]; then
@@ -73,7 +74,6 @@ if [ "$cmd" = "workflows" ]; then
     || die "no admin on $SLUG — branch protection setup will fail"
   git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
   mkdir -p .github/workflows
-  HERE="$(cd "$(dirname "$0")" && pwd)"
   render "$HERE/templates/merge-trigger.yml"   .github/workflows/merge-trigger.yml
   render "$HERE/templates/auto-update-prs.yml" .github/workflows/auto-update-prs.yml
   if [ "$ADD_SUBMODULE" = "1" ] && [ ! -d "agents" ]; then

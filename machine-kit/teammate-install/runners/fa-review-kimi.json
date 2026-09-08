@@ -1,18 +1,12 @@
 {
-  "name": "CliAgent",
+  "name": "Teammate",
+  "parent": { "path": "../../../agents/pr_review.json" },
   "params": {
-    "contextId": "fa-review-kimi",
-    "cliCommands": [
-      "./machine-kit/teammate-install/runners/run-fa.sh"
-    ],
+    "metadata": { "contextId": "fa-review-kimi" },
     "envVariables": {
-      "CLI_ALLOWED_COMMANDS": "run-fa.sh,./machine-kit/teammate-install/runners/run-fa.sh,fa,mkdir,cat,bash",
-      "FA_RUN_NAME": "review",
+      "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "kimi",
-      "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.kimi.com/coding/v1\",\"model\":\"kimi-k3-256k\",\"apiKeyEnvVar\":\"KIMI_API_KEY\"}"
-    },
-    "outputType": "none",
-    "cleanupInputFolder": false,
-    "cleanupOutputsFolder": false
+      "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.kimi.com/coding/v1\",\"model\":\"kimi-k3-256k\",\"apiKeyEnvVar\":\"KIMI_REVIEW_KEY\"}"
+    }
   }
 }

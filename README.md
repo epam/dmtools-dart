@@ -102,3 +102,14 @@ dart run bin/dmtools.dart doctor    # configuration presence report
 The full per-integration variable matrix (auth secrets plus sandbox-target
 `DMTOOLS_IT_*` variables) lives in
 [test/integration/README.md](test/integration/README.md).
+
+## Machine
+
+This repo runs its own dark-factory loop: GitHub issues drive AI teammates
+(bug/story development, PR review, PR rework), and PRs merge automatically
+once reviewed and green — see [machine-kit/teammate-install/](machine-kit/teammate-install/).
+
+- [fa-story-dev.json](machine-kit/teammate-install/runners/fa-story-dev.json) — story development teammate
+- [fa-bug-dev.json](machine-kit/teammate-install/runners/fa-bug-dev.json) — bug development teammate
+- [fa-review-kimi.json](machine-kit/teammate-install/runners/fa-review-kimi.json) — PR review teammate (Kimi; may approve with suggestions)
+- [fa-rework-zai.json](machine-kit/teammate-install/runners/fa-rework-zai.json) — PR rework teammate (addresses review comments)

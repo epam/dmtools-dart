@@ -49,6 +49,18 @@
 
 name: 'AI Teammate : issue assigned'
 
+# Run title in the Actions list — mirrors the dm.ai original, where every
+# run names its agent and ticket. The agent kind is derived from the event:
+# the just-added label wins (labeled action), then the full label set, then
+# the default dev path (assignee-triggered).
+run-name: >-
+  ${{ github.event.label.name == 'agent:rework' && '🔧 rework' ||
+      github.event.label.name == 'agent:review' && '🔍 review' ||
+      contains(github.event.issue.labels.*.name, 'agent:rework') && '🔧 rework' ||
+      contains(github.event.issue.labels.*.name, 'agent:review') && '🔍 review' ||
+      '⚒️ dev' }}
+  · gh-${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
 on:
   issues:
     types: [assigned, labeled]

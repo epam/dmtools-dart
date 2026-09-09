@@ -49,6 +49,18 @@
 
 name: 'AI Teammate : issue assigned'
 
+# Run title in the Actions list — mirrors the dm.ai original, where every
+# run names its agent and ticket. The agent kind is derived from the event:
+# the just-added label wins (labeled action), then the full label set, then
+# the default dev path (assignee-triggered).
+run-name: >-
+  ${{ github.event.label.name == 'agent:rework' && '🔧 rework' ||
+      github.event.label.name == 'agent:review' && '🔍 review' ||
+      contains(github.event.issue.labels.*.name, 'agent:rework') && '🔧 rework' ||
+      contains(github.event.issue.labels.*.name, 'agent:review') && '🔍 review' ||
+      '⚒️ dev' }}
+  · gh-${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
 on:
   issues:
     types: [assigned, labeled]
@@ -223,9 +235,31 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Live session trace: stream the fa session into THIS step's log
+          # while the agent works. dmtools captures fa's stdout and echoes it
+          # only at completion as one escaped JSON blob (unreadable in the
+          # Actions UI), so an external follower watches the session store
+          # instead: poll until fa creates the session, then follow it until
+          # the run ends ([fa]-prefixed, distinguishable from --debug noise).
+          (
+            set -o pipefail
+            for _ in $(seq 1 120); do
+              if fa trajectory tail "${FA_SESSION_NAME}" \
+                  --session-root "${FA_SESSION_ROOT}" 2>/dev/null \
+                  | sed -u 's/^/[fa] /'; then
+                break
+              fi
+              sleep 5
+            done
+          ) &
+          FOLLOWER_PID=$!
           dart run bin/dmtools.dart run "${RUNNER}" \
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
             --ciRunUrl "${CI_RUN_URL}" --debug
+          RC=$?
+          pkill -P "${FOLLOWER_PID}" 2>/dev/null || true
+          kill "${FOLLOWER_PID}" 2>/dev/null || true
+          exit "${RC}"
 
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:

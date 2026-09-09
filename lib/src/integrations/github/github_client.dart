@@ -3,11 +3,23 @@
 /// Each method corresponds to a `@MCPTool`-annotated method on the Java
 /// integration client. Transport is delegated to [GithubHttpClient]; this
 /// layer only shapes requests and parses JSON into typed results.
+///
+/// The issue family (Java `GitHubIssues.java`, dm.ai #543) resolves issue
+/// references from either explicit parts or a composite
+/// `owner/repo#123` key, falling back to the configured
+/// `SOURCE_GITHUB_WORKSPACE` / `SOURCE_GITHUB_REPOSITORY` defaults.
 library;
 
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+
+import '../../config/property_reader.dart';
+import '../../config/property_reader_getters.dart';
 import 'github_http_client.dart';
+
+part 'github_client_issue_tools.dart';
+part 'github_client_ci_tools.dart';
 
 /// GitHub API methods exposed to the MCP tool runtime.
 class GithubClient {
@@ -70,15 +82,24 @@ class GithubClient {
   /// `github_create_comment` — POST `/repos/{owner}/{repo}/issues/{number}/comments`.
   ///
   /// Pull-request comments are posted through the issues endpoint, matching
-  /// the GitHub REST API (PRs are issues).
+  /// the GitHub REST API (PRs are issues). Java `GitHubIssues.createComment`
+  /// (#543): the reference resolves from explicit parts, a composite [key],
+  /// or the configured defaults.
   Future<Map<String, dynamic>> createComment(
-    String owner,
-    String repo,
-    int number,
-    String body,
-  ) async {
+    String? workspace,
+    String? repository,
+    String? pullRequestId,
+    String body, {
+    String? key,
+  }) async {
+    final ref = resolveGhIssueRef(
+      key,
+      workspace,
+      repository,
+      _ghIntOrNull(pullRequestId),
+    );
     final response = await _http.post(
-      'repos/$owner/$repo/issues/$number/comments',
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}/comments',
       body: jsonEncode({'body': body}),
     );
     return jsonDecode(response) as Map<String, dynamic>;
@@ -86,13 +107,24 @@ class GithubClient {
 
   /// `github_get_issue` — GET `/repos/{owner}/{repo}/issues/{number}`.
   ///
-  /// Java parity (#524): [issueNumber] is carried as a string end to end.
+  /// Java `GitHubIssues.issue` (#543): the reference resolves from explicit
+  /// parts, a composite [key] (`owner/repo#123` or a bare number), or the
+  /// configured workspace/repository defaults.
   Future<Map<String, dynamic>> getIssue(
-    String owner,
-    String repo,
-    String issueNumber,
-  ) async {
-    final body = await _http.get('repos/$owner/$repo/issues/$issueNumber');
+    String? workspace,
+    String? repository,
+    String? issueNumber, {
+    String? key,
+  }) async {
+    final ref = resolveGhIssueRef(
+      key,
+      workspace,
+      repository,
+      _ghIntOrNull(issueNumber),
+    );
+    final body = await _http.get(
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}',
+    );
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
@@ -396,27 +428,45 @@ class GithubClient {
 
   /// `github_create_issue` — POST `/repos/{owner}/{repo}/issues`.
   ///
-  /// [body] optionally sets the issue description (markdown).
+  /// Java `GitHubIssues.createIssue` (#543): [key] optionally carries the
+  /// composite project reference `owner/repo`; blank parts fall back to the
+  /// configured defaults.
   Future<Map<String, dynamic>> createIssue(
-    String owner,
-    String repo,
-    String title, [
+    String? owner,
+    String? repo,
+    String title, {
     String? body,
-  ]) =>
-      _postWithOptionalBody(
-        'repos/$owner/$repo/issues',
-        {'title': title},
-        body,
+    String? key,
+  }) async {
+    final resolved = _resolveProjectRef(key, owner, repo);
+    if (resolved == null) {
+      throw ArgumentError(
+        "github_create_issue requires owner/repo or a composite "
+        "key/project 'owner/repo'.",
       );
+    }
+    final response = await _http.post(
+      'repos/${resolved.$1}/${resolved.$2}/issues',
+      body: jsonEncode({
+        'title': title,
+        if (body != null) 'body': body,
+      }),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
 
   /// `github_close_issue` — PATCH `/repos/{owner}/{repo}/issues/{number}`.
+  ///
+  /// Java `GitHubIssues.closeIssue` (#543): accepts a composite [key].
   Future<Map<String, dynamic>> closeIssue(
-    String owner,
-    String repo,
-    int number,
-  ) async {
+    String? owner,
+    String? repo,
+    int? number, {
+    String? key,
+  }) async {
+    final ref = resolveGhIssueRef(key, owner, repo, number);
     final response = await _http.patch(
-      'repos/$owner/$repo/issues/$number',
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}',
       body: jsonEncode({'state': 'closed'}),
     );
     return jsonDecode(response) as Map<String, dynamic>;
@@ -424,14 +474,18 @@ class GithubClient {
 
   /// `github_add_labels` — POST
   /// `/repos/{owner}/{repo}/issues/{number}/labels`.
+  ///
+  /// Java `GitHubIssues.addLabels` (#543): accepts a composite [key].
   Future<List<Map<String, dynamic>>> addLabels(
-    String owner,
-    String repo,
-    int number,
-    List<String> labels,
-  ) async {
+    String? owner,
+    String? repo,
+    int? number,
+    List<String> labels, {
+    String? key,
+  }) async {
+    final ref = resolveGhIssueRef(key, owner, repo, number);
     final response = await _http.post(
-      'repos/$owner/$repo/issues/$number/labels',
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}/labels',
       body: jsonEncode({'labels': labels}),
     );
     return _decodeList(response);
@@ -439,14 +493,19 @@ class GithubClient {
 
   /// `github_remove_label` — DELETE
   /// `/repos/{owner}/{repo}/issues/{number}/labels/{label}`.
+  ///
+  /// Java `GitHubIssues.removeLabel` (#543): accepts a composite [key].
   Future<Map<String, dynamic>> removeLabel(
-    String owner,
-    String repo,
-    int number,
-    String label,
-  ) async {
+    String? owner,
+    String? repo,
+    int? number,
+    String label, {
+    String? key,
+  }) async {
+    final ref = resolveGhIssueRef(key, owner, repo, number);
     final body = await _http.delete(
-      'repos/$owner/$repo/issues/$number/labels/$label',
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}'
+      '/labels/${Uri.encodeComponent(label)}',
     );
     return _decodeEmptyOk(body);
   }

@@ -22,6 +22,9 @@ import 'sync_request_helpers.dart';
 import 'github_release_assets.dart';
 import 'github_workflow_logs.dart';
 
+part 'github_issue_sync_tools.dart';
+part 'github_ci_sync_tools.dart';
+
 /// Connection config for one GitHub sync call.
 typedef GhSyncConfig = ({String baseUrl, Map<String, String> headers});
 
@@ -39,17 +42,26 @@ class GitHubSyncTools {
 
   /// GitHub tool executors, keyed by tool name.
   ///
-  /// Covers the agent-suite surface: PR read/comment/label/merge tools,
-  /// inline review threads (REST + GraphQL), Actions runs and logs, and
-  /// draft-release asset storage.
-  Map<String, String Function(Map<String, dynamic> args)> get handlers => {
+  /// Covers the agent-suite surface (PR read/comment/label/merge tools,
+  /// inline review threads, Actions runs and logs, draft-release asset
+  /// storage) plus the issue-tracker family ([GitHubIssueSyncTools], Java
+  /// `GitHubIssues.java`) and the CI/PR-activity tools
+  /// ([GitHubCiSyncTools]) merged in.
+  Map<String, String Function(Map<String, dynamic> args)> get handlers =>
+      {
+        ..._agentHandlers,
+        ...const GitHubIssueSyncTools().handlers,
+        ...const GitHubCiSyncTools().handlers,
+      };
+
+  /// The agent-suite handler surface owned by this class.
+  Map<String, String Function(Map<String, dynamic> args)> get _agentHandlers =>
+      {
         'github_get_pr': (args) => _run(_getPr, args),
         'github_list_prs': (args) => _run(_listPrs, args),
-        'github_create_comment': (args) => _run(_createComment, args),
         'github_add_pr_comment': (args) => _run(_addPrComment, args),
         'github_add_pr_label': (args) => _run(_addPrLabel, args),
         'github_remove_pr_label': (args) => _run(_removePrLabel, args),
-        'github_get_pr_comments': (args) => _run(_getPrComments, args),
         'github_get_pr_conversations': (args) =>
             _run(_getPrConversations, args),
         'github_get_pr_review_threads': (args) =>
@@ -73,14 +85,9 @@ class GitHubSyncTools {
             _run(_getOrCreateDraftRelease, args),
         'github_upload_release_asset': (args) =>
             _run(_uploadReleaseAsset, args),
-        'github_get_issue': (args) => _run(_getIssue, args),
         'github_submit_pr_review': (args) => _run(_submitPrReview, args),
         'github_list_pr_reviews': (args) => _run(_listPrReviews, args),
         'github_dismiss_pr_review': (args) => _run(_dismissPrReview, args),
-        'github_close_issue': (args) => _run(_closeIssue, args),
-        'github_create_issue': (args) => _run(_createIssue, args),
-        'github_add_labels': (args) => _run(_addIssueLabels, args),
-        'github_remove_label': (args) => _run(_removeIssueLabel, args),
       };
 
   /// Resolves GitHub config, then runs [fn] with it.
@@ -142,13 +149,6 @@ String _listPrs(GhSyncConfig c, Map<String, dynamic> a) {
       prs.where((pr) => pr is Map && pr['merged_at'] != null).toList();
   return jsonEncode(merged);
 }
-
-/// `github_create_comment` — POST `repos/{w}/{r}/issues/{id}/comments`.
-///
-/// Dart-catalog tool (no Java counterpart); accepts the Java-family
-/// `text` argument as well as the cataloged `body`.
-String _createComment(GhSyncConfig c, Map<String, dynamic> a) =>
-    _postIssueComment(c, a, a['text'] ?? a['body']);
 
 /// `github_add_pr_comment` — POST `repos/{w}/{r}/issues/{id}/comments`.
 String _addPrComment(GhSyncConfig c, Map<String, dynamic> a) =>
@@ -252,17 +252,8 @@ const Map<String, dynamic> _emptyDiffStats = {
 
 // ── Comments and review threads ────────────────────────────────────────
 
-/// `github_get_pr_comments` — inline + discussion comments, sorted.
-///
-/// Java `pullRequestComments`: paginates `pulls/{id}/comments` and
-/// `issues/{id}/comments`, concatenates both, sorts by creation date.
-String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) {
-  final pages = _prCommentPages(c, a);
-  final all = [...pages.inline, ...pages.issue];
-  all.sort(
-      (x, y) => syncAsStr(x['created']).compareTo(syncAsStr(y['created'])));
-  return jsonEncode(all);
-}
+// `github_get_pr_comments` lives in `github_issue_sync_tools.dart` (the
+// Java `GitHubIssues` family, composite-key aware).
 
 /// `github_get_pr_conversations` — inline threads + discussion entries.
 ///
@@ -639,64 +630,12 @@ String _repoSeg(Map<String, dynamic> a) =>
 String _prUrl(GhSyncConfig c, Map<String, dynamic> a) =>
     '${c.baseUrl}/${_repoSeg(a)}/pulls/${_prId(a)}';
 
-/// `github_get_issue` — GET `repos/{w}/{r}/issues/{issueNumber}`
-/// (Java `GitHub.issue`, #524; the number is carried as a string).
-String _getIssue(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.get(
-      '${c.baseUrl}/${_repoSeg(a)}/issues/${syncAsStr(a['issueNumber'])}',
-      headers: c.headers,
-    ));
-
-/// `repos/{owner}/{repo}` URL segment for the issue tools — the issue
-/// family speaks owner/repo/number (unlike the PR family's
-/// workspace/repository/pullRequestId).
-String _issueRepoSeg(Map<String, dynamic> a) =>
-    'repos/${syncAsStr(a['owner'])}/${syncAsStr(a['repo'])}';
-
-/// `repos/{owner}/{repo}/issues/{number}` URL.
-String _issueUrl(Map<String, dynamic> a) =>
-    '${_issueRepoSeg(a)}/issues/${syncAsStr(a['number'])}';
-
-/// `github_close_issue` — PATCH `repos/{o}/{r}/issues/{n}` with
-/// `{"state": "closed"}` (mirrors [GithubClient.closeIssue]).
-String _closeIssue(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.patch(
-      '${c.baseUrl}/${_issueUrl(a)}',
-      headers: c.headers,
-      body: jsonEncode({'state': 'closed'}),
-    ));
-
-/// `github_create_issue` — POST `repos/{o}/{r}/issues`. The markdown
-/// `body` is only sent when non-blank (mirrors the async client).
-String _createIssue(GhSyncConfig c, Map<String, dynamic> a) {
-  final payload = <String, dynamic>{'title': syncAsStr(a['title'])};
-  final body = a['body'];
-  if (body != null && syncAsStr(body).trim().isNotEmpty) {
-    payload['body'] = body;
-  }
-  return syncBodyOrError(SyncHttpClient.post(
-    '${c.baseUrl}/${_issueRepoSeg(a)}/issues',
-    headers: c.headers,
-    body: jsonEncode(payload),
-  ));
-}
-
-/// `github_add_labels` — POST `repos/{o}/{r}/issues/{n}/labels` with the
-/// label-name array.
-String _addIssueLabels(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.post(
-      '${c.baseUrl}/${_issueUrl(a)}/labels',
-      headers: c.headers,
-      body: jsonEncode({'labels': a['labels']}),
-    ));
-
-/// `github_remove_label` — DELETE `repos/{o}/{r}/issues/{n}/labels/{label}`.
-String _removeIssueLabel(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.delete(
-      '${c.baseUrl}/${_issueUrl(a)}'
-      '/labels/${Uri.encodeComponent(syncAsStr(a['label']))}',
-      headers: c.headers,
-    ));
+// The issue-tracker family (`github_get_issue`, `github_create_issue`,
+// `github_close_issue`, `github_reopen_issue`, `github_search_issues`,
+// `github_move_issue_to_status`, `github_assign_issue`,
+// `github_add_labels`, `github_remove_label`, `github_create_comment`,
+// `github_get_pr_comments`) lives in `github_issue_sync_tools.dart` —
+// Java `GitHubIssues.java` parity with composite-key resolution.
 
 /// `github_submit_pr_review` — POST `repos/{w}/{r}/pulls/{id}/reviews`
 /// (Java #495). The summary `body` is only sent when non-blank.

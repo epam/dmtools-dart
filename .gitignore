@@ -27,3 +27,6 @@ native/quickjs/*.dylib
 .dmtools-logs/
 input/
 outputs/
+
+# CodeGraph generated index - regenerated per-run, must never be committed
+.codegraph/

@@ -41,7 +41,11 @@ const _githubToolNames = [
   'github_create_comment',
   'github_get_issue',
   'github_create_issue',
+  'github_search_issues',
   'github_close_issue',
+  'github_reopen_issue',
+  'github_move_issue_to_status',
+  'github_assign_issue',
   'github_add_labels',
   'github_remove_label',
   'github_list_branches',
@@ -84,6 +88,18 @@ const _githubToolNames = [
   'github_submit_pr_review',
   'github_list_pr_reviews',
   'github_dismiss_pr_review',
+  'github_create_check_run',
+  'github_update_check_run',
+  'github_create_commit_status',
+  'github_get_workflow_run',
+  'github_repository_dispatch',
+  'github_update_pr_comment',
+  'github_delete_pr_comment',
+  'github_get_pr_activities',
+  'github_list_prs_filtered',
+  'github_list_release_assets',
+  'github_delete_release_asset',
+  'github_get_commits_from_branches',
 ];
 
 /// Serves `[]` for the PR-list GET (expects a JSON array), `{}` otherwise.
@@ -97,7 +113,7 @@ void catalogOrderTests() {
   group('githubTools catalog', () {
     final tools = githubTools();
 
-    test('registers the sixty-one tools in declaration order', () {
+    test('registers all 77 tools in declaration order', () {
       expect(tools.map((t) => t.name), _githubToolNames);
     });
 
@@ -148,12 +164,15 @@ void catalogParamTests() {
   group('github_create_comment', () {
     final tool = toolNamed('github_create_comment');
 
-    test('declares workspace, repository, pullRequestId, body', () {
+    test('declares optional workspace/repository/pullRequestId + body + key',
+        () {
       expect(
         tool.params.map((p) => p.name),
-        ['workspace', 'repository', 'pullRequestId', 'body'],
+        ['workspace', 'repository', 'pullRequestId', 'body', 'key'],
       );
-      expect(tool.params.every((p) => p.required), isTrue);
+      expect(tool.params.take(3).every((p) => !p.required), isTrue);
+      expect(tool.params.where((p) => p.name == 'body').single.required,
+          isTrue);
     });
   });
 
@@ -194,21 +213,27 @@ void catalogIssueParamTests() {
   group('github_get_issue', () {
     final tool = toolNamed('github_get_issue');
 
-    test('declares workspace, repository, issueNumber as required strings', () {
+    test('declares optional workspace/repository/issueNumber + key (#543)',
+        () {
       expect(tool.params.map((p) => p.name),
-          ['workspace', 'repository', 'issueNumber']);
-      expect(tool.params.map((p) => p.type), ['string', 'string', 'string']);
-      expect(tool.params.every((p) => p.required), isTrue);
+          ['workspace', 'repository', 'issueNumber', 'key']);
+      expect(tool.params.map((p) => p.type), const [
+        'string',
+        'string',
+        'string',
+        'string',
+      ]);
+      expect(tool.params.every((p) => !p.required), isTrue);
     });
 
-    test('carries the Java description, category, and alias', () {
+    test('carries the Java description, category, and alias set', () {
       expect(
         tool.description,
         'Get details of a GitHub issue including title, description, state, '
         'author, labels, assignees, and comments count.',
       );
       expect(tool.category, 'issues');
-      expect(tool.aliases, ['source_code_get_issue']);
+      expect(tool.aliases, ['source_code_get_issue', 'tracker_get_ticket']);
     });
   });
 }
@@ -447,23 +472,26 @@ class _SpyGithubClient extends GithubClient {
 
   @override
   Future<Map<String, dynamic>> createComment(
-    String owner,
-    String repo,
-    int number,
-    String body,
-  ) {
-    calls.add('createComment:$owner:$repo:$number:$body');
-    return super.createComment(owner, repo, number, body);
+    String? workspace,
+    String? repository,
+    String? pullRequestId,
+    String body, {
+    String? key,
+  }) {
+    calls.add('createComment:$workspace:$repository:$pullRequestId:$body');
+    return super.createComment(workspace, repository, pullRequestId, body,
+        key: key);
   }
 
   @override
   Future<Map<String, dynamic>> getIssue(
-    String owner,
-    String repo,
-    String issueNumber,
-  ) {
-    calls.add('getIssue:$owner:$repo:$issueNumber');
-    return super.getIssue(owner, repo, issueNumber);
+    String? workspace,
+    String? repository,
+    String? issueNumber, {
+    String? key,
+  }) {
+    calls.add('getIssue:$workspace:$repository:$issueNumber');
+    return super.getIssue(workspace, repository, issueNumber, key: key);
   }
 
   @override

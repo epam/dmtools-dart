@@ -32,7 +32,8 @@ void createIssueTests() {
 
     test('includes the description body when provided', () async {
       final f = mockGithub((o) => routeByPath({'/issues': _issueBody}, o));
-      await f.client.createIssue('epm', 'dm.ai', 'Bug', 'Steps to repro');
+      await f.client
+          .createIssue('epm', 'dm.ai', 'Bug', body: 'Steps to repro');
       expect(jsonDecode(f.adapter.calls.single.data as String), {
         'title': 'Bug',
         'body': 'Steps to repro',

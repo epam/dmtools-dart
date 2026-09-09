@@ -74,16 +74,35 @@ List<ToolDefinition> _agentPrReviewReadTools() => [
       ToolDefinition(
         name: 'github_get_pr_comments',
         description:
-            'Get all comments for a GitHub pull request, including both '
-            'inline code review comments and general discussion comments. '
-            'Results are sorted by creation date.',
+            'Get all comments for a GitHub pull request or issue, including '
+            'both inline code review comments and general discussion '
+            'comments. Results are sorted by creation date.',
         integration: 'github',
         category: 'pull_requests',
-        aliases: ['source_code_get_pr_comments'],
+        aliases: ['source_code_get_pr_comments', 'tracker_get_comments'],
         params: [
-          _workspaceParam(),
-          _repositoryParam(),
-          _prIdParam(),
+          const ToolParam(
+            name: 'workspace',
+            description: 'The GitHub owner/organization name',
+            required: false,
+          ),
+          const ToolParam(
+            name: 'repository',
+            description: 'The GitHub repository name',
+            required: false,
+          ),
+          const ToolParam(
+            name: 'pullRequestId',
+            description: 'The pull request or issue number',
+            required: false,
+            aliases: ['number'],
+          ),
+          const ToolParam(
+            name: 'key',
+            description: "Composite issue key 'owner/repo#123' (alternative "
+                'to workspace/repository/pullRequestId)',
+            required: false,
+          ),
         ],
       ),
       ToolDefinition(

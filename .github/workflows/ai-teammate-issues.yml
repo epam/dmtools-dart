@@ -30,9 +30,10 @@
 # Prerequisites: fa installs up front via agents/setup/install.sh
 #   (idempotent, self-contained — one binary carries every AI backend),
 #   version pinned in workflow env (repo var FA_VERSION overrides) and
-#   cached by version. dmtools-dart runs from source through the Flutter
-#   SDK's Dart (SDK + pub cached by version) — the machine repo dogfoods
-#   its own HEAD, the release binary would lag the branch.
+#   cached by version. dmtools-dart installs from the pinned release
+#   bundle (AOT binary + QuickJS .so, repo var DMTOOLS_VERSION overrides)
+#   via install.sh — no per-run dart pub get / make native; cut a new
+#   release when the CLI gains features the machine needs.
 #
 # Memory: fa's project memory (.fah/memory) is committed to the repo and
 #   pushed after every run — agent knowledge accumulates in the repository
@@ -80,7 +81,7 @@ env:
   # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
   # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
   FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
-  FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION || '3.44.4' }}
+  DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
@@ -178,27 +179,30 @@ jobs:
             ~/lib
           key: fa-${{ env.FA_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
-      - name: Set up Flutter (Dart SDK, cached by version)
-        uses: subosito/flutter-action@v2
+      - name: Cache dmtools CLI (by version)
+        uses: actions/cache@v6
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+          path: ~/.dmtools/bin
+          key: dmtools-${{ env.DMTOOLS_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install prerequisites (fa; no-op on cache hit)
         # register_path in the setup script exports PATH immediately and
         # persists it to GITHUB_PATH — no manual PATH edits needed here.
         run: bash agents/setup/install.sh "fa:${FA_VERSION}"
 
-      - name: Verify prerequisites
-        run: fa --version
-
-      - name: Build dmtools-dart from source (dogfood this checkout)
-        # The release binary lags this branch (PR #18 features) — the
-        # machine repo always runs its own HEAD. dart resolves the QuickJS
-        # bridge through .dart_tool/package_config.json (same as dart test).
+      - name: Install dmtools CLI (pinned release bundle)
+        # Prebuilt AOT binary + the QuickJS shared library it loads, from
+        # GitHub Releases (release-cli.yml) — no per-run dart pub get /
+        # make native. The installer only edits shell profiles; CI needs
+        # the explicit GITHUB_PATH line.
         run: |
-          dart pub get
-          make native
+          bash install.sh "${DMTOOLS_VERSION}"
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+
+      - name: Verify prerequisites
+        run: |
+          fa --version
+          dmtools --version
 
       - name: Configure Git Author
         run: |
@@ -250,7 +254,7 @@ jobs:
           echo "fa full trace: ${FA_LOG_FILE}"
           tail -n +1 -F "${FA_LOG_FILE}" 2>/dev/null | sed -u 's/^/[fa] /' &
           FOLLOWER_PID=$!
-          dart run bin/dmtools.dart run "${RUNNER}" \
+          dmtools run "${RUNNER}" \
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
             --ciRunUrl "${CI_RUN_URL}" --debug
           RC=$?

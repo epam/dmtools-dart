@@ -8,6 +8,9 @@
       "FA_PROVIDER_TYPE": "kimi",
       "FA_PROVIDER_CONFIG": "{\"baseUrl\": \"https://api.kimi.com/coding/v1\", \"model\": \"k3\", \"apiKeyEnvVar\": \"KIMI_REVIEW_KEY\"}"
     },
-    "inputJql": ""
+    "inputJql": "",
+    "customParams": {
+      "allowApproveWithSuggestions": true
+    }
   }
 }

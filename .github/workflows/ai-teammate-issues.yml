@@ -223,7 +223,9 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          dart run bin/dmtools.dart run "${RUNNER}" --ciRunUrl "${CI_RUN_URL}" --debug
+          dart run bin/dmtools.dart run "${RUNNER}" \
+            --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
+            --ciRunUrl "${CI_RUN_URL}" --debug
 
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:
@@ -249,9 +251,11 @@ jobs:
         # The dev agent opened (or updated) the PR — label the issue
         # agent:review so this same workflow picks it up for pr_review.
         # Review runs carry kind=review and skip this step (no loops).
+        # A PAT is REQUIRED here: label events created with GITHUB_TOKEN
+        # do not trigger workflows (recursion guard), the PAT does.
         if: needs.guard.outputs.kind == 'dev'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           NUMBER: ${{ github.event.issue.number }}
         run: |
           gh issue edit "$NUMBER" --repo "${{ github.repository }}" \

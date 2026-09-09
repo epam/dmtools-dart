@@ -89,7 +89,12 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
           git add pubspec.yaml lib/src/version.dart
-          git commit -m "chore: bump version to $NEW_VERSION"
+          # Tolerate the already-bumped tree: the version bump usually goes
+          # through a PR (protected main rejects GITHUB_TOKEN pushes), so a
+          # re-run dispatch finds the files already at NEW_VERSION. The tag
+          # and build below are what matter then.
+          git commit -m "chore: bump version to $NEW_VERSION" \
+            || echo "version already at $NEW_VERSION — nothing to commit"
 
       - name: Create tag
         run: |

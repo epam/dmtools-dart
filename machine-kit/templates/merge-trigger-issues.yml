@@ -86,6 +86,7 @@ jobs:
             [ -n "$prn" ] || continue
             n=$(echo "$body" | grep -oiE '\b(closes|fixes|resolves)\s+#[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
             [ -n "$n" ] || n=$(echo "$branch" | grep -oE '^[0-9]+' || true)
+            [ -n "$n" ] || n=$(echo "$branch" | grep -oE 'gh-[0-9]+' | head -1 | grep -oE '[0-9]+' || true)
             if [ -n "$n" ]; then
               open=$(gh issue view "$n" --repo "$repo" --json state --jq .state 2>/dev/null || true)
               [ "$open" = "OPEN" ] && issues="$issues $n"
@@ -105,6 +106,7 @@ jobs:
                 | select(
                     ((.body // "") | test("(?i)\\b(closes|fixes|resolves)\\s+#'"$n"'\\b"))
                     or (.headRefName | test("^'"$n"'[-_.]"))
+                    or (.headRefName | test("(^|[-_./])gh-0*'"$n"'$"))
                   )
                 | .number] | first // empty')
             if [ -z "$pr" ]; then

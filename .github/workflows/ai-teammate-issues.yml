@@ -30,9 +30,10 @@
 # Prerequisites: fa installs up front via agents/setup/install.sh
 #   (idempotent, self-contained — one binary carries every AI backend),
 #   version pinned in workflow env (repo var FA_VERSION overrides) and
-#   cached by version. dmtools-dart runs from source through the Flutter
-#   SDK's Dart (SDK + pub cached by version) — the machine repo dogfoods
-#   its own HEAD, the release binary would lag the branch.
+#   cached by version. dmtools-dart installs from the pinned release
+#   bundle (AOT binary + QuickJS .so, repo var DMTOOLS_VERSION overrides)
+#   via install.sh — no per-run dart pub get / make native; cut a new
+#   release when the CLI gains features the machine needs.
 #
 # Memory: fa's project memory (.fah/memory) is committed to the repo and
 #   pushed after every run — agent knowledge accumulates in the repository
@@ -80,7 +81,7 @@ env:
   # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
   # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
   FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
-  FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION || '3.44.4' }}
+  DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
@@ -178,27 +179,30 @@ jobs:
             ~/lib
           key: fa-${{ env.FA_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
-      - name: Set up Flutter (Dart SDK, cached by version)
-        uses: subosito/flutter-action@v2
+      - name: Cache dmtools CLI (by version)
+        uses: actions/cache@v6
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
+          path: ~/.dmtools/bin
+          key: dmtools-${{ env.DMTOOLS_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install prerequisites (fa; no-op on cache hit)
         # register_path in the setup script exports PATH immediately and
         # persists it to GITHUB_PATH — no manual PATH edits needed here.
         run: bash agents/setup/install.sh "fa:${FA_VERSION}"
 
-      - name: Verify prerequisites
-        run: fa --version
-
-      - name: Build dmtools-dart from source (dogfood this checkout)
-        # The release binary lags this branch (PR #18 features) — the
-        # machine repo always runs its own HEAD. dart resolves the QuickJS
-        # bridge through .dart_tool/package_config.json (same as dart test).
+      - name: Install dmtools CLI (pinned release bundle)
+        # Prebuilt AOT binary + the QuickJS shared library it loads, from
+        # GitHub Releases (release-cli.yml) — no per-run dart pub get /
+        # make native. The installer only edits shell profiles; CI needs
+        # the explicit GITHUB_PATH line.
         run: |
-          dart pub get
-          make native
+          bash install.sh "${DMTOOLS_VERSION}"
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
+
+      - name: Verify prerequisites
+        run: |
+          fa --version
+          dmtools --version
 
       - name: Configure Git Author
         run: |
@@ -235,31 +239,38 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Live session trace: stream the fa session into THIS step's log
-          # while the agent works. dmtools captures fa's stdout and echoes it
-          # only at completion as one escaped JSON blob (unreadable in the
-          # Actions UI), so an external follower watches the session store
-          # instead: poll until fa creates the session, then follow it until
-          # the run ends ([fa]-prefixed, distinguishable from --debug noise).
-          (
-            set -o pipefail
-            for _ in $(seq 1 120); do
-              if fa trajectory tail "${FA_SESSION_NAME}" \
-                  --session-root "${FA_SESSION_ROOT}" 2>/dev/null \
-                  | sed -u 's/^/[fa] /'; then
-                break
-              fi
-              sleep 5
-            done
-          ) &
+          # Live FULL session trace: run-agent.sh passes FA_LOG_FILE to
+          # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91) which
+          # tees every line fa prints — assistant text and tool calls,
+          # untruncated — to the file. dmtools captures fa's own stdout and
+          # echoes it only at the end as one escaped JSON blob (unreadable
+          # in the Actions UI), so we tail the log file here instead:
+          # full messages stream into this step's log as [fa]-prefixed
+          # lines while the agent works.
+          FA_LOG_FILE="${GITHUB_WORKSPACE}/.dmtools/fa-trace.log"
+          export FA_LOG_FILE
+          mkdir -p "$(dirname "${FA_LOG_FILE}")"
+          touch "${FA_LOG_FILE}"
+          echo "fa full trace: ${FA_LOG_FILE}"
+          tail -n +1 -F "${FA_LOG_FILE}" 2>/dev/null | sed -u 's/^/[fa] /' &
           FOLLOWER_PID=$!
-          dart run bin/dmtools.dart run "${RUNNER}" \
+          dmtools run "${RUNNER}" \
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
             --ciRunUrl "${CI_RUN_URL}" --debug
           RC=$?
           pkill -P "${FOLLOWER_PID}" 2>/dev/null || true
           kill "${FOLLOWER_PID}" 2>/dev/null || true
           exit "${RC}"
+
+      - name: Upload the full fa session trace
+        # The same file the step log streamed — kept as an artifact so the
+        # run can be read after log expiry or outside the Actions UI.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fa-trace-gh-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: .dmtools/fa-trace.log
+          if-no-files-found: ignore
 
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:

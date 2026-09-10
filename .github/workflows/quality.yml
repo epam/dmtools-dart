@@ -33,7 +33,15 @@ jobs:
           bash "$PKG/tool/build_quickjs.sh"
       - run: dart format --set-exit-if-changed .
       - run: dart analyze
-      - run: dart test --coverage=coverage
+      - name: dart test --coverage=coverage
+        id: test
+        # pipefail keeps a red suite red through the tee; the captured count
+        # feeds the badges step so the full suite runs ONCE per job.
+        run: |
+          set -o pipefail
+          dart test --coverage=coverage 2>&1 | tee /tmp/test_run.log
+          COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+')
+          echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - run: dart pub global activate coverage
       - name: Format coverage
         id: coverage
@@ -52,7 +60,7 @@ jobs:
       - name: Generate badges
         run: |
           mkdir -p .badges
-          TEST_COUNT=$(dart test --concurrency=1 2>&1 | grep -oE '\+[0-9]+' | tail -1 | tr -d '+')
+          TEST_COUNT="${{ steps.test.outputs.test_count }}"
           COV_PCT=$(grep -o 'LH:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
           COV_TOTAL=$(grep -o 'LF:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
           COV_FINAL=$(echo "scale=1; $COV_PCT * 100 / $COV_TOTAL" | bc 2>/dev/null || echo "0")
@@ -76,8 +84,9 @@ jobs:
           git push || true
 
   agents-suite:
+    # Runs in parallel with the quality job — both are required merge checks
+    # and the suite hard-gates on its own, so serializing only adds wall time.
     runs-on: ubuntu-latest
-    needs: quality
     steps:
       - uses: actions/checkout@v4
         with:

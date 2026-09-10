@@ -22,6 +22,10 @@ void main() {
   lifecycleContextTests();
   lifecycleEnvTests();
   lifecycleTicketDataTests();
+  ticketHydrationTests();
+  ticketTimerHydrationTests();
+  ticketHydrationEdgeTests();
+  ticketHydrationPrecedenceTests();
   factoryTests();
 }
 
@@ -575,6 +579,25 @@ void lifecycleTicketDataTests() {
       }
     });
 
+    test('creates empty input context when ticketData is null', () async {
+      final tmp = await _createTempDir();
+      try {
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect(Directory('${tmp.path}/input/cli-agent').listSync(), isEmpty);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void ticketHydrationTests() {
+  group('CliAgent ticket hydration', () {
     test('hydrates params.ticket from input/<contextId>/ticket.json', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/ticket_key.log';
@@ -602,7 +625,11 @@ void lifecycleTicketDataTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void ticketTimerHydrationTests() {
+  group('CliAgent timer ticket hydration', () {
     test(
       'timer context action sees params.ticket hydrated from ticket.json',
       () async {
@@ -635,7 +662,11 @@ void lifecycleTicketDataTests() {
         }
       },
     );
+  });
+}
 
+void ticketHydrationEdgeTests() {
+  group('CliAgent ticket hydration edge cases', () {
     test('malformed ticket.json behaves as no ticket', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/ticket_key.log';
@@ -662,7 +693,11 @@ void lifecycleTicketDataTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void ticketHydrationPrecedenceTests() {
+  group('CliAgent ticket hydration precedence', () {
     test('explicit ticketData wins over the ticket.json convention', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/ticket_key.log';
@@ -687,21 +722,6 @@ void lifecycleTicketDataTests() {
           ticketData: {'key': 'PROJ-9'},
         )).run();
         expect((await File(log).readAsString()).trim(), 'PROJ-9');
-      } finally {
-        await tmp.delete(recursive: true);
-      }
-    });
-
-    test('creates empty input context when ticketData is null', () async {
-      final tmp = await _createTempDir();
-      try {
-        await (CliAgent(
-          params: CliAgentParams()
-            ..cliCommands = ['echo done']
-            ..cleanupInputFolder = false,
-          workingDirectory: tmp.path,
-        )).run();
-        expect(Directory('${tmp.path}/input/cli-agent').listSync(), isEmpty);
       } finally {
         await tmp.delete(recursive: true);
       }

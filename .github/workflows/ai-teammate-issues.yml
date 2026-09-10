@@ -209,15 +209,26 @@ jobs:
           git config --global user.name "dm.ai"
           git config --global user.email "dm.ai@epam.com"
 
-      - name: Write issue body to the agent input folder
+      - name: Write the issue into the agent input folder
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.issue.number }}
         run: |
-          mkdir -p input
-          gh issue view "$NUMBER" --repo "${{ github.repository }}" --json title,body \
-            -q '.title, .body' > input/ticket.md
+          # ticket.json carries the tracker-contract fields (key/number/
+          # title/body/labels): dmtools hydrates it into params.ticket for
+          # every JS action (GOAL.md → Core abstractions → Tracker), so
+          # scripts read params.ticket.key exactly like on a Jira machine.
+          mkdir -p "input/gh-${NUMBER}"
+          gh issue view "$NUMBER" --repo "${{ github.repository }}" \
+            --json number,title,body,url,state,labels \
+            -q '{key: ("gh-" + (.number|tostring)), number: .number,
+                 title: .title, body: .body, url: .url, state: .state,
+                 labels: [.labels[].name]}' \
+            > "input/gh-${NUMBER}/ticket.json"
+          gh issue view "$NUMBER" --repo "${{ github.repository }}" \
+            --json title,body -q '.title, .body' > input/ticket.md
           echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
+          echo "input/gh-${NUMBER}/ticket.json: $(wc -c < input/gh-${NUMBER}/ticket.json) bytes"
 
       - name: Run agent (fa provider via runner env overrides)
         env:

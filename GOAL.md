@@ -26,6 +26,46 @@ https://github.com/IstiN/dmtools-agents — also cloned when needed.
 
 ---
 
+## Core abstractions (how dmtools thinks)
+
+Every integration dmtools exposes belongs to one of two unified abstractions.
+Agent scripts, job configs, and the port itself must be written against the
+abstraction — never against a concrete vendor.
+
+### 1. Tracker — any work-tracking system
+
+Jira, ADO Boards, GitHub Issues, Rally, … — one interface:
+`tracker_get_ticket`, `tracker_search`, `tracker_post_comment`,
+`tracker_move_to_status`, `tracker_add_label`, … Every concrete
+`jira_*` / `ado_*` / `github_*` issue tool is an implementation of the same
+contract, and the `tracker_*` surface must route to whichever tracker the
+environment configures (`DEFAULT_TRACKER`). A script written against
+`params.ticket.key` + tracker tools must run unchanged on any tracker
+backend. Context hydration follows the same contract: `params.ticket` /
+`params.ticketKey` carry the ticket key and data regardless of vendor.
+
+### 2. SCM — any source-control system
+
+GitHub, GitLab, Bitbucket, ADO Repos, … — one interface for PR / branch /
+commit / review operations (the `js/common/scm.js` provider abstraction in
+the agent ecosystem; `github_*` / `gitlab_*` / `bitbucket_*` sync tools
+underneath). Review, rework, and development flows must be SCM-agnostic:
+ticket → PR → review → rework → merge works the same regardless of vendor.
+
+### Consequences
+
+- **Porting rule:** a vendor integration is "done" only when its tools are
+  reachable through the unified interface (tracker routing, SCM providers) —
+  native tool names alone are not enough.
+- **Runtime rule:** context hydration, JS actions, and post-actions must
+  resolve `params.ticket` and the ticket key the same way for every tracker
+  (no `jira_post_comment("gh-35")`-style cross-vendor calls that silently
+  fail — route through the tracker abstraction).
+- The `tracker_*` aliases and `scm.js` providers are the contract surface;
+  vendor tools are the implementation detail.
+
+---
+
 ## Hard constraints (non-negotiable)
 
 ### 1. Signature parity with Java DMTools

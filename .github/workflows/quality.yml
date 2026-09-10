@@ -39,8 +39,11 @@ jobs:
         # feeds the badges step so the full suite runs ONCE per job.
         run: |
           set -o pipefail
-          dart test --coverage=coverage 2>&1 | tee /tmp/test_run.log
-          COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+')
+          # --reporter compact: on CI dart test auto-selects the github
+          # reporter, which has no +N counters and would leave COUNT empty
+          # (grep exits 1, bash -e kills the step).
+          dart test --coverage=coverage --reporter compact 2>&1 | tee /tmp/test_run.log
+          COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+' || true)
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - run: dart pub global activate coverage
       - name: Format coverage
@@ -76,6 +79,9 @@ jobs:
           wget -q -O .badges/crap4dart.svg \
             "https://img.shields.io/badge/crap4dart-${CRAP}%20threshold-green"
       - name: Commit badges
+        # Badges belong to main only — on PR branches this step would push a
+        # stray bot commit to the feature branch mid-review.
+        if: github.ref == 'refs/heads/main'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'

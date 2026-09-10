@@ -17,6 +17,7 @@
 /// failures can fail the run.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import '../config/env_file_parser.dart';
@@ -75,6 +76,14 @@ class CliAgent {
   /// Input context path — cleaned up in the finally block.
   String? _inputContextPath;
 
+  /// Ticket data as seen by the JS actions (`params.ticket`).
+  ///
+  /// Either the tracker-fetched [ticketData] (Teammate job) or, when absent,
+  /// `input/<contextId>/ticket.json` loaded by convention (direct
+  /// `dmtools run` launches, e.g. the machine-kit review/rework runners).
+  /// Set once at the start of the lifecycle.
+  Map<String, dynamic>? _resolvedTicketData;
+
   /// Runs the full lifecycle. Returns a result map.
   ///
   /// - Success: `{'success': true, 'contextId': …, 'response': …}`
@@ -108,6 +117,7 @@ class CliAgent {
   Future<Map<String, dynamic>> _runLifecycle(String workDir) async {
     String? response;
     try {
+      _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
       _executeJsAction('preJSAction', params.preJSAction, null, null, workDir);
@@ -212,7 +222,7 @@ class CliAgent {
       jsRunner.runScript(
         scriptPath: actionPath,
         jobParams: _buildJobParams(response, inputFolderPath),
-        ticket: ticketData,
+        ticket: _resolvedTicketData ?? ticketData,
         workingDirectory: workDir,
         config: JsRunConfig(
           extraGlobals: _buildExtraGlobals(response, inputFolderPath, workDir),
@@ -344,6 +354,7 @@ class CliAgent {
       return jsRunner.runScript(
         scriptPath: actionPath,
         jobParams: _buildJobParams(null, null),
+        ticket: _resolvedTicketData ?? ticketData,
         workingDirectory: workDir,
         config: JsRunConfig(
           extraGlobals: _mergeContextGlobals(context, workDir),
@@ -438,15 +449,39 @@ class CliAgent {
 
   /// Creates the input context folder: `input/<contextId>/`.
   ///
-  /// When [ticketData] is set (fetched from a tracker), the folder is
+  /// When resolved ticket data is set (fetched from a tracker, or loaded by
+  /// convention from `input/<contextId>/ticket.json`), the folder is
   /// populated with `ticket.md`, `ticket.json`, `subtasks/`, and
-  /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty folder
-  /// is created — the ticket-agnostic behavior.
+  /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty
+  /// folder is created — the ticket-agnostic behavior.
   String _createInputContext(String workDir) {
     return TicketInputContextBuilder(workDir).build(
       params.contextId,
-      ticketData: ticketData,
+      ticketData: _resolvedTicketData ?? ticketData,
     );
+  }
+
+  /// Resolves the ticket data for the JS `params.ticket` contract.
+  ///
+  /// [ticketData] (fetched by the Teammate job) wins. Otherwise a direct
+  /// `dmtools run` launch may still carry a ticket by convention: the CI
+  /// integration pre-writes `input/<contextId>/ticket.json` (the same file
+  /// [TicketInputContextBuilder] produces) before the run. Loading it keeps
+  /// `params.ticket.key` / `params.ticketKey` — and every JS action that
+  /// reads them (timer auto-commit, post-JS hooks) — working identically
+  /// for GitHub-issue runs and Jira runs. A malformed or missing file
+  /// behaves as "no ticket".
+  Map<String, dynamic>? _resolveTicketData(String workDir) {
+    if (ticketData != null) return ticketData;
+    if (params.contextId.isEmpty) return null;
+    final file = File('$workDir/input/${params.contextId}/ticket.json');
+    if (!file.existsSync()) return null;
+    try {
+      final decoded = jsonDecode(file.readAsStringSync());
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Ensures the `outputs/` folder exists before CLI commands run.

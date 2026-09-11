@@ -1,20 +1,17 @@
 /// Property resolution engine for DMTools — Dart port of Java `PropertyReader`.
 ///
-/// Resolution chain (first non-null, non-empty wins):
+/// Resolution chain (mirrors `PropertyReader.getValue`):
 /// 1. Static overrides — equivalent of Java's `ThreadLocal` overrides,
-///    set by `setOverrides` before job execution.
-/// 2. `dmtools.env` file — loaded from CWD or project root (mirrors Java's
-///    direct file load, which has higher priority than OS env).
-/// 3. `dmtools-local.env` file — loaded from CWD (replaces the shell-launcher
-///    `export` behaviour from `dmtools.sh`, since the Dart CLI has no shell
-///    wrapper).
-/// 4. OS environment variables — `Platform.environment`.
+///    set by `setOverrides` before job execution. Accepted whenever the key
+///    is present, even with an empty value.
+/// 2. `config.properties` — `<projectRoot>/src/main/resources/config.properties`
+///    from disk, else the [PropertyReader.setConfigFile] resource. Accepted
+///    only for non-empty values.
+/// 3. `dmtools.env` file — loaded from the project root first, then the
+///    working directory (Java `loadEnvFileProperties`). Accepted only for
+///    non-empty values; empty entries fall through.
+/// 4. OS environment variables — `Platform.environment`, returned as-is.
 /// 5. Method-level default (if provided).
-///
-/// **Note on Java discrepancy:** GOAL.md states "real env always wins", but
-/// the actual Java `PropertyReader.getValue()` checks OS env *last*. The Dart
-/// port follows the Java source (the spec per AGENTS.md). A `dmtools.env` in
-/// the working directory overrides a real env var set in the shell.
 library;
 
 import 'dart:async';
@@ -26,8 +23,30 @@ import 'env_file_parser.dart';
 ///
 /// Integration-specific getters live in the `PropertyReaderGetters` extension.
 class PropertyReader {
-  /// Project-root marker file (Dart equivalent of `settings.gradle`).
-  static const _rootMarker = 'pubspec.yaml';
+  /// Project-root marker files (Java `findProjectRoot` walks up looking for
+  /// Gradle settings files — PropertyReader.java lines 92-93). NOT
+  /// pubspec.yaml: the Dart port mirrors the Java marker contract.
+  static const _gradleMarkers = <String>[
+    'settings.gradle',
+    'settings.gradle.kts'
+  ];
+
+  /// Resource path consulted by the config.properties fallback tier (Java
+  /// line 21: `PATH_TO_CONFIG_FILE = "/config.properties"`). Only the
+  /// fallback lookup is affected — never the on-disk `<root>/src/main/
+  /// resources/config.properties` tier.
+  static String _pathToConfigFile = '/config.properties';
+
+  /// Points the config.properties fallback tier at [resourcePath].
+  ///
+  /// Java resolves this path against the classpath; a pure Dart VM has no
+  /// classpath, so the recorded path is resolved against the filesystem
+  /// instead (absolute as-is, relative to the reader's [basePath] / CWD)
+  /// and only adopted when it names an existing regular file — an absent
+  /// resource yields nothing, exactly like a classpath miss.
+  static void setConfigFile(String resourcePath) {
+    _pathToConfigFile = resourcePath;
+  }
 
   // --- Static overrides (Java ThreadLocal equivalent) ---
 
@@ -88,10 +107,10 @@ class PropertyReader {
 
   // --- Test isolation (hermetic L1 tests) ---
 
-  /// Testing-only switch: when `true`, `dmtools.env` / `dmtools-local.env`
-  /// discovery via CWD/project root is skipped (readers with an explicit
-  /// [basePath] still load files) and the OS-environment source is replaced
-  /// by [testEnvironment].
+  /// Testing-only switch: when `true`, `dmtools.env` and the on-disk
+  /// `config.properties` discovery via CWD/project root are skipped
+  /// (readers with an explicit [basePath] still load files) and the
+  /// OS-environment source is replaced by [testEnvironment].
   ///
   /// Keeps unit tests hermetic: a developer's real `dmtools.env` in the
   /// project root (the normal L3 setup) otherwise leaks live credentials
@@ -105,43 +124,49 @@ class PropertyReader {
 
   /// Optional base directory override (for testing).
   ///
-  /// When set, `.env` files are loaded from this directory instead of
+  /// When set, it stands in for the process working directory: `dmtools.env`
+  /// and the `config.properties` project root are searched from this
+  /// directory (walking up for the Gradle marker) instead of
   /// [Directory.current]. Production code leaves this `null`.
   final String? basePath;
 
   /// Creates a property reader.
   ///
-  /// Pass [basePath] to override the directory where `dmtools.env` and
-  /// `dmtools-local.env` are searched (testing only — production code
-  /// omits it so files load from the current working directory).
+  /// Pass [basePath] to override the directory where `dmtools.env` is
+  /// searched (testing only — production code omits it so the file loads
+  /// from the current working directory / project root).
   PropertyReader({this.basePath});
 
   // --- Instance state ---
 
+  Map<String, String>? _configProps;
+  bool _configPropsLoaded = false;
   Map<String, String>? _envProps;
   bool _envPropsLoaded = false;
-  Map<String, String>? _localEnvProps;
-  bool _localEnvPropsLoaded = false;
   String? _projectRoot;
 
   /// Resolves a property key through the full chain.
   ///
   /// Returns `null` if not found anywhere.
   String? getValue(String key) {
-    // 1. Static overrides (highest priority).
+    // 1. Static overrides (highest priority) — accepted on presence, even
+    //    when the value is empty.
     final overrides = getOverrides();
     if (overrides.containsKey(key)) {
       return overrides[key];
     }
-    // 2. dmtools.env.
-    _ensureEnvLoaded();
-    if (_envProps!.containsKey(key)) {
-      return _envProps![key];
+    // 2. config.properties (Java resource tier) — every file tier accepts
+    //    only non-null AND non-empty values (`property != null &&
+    //    !property.isEmpty()`), so empty entries fall through.
+    final configValue = _ensureConfigLoaded()[key];
+    if (configValue != null && configValue.isNotEmpty) {
+      return configValue;
     }
-    // 3. dmtools-local.env.
-    _ensureLocalEnvLoaded();
-    if (_localEnvProps!.containsKey(key)) {
-      return _localEnvProps![key];
+    // 3. dmtools.env — same non-null AND non-empty guard.
+    _ensureEnvLoaded();
+    final envValue = _envProps![key];
+    if (envValue != null && envValue.isNotEmpty) {
+      return envValue;
     }
     // 4. OS environment variables (or the isolated test map).
     final env = testIsolation ? testEnvironment : Platform.environment;
@@ -169,11 +194,41 @@ class PropertyReader {
     _envPropsLoaded = true;
   }
 
-  void _ensureLocalEnvLoaded() {
-    if (_localEnvPropsLoaded) return;
-    _localEnvProps =
-        _isolationBlocksDefaultFiles() ? {} : _loadEnvFile('dmtools-local.env');
-    _localEnvPropsLoaded = true;
+  /// Lazily loads the `config.properties` tier and caches it (the Dart
+  /// equivalent of Java's double-checked `prop` field, lines 170-224).
+  Map<String, String> _ensureConfigLoaded() {
+    if (_configPropsLoaded) return _configProps!;
+    _configProps = _loadConfigFileProps();
+    _configPropsLoaded = true;
+    return _configProps!;
+  }
+
+  /// Priority 1: `<projectRoot>/src/main/resources/config.properties` from
+  /// disk — an existing regular file always wins, even when it parses empty
+  /// (Java lines 179-186). Priority 2: the [setConfigFile] resource, tried
+  /// only when the disk tier did not load (Java lines 200-219).
+  Map<String, String> _loadConfigFileProps() {
+    if (!_isolationBlocksDefaultFiles()) {
+      final root = _findProjectRoot();
+      final fromDisk = _readRegularFileProps(
+        '$root/src/main/resources/config.properties',
+      );
+      if (fromDisk != null) return fromDisk;
+    }
+    return _readRegularFileProps(_resolveResourcePath()) ??
+        const <String, String>{};
+  }
+
+  /// Resolves the [setConfigFile] resource path against the filesystem.
+  ///
+  /// Dart substitute for Java's `getResourceAsStream(PATH_TO_CONFIG_FILE)`:
+  /// absolute paths are used as-is, relative ones resolve against the
+  /// reader's [basePath] (or CWD).
+  String _resolveResourcePath() {
+    final resource = _pathToConfigFile;
+    if (File(resource).isAbsolute) return resource;
+    final base = basePath ?? Directory.current.path;
+    return '$base/$resource';
   }
 
   /// Whether test isolation is active and this reader uses the default
@@ -181,49 +236,96 @@ class PropertyReader {
   /// [basePath] directories are still loaded.
   bool _isolationBlocksDefaultFiles() => testIsolation && basePath == null;
 
-  /// Loads an `.env` file from the base path (CWD by default).
+  /// Loads `dmtools.env` — project root first, then the working directory
+  /// (Java `loadEnvFileProperties`).
+  ///
+  /// A candidate is adopted only when the file exists, is a regular file,
+  /// parses without error AND yields at least one entry (Java lines 128 and
+  /// 146): an empty file never adopts, so the next candidate is tried. When
+  /// no candidate is adopted the result is an empty map (published once so
+  /// subsequent lookups skip the search — Java line 158).
   Map<String, String> _loadEnvFile(String filename) {
-    final dir = basePath ?? Directory.current.path;
-    final file = File('$dir/$filename');
-    if (file.existsSync()) {
-      return parseEnvFile(file.path);
-    }
-    if (basePath == null) {
-      final root = _findProjectRoot();
-      if (root != null && root != dir) {
-        final rootFile = File('$root/$filename');
-        if (rootFile.existsSync()) {
-          return parseEnvFile(rootFile.path);
-        }
-      }
+    final cwd = basePath ?? Directory.current.path;
+    final root = _findProjectRoot();
+    final atRoot = _tryAdoptEnvFile('$root/$filename');
+    if (atRoot != null) return atRoot;
+    if (cwd != root) {
+      final atCwd = _tryAdoptEnvFile('$cwd/$filename');
+      if (atCwd != null) return atCwd;
     }
     return {};
   }
 
-  /// Walks up from CWD looking for [_rootMarker] (`pubspec.yaml`).
-  String? _findProjectRoot() {
-    if (_projectRoot != null) return _projectRoot;
-    var dir = Directory.current;
+  /// Parses the `.env` file at [path] when it is an existing regular file
+  /// AND yields at least one entry (Java lines 128 / 146: an empty file
+  /// never adopts, so the next candidate is tried).
+  Map<String, String>? _tryAdoptEnvFile(String path) {
+    final props = _readRegularFileProps(path);
+    if (props == null || props.isEmpty) return null;
+    return props;
+  }
+
+  /// Reads a KEY=VALUE file at [path] when it is an existing regular file.
+  ///
+  /// Returns `null` when the path is missing or not a regular file, or when
+  /// reading fails (warn and continue — Java lines 134-136 / 152-154).
+  Map<String, String>? _readRegularFileProps(String path) {
+    if (FileStat.statSync(path).type != FileSystemEntityType.file) {
+      return null;
+    }
+    try {
+      return parseEnvFile(path);
+    } catch (e) {
+      stderr.writeln('PropertyReader: failed to read $path, continuing: $e');
+      return null;
+    }
+  }
+
+  /// Walks up from the working directory looking for a Gradle settings
+  /// marker (see [_gradleMarkers]) and caches the result; falls back to the
+  /// working directory itself when no marker is found (Java
+  /// `findProjectRoot`, lines 100-103).
+  /// marker is found (Java `findProjectRoot`, lines 100-103).
+  String _findProjectRoot() {
+    if (_projectRoot != null) return _projectRoot!;
+    final start = basePath ?? Directory.current.path;
+    _projectRoot = _walkUpForMarker(start) ?? start;
+    return _projectRoot!;
+  }
+
+  /// Returns the nearest ancestor of [startPath] containing a Gradle
+  /// settings marker, or `null` when the filesystem root is reached.
+  String? _walkUpForMarker(String startPath) {
+    var dir = Directory(startPath);
     while (true) {
-      if (File('${dir.path}/$_rootMarker').existsSync()) {
-        _projectRoot = dir.path;
-        return _projectRoot;
-      }
+      if (_hasGradleMarker(dir.path)) return dir.path;
       final parent = dir.parent;
-      if (parent.path == dir.path) break; // filesystem root
+      if (parent.path == dir.path) return null; // filesystem root
       dir = parent;
     }
-    return null;
   }
+
+  /// Whether [dirPath] contains either Gradle settings marker. The check is
+  /// directory-inclusive: Java `Files.exists` is true for directories too.
+  bool _hasGradleMarker(String dirPath) {
+    for (final marker in _gradleMarkers) {
+      if (_pathExists('$dirPath/$marker')) return true;
+    }
+    return false;
+  }
+
+  /// Directory-inclusive existence check (Java `Files.exists` semantics).
+  bool _pathExists(String path) =>
+      FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound;
 
   /// Resets cached state so the next `getValue` reloads files.
   ///
   /// For unit tests that change env between test cases.
   void resetForTesting() {
+    _configProps = null;
+    _configPropsLoaded = false;
     _envProps = null;
     _envPropsLoaded = false;
-    _localEnvProps = null;
-    _localEnvPropsLoaded = false;
     _projectRoot = null;
   }
 }

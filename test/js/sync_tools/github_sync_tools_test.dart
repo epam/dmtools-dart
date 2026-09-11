@@ -279,6 +279,18 @@ void fixturecommenttools_p2() {
     final comments = jsonDecode(result) as List;
     expect(comments.map((c) => c['id']), [10, 1, 2, 3]);
   });
+
+  test('github_get_pr_comments surfaces non-OK pages as an error', () {
+    // Java AbstractRestClient throws a RestClientException on any non-OK
+    // page — the old Dart loop broke on it and reported "no comments".
+    final result = tools.handlers['github_get_pr_comments']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'pullRequestId': '7',
+    });
+    final decoded = jsonDecode(result) as Map<String, dynamic>;
+    expect(decoded['error'], contains('HTTP 500'));
+  });
 }
 
 /// Review-thread tools (REST grouping + GraphQL).

@@ -157,6 +157,10 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._record(body)
             self._respond(200, INLINE_COMMENTS)
             return
+        if base.endswith("/pulls/7/comments"):
+            self._record(body)
+            self._respond(500, '{"message": "boom"}')
+            return
         if base.endswith("/issues/42/comments"):
             self._record(body)
             self._respond(200, ISSUE_COMMENTS)

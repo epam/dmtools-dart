@@ -257,7 +257,15 @@ const Map<String, dynamic> _emptyDiffStats = {
 /// Java `pullRequestComments`: paginates `pulls/{id}/comments` and
 /// `issues/{id}/comments`, concatenates both, sorts by creation date.
 String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) {
-  final pages = _prCommentPages(c, a);
+  final ({
+    List<Map<String, dynamic>> inline,
+    List<Map<String, dynamic>> issue
+  }) pages;
+  try {
+    pages = _prCommentPages(c, a);
+  } on StateError catch (e) {
+    return syncErr(e.message);
+  }
   final all = [...pages.inline, ...pages.issue];
   all.sort(
       (x, y) => syncAsStr(x['created']).compareTo(syncAsStr(y['created'])));
@@ -271,7 +279,15 @@ String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) {
 /// Java `GitHubConversation.toJSON` shape), then appends one entry per
 /// issue-style discussion comment.
 String _getPrConversations(GhSyncConfig c, Map<String, dynamic> a) {
-  final pages = _prCommentPages(c, a);
+  final ({
+    List<Map<String, dynamic>> inline,
+    List<Map<String, dynamic>> issue
+  }) pages;
+  try {
+    pages = _prCommentPages(c, a);
+  } on StateError catch (e) {
+    return syncErr(e.message);
+  }
   return jsonEncode(_groupConversations(pages.inline, pages.issue));
 }
 
@@ -759,7 +775,15 @@ List<Map<String, dynamic>> _fetchPages(GhSyncConfig c, String urlBase) {
   for (var page = 1;; page++) {
     final resp = SyncHttpClient.get('$urlBase?per_page=100&page=$page',
         headers: c.headers);
-    if (!resp.isOk) break;
+    // Java `AbstractRestClient.execute` throws a RestClientException on any
+    // non-OK page (retrying retryable codes) — the paging loop in
+    // `pullRequestComments` breaks only on a null/empty body (the empty
+    // last page). Breaking on every non-OK silently reported 401/403/5xx
+    // as "no comments".
+    if (!resp.isOk) {
+      throw StateError('HTTP ${resp.statusCode} fetching comments '
+          '(page $page): ${resp.body}');
+    }
     final decoded = syncTryDecode(resp.body);
     if (decoded is! List) break;
     out.addAll(decoded.whereType<Map>().cast<Map<String, dynamic>>());

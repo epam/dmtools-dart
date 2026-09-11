@@ -383,6 +383,21 @@ void _testCliExecuteDispatch() {
       expect(result, 'hello');
     });
 
+    test('inherits the parent process environment (ProcessBuilder parity)',
+        () async {
+      // Java CommandLineUtils.runCommand builds the child environment from
+      // ProcessBuilder.environment() (a copy of the parent process env) and
+      // merges the extras on top — vars the host exported (e.g. the
+      // machine-kit FA_LOG_FILE) must reach the command.
+      final marker = Platform.environment['HOME'];
+      final result = await _runCliToolScript('''
+        var res = executeToolViaJava('cli_execute_command',
+            {command: 'printenv HOME'});
+        function action(params) { return res; }
+      ''', overrides: {'CLI_ALLOWED_COMMANDS': 'printenv'});
+      expect(result, marker);
+    });
+
     test('interprets the full command line via shell', () async {
       final result = await _runCliToolScript('''
         var res = executeToolViaJava('cli_execute_command',

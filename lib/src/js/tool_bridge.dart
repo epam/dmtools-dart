@@ -407,16 +407,19 @@ class ToolBridge {
     return null;
   }
 
-  /// Java `loadEnvironmentVariables` parity: non-interactive git defaults,
-  /// a PATH extended with common tool installation directories,
-  /// `dmtools.env` from the resolved working directory, and job-level
-  /// overrides on top.
+  /// Java `loadEnvironmentVariables` + `CommandLineUtils.runCommand` parity:
+  /// the command runs through a `ProcessBuilder`, whose environment starts
+  /// as a copy of the PARENT process environment, then merges the extras on
+  /// top (`environment().putAll(additionalEnv)`) — so children inherit
+  /// everything the host exported (e.g. `FA_LOG_FILE` for the run-agent
+  /// trace), with GIT_PAGER/GIT_TERMINAL_PROMPT defaults, the extended PATH,
+  /// `dmtools.env` from the working directory and job-level overrides
+  /// applied over it in that order.
   Map<String, String> _cliProcessEnv(String? workDir) {
-    final env = <String, String>{
-      'GIT_PAGER': 'cat',
-      'GIT_TERMINAL_PROMPT': '0',
-    };
-    var path = Platform.environment['PATH'] ?? '';
+    final env = Map<String, String>.from(Platform.environment);
+    env['GIT_PAGER'] = 'cat';
+    env['GIT_TERMINAL_PROMPT'] = '0';
+    var path = env['PATH'] ?? '';
     for (final dir in const [
       '/usr/local/bin',
       '/opt/homebrew/bin',

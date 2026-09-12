@@ -84,10 +84,14 @@ permissions:
 
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
-  # Prerequisite versions — pinned (cache-by-version); repo vars override.
+  # Prerequisite versions — repo vars override; fa defaults to the latest
+  # release so the pinned-fallback can never lag a shipped feature again
+  # (v0.1.324 vs the --log-file tee in v0.1.335 bit us on 2026-09-12).
+  # The fa CLI cache step is skipped for 'latest' (a cached "latest" would
+  # freeze the first version it saw).
   # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
   # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
-  FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
+  FA_VERSION: ${{ vars.FA_VERSION || 'latest' }}
   DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
@@ -188,6 +192,9 @@ jobs:
           restore-keys: ${{ env.FA_SESSION_CACHE_RESTORE_KEY }}
 
       - name: Cache fa CLI (by version)
+        # 'latest' must never be cached — a cached "latest" freezes the
+        # first version it saw and defeats the point.
+        if: env.FA_VERSION != 'latest'
         uses: actions/cache@v6
         with:
           path: |

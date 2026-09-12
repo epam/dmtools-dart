@@ -232,6 +232,12 @@ jobs:
         run: |
           if git fetch --depth 1 origin "refs/heads/$FA_SESS_BRANCH"; then
             git checkout "refs/remotes/origin/$FA_SESS_BRANCH" -- .dmtools/fa-sessions
+            # checkout-from-tree STAGES the restored files into the index
+            # (bypassing .gitignore); anything staged here rides into the
+            # agent's own commits and leaks session state into ai/gh-<n>
+            # PR branches (review finding on #89, run 34716859005).
+            # Unstage: keep worktree copies, index stays clean.
+            git restore --staged .dmtools/fa-sessions
             echo "→ fa session restored from $FA_SESS_BRANCH"
           else
             echo "→ no saved fa session yet ($FA_SESS_BRANCH absent) — starting fresh"
@@ -761,7 +767,18 @@ jobs:
           git config user.name "dm.ai"
           git config user.email "dm.ai@epam.com"
           git fetch --depth 1 origin "refs/heads/$FA_SESS_BRANCH" || true
+          # Snapshot the session tree OUTSIDE the repo before switching:
+          # `git switch --orphan` removes TRACKED files from the working
+          # tree, and restored sessions can be tracked (the restore-step
+          # staging leak) — without the snapshot, `git add -f` then dies
+          # on "pathspec did not match any files" (run 34716859005).
+          SESS_SNAP="$(mktemp -d)"
+          cp -a .dmtools/fa-sessions "$SESS_SNAP/"
           git switch --orphan "$FA_SESS_BRANCH" 2>/dev/null || git switch -C "$FA_SESS_BRANCH"
+          rm -rf .dmtools/fa-sessions
+          mkdir -p .dmtools
+          cp -a "$SESS_SNAP/fa-sessions" .dmtools/
+          rm -rf "$SESS_SNAP"
           git add -f .dmtools/fa-sessions
           if git diff --cached --quiet; then
             echo "fa session staged nothing (ignored/empty) — nothing to persist"

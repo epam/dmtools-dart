@@ -189,7 +189,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `executeCommand` additionally accepts the `workingDirectory` the
   `cli_execute_command` schema always advertised: the async executor now
   forwards it to the child process instead of silently ignoring it (the
-  JS-bridge path already resolved it per Java `resolveWorkingDirectory`).
+  JS-bridge path already resolved it per Java `resolveWorkingDirectory`),
+  validated within the allowed base directories (process CWD, its git
+  root, the system temp dir — Java `validateWithinAllowedBase` parity)
+  through the same shared check the JS-bridge path uses, so both surfaces
+  of the tool enforce the same sandbox; a directory outside them throws.
 
 ## [0.1.0] — 2026-08-13
 

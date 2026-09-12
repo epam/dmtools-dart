@@ -5,10 +5,13 @@
 /// `CLI_ALLOWED_COMMANDS` environment variable.
 library;
 
+import 'dart:io';
+
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
+import 'allowed_base.dart';
 import 'process_output_tee.dart';
 
 /// Built-in whitelist of allowed CLI commands.
@@ -117,9 +120,11 @@ class CliToolExecutor {
   /// live to dmtools' stderr ([mirror] overrides the target for tests).
   ///
   /// [workingDirectory] runs the child inside that directory (absolute, or
-  /// relative to the process CWD) instead of silently ignoring it — the
-  /// parameter the tool schema advertises. When null the child inherits the
-  /// process CWD, as before.
+  /// relative to the process CWD). It is validated within the allowed base
+  /// directories — the process CWD, its git root, the system temp dir —
+  /// per Java `validateWithinAllowedBase` parity, the same sandbox the
+  /// JS-bridge path for this tool enforces; a directory outside them
+  /// throws. When null the child inherits the process CWD, as before.
   ///
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
@@ -135,10 +140,27 @@ class CliToolExecutor {
     final result = await runCaptured(
       command,
       args ?? const [],
-      workingDirectory: workingDirectory,
+      workingDirectory: _validatedWorkingDir(workingDirectory),
       mirror: mirror,
     );
     return _resultMap(result);
+  }
+
+  /// Resolves [workingDirectory] against the process CWD and validates it
+  /// within the allowed bases (Java `validateWithinAllowedBase` parity) —
+  /// the same check the JS-bridge path applies, so both surfaces of the
+  /// tool enforce the same sandbox. Null inherits the process CWD.
+  String? _validatedWorkingDir(String? workingDirectory) {
+    if (workingDirectory == null || workingDirectory.trim().isEmpty) {
+      return null;
+    }
+    final base = Directory.current.path;
+    final specified = Directory(workingDirectory.trim());
+    final resolved = specified.isAbsolute
+        ? specified
+        : Directory('$base/${specified.path}');
+    validateWithinAllowedBase(resolved.absolute.path, base);
+    return resolved.path;
   }
 
   /// Executes [command] with [args] and extra [envVars], mirroring every

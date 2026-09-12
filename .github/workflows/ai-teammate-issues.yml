@@ -349,6 +349,18 @@ jobs:
           # last line starting with '{' — jq first, the raw line as
           # fallback. Pinned by test/ai_teammate_review_cycle_test.dart.
           result_line="$(grep '^{' "${RUN_OUTPUT}" 2>/dev/null | tail -1 || true)"
+          # Shape guard: a '{'-line is only trusted as the result when it
+          # parses as JSON with the result shape. A future --debug
+          # diagnostic or any '{'-starting mirrored line that lands after
+          # the real blob is blanked here — degrading to the no-verdict
+          # warning path instead of verdict-grepping a raw transcript line
+          # (possible spurious agent:rework loop). Pinned by
+          # test/ai_teammate_review_cycle_test.dart.
+          if [ -n "$result_line" ]; then
+            shape_ok="$(printf '%s\n' "$result_line" | \
+              jq -r 'has("results") or has("success")' 2>/dev/null || echo false)"
+            [ "$shape_ok" = "true" ] || result_line=""
+          fi
           response=""
           if [ -n "$result_line" ]; then
             response="$(printf '%s\n' "$result_line" | \

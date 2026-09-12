@@ -13,6 +13,7 @@ void main() {
   executeDispatchTests();
   liveMirrorTests();
   workingDirectoryTests();
+  workingDirectoryValidationTests();
 }
 
 /// Catalog shape: tool name, integration, params.
@@ -217,6 +218,43 @@ void workingDirectoryTests() {
         'args': ['-c', 'pwd'],
       });
       expect(result['stdout'].trim(), Directory.current.path);
+    });
+  });
+}
+
+/// Allowed-base validation on the async executor (Java
+/// `validateWithinAllowedBase` parity): the two surfaces of
+/// `cli_execute_command` — the JS-bridge path and this executor — must
+/// enforce the same sandbox on a caller-supplied `workingDirectory`, not
+/// disagree on a security-flavored behavior.
+void workingDirectoryValidationTests() {
+  group('cli_execute_command workingDirectory allowed-base validation', () {
+    test('rejects a directory outside the allowed bases', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      await expectLater(
+        () => executor.executeCommand(
+          'sh',
+          args: ['-c', 'pwd'],
+          workingDirectory: '/etc',
+        ),
+        throwsException,
+      );
+    });
+
+    test('still runs inside a directory within the allowed bases', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      // A repo-relative directory resolves against the process CWD (the
+      // base) and stays within it — allowed. System-temp targets (an
+      // allowed base themselves) are pinned by the forwarding tests above.
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: 'test',
+      );
+      expect(result['stdout'].trim(), endsWith('/test'));
+      expect(result['exitCode'], 0);
     });
   });
 }

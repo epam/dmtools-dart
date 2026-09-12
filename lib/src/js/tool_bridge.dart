@@ -21,6 +21,7 @@ import 'dart:io';
 
 import '../config/env_file_parser.dart';
 import '../config/property_reader.dart';
+import '../integrations/cli/allowed_base.dart';
 import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
 import 'package:quickjs_runtime/quickjs_runtime.dart';
@@ -356,55 +357,11 @@ class ToolBridge {
           ? specified
           : Directory('$base/${specified.path}');
       if (resolved.existsSync()) {
-        _validateWithinAllowedBase(resolved.absolute.path, base);
+        validateWithinAllowedBase(resolved.absolute.path, base);
         return resolved.path;
       }
     }
-    return _cliGitRoot(base) ?? base;
-  }
-
-  /// Java `validateWithinAllowedBase` parity: the canonical [dirPath] must
-  /// sit inside the job base directory (Java's `user.dir`), its git root,
-  /// or the system temp dir — otherwise the call fails (SecurityException
-  /// parity, rethrown as a JS `Error`).
-  void _validateWithinAllowedBase(String dirPath, String base) {
-    String canonical(String p) {
-      try {
-        return Directory(p).resolveSymbolicLinksSync();
-      } catch (_) {
-        return p;
-      }
-    }
-
-    final dir = canonical(dirPath);
-    bool within(String? candidate) {
-      if (candidate == null) return false;
-      final c = canonical(candidate);
-      return dir == c || dir.startsWith('$c/');
-    }
-
-    if (within(base) || within(_cliGitRoot(base))) return;
-    if (within(Directory.systemTemp.path)) return;
-    throw Exception('Working directory is outside allowed base paths '
-        '(user.dir, git root, tmpdir): $dirPath');
-  }
-
-  /// Detects the git repository root containing [base], or `null` when
-  /// [base] is not inside a repository (Java `resolveWorkingDirectory`
-  /// git-root detection parity).
-  String? _cliGitRoot(String base) {
-    try {
-      final result = Process.runSync(
-          'git', const ['rev-parse', '--show-toplevel'],
-          workingDirectory: base);
-      final root = result.stdout.toString().trim();
-      if (result.exitCode == 0 &&
-          root.isNotEmpty &&
-          Directory(root).existsSync()) {
-        return root;
-      }
-    } catch (_) {}
-    return null;
+    return gitRepositoryRoot(base) ?? base;
   }
 
   /// Java `loadEnvironmentVariables` + `CommandLineUtils.runCommand` parity:

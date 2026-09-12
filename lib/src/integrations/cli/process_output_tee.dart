@@ -89,13 +89,11 @@ Future<CapturedProcessResult> runCaptured(
     environment: environment,
     includeParentEnvironment: includeParentEnvironment,
   );
-  final stdout = captureAndMirror(process.stdout, mirror: mirror);
-  final stderr = captureAndMirror(process.stderr, mirror: mirror);
-  final exitCode = await process.exitCode;
-  return CapturedProcessResult(
-    stdout: await stdout,
-    stderr: await stderr,
-    exitCode: exitCode,
+  return drainCaptured(
+    process.stdout,
+    process.stderr,
+    process.exitCode,
+    mirror: mirror,
   );
 }
 
@@ -124,6 +122,34 @@ Future<String> captureAndMirror(
     sink.close();
   }
   return sink.captured.toString();
+}
+
+/// Drains the output streams of an already-started child process into a
+/// [CapturedProcessResult], mirroring every complete line through [mirror]
+/// as it arrives.
+///
+/// Both capture futures and [exitCode] are awaited together through
+/// [Future.wait], so every capture future has its error listener attached
+/// the moment it is created: a byte stream that completes with an error
+/// mid-capture (e.g. an OS read error on the child pipe) makes the
+/// returned future throw deterministically instead of surfacing as an
+/// unhandled zone error while the orchestrator is still awaiting
+/// [exitCode] — and the second stream's flush is never left without an
+/// awaiter because the first await threw.
+Future<CapturedProcessResult> drainCaptured(
+  Stream<List<int>> stdoutStream,
+  Stream<List<int>> stderrStream,
+  Future<int> exitCode, {
+  OutputLineSink? mirror,
+}) async {
+  final stdout = captureAndMirror(stdoutStream, mirror: mirror);
+  final stderr = captureAndMirror(stderrStream, mirror: mirror);
+  final results = await Future.wait<Object>([stdout, stderr, exitCode]);
+  return CapturedProcessResult(
+    stdout: results[0] as String,
+    stderr: results[1] as String,
+    exitCode: results[2] as int,
+  );
 }
 
 /// Production mirror target: dmtools' own stderr. Stdout stays untouched —

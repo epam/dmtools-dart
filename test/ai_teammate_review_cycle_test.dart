@@ -82,6 +82,26 @@ void verdictParserTests(String workflow) {
       );
       expect(workflow, contains('jq -r'));
     });
+
+    test('the raw-line fallback trusts only result-shaped JSON', () {
+      // grep '^{' | tail -1 assumes the last '{'-line IS the result blob,
+      // but nothing structural enforces it: a future --debug diagnostic or
+      // any '{'-starting mirrored line landing after the blob would be
+      // adopted as the result, and the raw-line fallback would then grep
+      // that transcript line for verdict tokens — narrowly reopening the
+      // quoted-token flip this rework eliminated. The workflow must
+      // shape-check the line first, so an unrecognized '{'-line degrades
+      // to the no-verdict warning path instead of a possible spurious
+      // agent:rework loop.
+      expect(
+        workflow,
+        contains(r"""jq -r 'has("results") or has("success")' """),
+      );
+      expect(
+        workflow,
+        contains(r'[ "$shape_ok" = "true" ] || result_line=""'),
+      );
+    });
   });
 
   verdictClassificationPins(workflow);
@@ -170,6 +190,20 @@ void verdictExtractionTests() {
       );
       expect(verdict, isEmpty);
     });
+
+    test('a non-result { line after the blob cannot inject a verdict',
+        () async {
+      // The hazard: tail -1 adopts the LAST '{'-line as the result. A
+      // mirrored diagnostic line landing after the real blob that quotes a
+      // verdict token must NOT be verdict-grepped raw — the shape check
+      // blanks it, degrading to the no-verdict warning path.
+      final verdict = await extractVerdict(
+        '{"success":true,"results":[{"response":"# PR Review — verdict: '
+        'APPROVE"}]}\n'
+        '{"note":"mirrored child json diagnostic quoting CHANGES_REQUESTED"}\n',
+      );
+      expect(verdict, isEmpty);
+    });
   },
       skip: jqAvailable()
           ? null
@@ -179,11 +213,16 @@ void verdictExtractionTests() {
 
 /// The verdict extraction+classification pipeline, mirroring the
 /// "Apply the review verdict" step's shell (kept in sync by the
-/// `parses only the trailing single-line result JSON blob` and
-/// `verdict classification regexes` pins).
+/// `parses only the trailing single-line result JSON blob`, `the raw-line
+/// fallback trusts only result-shaped JSON` and `verdict classification
+/// regexes` pins).
 const String _verdictSnippet = '''
 RUN_OUTPUT="\$1"
 result_line="\$(grep '^\{' "\$RUN_OUTPUT" 2>/dev/null | tail -1 || true)"
+if [ -n "\$result_line" ]; then
+  shape_ok="\$(printf '%s\\n' "\$result_line" | jq -r 'has("results") or has("success")' 2>/dev/null || echo false)"
+  [ "\$shape_ok" = "true" ] || result_line=""
+fi
 response=""
 if [ -n "\$result_line" ]; then
   response="\$(printf '%s\\n' "\$result_line" | jq -r '.results[0].response // .response // empty' 2>/dev/null || true)"

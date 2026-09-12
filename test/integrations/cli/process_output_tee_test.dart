@@ -16,6 +16,7 @@ void main() {
   lineMirrorTests();
   liveStreamTests();
   runCapturedTests();
+  drainTests();
   resilienceTests();
   errorPathFlushTests();
 }
@@ -199,6 +200,58 @@ void runCapturedTests() {
           ],
           mirror: (_) {});
       expect(result.stdout.split('\n').length, greaterThan(4999));
+    });
+  });
+}
+
+/// [drainCaptured]: error-listener timing of the drain orchestration.
+/// Both capture futures must have their error listeners attached the
+/// moment they are created — an error arriving while the orchestrator is
+/// still awaiting `exitCode` would otherwise hit the zone as an unhandled
+/// async error (a `dart test` suite failure) instead of the deterministic
+/// throw an awaiter sees, and a throw from the first awaited capture would
+/// leave the second stream's flush without an awaiter.
+void drainTests() {
+  group('drainCaptured', () {
+    test('captures both streams and the exit code', () async {
+      final outCtrl = StreamController<List<int>>();
+      final errCtrl = StreamController<List<int>>();
+      final done = drainCaptured(
+        outCtrl.stream,
+        errCtrl.stream,
+        Future<int>.value(3),
+        mirror: (_) {},
+      );
+      outCtrl.add(utf8.encode('out line\n'));
+      errCtrl.add(utf8.encode('err line\n'));
+      await outCtrl.close();
+      await errCtrl.close();
+      final result = await done;
+      expect(result.stdout, 'out line\n');
+      expect(result.stderr, 'err line\n');
+      expect(result.exitCode, 3);
+    });
+
+    test('a stream error before exitCode resolves throws deterministically',
+        () async {
+      final outCtrl = StreamController<List<int>>();
+      final errCtrl = StreamController<List<int>>();
+      final exitCode = Completer<int>();
+      final done = drainCaptured(
+        outCtrl.stream,
+        errCtrl.stream,
+        exitCode.future,
+        mirror: (_) {},
+      );
+      outCtrl.add(utf8.encode('whole\npartial tail'));
+      // Errors while exitCode is still pending — exactly the window where
+      // a capture future with no listener attached yet becomes an
+      // unhandled zone error instead of the awaited throw.
+      outCtrl.addError(StateError('pipe read error'));
+      exitCode.complete(0);
+      await outCtrl.close();
+      await errCtrl.close();
+      await expectLater(done, throwsStateError);
     });
   });
 }

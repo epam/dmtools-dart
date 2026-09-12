@@ -1,0 +1,23 @@
+name: diag fa 404
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  curl:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -x
+          U=https://github.com/IstiN/flutter_agent_harness/releases/download/v0.1.357/fa-linux-x64.tar.gz
+          echo "=== variant 1: plain curl -v"
+          curl -v -fL --max-time 60 -o /tmp/fa1.tgz "$U" 2>&1 | grep -E "^< HTTP|^< location|^> GET|error" | head -12 || true
+          echo "=== variant 2: curl with GITHUB_TOKEN bearer"
+          curl -sS -fL --max-time 60 -H "Authorization: Bearer $GITHUB_TOKEN" -o /tmp/fa2.tgz "$U" && echo OK2 || echo FAIL2
+          echo "=== variant 3: gh api octet-stream"
+          gh api -H "Accept: application/octet-stream" repos/IstiN/flutter_agent_harness/releases/tags/v0.1.357 >/tmp/fa3.tgz 2>/tmp/fa3.err && echo OK3 || { echo FAIL3; cat /tmp/fa3.err; }
+          echo "=== variant 4: gh release download"
+          gh release download v0.1.357 --repo IstiN/flutter_agent_harness -p 'fa-linux-x64.tar.gz' -D /tmp/fa4 && echo OK4 || echo FAIL4
+          ls -la /tmp/fa*.tgz /tmp/fa4 2>/dev/null || true
+          file /tmp/fa2.tgz /tmp/fa4/* 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -314,6 +314,11 @@ jobs:
           GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           NUMBER: ${{ github.event.issue.number }}
         run: |
+          # Remove-then-add: re-adding an existing label is a silent no-op
+          # event-wise (no `labeled` event), so the re-review would never
+          # start. Removing first (ignore failure) guarantees the event fires.
+          gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+            --remove-label "agent:review" || true
           gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
             --add-label "agent:review"
           echo "→ labeled agent:review — pr_review run queued"

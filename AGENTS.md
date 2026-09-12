@@ -139,6 +139,7 @@ bug/story/rework share the `dev-write` conversation (a rework continues the
 ticket's dev thread), review has its own `dev-review`. The session directory
 (`.dmtools/fa-sessions`) travels across CI runs on a dedicated per-issue branch
 `fa-sess/gh-<n>`: restored before the run, force-pushed after it, never merged.
-For live debugging, the `FA_LOG_FILE` tee mirrors the full agent transcript into
-the run log as `[fa]`-prefixed lines (also uploaded as a run artifact). Wiring:
-`.github/workflows/ai-teammate-issues.yml`.
+For live debugging, `FA_LOG_FILE` (`fa --log-file`) captures the full
+untruncated agent transcript, uploaded as the `fa-trace-*` run artifact;
+dmtools also streams the agent's output live into the step log via stderr
+mirroring (gh-50). Wiring: `.github/workflows/ai-teammate-issues.yml`.

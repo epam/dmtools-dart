@@ -170,8 +170,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   monitored — now mirror every child output line to dmtools' own stderr as
   it arrives (line-buffered, always on; no flags or env toggles) while the
   captured strings stay byte-identical for well-formed UTF-8 output
-  (malformed byte sequences decode leniently to U+FFFD where the previous
-  strict `Process.run`-style decode threw a `FormatException`).
+  (malformed byte sequences decode leniently to U+FFFD on both the
+  buffered and monitored paths where the previous strict decode threw a
+  `FormatException`; mirroring itself is best-effort — a failing stderr
+  sink never aborts the capture or the batch).
   `dmtools run <config>` therefore streams the inner agent's work into the
   CI step log live, and the ai-teammate workflow drops its `FA_LOG_FILE` +
   `tail -F | sed` follower side-channel (the trace file itself stays,

@@ -8,6 +8,8 @@ import 'package:test/test.dart';
 void main() {
   bufferedPathTests();
   monitoredPathTests();
+  mirrorResilienceTests();
+  lenientDecodeTests();
 }
 
 /// Buffered path (`executeCommands`): mirror + exact response formats.
@@ -98,6 +100,81 @@ void monitoredPathTests() {
       );
       expect(mirrored, ['keep-going']);
       expect(r.commandResponses, contains('Stopped: CLI execution stopped'));
+    });
+  });
+}
+
+/// Mirror resilience (review threads on gh-50): the mirror is a
+/// side-channel, so a throwing sink must never abort the batch — the
+/// captured response format stays byte-identical.
+void mirrorResilienceTests() {
+  group('CliExecutionHelper throwing-mirror resilience', () {
+    test('buffered batch completes when the mirror throws', () async {
+      final r = await const CliExecutionHelper().executeCommands(
+        ['echo one', 'echo two'],
+        mirror: (line) => throw StateError('stderr pipe closed'),
+      );
+      expect(r.hasFatalError, isFalse);
+      expect(
+        r.commandResponses,
+        'CLI Command: echo one\nResponse:\none\n\n\n'
+        'CLI Command: echo two\nResponse:\ntwo\n\n\n',
+        reason: 'capture stays byte-identical to a non-throwing mirror',
+      );
+    });
+
+    test('monitored batch completes when the mirror throws', () async {
+      final seenLines = <String>[];
+      final r = await const CliExecutionHelper().executeCommandsWithCallbacks(
+        ['echo first', 'echo second'],
+        callbacks: CliExecutionCallbacks(
+          timerIntervalSeconds: 0,
+          lineStopPredicate: (line) {
+            seenLines.add(line);
+            return false;
+          },
+        ),
+        mirror: (line) => throw StateError('stderr pipe closed'),
+      );
+      expect(r.hasFatalError, isFalse);
+      // The hooks still see every line even though the sink failed.
+      expect(seenLines, ['first', 'second']);
+      expect(
+        r.commandResponses,
+        'CLI Command: echo first\nResponse:\nfirst\n\n\n'
+        'CLI Command: echo second\nResponse:\nsecond\n\n\n',
+      );
+    });
+  });
+}
+
+/// The monitored path must decode like the buffered path
+/// (`captureAndMirror`): malformed child UTF-8 becomes U+FFFD instead of
+/// throwing a FormatException mid-batch.
+void lenientDecodeTests() {
+  group('CliExecutionHelper monitored-path lenient decoding', () {
+    test('malformed utf-8 child output completes the batch as U+FFFD',
+        () async {
+      final seenLines = <String>[];
+      // \377 is octal for 0xFF — never valid UTF-8. The buffered path
+      // (captureAndMirror) already decodes this leniently; the monitored
+      // path must behave the same instead of aborting the batch.
+      final r = await const CliExecutionHelper().executeCommandsWithCallbacks(
+        [r"printf 'bad\377byte\n'; echo done"],
+        callbacks: CliExecutionCallbacks(
+          timerIntervalSeconds: 0,
+          lineStopPredicate: (line) {
+            seenLines.add(line);
+            return false;
+          },
+        ),
+        mirror: (_) {},
+      );
+      expect(r.hasFatalError, isFalse);
+      expect(seenLines, contains('bad\u{FFFD}byte'),
+          reason: 'the line hook sees the leniently-decoded line');
+      expect(r.commandResponses, contains('bad\u{FFFD}byte\ndone\n'),
+          reason: 'the batch continues past the malformed bytes');
     });
   });
 }

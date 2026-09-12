@@ -9,9 +9,10 @@
 ///
 /// Used by the process-execution paths behind the CLI tool surface
 /// ([runCaptured]) and the CliAgent command phases (see
-/// `CliExecutionHelper`). The synchronous JS-bridge path cannot mirror: FFI
-/// host functions are synchronous and `dart:io` has no synchronous
-/// streaming API, so its capture stays buffered by contract.
+/// `CliExecutionHelper`). Mirroring is best-effort ([safeMirrorLine]): a
+/// failing sink never breaks the capture. The synchronous JS-bridge path
+/// cannot mirror: FFI host functions are synchronous and `dart:io` has no
+/// synchronous streaming API, so its capture stays buffered by contract.
 library;
 
 import 'dart:async';
@@ -20,6 +21,20 @@ import 'dart:io';
 
 /// Sink for one mirrored output line.
 typedef OutputLineSink = void Function(String line);
+
+/// Invokes [mirror] best-effort for one output [line].
+///
+/// Mirroring is an observability side-channel (humans and CI step logs),
+/// never a correctness surface: a failing sink — closed fd 2, detached
+/// process — must not abort the capture or the command batch. Exceptions
+/// from [mirror] are swallowed; the capture is unaffected.
+void safeMirrorLine(OutputLineSink mirror, String line) {
+  try {
+    mirror(line);
+  } catch (_) {
+    // Side-channel only: a broken mirror must never break the capture.
+  }
+}
 
 /// Captured output of a finished child process (the fields mirror the
 /// `ProcessResult` shape the tool executors expose).
@@ -148,7 +163,7 @@ class _LineSink implements Sink<String> {
   final OutputLineSink _mirror;
 
   @override
-  void add(String line) => _mirror(line);
+  void add(String line) => safeMirrorLine(_mirror, line);
 
   @override
   void close() {}

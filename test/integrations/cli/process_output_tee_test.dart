@@ -16,6 +16,7 @@ void main() {
   lineMirrorTests();
   liveStreamTests();
   runCapturedTests();
+  resilienceTests();
 }
 
 /// Capture fidelity: the returned string is byte-identical to a full-buffer
@@ -199,6 +200,56 @@ void runCapturedTests() {
       expect(result.stdout.split('\n').length, greaterThan(4999));
     });
   });
+}
+
+/// Resilience: the mirror is a side-channel (humans/CI logs), so a sink
+/// that throws must never break the capture or the process run — the
+/// captured strings stay byte-identical to a non-throwing run.
+void resilienceTests() {
+  group('captureAndMirror best-effort mirror', () {
+    test('completes the capture when the mirror throws', () async {
+      final controller = StreamController<List<int>>();
+      final done = captureAndMirror(controller.stream, mirror: _throwingSink);
+      controller.add(utf8.encode('line one\n'));
+      controller.add(utf8.encode('line two\n'));
+      await controller.close();
+      expect(await done, 'line one\nline two\n');
+    });
+
+    test('still mirrors the lines before the sink starts throwing', () async {
+      final controller = StreamController<List<int>>();
+      final seen = <String>[];
+      final done = captureAndMirror(
+        controller.stream,
+        mirror: (line) {
+          seen.add(line);
+          if (line == 'boom') throw StateError('stderr closed');
+        },
+      );
+      controller.add(utf8.encode('boom\nafter\n'));
+      await controller.close();
+      await done;
+      expect(seen, contains('boom'));
+    });
+  });
+
+  group('runCaptured best-effort mirror', () {
+    test('returns the captured result when the mirror throws', () async {
+      final result = await runCaptured(
+        '/bin/sh',
+        ['-c', 'echo out; echo err 1>&2; exit 5'],
+        mirror: _throwingSink,
+      );
+      expect(result.stdout, 'out\n');
+      expect(result.stderr, 'err\n');
+      expect(result.exitCode, 5);
+    });
+  });
+}
+
+/// A mirror sink that always fails (closed fd 2, detached process, ...).
+void _throwingSink(String line) {
+  throw StateError('stderr pipe closed');
 }
 
 /// Polls [condition] until it holds or [timeout] elapses.

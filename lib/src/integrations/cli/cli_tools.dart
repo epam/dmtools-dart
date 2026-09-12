@@ -82,7 +82,7 @@ List<ToolDefinition> cliTools() => [
 
 /// Executes CLI MCP tools via a streaming capture process run, enforcing
 /// the command whitelist. Output lines are mirrored live to dmtools' stderr
-/// (see [process_output_tee]) while the `{stdout, stderr, exitCode}` result
+/// (see [runCaptured]) while the `{stdout, stderr, exitCode}` result
 /// stays byte-identical to a full-buffer capture.
 class CliToolExecutor {
   /// Creates a CLI tool executor.

@@ -351,8 +351,9 @@ class CliExecutionHelper {
   ///
   /// Updates [CliExecutionCallbacks.liveOutput] after each line so a concurrent
   /// timer tick sees partial output, and mirrors every line live via [mirror]
-  /// (dmtools' own stderr when null). When the line-stop predicate returns
-  /// `true`, the process is killed and execution stops.
+  /// (dmtools' own stderr when null; best-effort, like [safeMirrorLine]).
+  /// When the line-stop predicate returns `true`, the process is killed and
+  /// execution stops.
   Future<_CommandOutcome> _runStreamedCommand(
     String command,
     String? workDir,
@@ -371,11 +372,14 @@ class CliExecutionHelper {
     final lineMirror = mirror ?? mirrorLineToStderr;
     var stopped = false;
     String? stopLine;
+    // Lenient UTF-8 (allowMalformed: true) matches the buffered path's
+    // captureAndMirror decode: malformed child output becomes U+FFFD on
+    // both CliAgent paths instead of throwing mid-batch only here.
     await for (final line in proc.stdout
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())) {
       output.writeln(line);
-      lineMirror(line);
+      safeMirrorLine(lineMirror, line);
       final live = cb.liveOutput;
       if (live != null) live.value = '$responses$output';
       if (cb.lineStopPredicate != null && cb.lineStopPredicate!(line)) {

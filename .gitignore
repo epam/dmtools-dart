@@ -25,6 +25,7 @@ native/quickjs/*.dylib
 
 # local dmtools run artifacts
 .dmtools-logs/
+.dmtools/
 input/
 outputs/
 

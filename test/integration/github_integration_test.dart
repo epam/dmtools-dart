@@ -9,9 +9,11 @@
 /// - targeted at a sandbox repo via [gateVar] (`DMTOOLS_IT_GITHUB_REPO`) in
 ///   `owner/repo` form, which selects *where* to test, never *how* to
 ///   authenticate;
-/// - credentials resolved through the standard chain (real env → `dmtools.env`
-///   → `dmtools-local.env`) by the Phase 1 [PropertyReader] — the same path
-///   production uses. `SOURCE_GITHUB_TOKEN` carries the auth token;
+/// - credentials resolved through the standard chain (overrides →
+///   `config.properties` → `dmtools.env` → OS env; the file is loaded from
+///   the project root first, then the working directory) by the Phase 1
+///   [PropertyReader] — the same path production uses. `SOURCE_GITHUB_TOKEN`
+///   carries the auth token;
 /// - skipped locally when the gate variable is absent; `DMTOOLS_IT_REQUIRE_CREDS`
 ///   turns that skip into a failure in the CI integration job so a rotting
 ///   secret cannot hide;

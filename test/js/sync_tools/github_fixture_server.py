@@ -228,6 +228,34 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._record(body)
             self._respond(500, '{"message": "boom"}')
             return
+        # Plain issue #9: GitHub answers 404 for the review-comments page
+        # (only PRs have one) but serves the discussion page normally.
+        if base.endswith("/pulls/9/comments"):
+            self._record(body)
+            self._respond(404, '{"message": "Not Found"}')
+            return
+        if base.endswith("/issues/9/comments"):
+            self._record(body)
+            self._respond(
+                200,
+                [
+                    {
+                        "id": 21,
+                        "body": "plain issue discussion",
+                        "created_at": "2026-09-12T10:00:00Z",
+                    }
+                ],
+            )
+            return
+        # Missing #8: both pages 404 — the error must still surface.
+        if base.endswith("/pulls/8/comments"):
+            self._record(body)
+            self._respond(404, '{"message": "Not Found"}')
+            return
+        if base.endswith("/issues/8/comments"):
+            self._record(body)
+            self._respond(404, '{"message": "Not Found"}')
+            return
         if base.endswith("/issues/42/comments"):
             self._record(body)
             self._respond(200, ISSUE_COMMENTS)

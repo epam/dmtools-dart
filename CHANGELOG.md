@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GitHub Issues backend for tracker-shaped `jira_*` tool calls (gh-62):
+  when the ticket key matches `gh-<number>` and Jira is not configured (no
+  `JIRA_BASE_PATH` / Jira auth token), `jira_get_ticket`,
+  `jira_get_comments`, `jira_post_comment`, `jira_add_label`,
+  `jira_remove_label`, `jira_move_to_status`, and `jira_search_by_jql`
+  route to GitHub Issues on the tracker repo (`DMTOOLS_TRACKER_REPO`, else
+  `GITHUB_REPOSITORY`, else `SOURCE_GITHUB_REPOSITORY`) through the JS
+  bridge, CLI direct dispatch, and JS-generated wrappers alike.
+  `jira_move_to_status` swaps the `status:<name>` label and closes/reopens
+  the issue for Done-ish/Open-ish names; `jira_search_by_jql` supports
+  key/labels/status/assignee filters and reports an honest
+  "unsupported JQL" error otherwise. Any real Jira config keeps the Jira
+  path — zero regression for Java-parity environments. This unblocks the
+  agents' `postPRReviewComments` `pr_approved` hand-off on `gh-N` tickets.
 - TestRail section-aware case creation, porting Java PR
   [epam/dm.ai#462](https://github.com/epam/dm.ai/pull/462):
   `testrail_get_sections` (`project_name` + optional `suite_id`, paginated,

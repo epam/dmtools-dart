@@ -96,7 +96,7 @@ void executeCommandTests() {
     test('executes a whitelisted command and captures output', () async {
       PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'echo'});
       final executor = CliToolExecutor(PropertyReader());
-      final result = await executor.executeCommand('echo', ['hello']);
+      final result = await executor.executeCommand('echo', args: ['hello']);
       expect(result['stdout'].trim(), 'hello');
       expect(result['stderr'], '');
       expect(result['exitCode'], 0);
@@ -112,7 +112,7 @@ void executeCommandTests() {
     test('throws ArgumentError for a non-whitelisted command', () {
       final executor = CliToolExecutor();
       expect(
-        () => executor.executeCommand('rm', ['-rf', '/']),
+        () => executor.executeCommand('rm', args: ['-rf', '/']),
         throwsArgumentError,
       );
     });
@@ -175,8 +175,11 @@ void liveMirrorTests() {
       PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'echo'});
       final executor = CliToolExecutor(PropertyReader());
       final mirrored = <String>[];
-      final result =
-          await executor.executeCommand('echo', ['hello'], mirrored.add);
+      final result = await executor.executeCommand(
+        'echo',
+        args: ['hello'],
+        mirror: mirrored.add,
+      );
       expect(result['stdout'], 'hello\n');
       expect(result['stderr'], '');
       expect(result['exitCode'], 0);
@@ -187,8 +190,8 @@ void liveMirrorTests() {
       PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
       final executor = CliToolExecutor(PropertyReader());
       final mirrored = <String>[];
-      final result = await executor.executeCommand(
-          'sh', ['-c', 'echo a; echo b; echo c'], mirrored.add);
+      final result = await executor.executeCommand('sh',
+          args: ['-c', 'echo a; echo b; echo c'], mirror: mirrored.add);
       expect(mirrored, ['a', 'b', 'c']);
       expect(result['stdout'], 'a\nb\nc\n');
     });
@@ -197,8 +200,8 @@ void liveMirrorTests() {
       PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
       final executor = CliToolExecutor(PropertyReader());
       final mirrored = <String>[];
-      final result = await executor.executeCommand(
-          'sh', ['-c', 'echo out; echo err 1>&2'], mirrored.add);
+      final result = await executor.executeCommand('sh',
+          args: ['-c', 'echo out; echo err 1>&2'], mirror: mirrored.add);
       expect(mirrored, containsAll(['out', 'err']));
       expect(result['stdout'], 'out\n');
       expect(result['stderr'], 'err\n');
@@ -212,9 +215,9 @@ void liveMirrorTests() {
       final mirrored = <String>[];
       final result = await executor.executeCommandWithEnv(
         'sh',
-        ['-c', 'echo \$MIRROR_PROBE'],
-        {'MIRROR_PROBE': 'env-value'},
-        mirrored.add,
+        args: ['-c', 'echo \$MIRROR_PROBE'],
+        envVars: {'MIRROR_PROBE': 'env-value'},
+        mirror: mirrored.add,
       );
       expect(mirrored, ['env-value']);
       expect(result['stdout'], 'env-value\n');

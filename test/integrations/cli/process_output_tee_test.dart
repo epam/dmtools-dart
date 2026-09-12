@@ -17,6 +17,7 @@ void main() {
   liveStreamTests();
   runCapturedTests();
   resilienceTests();
+  errorPathFlushTests();
 }
 
 /// Capture fidelity: the returned string is byte-identical to a full-buffer
@@ -243,6 +244,42 @@ void resilienceTests() {
       expect(result.stdout, 'out\n');
       expect(result.stderr, 'err\n');
       expect(result.exitCode, 5);
+    });
+  });
+}
+
+/// Deterministic partial-capture semantics: when the byte stream completes
+/// with an ERROR mid-capture (e.g. an OS read error on the child pipe), the
+/// chunked UTF-8 decoder and the line splitter are still flushed — the
+/// buffered tail (partial multi-byte sequence, partial final line) is
+/// mirrored instead of silently dropped, while the error still propagates.
+void errorPathFlushTests() {
+  group('captureAndMirror error-path flush', () {
+    test('mirrors and decodes the buffered tail when the stream errors',
+        () async {
+      final controller = StreamController<List<int>>();
+      final mirrored = <String>[];
+      final done = captureAndMirror(controller.stream, mirror: mirrored.add);
+      controller.add(utf8.encode('whole\npartial tail'));
+      // The error event alone aborts the byte-drain; the controller is not
+      // closed (closing it would route the same error through a second
+      // future and pollute the test zone). The flush under test happens in
+      // captureAndMirror's finally, not in the controller.
+      controller.addError(StateError('pipe read error'));
+      await expectLater(done, throwsStateError);
+      expect(mirrored, ['whole', 'partial tail']);
+    });
+
+    test('flushes a split multi-byte sequence on the error path', () async {
+      final controller = StreamController<List<int>>();
+      final mirrored = <String>[];
+      final done = captureAndMirror(controller.stream, mirror: mirrored.add);
+      final eBytes = utf8.encode('é');
+      controller.add(utf8.encode('h'));
+      controller.add([eBytes[0]]);
+      controller.addError(StateError('pipe read error'));
+      await expectLater(done, throwsStateError);
+      expect(mirrored, ['h\u{FFFD}']);
     });
   });
 }

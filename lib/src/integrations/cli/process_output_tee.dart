@@ -63,6 +63,17 @@ class CapturedProcessResult {
 /// Returns after the process has exited and both streams are fully drained
 /// (no deadlock on large outputs). [mirror] defaults to dmtools' own stderr;
 /// tests inject a collector.
+///
+/// Decoding contract: both streams are decoded as UTF-8, tolerating
+/// malformed byte sequences (`allowMalformed: true` — bad bytes become
+/// U+FFFD). The capture is UTF-8-only by design and deliberately differs
+/// from `Process.run`, whose `stdoutEncoding`/`stderrEncoding` default to
+/// `systemEncoding` — the platform codepage (UTF-8 on Linux/macOS, but
+/// typically the OEM/ANSI codepage on Windows consoles) — and whose default
+/// decode is strict (a malformed sequence throws [FormatException] instead
+/// of substituting U+FFFD). For well-formed UTF-8 output the returned
+/// strings are byte-identical to a full-buffer read, including multi-byte
+/// sequences split across chunk boundaries.
 Future<CapturedProcessResult> runCaptured(
   String executable,
   List<String> arguments, {
@@ -103,8 +114,15 @@ Future<String> captureAndMirror(
   OutputLineSink? mirror,
 }) async {
   final sink = _CaptureSink(mirror ?? mirrorLineToStderr);
-  await stream.forEach(sink.add);
-  sink.close();
+  try {
+    await stream.forEach(sink.add);
+  } finally {
+    // Flush even when the stream completes with an error: the chunked
+    // UTF-8 decoder and the line splitter must emit the buffered tail
+    // (a partial multi-byte sequence and the partial final line) instead
+    // of silently dropping it from the mirror.
+    sink.close();
+  }
   return sink.captured.toString();
 }
 

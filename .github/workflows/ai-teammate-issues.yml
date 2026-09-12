@@ -338,11 +338,23 @@ jobs:
             exit 0
           fi
           repo="${{ github.repository }}"
-          # Agent response from the run JSON blob; fall back to the raw
-          # output when --debug lines surround it and jq cannot parse.
-          response="$(jq -r '.results[0].response // .response // empty' \
-            "${RUN_OUTPUT}" 2>/dev/null || true)"
-          [ -n "$response" ] || response="$(cat "${RUN_OUTPUT}" 2>/dev/null || true)"
+          # dmtools prints the run result as ONE line of JSON on stdout at
+          # the very end. gh-50 mirrors every child output line into
+          # dmtools' own stderr (merged into RUN_OUTPUT via 2>&1), so the
+          # file holds the whole session transcript: grepping it raw would
+          # match verdict tokens the agent merely QUOTED (this workflow's
+          # own CHANGES_REQUESTED / BLOCK docs, review-format files,
+          # reasoning lines) and flip a genuine APPROVE into a spurious
+          # agent:rework loop. Parse only the trailing result blob — the
+          # last line starting with '{' — jq first, the raw line as
+          # fallback. Pinned by test/ai_teammate_review_cycle_test.dart.
+          result_line="$(grep '^{' "${RUN_OUTPUT}" 2>/dev/null | tail -1 || true)"
+          response=""
+          if [ -n "$result_line" ]; then
+            response="$(printf '%s\n' "$result_line" | \
+              jq -r '.results[0].response // .response // empty' 2>/dev/null || true)"
+          fi
+          [ -n "$response" ] || response="$result_line"
           # Verdict tokens, stricter first (a response mentioning both must
           # resolve to rework). The agent emits "CHANGES REQUESTED" /
           # CHANGES_REQUESTED / REQUEST_CHANGES or a BLOCK verdict; APPROVE

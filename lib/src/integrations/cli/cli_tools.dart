@@ -119,10 +119,10 @@ class CliToolExecutor {
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
   Future<Map<String, dynamic>> executeCommand(
-    String command, [
+    String command, {
     List<String>? args,
     OutputLineSink? mirror,
-  ]) async {
+  }) async {
     if (!isAllowed(command)) {
       throw ArgumentError('Command not allowed: $command');
     }
@@ -141,11 +141,11 @@ class CliToolExecutor {
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
   Future<Map<String, dynamic>> executeCommandWithEnv(
-    String command, [
+    String command, {
     List<String>? args,
     Map<String, String>? envVars,
     OutputLineSink? mirror,
-  ]) async {
+  }) async {
     if (!isAllowed(command)) {
       throw ArgumentError('Command not allowed: $command');
     }
@@ -193,12 +193,12 @@ class CliToolExecutor {
       Future<Map<String, dynamic>> Function(Map<String, dynamic>)> _handlers = {
     'cli_execute_command': (a) => executeCommand(
           a['command'] as String,
-          _parseArgs(a['args']),
+          args: _parseArgs(a['args']),
         ),
     'cli_execute_command_with_env': (a) => executeCommandWithEnv(
           a['command'] as String,
-          _parseArgs(a['args']),
-          _parseEnv(a['env_vars']),
+          args: _parseArgs(a['args']),
+          envVars: _parseEnv(a['env_vars']),
         ),
     'cli_list_allowed_commands': (a) async =>
         {'commands': getAllowedCommands()},

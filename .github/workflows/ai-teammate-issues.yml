@@ -74,6 +74,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # Cache saves were denied ("token has no writable scopes") without this:
+  # actions/cache@v6 save phase needs actions:write on github.token.
+  actions: write
 
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to
@@ -105,6 +108,15 @@ jobs:
           LABELS: ${{ join(github.event.issue.labels.*.name, ' ') }}
           ACTOR: ${{ github.event.action }}
         run: |
+          # Closed issues are terminal: no agent runs on them, whatever the
+          # labels say (prevents post-merge review/rework runs from looping
+          # on a closed ticket).
+          state="$(gh issue view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json state -q .state)"
+          if [ "$state" != "OPEN" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "→ issue #$NUMBER is ${state} — not for the agent"
+            exit 0
+          fi
           runner=""
           if echo "$LABELS" | grep -qw "agent:rework"; then
             runner="$RUNNER_REWORK"
@@ -204,10 +216,27 @@ jobs:
           fa --version
           dmtools --version
 
-      - name: Configure Git Author
+      - name: Configure Git Author + push credentials
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
           git config --global user.name "dm.ai"
           git config --global user.email "dm.ai@epam.com"
+          # actions/checkout persists its GitHub App token as an http
+          # extraheader; that token has NO `workflows` permission, so any
+          # push touching .github/workflows/* is rejected remotely
+          # ("refusing to allow a GitHub App to create or update workflow").
+          # When a PAT is available, drop the extraheader and route pushes
+          # through the PAT instead (classic PAT with repo+workflow scopes
+          # can push workflow files; the App token never can).
+          if [ -n "$SOURCE_GITHUB_TOKEN" ]; then
+            git config --unset-all http.https://github.com/.extraheader || true
+            git config --global --unset-all http.https://github.com/.extraheader || true
+            git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; }; f'
+            echo "→ git pushes will use SOURCE_GITHUB_TOKEN (workflows-capable)"
+          else
+            echo "::warning::SOURCE_GITHUB_TOKEN not set — pushes of workflow-file changes will be rejected (App token lacks workflows permission)"
+          fi
 
       - name: Write the issue into the agent input folder
         env:
@@ -273,6 +302,20 @@ jobs:
           kill "${FOLLOWER_PID}" 2>/dev/null || true
           exit "${RC}"
 
+      - name: Close the review cycle (review runs only)
+        # A review run must never re-queue itself: whatever the agent did
+        # during the session (it has been observed re-adding agent:review —
+        # live loop on #49), strip the queue label at completion. Removing
+        # a label fires no `labeled` event, so no new run starts.
+        if: always() && needs.guard.outputs.kind == 'review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+            --remove-label "agent:review" || true
+          echo "→ review cycle closed (agent:review removed)"
+
       - name: Upload the full fa session trace
         # The same file the step log streamed — kept as an artifact so the
         # run can be read after log expiry or outside the Actions UI.
@@ -292,6 +335,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
           git config user.name "dm.ai"
           git config user.email "dm.ai@epam.com"

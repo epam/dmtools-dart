@@ -9,24 +9,27 @@
 # exactly once (review: the inline copies drifted / had to be fixed 6x).
 # Idempotent — safe to call again later in the same job.
 #
-# Callers must export SOURCE_GITHUB_TOKEN; GITHUB_WORKSPACE and RUNNER_TEMP
+# Callers must export SOURCE_GITHUB_TOKEN; GITHUB_WORKSPACE
 # come from the Actions environment (sane fallbacks below).
 #
 # What it does, in order:
 #   1. Purge the checkout's persisted App token:
-#        - actions/checkout >= 4.2 does NOT write the extraheader into
-#          .git/config: it hides it in a RUNNER_TEMP include file
-#          (git-credentials-*.config) wired in via includeIf.gitdir: entries
-#          (main repo + submodules). `git config --unset-all` edits the named
-#          file ONLY and never follows includes — the historical unset was a
-#          silent no-op, the App-token Authorization header stayed live (sent
-#          proactively on the initial request, so a credential helper was
-#          never even consulted) and every push authenticated as
-#          github-actions[bot]. Delete the include FILE itself (one shot
-#          covers the repo and the submodule includeIf references — a missing
-#          include is ignored).
-#        - older checkout versions persisted the extraheader directly —
-#          drop it from the local and global config.
+#        - actions/checkout (verified against the shipped v4.2.2 and v5.0.0
+#          dist) writes http.https://github.com/.extraheader DIRECTLY into
+#          the repo's local .git/config (configureToken → local config,
+#          globalConfig = false). It never writes any RUNNER_TEMP include
+#          file — an earlier version of this script claimed so and removed
+#          a matching temp-file glob, a silent no-op that chased a file
+#          that does not exist (PR #68 review thread 7). `git config
+#          --unset-all` on the local config is what actually purges the
+#          main repo.
+#        - with submodules: true, checkout ALSO writes the real token
+#          extraheader into EACH submodule's local config
+#          (.git/modules/<name>/config) — a `git submodule foreach
+#          --recursive` purge follows, or any push from inside agents/
+#          still authenticates as github-actions[bot] (thread 8).
+#        - belt-and-braces: the global config too (older checkout versions
+#          persisted the extraheader globally).
 #   2. Install the credential that must win, HOST-SCOPED to github.com:
 #        a generic `credential.helper` is consulted for ANY https host whose
 #        server answers 401 — a prompt-injected `git clone
@@ -51,14 +54,19 @@ git config --global user.name "dm.ai"
 git config --global user.email "dm.ai@epam.com"
 
 if [ -z "${SOURCE_GITHUB_TOKEN:-}" ]; then
-  echo "::warning::SOURCE_GITHUB_TOKEN not set — pushes stay on the checkout App token (github-actions[bot]): workflow-file changes are rejected remotely and CI waits behind the bot-actor approval gate"
+  echo "::warning::SOURCE_GITHUB_TOKEN not set — no push credential installed. The checkout no longer persists its App token (persist-credentials: false, gh-63), so pushes FAIL instead of silently authenticating as github-actions[bot] and landing behind the bot-actor approval gate"
   exit 0
 fi
 
 # ── 1. Purge the checkout's persisted App token (gh-63 root cause) ──
-rm -f "${RUNNER_TEMP:-/tmp}"/git-credentials-*.config
+# Main repo local config (where checkout's configureToken actually writes
+# it — see the header comment), then global, then every submodule's local
+# config (checkout's configureSubmoduleAuth arms those too when the
+# workflow checks out with submodules: true).
 git config --unset-all http.https://github.com/.extraheader || true
 git config --global --unset-all http.https://github.com/.extraheader || true
+git submodule foreach --recursive \
+  'git config --unset-all http.https://github.com/.extraheader || true' >/dev/null || true
 
 # ── 2. The credential that must win: SOURCE_GITHUB_TOKEN, github.com only ──
 # One line on purpose: `git config` rejects multi-line values. Inner quoting

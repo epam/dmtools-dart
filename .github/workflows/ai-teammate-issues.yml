@@ -174,6 +174,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true # agents/ — inherited agent configs + run-agent.sh
+          # gh-63: do not leave the checkout's App token (github-actions[bot])
+          # in any git config after checkout — main repo or submodule. The
+          # SOURCE_GITHUB_TOKEN helper (installed by the shared script below)
+          # must be the only live github.com credential in the job.
+          persist-credentials: false
 
       - name: Export fa session identity + cache keys
         env:
@@ -259,12 +264,16 @@ jobs:
           echo "input/gh-${NUMBER}/ticket.json: $(wc -c < input/gh-${NUMBER}/ticket.json) bytes"
 
       - name: Trace git credential stack (push-time evidence)
-        # gh-63 Task 1 — same run that pushes, right before the agent:
+        # gh-63 Task 1 — same run that pushes, right before the agent.
+        # What each section proves:
         #   --show-origin        WHERE each credential source lives; the
         #                        extraheader section must come back empty —
-        #                        asserted below, so a renamed checkout
-        #                        include file fails the run here instead of
-        #                        silently resurrecting the App token
+        #                        asserted below, so any resurrection of the
+        #                        App-token header (checkout layout change,
+        #                        mid-run config write) fails the run here
+        #                        instead of silently re-arming bot pushes
+        #   submodule foreach    same proof for each submodule local config
+        #                        (checkout arms those with submodules: true)
         #   git credential fill  dry-runs the exact push-path resolution and
         #                        shows the winning username; the password is
         #                        masked, and the helper's stderr line confirms
@@ -282,18 +291,37 @@ jobs:
             echo "::error::App-token extraheader still present after purge — pushes would authenticate as github-actions[bot]"
             exit 1
           fi
+          echo "── submodule extraheaders (must be empty — App token purged there too) ──"
+          # checkout arms every submodule's local config with the same token;
+          # a push made from inside agents/ must not fall back to it (gh-63).
+          # The probe echoes a LEFTOVER marker line only when a config is
+          # still armed, so "no submodules" and "all clean" stay quiet.
+          sub_leftovers="$(git submodule foreach --quiet --recursive \
+            'c="$(git config --get-all http.https://github.com/.extraheader || true)"; [ -z "$c" ] || echo "LEFTOVER ${sm_path}: ${c}"' \
+            || true)"
+          if [ -n "$sub_leftovers" ]; then
+            echo "::error::App-token extraheader still present in a submodule config after purge — pushes from inside the submodule would authenticate as github-actions[bot]"
+            printf '%s\n' "$sub_leftovers"
+            exit 1
+          fi
           echo "── commit identity ──"
           git var GIT_AUTHOR_IDENT
           git var GIT_COMMITTER_IDENT
           echo "── dry-run: credential a github.com push would use ──"
-          # Capture first, then redact: in a pipe the fallback would key off
-          # the LAST stage's exit status, and sed exits 0 even on empty
-          # input — the "(no helper …)" line would never fire.
+          # Capture first, then assert: with GIT_ASKPASS=echo `git credential
+          # fill` exits 0 even when NO helper answered (echo prints its prompt
+          # back, git accepts it as a bogus credential) — only the
+          # SOURCE helper's username proves the SOURCE credential wins.
           # CRED_HELPER_CONTEXT tags the helper's log line so this dry-run
           # stays distinguishable from real pushes in the evidence log.
-          out="$(printf 'protocol=https\nhost=github.com\n' | CRED_HELPER_CONTEXT=trace-dry-run GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=echo git credential fill 2>&1)" \
-            && echo "$out" | sed -E 's/^password=.+/password=<redacted — served by the winning helper>/' \
-            || echo "(no helper produced a complete credential — pushes would fail or fall back)"
+          out="$(printf 'protocol=https\nhost=github.com\n' | CRED_HELPER_CONTEXT=trace-dry-run GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=echo git credential fill 2>&1)" || true
+          if printf '%s\n' "$out" | grep -q '^username=x-access-token$'; then
+            echo "$out" | sed -E 's/^password=.+/password=<redacted — served by the SOURCE_GITHUB_TOKEN helper>/'
+          else
+            echo "::error::dry-run credential was NOT served by the SOURCE_GITHUB_TOKEN helper — a github.com push would not authenticate as the SOURCE account"
+            printf '%s\n' "$out" | sed -E 's/^password=.+/password=<redacted>/'
+            exit 1
+          fi
 
       - name: Run agent (fa provider via runner env overrides)
         env:
@@ -484,6 +512,18 @@ jobs:
           # session ran since the configure step and this is the last push
           # path in the job (same idempotent installer as there, gh-63).
           bash machine-kit/scripts/install-source-git-credentials.sh
+          # Post-agent purge evidence + gate (gh-63): the agent session ran
+          # since the configure step — if a mid-run re-assertion (gh auth
+          # setup-git, a script writing config) resurrected the App token,
+          # fail HERE with the --show-origin trace instead of pushing as
+          # github-actions[bot]. The origin line answers WHICH source
+          # re-asserted the credential (ticket Task 1).
+          echo "── post-agent extraheader trace (must be empty) ──"
+          git config --show-origin --get-all http.https://github.com/.extraheader || true
+          if git config --get-all http.https://github.com/.extraheader | grep -q .; then
+            echo "::error::App-token extraheader reappeared after the agent session — a mid-run re-assertion would push as github-actions[bot]"
+            exit 1
+          fi
           if [ -d .fah/memory ] && [ -n "$(git status --porcelain -- .fah/memory)" ]; then
             git add .fah/memory
             git commit -m "chore(fa): persist agent project memory [skip ci]"

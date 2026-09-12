@@ -36,6 +36,11 @@ void main() {
   _deduplicationIntoScript();
   _artifactSeesFinalPush();
   _identityRegex();
+  _purgeTargetsRealCredentialSources();
+  _submodulePurgeGateYaml();
+  _dryRunAssertsHelperServedUsername();
+  _persistStepReassertsPurge();
+  _checkoutStopsPersistingAppToken();
 }
 
 /// BLOCKING review thread 1 (YAML side): neither YAML file may install the
@@ -287,5 +292,165 @@ void _identityRegex() {
       expect(good.hasMatch('123+log@in'), isFalse, reason: 'login has an @');
       expect(good.hasMatch(''), isFalse);
     });
+  });
+}
+
+/// PR #68 review threads 7+8: actions/checkout (verified against the shipped
+/// v4.2.2 and v5.0.0 dist) NEVER writes a RUNNER_TEMP
+/// `git-credentials-*.config` include file — it writes the App-token
+/// extraheader DIRECTLY into the repo local .git/config and, with
+/// `submodules: true`, into each submodule's local config
+/// (.git/modules/<name>/config). The purge must target those real sources
+/// and must not chase the phantom include file (an earlier version of the
+/// script's root-cause comment claimed an include file existed and `rm`ed a
+/// matching glob — a silent no-op that sent debugging rounds chasing a file
+/// that does not exist).
+void _purgeTargetsRealCredentialSources() {
+  group('purge targets the credential sources checkout actually writes', () {
+    test('the script does not chase the phantom checkout include file', () {
+      expect(
+        _read(_scriptPath),
+        isNot(contains('git-credentials-*.config')),
+        reason: 'no actions/checkout release writes '
+            'RUNNER_TEMP/git-credentials-*.config — the rm is a no-op and '
+            'the comment around it documents a mechanism that does not '
+            'exist (review threads 7 and 13)',
+      );
+    });
+
+    test('the script purges submodule local configs too', () {
+      final script = _read(_scriptPath);
+      expect(
+        script.contains('git submodule foreach --recursive'),
+        isTrue,
+        reason: 'checkout with submodules: true arms every submodule local '
+            'config with the App-token extraheader — a push from inside '
+            'agents/ would still authenticate as github-actions[bot] '
+            '(review thread 8)',
+      );
+      expect(
+        script.contains(
+            r"--unset-all http.https://github.com/.extraheader || true'"),
+        isTrue,
+        reason: 'the submodule foreach must unset the extraheader while '
+            'tolerating an already-clean config',
+      );
+    });
+  });
+}
+
+/// Review thread 8 (trace-gate side): the workflow's purge evidence used to
+/// inspect only the main repo — it passes while a submodule stays armed.
+/// The trace step must probe every submodule local config and fail the run
+/// on a leftover.
+void _submodulePurgeGateYaml() {
+  group('the trace step gates on submodule extraheaders too (gh-63)', () {
+    for (final path in _credentialYamlFiles) {
+      test('$path probes submodule configs for the App token', () {
+        final source = _read(path);
+        expect(
+          source.contains('git submodule foreach --quiet --recursive'),
+          isTrue,
+          reason: 'the trace gate must inspect every submodule local config '
+              '— a leftover there arms pushes made from inside the submodule',
+        );
+        expect(
+          source.contains('submodule config after purge'),
+          isTrue,
+          reason: 'a submodule leftover must fail the run (::error:: + '
+              'exit 1), not just print',
+        );
+      });
+    }
+  });
+}
+
+/// Review thread 9: with GIT_ASKPASS=echo, `git credential fill` exits 0 even
+/// when no credential helper answered (echo prints its prompt argument back
+/// and git accepts it as a bogus credential) — so the dry-run's exit status
+/// proves nothing. The dry-run must ASSERT that the winning credential is the
+/// SOURCE helper's (`username=x-access-token`) and fail the run otherwise.
+void _dryRunAssertsHelperServedUsername() {
+  group('trace dry-run is a real gate on the winning credential (gh-63)', () {
+    for (final path in _credentialYamlFiles) {
+      test('$path asserts the SOURCE helper served the dry-run', () {
+        final source = _read(path);
+        expect(
+          source.contains(r"grep -q '^username=x-access-token$'"),
+          isTrue,
+          reason: 'GIT_ASKPASS=echo makes git credential fill "succeed" even '
+              'when no helper answered — only the helper-served username '
+              'proves the SOURCE credential wins (review thread 9)',
+        );
+        expect(
+          source.contains('dry-run credential was NOT served'),
+          isTrue,
+          reason: 'an un-served dry-run must fail the run (::error:: + exit 1)',
+        );
+      });
+    }
+  });
+}
+
+/// Review thread 10: the purge gate used to run only BEFORE the agent — a
+/// mid-run re-assertion (gh auth setup-git, submodule config writes) slipped
+/// through until push time. The memory-persist step is the last push path and
+/// runs AFTER the agent session: it must re-assert the extraheader emptiness
+/// (and --show-origin the config so the log shows WHEN/WHERE it reappeared).
+void _persistStepReassertsPurge() {
+  group('the memory-persist push re-asserts the purge post-agent (gh-63)', () {
+    for (final path in _credentialYamlFiles) {
+      test('$path re-asserts the extraheader purge after the agent session',
+          () {
+        final source = _read(path);
+        // The memory-persist step hosts the LAST installer call in the file.
+        final installerCall = source.lastIndexOf(
+            'bash machine-kit/scripts/install-source-git-credentials.sh');
+        final reassert = source.indexOf('reappeared after the agent session');
+        expect(installerCall, greaterThan(-1),
+            reason: '$path must invoke the shared installer');
+        expect(
+          reassert,
+          greaterThan(installerCall),
+          reason: 'the gate must run in the memory-persist step (after the '
+              'agent ran) — pre-agent evidence cannot catch a mid-run '
+              're-assertion (review thread 10)',
+        );
+        expect(
+          source.contains(
+              'git config --show-origin --get-all http.https://github.com/.extraheader || true'),
+          isTrue,
+          reason: 'the post-agent trace must name the config origin, so the '
+              'run log answers WHEN the extraheader reappeared '
+              '(ticket Task 1)',
+        );
+      });
+    }
+  });
+}
+
+/// Review thread 11 (optional simplification) + ticket Task 2: the cleanest
+/// way to make SOURCE_GITHUB_TOKEN win is to stop persisting the competing
+/// App token at the source — actions/checkout must run with
+/// `persist-credentials: false` (which also skips the submodule extraheader
+/// writes). The explicit purge in the shared script stays as
+/// defense-in-depth for runners/actions that ignore the flag.
+void _checkoutStopsPersistingAppToken() {
+  group('checkout stops persisting the App token at the source (gh-63)', () {
+    for (final path in _credentialYamlFiles) {
+      test('$path checks out with persist-credentials: false', () {
+        final source = _read(path);
+        final checkout = source.indexOf('uses: actions/checkout@');
+        expect(checkout, greaterThan(-1));
+        final persist = source.indexOf('persist-credentials: false', checkout);
+        expect(
+          persist,
+          greaterThan(checkout),
+          reason: 'persist-credentials: false removes the App-token '
+              'extraheader (main repo + submodules) at the source — the '
+              'script purge stays as defense-in-depth (review thread 11)',
+        );
+      });
+    }
   });
 }

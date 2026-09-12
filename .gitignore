@@ -23,9 +23,19 @@ native/quickjs/*.dylib
 !.fah/memory/
 .fah/memory/.last_maintenance
 
-# local dmtools run artifacts
+# local dmtools run artifacts.
+# NEVER ignore the .dmtools dir itself nor .dmtools/copilot-sessions: the
+# agents' commit flow stages with `git add . -- ':!.dmtools/copilot-sessions'
+# ':!.dmtools/copilot-sessions/**'`, and git fatals when ANY ignored path is
+# a string prefix of an (even negated) pathspec item (dir.c
+# exclude_matches_pathspec does not skip exclude items). Ignoring only the
+# CONTENTS keeps the walk below those two paths; the #57 guard (blanket
+# `git add .` must not stage .dmtools/**) still holds. Regression tests:
+# test/gitignore_git_add_test.dart
+.dmtools/**
+!.dmtools/copilot-sessions/
+.dmtools/copilot-sessions/**
 .dmtools-logs/
-.dmtools/
 input/
 outputs/
 

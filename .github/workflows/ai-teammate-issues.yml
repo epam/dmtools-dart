@@ -15,6 +15,18 @@
 #           merge-trigger.yml: pr_approved label → checks green → squash
 #         CHANGES_REQUESTED / BLOCK → agent:rework label → rework run →
 #           re-review (the labeled event re-fires this same workflow)
+#       The rework loop is BOUNDED (gh-71): every automatic rework round is
+#         counted as a rework-round-<n> label on the issue; after
+#         MAX_AUTO_REWORK_ROUNDS rounds without an APPROVE verdict the
+#         machine stops labeling agent:rework and labels needs-human with a
+#         summary of the unresolved PR review threads instead. A human then
+#         fixes directly or re-arms the loop by re-labeling agent:rework
+#         (escalation cleared the counter, so a re-arm gets a fresh cap).
+#       A suggestion-only round converges (gh-71): the verdict is read from
+#         outputs/pr_review.json; a REQUEST_CHANGES with zero BLOCKING
+#         findings is honored as approve-with-suggestions (protocol:
+#         only correctness/bug findings — broken behavior, failing gates,
+#         scope violations — produce CHANGES_REQUESTED).
 #
 # Runner selection (agent configs run AS-IS — Teammate fills input/ from
 # the issue body and executes the config through CliAgent):
@@ -99,6 +111,10 @@ env:
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json
   RUNNER_REVIEW: machine-kit/teammate-install/runners/fa-review-kimi.json
   RUNNER_REWORK: machine-kit/teammate-install/runners/fa-rework-zai.json
+  # gh-71 round cap: automatic review→rework rounds per issue before the
+  # machine stops auto-labeling agent:rework and escalates to needs-human
+  # (0/1 escalates on the first rework verdict; repo var overrides).
+  MAX_AUTO_REWORK_ROUNDS: ${{ vars.MAX_AUTO_REWORK_ROUNDS || 2 }}
 
 jobs:
   guard:
@@ -176,6 +192,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true # agents/ — inherited agent configs + run-agent.sh
+          # gh-63: do not leave the checkout's App token (github-actions[bot])
+          # in any git config after checkout — main repo or submodule. The
+          # SOURCE_GITHUB_TOKEN helper (installed by the shared script below)
+          # must be the only live github.com credential in the job.
+          persist-credentials: false
 
       - name: Export fa session identity + cache keys
         env:
@@ -242,26 +263,14 @@ jobs:
           dmtools --version
 
       - name: Configure Git Author + push credentials
+        # gh-63: purge the checkout's persisted App token (github-actions[bot])
+        # and make SOURCE_GITHUB_TOKEN the credential that wins for github.com
+        # pushes. All logic lives in the shared installer — one copy serves
+        # every push path in the job (this step + the memory-persist
+        # re-assert below), so it cannot drift between call sites.
         env:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-        run: |
-          git config --global user.name "dm.ai"
-          git config --global user.email "dm.ai@epam.com"
-          # actions/checkout persists its GitHub App token as an http
-          # extraheader; that token has NO `workflows` permission, so any
-          # push touching .github/workflows/* is rejected remotely
-          # ("refusing to allow a GitHub App to create or update workflow").
-          # When a PAT is available, drop the extraheader and route pushes
-          # through the PAT instead (classic PAT with repo+workflow scopes
-          # can push workflow files; the App token never can).
-          if [ -n "$SOURCE_GITHUB_TOKEN" ]; then
-            git config --unset-all http.https://github.com/.extraheader || true
-            git config --global --unset-all http.https://github.com/.extraheader || true
-            git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; }; f'
-            echo "→ git pushes will use SOURCE_GITHUB_TOKEN (workflows-capable)"
-          else
-            echo "::warning::SOURCE_GITHUB_TOKEN not set — pushes of workflow-file changes will be rejected (App token lacks workflows permission)"
-          fi
+        run: bash machine-kit/scripts/install-source-git-credentials.sh
 
       - name: Write the issue into the agent input folder
         env:
@@ -284,6 +293,76 @@ jobs:
           echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
           echo "input/gh-${NUMBER}/ticket.json: $(wc -c < input/gh-${NUMBER}/ticket.json) bytes"
 
+      - name: Trace git credential stack (push-time evidence)
+        # gh-63 Task 1 — same run that pushes, right before the agent.
+        # What each section proves:
+        #   --show-origin        WHERE each credential source lives; the
+        #                        extraheader section must come back empty —
+        #                        asserted below, so any resurrection of the
+        #                        App-token header (checkout layout change,
+        #                        mid-run config write) fails the run here
+        #                        instead of silently re-arming bot pushes
+        #   submodule foreach    same proof for each submodule local config
+        #                        (checkout arms those with submodules: true)
+        #   git credential fill  dry-runs the exact push-path resolution and
+        #                        shows the winning username; the password is
+        #                        masked, and the helper's stderr line confirms
+        #                        SOURCE_GITHUB_TOKEN served the credential
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+        run: |
+          mkdir -p .dmtools
+          echo "── credential.helper — all scopes, with origins ──"
+          git config --show-origin --get-all credential.helper || true
+          git config --show-origin --get-all credential.https://github.com.helper || true
+          echo "── http.https://github.com/.extraheader (must be empty — App token purged) ──"
+          # Redact the VALUE (gh-63 review threads 11/12): on a leftover this
+          # dump prints AUTHORIZATION: basic <base64(App token)> — GitHub's
+          # log masking matches the raw token string, not its base64 form.
+          # git 2.x prints "<origin>\t<value>" (--show-origin --get-all has
+          # NO key= prefix), so redact everything after the first TAB — a
+          # sed on '=' alone would only trim the base64 padding. The origin
+          # (file/scope) stays visible; a tab-less line is fully redacted.
+          git config --show-origin --get-all http.https://github.com/.extraheader | sed -E 's/^([^\t]*\t).*/\1<redacted>/; t; s/.+/<redacted> (unexpected line without origin)/' || true
+          if git config --get-all http.https://github.com/.extraheader | grep -q .; then
+            echo "::error::App-token extraheader still present after purge — pushes would authenticate as github-actions[bot]"
+            exit 1
+          fi
+          echo "── submodule extraheaders (must be empty — App token purged there too) ──"
+          # checkout arms every submodule's local config with the same token;
+          # a push made from inside agents/ must not fall back to it (gh-63).
+          # The probe echoes a LEFTOVER marker line only when a config is
+          # still armed, so "no submodules" and "all clean" stay quiet.
+          # The marker names the submodule but NEVER the header value: it is
+          # AUTHORIZATION: basic <base64(App token)>, decodable and NOT masked
+          # by GitHub log redaction (gh-63 review threads 11/12).
+          sub_leftovers="$(git submodule foreach --quiet --recursive \
+            'c="$(git config --get-all http.https://github.com/.extraheader || true)"; [ -z "$c" ] || echo "LEFTOVER ${sm_path}: <redacted>"' \
+            || true)"
+          if [ -n "$sub_leftovers" ]; then
+            echo "::error::App-token extraheader still present in a submodule config after purge — pushes from inside the submodule would authenticate as github-actions[bot]"
+            printf '%s\n' "$sub_leftovers"
+            exit 1
+          fi
+          echo "── commit identity ──"
+          git var GIT_AUTHOR_IDENT
+          git var GIT_COMMITTER_IDENT
+          echo "── dry-run: credential a github.com push would use ──"
+          # Capture first, then assert: with GIT_ASKPASS=echo `git credential
+          # fill` exits 0 even when NO helper answered (echo prints its prompt
+          # back, git accepts it as a bogus credential) — only the
+          # SOURCE helper's username proves the SOURCE credential wins.
+          # CRED_HELPER_CONTEXT tags the helper's log line so this dry-run
+          # stays distinguishable from real pushes in the evidence log.
+          out="$(printf 'protocol=https\nhost=github.com\n' | CRED_HELPER_CONTEXT=trace-dry-run GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=echo git credential fill 2>&1)" || true
+          if printf '%s\n' "$out" | grep -q '^username=x-access-token$'; then
+            echo "$out" | sed -E 's/^password=.+/password=<redacted — served by the SOURCE_GITHUB_TOKEN helper>/'
+          else
+            echo "::error::dry-run credential was NOT served by the SOURCE_GITHUB_TOKEN helper — a github.com push would not authenticate as the SOURCE account"
+            printf '%s\n' "$out" | sed -E 's/^password=.+/password=<redacted>/'
+            exit 1
+          fi
+
       - name: Run agent (fa provider via runner env overrides)
         env:
           CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -302,7 +381,11 @@ jobs:
           ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
           KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
+          # gh operations inside the session (pr create/edit, api, …) must act
+          # AS the SOURCE account: events created with GITHUB_TOKEN do not
+          # trigger workflows, and commits/PRs created via the API author as
+          # github-actions[bot]. Same PAT-first fallback as auto-update-prs.yml.
+          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN || github.token }}
         run: |
           # Live FULL session trace: run-agent.sh passes FA_LOG_FILE to
           # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91) which
@@ -346,54 +429,157 @@ jobs:
         # A PAT is REQUIRED for labeling: label events created with
         # GITHUB_TOKEN do not trigger workflows (recursion guard), the PAT
         # does — same reason as the reviewer hand-off below.
+        #
+        # gh-71 — the loop is bounded and suggestion-rounds converge:
+        #   The verdict is resolved by machine-kit/teammate-install/scripts/
+        #   review-verdict.sh (unit-tested in test/machine_kit/):
+        #     1. outputs/pr_review.json is authoritative; a REQUEST_CHANGES
+        #        with zero BLOCKING findings is honored as approve
+        #        (approve-with-suggestions) instead of looping rework.
+        #     2. Token-grep of the run output only as a fallback for runs
+        #        that produced no JSON.
+        #     3. Round cap: rounds_done = highest rework-round-<n> label.
+        #        escalate=true ⇒ label needs-human (+ unresolved-thread
+        #        summary comment) INSTEAD of agent:rework. A human fixes
+        #        directly or re-arms by re-labeling agent:rework.
         if: needs.guard.outputs.kind == 'review'
         env:
           GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           NUMBER: ${{ github.event.issue.number }}
           RUN_OUTPUT: .dmtools/run-output.txt
+          MAX_ROUNDS: ${{ env.MAX_AUTO_REWORK_ROUNDS }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "::warning::SOURCE_GITHUB_TOKEN not set — verdict labels would not trigger workflows; skipping (a maintainer must label manually)"
             exit 0
           fi
           repo="${{ github.repository }}"
-          # Agent response from the run JSON blob; fall back to the raw
-          # output when --debug lines surround it and jq cannot parse.
-          response="$(jq -r '.results[0].response // .response // empty' \
-            "${RUN_OUTPUT}" 2>/dev/null || true)"
-          [ -n "$response" ] || response="$(cat "${RUN_OUTPUT}" 2>/dev/null || true)"
-          # Verdict tokens, stricter first (a response mentioning both must
-          # resolve to rework). The agent emits "CHANGES REQUESTED" /
-          # CHANGES_REQUESTED / REQUEST_CHANGES or a BLOCK verdict; APPROVE
-          # covers the normalized APPROVED form. 💡 SUGGESTION-only rounds
-          # end in APPROVE (allowApproveWithSuggestions) — they never
-          # produce a changes token.
-          verdict=""
-          if echo "$response" | grep -qE 'CHANGES[_ ]REQUESTED|REQUEST_CHANGES|\bBLOCK(ED)?\b'; then
-            verdict="rework"
-          elif echo "$response" | grep -qE '\bAPPROVE(D)?\b'; then
-            verdict="approve"
-          fi
-          if [ -z "$verdict" ]; then
-            echo "::warning::no verdict token found in the run output — skipping labeling"
-            exit 0
-          fi
-          echo "→ review verdict: ${verdict}"
-          if [ "$verdict" = "rework" ]; then
-            gh issue edit "$NUMBER" --repo "$repo" --add-label "agent:rework"
-            echo "→ labeled agent:rework — rework run queued (re-review follows automatically)"
-            exit 0
-          fi
-          # APPROVE: trust the verdict only when CI on the PR head is green.
+          labels="$(gh issue view "$NUMBER" --repo "$repo" --json labels \
+            --jq '[.labels[].name] | join(" ")' 2>/dev/null || echo '')"
           # Linked-PR resolution mirrors merge-trigger.yml: "Closes #NN" in
-          # the body, or an NN-… / ai/gh-NN branch.
-          pr="$(gh pr list --repo "$repo" --state open \
-            --json number,body,headRefName --jq '
-            [.[] | select(
-                ((.body // "") | test("(?i)\\b(closes|fixes|resolves)\\s+#'"$NUMBER"'\\b"))
-                or (.headRefName | test("^'"$NUMBER"'[-_.]"))
-                or (.headRefName | test("(^|[-_./])gh-0*'"$NUMBER"'$")))
-              | .number] | first // empty')"
+          # the body, or an NN-… / ai/gh-NN branch. Both the approve path
+          # (CI gate) and the escalation path (thread summary) need it.
+          find_linked_pr() {
+            gh pr list --repo "$repo" --state open \
+              --json number,body,headRefName --jq '
+              [.[] | select(
+                  ((.body // "") | test("(?i)\\b(closes|fixes|resolves)\\s+#'"$NUMBER"'\\b"))
+                  or (.headRefName | test("^'"$NUMBER"'[-_.]"))
+                  or (.headRefName | test("(^|[-_./])gh-0*'"$NUMBER"'$")))
+                | .number] | first // empty'
+          }
+          pr="$(find_linked_pr)"
+          # Decision (pure logic, eval-safe key=value output): decision,
+          # source, override, blocking_markers, rounds_done, next_round,
+          # escalate, round_labels.
+          eval "$(MAX_ROUNDS="${MAX_ROUNDS}" \
+            PR_REVIEW_JSON="outputs/pr_review.json" \
+            PR_REVIEW_JSON_ALT="outputs/gh-${NUMBER}/pr_review.json" \
+            RUN_OUTPUT="${RUN_OUTPUT}" \
+            ISSUE_LABELS="${labels}" \
+            bash machine-kit/teammate-install/scripts/review-verdict.sh decide)"
+          decision="${decision:-unknown}"
+          escalate="${escalate:-false}"
+          rounds_done="${rounds_done:-0}"
+          next_round="${next_round:-0}"
+          echo "→ review decision: ${decision} (source=${source:-none}, override=${override:-false}, rounds_done=${rounds_done})"
+          strip_round_labels() {
+            # round_labels arrives %q-quoted for eval; after eval it is a
+            # plain space-separated list.
+            for lbl in ${round_labels:-}; do
+              gh issue edit "$NUMBER" --repo "$repo" --remove-label "$lbl" || true
+            done
+          }
+          # gh issue edit --add-label hard-fails on a label that does not
+          # exist yet ("could not add label: 'x' not found") — and this step
+          # runs under bash -e, so a missing label would abort the verdict
+          # transition before agent:rework is ever queued. Create-or-update
+          # first: --force is an idempotent no-op when the label already
+          # exists with this color.
+          ensure_label() {
+            gh label create "$1" --repo "$repo" --color "$2" --force >/dev/null 2>&1 || true
+          }
+          if [ "$decision" = "rework" ]; then
+            if [ "$escalate" = "true" ]; then
+              # Cap reached: hand over to a human with a summary of the
+              # unresolved review threads — no more automatic rounds.
+              strip_round_labels
+              ensure_label "needs-human" "B60205"
+              gh issue edit "$NUMBER" --repo "$repo" --add-label "needs-human"
+              # Fetch the thread summary BEFORE composing the comment: a
+              # failed `gh api graphql` call returns an error JSON that the
+              # renderer parses to zero threads — indistinguishable from
+              # "no unresolved threads" unless the failure is annotated
+              # (gh-71 review: the old pipe-into-renderer `|| true` hid it).
+              thread_summary=""
+              if [ -n "$pr" ]; then
+                owner="${GITHUB_REPOSITORY%%/*}"
+                name="${GITHUB_REPOSITORY#*/}"
+                threads_json="$(mktemp)"
+                if gh api graphql \
+                  -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved path line comments(first:1){nodes{body author{login}}}}}}}}' \
+                  -f owner="$owner" -f name="$name" -F number="$pr" \
+                  > "$threads_json"; then
+                  thread_summary="$(bash machine-kit/teammate-install/scripts/review-verdict.sh threads "$threads_json")"
+                else
+                  echo "::warning::reviewThreads fetch failed — the needs-human comment cannot list unresolved threads (the findings live in the PR review comments)"
+                fi
+                rm -f "$threads_json"
+              fi
+              body_file="$(mktemp)"
+              {
+                echo "🛑 **Auto-rework loop capped** — ${rounds_done} automatic rework rounds without an APPROVE verdict (cap: ${MAX_ROUNDS}). The machine stopped labeling \`agent:rework\`."
+                echo ""
+                if [ -n "$pr" ]; then
+                  echo "### Unresolved review threads on PR #${pr}"
+                  echo ""
+                  if [ -n "$thread_summary" ]; then
+                    printf '%s\n' "$thread_summary"
+                  fi
+                  echo ""
+                  echo "_If no threads are listed, the findings live in the PR general comments._"
+                else
+                  echo "_No linked open PR found for this issue._"
+                fi
+                echo ""
+                echo "**Next step (human):** fix the remaining findings directly and re-label \`agent:review\` for a fresh review — or re-label \`agent:rework\` to re-arm the agent loop with a fresh round cap."
+              } > "$body_file"
+              gh issue comment "$NUMBER" --repo "$repo" --body-file "$body_file"
+              rm -f "$body_file"
+              echo "→ labeled needs-human — auto-rework capped after ${rounds_done} round(s)"
+              exit 0
+            fi
+            # Bounded auto-rework: bump the round counter, clear a stale
+            # needs-human (a human re-arm may have left it behind), then
+            # queue the rework run.
+            #
+            # Ordering is load-bearing (gh-71 review): agent:rework goes
+            # FIRST. The rework-round-<n> labeled event fires while
+            # agent:review is still on the issue ("Close the review cycle"
+            # strips it only after this step), so that event's guard would
+            # route to an unplanned REVIEW run, not bail. What keeps that in
+            # check is the concurrency group (ai-teammate-issue-<n>): at
+            # most one pending run survives, and the agent:rework event —
+            # queued first — supersedes the round-label run. Even if a
+            # superseded run ever started, its guard routes on agent:rework
+            # (highest priority). If agent:rework were added second and its
+            # add failed after the round label succeeded, the pending
+            # round-label run WOULD start — with agent:review still present
+            # → a wasted 15–20 min review run.
+            gh issue edit "$NUMBER" --repo "$repo" --remove-label "needs-human" || true
+            strip_round_labels
+            gh issue edit "$NUMBER" --repo "$repo" --add-label "agent:rework"
+            ensure_label "rework-round-${next_round}" "BFD4F2"
+            gh issue edit "$NUMBER" --repo "$repo" --add-label "rework-round-${next_round}"
+            echo "→ labeled agent:rework (round ${next_round}/${MAX_ROUNDS}) — rework run queued (re-review follows automatically)"
+            exit 0
+          fi
+          if [ "$decision" != "approve" ]; then
+            echo "::warning::no verdict found in the run output — skipping labeling"
+            exit 0
+          fi
+          echo "→ review verdict: approve"
+          # APPROVE: trust the verdict only when CI on the PR head is green.
           if [ -z "$pr" ]; then
             echo "::warning::APPROVE verdict but no linked open PR for #${NUMBER} — skipping pr_approved"
             exit 0
@@ -425,6 +611,9 @@ jobs:
             fi
             sleep 30
           done
+          # Cycle converged — clear the rework bookkeeping before merging.
+          strip_round_labels
+          gh issue edit "$NUMBER" --repo "$repo" --remove-label "needs-human" || true
           gh issue edit "$NUMBER" --repo "$repo" --add-label "pr_approved"
           echo "→ labeled pr_approved — merge-trigger will squash-merge PR #${pr} once CLEAN"
 
@@ -452,18 +641,6 @@ jobs:
             --remove-label "agent:review" || true
           echo "→ review cycle closed (agent:review removed)"
 
-      - name: Upload the full fa session trace
-        # The same file the step log streamed — kept as an artifact so the
-        # run can be read after log expiry or outside the Actions UI.
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fa-trace-gh-${{ github.event.issue.number }}-${{ github.run_id }}
-          path: |
-            .dmtools/fa-trace.log
-            .dmtools/run-output.txt
-          if-no-files-found: ignore
-
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:
         # project notes) — committing it makes agent knowledge survive
@@ -475,8 +652,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
-          git config user.name "dm.ai"
-          git config user.email "dm.ai@epam.com"
+          # Identity comes from "Configure Git Author + push credentials"
+          # (global scope — SOURCE-account noreply when resolvable).
+          # Re-assert the SOURCE push credentials before pushing: the agent
+          # session ran since the configure step and this is the last push
+          # path in the job (same idempotent installer as there, gh-63).
+          bash machine-kit/scripts/install-source-git-credentials.sh
+          # Post-agent purge evidence + gate (gh-63): the agent session ran
+          # since the configure step — if a mid-run re-assertion (gh auth
+          # setup-git, a script writing config) resurrected the App token,
+          # fail HERE with the --show-origin trace instead of pushing as
+          # github-actions[bot]. The origin line answers WHICH source
+          # re-asserted the credential (ticket Task 1).
+          echo "── post-agent extraheader trace (must be empty) ──"
+          # Redacted like the pre-agent trace (gh-63 review threads 11/12):
+          # the origin answers WHICH source re-asserted the credential
+          # (ticket Task 1); the VALUE (base64 App token, decodable,
+          # unmasked by GitHub) must not print.
+          git config --show-origin --get-all http.https://github.com/.extraheader | sed -E 's/^([^\t]*\t).*/\1<redacted>/; t; s/.+/<redacted> (unexpected line without origin)/' || true
+          if git config --get-all http.https://github.com/.extraheader | grep -q .; then
+            echo "::error::App-token extraheader reappeared after the agent session — a mid-run re-assertion would push as github-actions[bot]"
+            exit 1
+          fi
           if [ -d .fah/memory ] && [ -n "$(git status --porcelain -- .fah/memory)" ]; then
             git add .fah/memory
             git commit -m "chore(fa): persist agent project memory [skip ci]"
@@ -484,6 +681,27 @@ jobs:
           else
             echo "no new fa memory to persist"
           fi
+          # At-push-time evidence (gh-63): one line per credential the helper
+          # actually served during this run (agent pushes + trace dry-runs).
+          if [ -f .dmtools/credential-helper.log ]; then
+            echo "── SOURCE_GITHUB_TOKEN helper invocations this run (push-path evidence) ──"
+            cat .dmtools/credential-helper.log
+          fi
+
+      - name: Upload the full fa session trace
+        # Must run AFTER the memory-persist push: the artifact is the durable
+        # copy of the run (readable after log expiry), so it has to include
+        # the final helper invocation from the memory push above — uploaded
+        # earlier it would silently miss the last push of the run.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fa-trace-gh-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: |
+            .dmtools/fa-trace.log
+            .dmtools/run-output.txt
+            .dmtools/credential-helper.log
+          if-no-files-found: ignore
 
       - name: Persist fa session to its git branch
         # The save side of the git-based session store (see the restore

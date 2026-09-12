@@ -296,6 +296,13 @@ class ToolBridge {
   /// Java `CommandLineUtils.runCommand` parity: the line is written to a temp
   /// script (avoids shell-escaping issues) and executed with `/bin/sh`, the
   /// real exit code is propagated, and a non-zero exit fails the call.
+  ///
+  /// This path captures synchronously and cannot mirror output live: the JS
+  /// `executeToolViaJava` contract is a synchronous FFI host call, and
+  /// `dart:io` has no synchronous streaming API (`Process.runSync` is the
+  /// only blocking run). The live stderr mirroring lives on the async
+  /// process paths — the CliAgent command phases and the direct CLI tool
+  /// executor — see `process_output_tee.dart`.
   String _runCommandLine(String command, String? workDir) {
     final env = _cliProcessEnv(workDir);
     try {

@@ -279,28 +279,21 @@ jobs:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Live FULL session trace: run-agent.sh passes FA_LOG_FILE to
-          # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91) which
-          # tees every line fa prints — assistant text and tool calls,
-          # untruncated — to the file. dmtools captures fa's own stdout and
-          # echoes it only at the end as one escaped JSON blob (unreadable
-          # in the Actions UI), so we tail the log file here instead:
-          # full messages stream into this step's log as [fa]-prefixed
-          # lines while the agent works.
+          # FULL session trace: run-agent.sh passes FA_LOG_FILE to
+          # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91),
+          # which tees every line fa prints — assistant text and tool
+          # calls, untruncated — to the file, uploaded as an artifact
+          # below. dmtools mirrors child output live to its own stderr
+          # (gh-50), so the agent's work already streams into this step's
+          # log as it happens; the follower side-channel is gone.
           FA_LOG_FILE="${GITHUB_WORKSPACE}/.dmtools/fa-trace.log"
           export FA_LOG_FILE
           mkdir -p "$(dirname "${FA_LOG_FILE}")"
           touch "${FA_LOG_FILE}"
           echo "fa full trace: ${FA_LOG_FILE}"
-          tail -n +1 -F "${FA_LOG_FILE}" 2>/dev/null | sed -u 's/^/[fa] /' &
-          FOLLOWER_PID=$!
           dmtools run "${RUNNER}" \
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
             --ciRunUrl "${CI_RUN_URL}" --debug
-          RC=$?
-          pkill -P "${FOLLOWER_PID}" 2>/dev/null || true
-          kill "${FOLLOWER_PID}" 2>/dev/null || true
-          exit "${RC}"
 
       - name: Close the review cycle (review runs only)
         # A review run must never re-queue itself: whatever the agent did

@@ -5,12 +5,11 @@
 /// `CLI_ALLOWED_COMMANDS` environment variable.
 library;
 
-import 'dart:io';
-
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
+import 'process_output_tee.dart';
 
 /// Built-in whitelist of allowed CLI commands.
 const Set<String> defaultAllowedCommands = {
@@ -81,7 +80,10 @@ List<ToolDefinition> cliTools() => [
       ),
     ];
 
-/// Executes CLI MCP tools via [Process.run], enforcing the command whitelist.
+/// Executes CLI MCP tools via a streaming capture process run, enforcing
+/// the command whitelist. Output lines are mirrored live to dmtools' stderr
+/// (see [process_output_tee]) while the `{stdout, stderr, exitCode}` result
+/// stays byte-identical to a full-buffer capture.
 class CliToolExecutor {
   /// Creates a CLI tool executor.
   ///
@@ -111,22 +113,30 @@ class CliToolExecutor {
   /// Returns the full whitelist as a sorted array.
   List<String> getAllowedCommands() => (allowedCommands.toList()..sort());
 
-  /// Executes [command] with optional [args] via [Process.run].
+  /// Executes [command] with optional [args], mirroring every output line
+  /// live to dmtools' stderr ([mirror] overrides the target for tests).
   ///
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
   Future<Map<String, dynamic>> executeCommand(
     String command, [
     List<String>? args,
+    OutputLineSink? mirror,
   ]) async {
     if (!isAllowed(command)) {
       throw ArgumentError('Command not allowed: $command');
     }
-    final result = await Process.run(command, args ?? const []);
+    final result = await runCaptured(
+      command,
+      args ?? const [],
+      mirror: mirror,
+    );
     return _resultMap(result);
   }
 
-  /// Executes [command] with [args] and extra [envVars] via [Process.run].
+  /// Executes [command] with [args] and extra [envVars], mirroring every
+  /// output line live to dmtools' stderr ([mirror] overrides the target for
+  /// tests).
   ///
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
@@ -134,21 +144,23 @@ class CliToolExecutor {
     String command, [
     List<String>? args,
     Map<String, String>? envVars,
+    OutputLineSink? mirror,
   ]) async {
     if (!isAllowed(command)) {
       throw ArgumentError('Command not allowed: $command');
     }
-    final result = await Process.run(
+    final result = await runCaptured(
       command,
       args ?? const [],
       environment: envVars,
+      mirror: mirror,
     );
     return _resultMap(result);
   }
 
-  Map<String, dynamic> _resultMap(ProcessResult result) => {
-        'stdout': result.stdout.toString(),
-        'stderr': result.stderr.toString(),
+  Map<String, dynamic> _resultMap(CapturedProcessResult result) => {
+        'stdout': result.stdout,
+        'stderr': result.stderr,
         'exitCode': result.exitCode,
       };
 

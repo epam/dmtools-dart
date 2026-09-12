@@ -9,6 +9,7 @@ void main() {
   whitelistTests();
   executeCommandTests();
   executeDispatchTests();
+  liveMirrorTests();
 }
 
 /// Catalog shape: tool name, integration, params.
@@ -162,6 +163,61 @@ void executeDispatchTests() {
         () => executor.execute('cli_unknown', {'command': 'git'}),
         throwsArgumentError,
       );
+    });
+  });
+}
+
+/// Live stderr mirroring: every output line is mirrored as it arrives while
+/// the returned `{stdout, stderr, exitCode}` capture stays byte-identical.
+void liveMirrorTests() {
+  group('CliToolExecutor.executeCommand live mirror', () {
+    test('mirrors each output line and keeps the captured result', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'echo'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result =
+          await executor.executeCommand('echo', ['hello'], mirrored.add);
+      expect(result['stdout'], 'hello\n');
+      expect(result['stderr'], '');
+      expect(result['exitCode'], 0);
+      expect(mirrored, ['hello']);
+    });
+
+    test('mirrors multi-line output from a single command', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommand(
+          'sh', ['-c', 'echo a; echo b; echo c'], mirrored.add);
+      expect(mirrored, ['a', 'b', 'c']);
+      expect(result['stdout'], 'a\nb\nc\n');
+    });
+
+    test('mirrors stderr lines too, captured separately', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommand(
+          'sh', ['-c', 'echo out; echo err 1>&2'], mirrored.add);
+      expect(mirrored, containsAll(['out', 'err']));
+      expect(result['stdout'], 'out\n');
+      expect(result['stderr'], 'err\n');
+    });
+  });
+
+  group('CliToolExecutor.executeCommandWithEnv live mirror', () {
+    test('mirrors lines and applies env vars', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommandWithEnv(
+        'sh',
+        ['-c', 'echo \$MIRROR_PROBE'],
+        {'MIRROR_PROBE': 'env-value'},
+        mirrored.add,
+      );
+      expect(mirrored, ['env-value']);
+      expect(result['stdout'], 'env-value\n');
     });
   });
 }

@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 void main() {
   _testBasicExecution();
   _testContextInjection();
+  _testExtraGlobalsFlatten();
   _testHostFunctions();
   _testErrorDispatch();
   _testWrapperDispatch();
@@ -107,12 +108,16 @@ void _testContextInjection() {
         dir.deleteSync(recursive: true);
       }
     });
+  });
+}
 
-    test('flattens extraGlobals into the params object (Java parity)', () {
-      // Java JavaScriptExecutor.execute(): every .with(key, value) binding
-      // (inputFolderPath, workingDirectory, customParams, ...) is a member
-      // of the SAME params object the script receives — regression for
-      // preparePRForReview.js's params.inputFolderPath.split('/').
+/// Java `JavaScriptExecutor.execute()` parity: every `.with(key, value)`
+/// binding (inputFolderPath, workingDirectory, customParams, …) is a member
+/// of the SAME params object the script receives — regression for
+/// preparePRForReview.js's `params.inputFolderPath.split('/')`.
+void _testExtraGlobalsFlatten() {
+  group('extraGlobals flattening (Java parity)', () {
+    test('flattens extraGlobals into the params object', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_flat');
       try {
         final script = _writeScript(

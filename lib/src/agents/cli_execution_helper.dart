@@ -198,7 +198,7 @@ class CliExecutionHelper {
         responses.write('\n');
         hasFatal = true;
         exitCode = result.exitCode;
-        errorMsg = result.stderr.toString();
+        errorMsg = result.stderr;
       } else {
         responses.write('Response:\n${result.stdout}\n\n');
       }

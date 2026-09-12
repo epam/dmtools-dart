@@ -7,20 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Live child-output streaming (gh-50): the process paths behind
-  `cli_execute_command` and the CliAgent command phases — buffered and
-  monitored — now mirror every child output line to dmtools' own stderr as
-  it arrives (line-buffered, always on; no flags or env toggles) while the
-  captured strings stay byte-identical. `dmtools run <config>` therefore
-  streams the inner agent's work into the CI step log live, and the
-  ai-teammate workflow drops its `FA_LOG_FILE` + `tail -F | sed` follower
-  side-channel (the trace file itself stays, feeding the artifact upload).
-  The synchronous JS-bridge capture (`executeToolViaJava`) cannot mirror —
-  FFI host calls are synchronous and `dart:io` has no synchronous streaming
-  API — so its captured-string contract is unchanged.
-
 ### Added
 
 - TestRail section-aware case creation, porting Java PR
@@ -176,6 +162,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install-test.yml`: simulates clean-machine installs across the OS
   matrix and exercises `dmtools --version` / `dmtools list`; `dash -n` +
   `shellcheck` the installer on every PR.
+
+### Changed
+
+- Live child-output streaming (gh-50): the process paths behind
+  `cli_execute_command` and the CliAgent command phases — buffered and
+  monitored — now mirror every child output line to dmtools' own stderr as
+  it arrives (line-buffered, always on; no flags or env toggles) while the
+  captured strings stay byte-identical for well-formed UTF-8 output
+  (malformed byte sequences decode leniently to U+FFFD where the previous
+  strict `Process.run`-style decode threw a `FormatException`).
+  `dmtools run <config>` therefore streams the inner agent's work into the
+  CI step log live, and the ai-teammate workflow drops its `FA_LOG_FILE` +
+  `tail -F | sed` follower side-channel (the trace file itself stays,
+  feeding the artifact upload). The synchronous JS-bridge capture
+  (`executeToolViaJava`) cannot mirror — FFI host calls are synchronous
+  and `dart:io` has no synchronous streaming API — so its captured-string
+  contract is unchanged.
 
 ## [0.1.0] — 2026-08-13
 

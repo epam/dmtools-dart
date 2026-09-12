@@ -36,6 +36,9 @@ void bufferedPathTests() {
       );
       expect(r.hasFatalError, isTrue);
       expect(r.lastExitCode, 3);
+      // lastErrorMessage is the captured stderr verbatim, trailing newline
+      // included (the no-op `.toString()` cleanup must not change this).
+      expect(r.lastErrorMessage, 'stderr-msg\n');
       expect(
         r.commandResponses,
         'CLI Command: echo stdout-msg; echo stderr-msg 1>&2; exit 3\n'

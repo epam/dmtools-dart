@@ -310,8 +310,9 @@ jobs:
           echo "→ review cycle closed (agent:review removed)"
 
       - name: Upload the full fa session trace
-        # The same file the step log streamed — kept as an artifact so the
-        # run can be read after log expiry or outside the Actions UI.
+        # The full untruncated trace file. The step log streams the same
+        # output live via dmtools' stderr mirroring (gh-50); the artifact
+        # keeps the run readable after log expiry or outside the Actions UI.
         if: always()
         uses: actions/upload-artifact@v4
         with:

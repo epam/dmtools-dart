@@ -77,9 +77,12 @@ Future<CapturedProcessResult> runCaptured(
 /// line through [mirror] as it arrives (a partial final line is mirrored
 /// when the stream closes).
 ///
-/// The capture decodes with the same lenient UTF-8 fallback `Process.run`
-/// uses, so the returned string is byte-identical to a full-buffer read —
-/// even for multi-byte sequences split across chunk boundaries.
+/// The capture decodes as UTF-8, tolerating malformed byte sequences
+/// (`allowMalformed: true`): bad bytes are replaced with U+FFFD where a
+/// strict decode — what `Process.run`'s default UTF-8/systemEncoding does —
+/// would throw a [FormatException]. For well-formed UTF-8 output the
+/// returned string is byte-identical to a full-buffer read, including
+/// multi-byte sequences split across chunk boundaries.
 Future<String> captureAndMirror(
   Stream<List<int>> stream, {
   OutputLineSink? mirror,

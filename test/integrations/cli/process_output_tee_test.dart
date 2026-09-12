@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dmtools/src/integrations/cli/process_output_tee.dart';
+import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
 /// Tests for the capture-plus-tee helper backing live child-output
@@ -55,6 +55,19 @@ void captureTests() {
       final done = captureAndMirror(controller.stream);
       await controller.close();
       expect(await done, '');
+    });
+
+    test('decodes malformed utf8 leniently as U+FFFD, not a throw', () async {
+      // 0xFF is never valid UTF-8: the lenient decoder substitutes U+FFFD
+      // where Process.run's default (strict) decode throws a
+      // FormatException. Well-formed bytes around it are untouched.
+      final controller = StreamController<List<int>>();
+      final done = captureAndMirror(controller.stream);
+      controller.add(utf8.encode('ok '));
+      controller.add([0xFF]);
+      controller.add(utf8.encode(' bad\n'));
+      await controller.close();
+      expect(await done, 'ok \u{FFFD} bad\n');
     });
   });
 }

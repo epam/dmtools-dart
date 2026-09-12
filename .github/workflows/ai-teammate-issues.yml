@@ -226,21 +226,50 @@ jobs:
         run: |
           git config --global user.name "dm.ai"
           git config --global user.email "dm.ai@epam.com"
-          # actions/checkout persists its GitHub App token as an http
-          # extraheader; that token has NO `workflows` permission, so any
-          # push touching .github/workflows/* is rejected remotely
-          # ("refusing to allow a GitHub App to create or update workflow").
-          # When a PAT is available, drop the extraheader and route pushes
-          # through the PAT instead (classic PAT with repo+workflow scopes
-          # can push workflow files; the App token never can).
-          if [ -n "$SOURCE_GITHUB_TOKEN" ]; then
-            git config --unset-all http.https://github.com/.extraheader || true
-            git config --global --unset-all http.https://github.com/.extraheader || true
-            git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; }; f'
-            echo "→ git pushes will use SOURCE_GITHUB_TOKEN (workflows-capable)"
-          else
-            echo "::warning::SOURCE_GITHUB_TOKEN not set — pushes of workflow-file changes will be rejected (App token lacks workflows permission)"
+          if [ -z "$SOURCE_GITHUB_TOKEN" ]; then
+            echo "::warning::SOURCE_GITHUB_TOKEN not set — pushes stay on the checkout App token (github-actions[bot]): workflow-file changes are rejected remotely and CI waits behind the bot-actor approval gate"
+            exit 0
           fi
+          # Attribute commits to the SOURCE account when resolvable (gh-63:
+          # the PUSH actor is what matters for the gate; author is
+          # best-effort — dm.ai stays the fallback when the lookup fails).
+          identity="$(GH_TOKEN="$SOURCE_GITHUB_TOKEN" gh api user --jq '"\(.id)+\(.login)"' 2>/dev/null || true)"
+          if echo "$identity" | grep -qE '^[0-9]+[^[:space:]@]*\+[^[:space:]@]+$'; then
+            git config --global user.email "${identity}@users.noreply.github.com"
+            echo "→ commit author email: ${identity}@users.noreply.github.com (SOURCE account noreply)"
+          fi
+          # ── Purge the checkout's persisted App token (gh-63 root cause) ──
+          # actions/checkout >= 4.2 does NOT write the extraheader into
+          # .git/config: it hides it in a RUNNER_TEMP include file
+          # (git-credentials-*.config) wired in via includeIf.gitdir: entries
+          # (main repo + submodules). `git config --unset-all` edits the
+          # named file ONLY and never follows includes — the historical unset
+          # here was a silent no-op, the App-token Authorization header stayed
+          # live (sent proactively on the initial request, so a credential
+          # helper was never even consulted) and every push authenticated as
+          # github-actions[bot] → bot check-suites + "awaiting approval".
+          # Delete the include FILE itself (one shot covers the repo and the
+          # submodule includeIf references — a missing include is ignored),
+          # then drop any directly persisted key (older checkout versions).
+          rm -f "${RUNNER_TEMP:-/tmp}"/git-credentials-*.config
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config --global --unset-all http.https://github.com/.extraheader || true
+          # ── Install the credential that must win: SOURCE_GITHUB_TOKEN ──
+          # Per-repo helper behind a list RESET: an empty credential.helper
+          # value clears every helper inherited from system/global scope, so
+          # this checkout is immune to anything that adds helpers later
+          # (e.g. a mid-run `gh auth setup-git`, runner-image system config).
+          # The helper logs each invocation to .dmtools/credential-helper.log
+          # — the at-push-time proof of which credential served the push.
+          git config --local credential.helper ''
+          git config --local --add credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; mkdir -p "${GITHUB_WORKSPACE:-.}/.dmtools" 2>/dev/null; printf "[%s] SOURCE_GITHUB_TOKEN credential served for https://github.com\n" "$(date -u +%FT%TZ)" >> "${GITHUB_WORKSPACE:-.}/.dmtools/credential-helper.log" 2>/dev/null || true; echo "credential-helper: served SOURCE_GITHUB_TOKEN for github.com (push actor = SOURCE account)" >&2; }; f'
+          # Global fallback for pushes from OTHER checkouts (fresh clones or
+          # worktrees the agent creates have no local reset; helpers resolve
+          # in declaration order and git stops at the first complete
+          # credential — this step installs ours before anything else runs,
+          # so SOURCE wins there too).
+          git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; mkdir -p "${GITHUB_WORKSPACE:-.}/.dmtools" 2>/dev/null; printf "[%s] SOURCE_GITHUB_TOKEN credential served for https://github.com\n" "$(date -u +%FT%TZ)" >> "${GITHUB_WORKSPACE:-.}/.dmtools/credential-helper.log" 2>/dev/null || true; echo "credential-helper: served SOURCE_GITHUB_TOKEN for github.com (push actor = SOURCE account)" >&2; }; f'
+          echo "→ git pushes will use SOURCE_GITHUB_TOKEN (workflows-capable); App-token header purged"
 
       - name: Write the issue into the agent input folder
         env:
@@ -263,6 +292,33 @@ jobs:
           echo "input/ticket.md: $(wc -l < input/ticket.md) lines"
           echo "input/gh-${NUMBER}/ticket.json: $(wc -c < input/gh-${NUMBER}/ticket.json) bytes"
 
+      - name: Trace git credential stack (push-time evidence)
+        # gh-63 Task 1 — same run that pushes, right before the agent:
+        #   --show-origin        WHERE each credential source lives; the
+        #                        extraheader section MUST come back empty —
+        #                        that emptiness is the purge's proof
+        #   git credential fill  dry-runs the exact push-path resolution and
+        #                        shows the winning username; the password is
+        #                        masked, and the helper's stderr line confirms
+        #                        SOURCE_GITHUB_TOKEN served the credential
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+        run: |
+          mkdir -p .dmtools
+          echo "── credential.helper — all scopes, with origins ──"
+          git config --show-origin --get-all credential.helper || true
+          git config --show-origin --get-all credential.https://github.com.helper || true
+          echo "── http.https://github.com/.extraheader (must be empty — App token purged) ──"
+          git config --show-origin --get-all http.https://github.com/.extraheader || true
+          echo "── commit identity ──"
+          git var GIT_AUTHOR_IDENT
+          git var GIT_COMMITTER_IDENT
+          echo "── dry-run: credential a github.com push would use ──"
+          printf 'protocol=https\nhost=github.com\n' \
+            | GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=echo git credential fill 2>&1 \
+            | sed -E 's/^password=.+/password=<redacted — served by the winning helper>/' \
+            || echo "(no helper produced a complete credential — pushes would fail or fall back)"
+
       - name: Run agent (fa provider via runner env overrides)
         env:
           CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -281,7 +337,11 @@ jobs:
           ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
           KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
+          # gh operations inside the session (pr create/edit, api, …) must act
+          # AS the SOURCE account: events created with GITHUB_TOKEN do not
+          # trigger workflows, and commits/PRs created via the API author as
+          # github-actions[bot]. Same PAT-first fallback as auto-update-prs.yml.
+          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN || github.token }}
         run: |
           # Live FULL session trace: run-agent.sh passes FA_LOG_FILE to
           # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91) which
@@ -441,6 +501,7 @@ jobs:
           path: |
             .dmtools/fa-trace.log
             .dmtools/run-output.txt
+            .dmtools/credential-helper.log
           if-no-files-found: ignore
 
       - name: Persist fa project memory into the repository
@@ -454,14 +515,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
-          git config user.name "dm.ai"
-          git config user.email "dm.ai@epam.com"
+          # Identity comes from "Configure Git Author + push credentials"
+          # (global scope — SOURCE-account noreply when resolvable).
+          # Re-assert the SOURCE push credentials before pushing: the agent
+          # session ran since the configure step and this is the last push
+          # path in the job (same purge + reset as there, gh-63).
+          if [ -n "${SOURCE_GITHUB_TOKEN:-}" ]; then
+            rm -f "${RUNNER_TEMP:-/tmp}"/git-credentials-*.config
+            git config --unset-all http.https://github.com/.extraheader || true
+            git config --global --unset-all http.https://github.com/.extraheader || true
+            # --replace-all, not a plain write: configure left TWO local
+            # values (the reset '' + the helper) and a single-value write on a
+            # multi-valued key errors out — under bash -e that would abort
+            # this step before the push.
+            git config --local --replace-all credential.helper ''
+            git config --local --add credential.helper '!f() { echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; mkdir -p "${GITHUB_WORKSPACE:-.}/.dmtools" 2>/dev/null; printf "[%s] SOURCE_GITHUB_TOKEN credential served for https://github.com\n" "$(date -u +%FT%TZ)" >> "${GITHUB_WORKSPACE:-.}/.dmtools/credential-helper.log" 2>/dev/null || true; echo "credential-helper: served SOURCE_GITHUB_TOKEN for github.com (push actor = SOURCE account)" >&2; }; f'
+          fi
           if [ -d .fah/memory ] && [ -n "$(git status --porcelain -- .fah/memory)" ]; then
             git add .fah/memory
             git commit -m "chore(fa): persist agent project memory [skip ci]"
             git push || echo "::warning::memory push rejected (protected branch?) — kept in run only"
           else
             echo "no new fa memory to persist"
+          fi
+          # At-push-time evidence (gh-63): one line per credential the helper
+          # actually served during this run (agent pushes + trace dry-runs).
+          if [ -f .dmtools/credential-helper.log ]; then
+            echo "── SOURCE_GITHUB_TOKEN helper invocations this run (push-path evidence) ──"
+            cat .dmtools/credential-helper.log
           fi
 
       - name: Hand the issue to the reviewer (dev runs only)

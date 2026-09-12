@@ -189,14 +189,12 @@ dart run bin/dmtools.dart run agents/js/unit-tests/run_all.json
 Reference: `dmtools-core/.../common/utils/PropertyReader.java` (1567 lines),
 `common/config/ApplicationConfiguration.java`.
 
-- [x] Config resolution order identical to Java: real env vars → `dmtools.env` →
-      `dmtools-local.env` → defaults; real env always wins (mirrors
-      `run-teammate-local.sh` semantics).
-      **Note:** Java `PropertyReader.getValue()` actually checks OS env *last*
-      (overrides → config.properties → dmtools.env → OS env). The Dart port
-      follows the Java source (the spec per AGENTS.md), so `dmtools.env` in CWD
-      overrides real OS env vars. `dmtools-local.env` sits between the two
-      (replaces the shell-launcher `export` from `dmtools.sh`).
+- [x] Config resolution order identical to Java: overrides → `config.properties`
+      → `dmtools.env` → OS env; OS env is checked *last* (mirrors
+      `PropertyReader.getValue()`, so `dmtools.env` in CWD overrides real OS
+      env vars).
+      **Note:** the `dmtools-local.env` tier was removed per the 2026-08-24
+      audit — Java has no such tier (P6-CFG-03).
 - [x] Thread-local/zone-local overrides (`PropertyReader.getOverrides()` equivalent)
       — required by `CLI_ALLOWED_COMMANDS` and job-level `envVariables`.
 - [x] Every env var getter used by integrations (Jira, ADO, GitHub, GitLab,
@@ -378,7 +376,7 @@ record — update a wave's `status:` header AND this table together.
 |------|------|-------|--------|------------|--------|
 | W0 | `phases/phase6-w0-owner-regressions.md` | 2 | **done** | — | — |
 | W1 | `phases/phase6-w1-jira-sync.md` | 18 | in-progress | W6 | — |
-| W2 | `phases/phase6-w2-config.md` | 13 | open | — | W3 |
+| W2 | `phases/phase6-w2-config.md` | 13 | in-progress | — | W3 |
 | W3 | `phases/phase6-w3-runners-cli.md` | 28 | open | W2 | — |
 | W4 | `phases/phase6-w4-vcs-sync.md` | 23 | open | W6 | — |
 | W5 | `phases/phase6-w5-ci-docs-sync.md` | 35 | open | W6 | — |
@@ -482,6 +480,19 @@ full gate sequence green; unblock dependents in this table).
   again (per the standing rule: fuse only while the runtime lags
   upstream). Suite output shape `{"success":true,"passed":882,
   "failed":0}` is the new baseline.
+- **2026-09-11 (session 5, first full e2e subagent run):** W2 opened:
+  P6-CFG-01..05 closed via a four-agent pipeline (explore research →
+  implement → review → review-fix), score 13/221. The config chain is
+  now Java-exact: overrides → config.properties (disk
+  `<root>/src/main/resources` wins even when empty, else the
+  setConfigFile resource) → dmtools.env (project root FIRST, then CWD;
+  empty-parse file skipped; unreadable file warns + continues) → OS
+  env. Empty values fall through file tiers; root marker is
+  settings.gradle(.kts) with CWD fallback; the dmtools-local.env tier
+  is REMOVED (P6-CFG-03 — Java has none; GOAL.md Phase-1 note and the
+  integration-strategy credentials line updated accordingly). Gates
+  green: format/analyze/2363 tests/coverage 98.9%/crap4dart (Max CRAP
+  8.00)/agents suite 917/917.
 
 **Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
 the catalog parity test reports zero gaps against a fresh Java clone, and
@@ -513,9 +524,9 @@ destabilize the default quality loop.
 - Live tests live under `test/` tagged `@Tags(['integration'])` with a
   `dart_test.yaml` that **excludes the tag by default**; run explicitly via
   `dart test -t integration`.
-- **Credentials come from the standard resolution chain** — real env vars first,
-  then `dmtools.env`, then `dmtools-local.env` (the Phase 1 config layer, same path
-  production uses). Locally the expected setup is a git-ignored `dmtools.env` with
+- **Credentials come from the standard resolution chain** — overrides →
+  `config.properties` → `dmtools.env` → OS env vars (the Phase 1 config layer,
+  same path production uses). Locally the expected setup is a git-ignored `dmtools.env` with
   real keys; in CI the same variables arrive as injected secrets. No test-specific
   config files, no hardcoded values anywhere.
 - **Sandbox targeting** via test-scoped overrides: `DMTOOLS_IT_JIRA_PROJECT`,

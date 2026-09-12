@@ -17,6 +17,15 @@ void main() {
   final workflow =
       File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
 
+  _reviewCycleGroup(workflow);
+  _verdictDelegationGroup(workflow);
+}
+
+/// The run/verdict step wiring itself: the verdict step exists, labels
+/// every cycle outcome, and consumes exactly the output the run step
+/// captures (gh-50: captured via tee while dmtools mirrors child output
+/// live to stderr — no `tail -F` follower side-channel).
+void _reviewCycleGroup(String workflow) {
   group('ai-teammate-issues.yml review cycle', () {
     test('verdict step survives the gh-50 rewrite', () {
       expect(workflow, contains('- name: Apply the review verdict'));
@@ -47,7 +56,13 @@ void main() {
       expect(workflow, isNot(contains(r"sed -u 's/^/[fa] /'")));
     });
   });
+}
 
+/// gh-71: the decision logic lives in the shared, unit-tested
+/// review-verdict.sh — the workflow only wires its inputs (round cap,
+/// labels, run output) and must not grow an inline parser copy that
+/// could drift from the tested script.
+void _verdictDelegationGroup(String workflow) {
   group('ai-teammate-issues.yml verdict step delegates to review-verdict.sh',
       () {
     test('decision comes from review-verdict.sh, not an inline parser', () {

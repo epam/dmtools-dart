@@ -144,6 +144,17 @@ jobs:
             echo "→ issue #$NUMBER is ${state} — not for the agent"
             exit 0
           fi
+          # agent:skip — hard opt-out for smoke/verification tickets that
+          # must never spin the dev→review→rework cycle. One guard covers
+          # every entry path: pipeline-added labels (the dev run's
+          # agent:review hand-off, the review verdict's agent:rework)
+          # re-enter this same gate, so a skip label stays terminal for
+          # the whole cycle, not just the initial event.
+          if echo "$LABELS" | grep -qw "agent:skip"; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "→ issue #$NUMBER carries agent:skip — agent bypassed"
+            exit 0
+          fi
           runner=""
           if echo "$LABELS" | grep -qw "agent:rework"; then
             runner="$RUNNER_REWORK"

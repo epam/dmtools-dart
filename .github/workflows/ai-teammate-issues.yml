@@ -56,11 +56,12 @@
 #   (the checkout already brings the accumulated memory back in).
 #
 # Sessions: run-agent.sh resumes a deterministic named fa session per
-#   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
-#   the ticket's dev conversation; review has its own dev-review), and the
-#   per-issue git branch fa-sess/gh-<n> carries the session directory
-#   across CI runs (Actions cache saves are denied on issues-event runs —
-#   the job token is cache-read-only there, verified 2026-09-12).
+#   repo:GH-<n>:group, and the per-issue git branch fa-sess/gh-<n> carries
+#   the session directory across CI runs (Actions cache saves are denied
+#   on issues-event runs — the job token is cache-read-only there,
+#   verified 2026-09-12). Session groups (dev-write/dev-review): see
+#   AGENTS.md "fa session reuse (CI machine)" — the operating manual is
+#   the single source of truth.
 #
 # Self-contained on purpose: unlike the Jira-era reusable ai-teammate.yml,
 # this template must prepare the ticket input (issue body) BEFORE the run,
@@ -173,9 +174,8 @@ jobs:
           fi
           if [ -n "$runner" ]; then
             # Parent agent config of the runner — fa-session.sh derives the
-            # session group from it (bug/story/rework share dev-write so a
-            # rework RESUMES the ticket's dev conversation; review is
-            # dev-review).
+            # session group from it (group mapping: see AGENTS.md
+            # "fa session reuse (CI machine)").
             case "$runner" in
               *fa-bug-dev*)      config="agents/bug_development.json"; kind="dev" ;;
               *fa-story-dev*)    config="agents/story_development.json"; kind="dev" ;;
@@ -232,11 +232,10 @@ jobs:
         run: |
           if git fetch --depth 1 origin "refs/heads/$FA_SESS_BRANCH"; then
             git checkout "refs/remotes/origin/$FA_SESS_BRANCH" -- .dmtools/fa-sessions
-            # checkout-from-tree STAGES the restored files into the index
-            # (bypassing .gitignore); anything staged here rides into the
-            # agent's own commits and leaks session state into ai/gh-<n>
-            # PR branches (review finding on #89, run 34716859005).
-            # Unstage: keep worktree copies, index stays clean.
+            # checkout <ref> -- <path> STAGES what it restores. The session
+            # store belongs on the fa-sess branch only (the persist step
+            # re-adds it with -f); left staged here it leaks machine state
+            # into this branch's own commit. Unstage, keep the working tree.
             git restore --staged .dmtools/fa-sessions
             echo "→ fa session restored from $FA_SESS_BRANCH"
           else

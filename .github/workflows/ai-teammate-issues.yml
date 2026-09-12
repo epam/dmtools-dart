@@ -74,6 +74,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 
 env:
   AGENT_HANDLE: ai-teammate        # the bot account issues get assigned to

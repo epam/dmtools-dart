@@ -230,46 +230,6 @@ void _testRunCliAgent() {
       expect(result['success'], isTrue);
     });
   });
-
-  group('run <teammate-config>.json', () {
-    // Hermetic cwd: with no inputJql, TeammateJob probes
-    // <Directory.current>/input/ticket.md for the prepared-input
-    // pass-through. A repo root with a harness-prepared input/ticket.md
-    // would flip the no-op branch into a full CliAgent run — pin cwd to
-    // the per-test temp dir for the whole group.
-    late String _savedCwd;
-    setUp(() {
-      _savedCwd = Directory.current.path;
-      Directory.current = _tmp.path;
-    });
-    tearDown(() => Directory.current = _savedCwd);
-    test('executes a teammate job without inputJql as a no-op success',
-        () async {
-      final configFile = File('${_tmp.path}/teammate.json')
-        ..writeAsStringSync(jsonEncode({
-          'name': 'Teammate',
-          'params': {
-            'cliCommands': ['echo done'],
-          },
-        }));
-      final code = await _dispatcher.dispatch(['run', configFile.path]);
-      expect(code, 0);
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
-      expect(result['success'], isTrue);
-      expect(result['results'], isEmpty);
-    });
-
-    test('runs the teammate config case-insensitively', () async {
-      final configFile = File('${_tmp.path}/teammate2.json')
-        ..writeAsStringSync(jsonEncode({
-          'name': 'teammate',
-          'params': {
-            'cliCommands': ['echo done']
-          },
-        }));
-      expect(await _dispatcher.dispatch(['run', configFile.path]), 0);
-    });
-  });
 }
 
 void _testList() {

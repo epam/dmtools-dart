@@ -1,0 +1,14 @@
+name: diag fa 404
+on: workflow_dispatch
+permissions: {}
+jobs:
+  curl:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -x
+          curl -v -fL --max-time 60 -o /tmp/fa.tgz https://github.com/IstiN/flutter_agent_harness/releases/download/v0.1.357/fa-linux-x64.tar.gz 2>&1 | tail -30 || true
+          echo "exit=$?"
+          ls -la /tmp/fa.tgz 2>/dev/null || true
+          file /tmp/fa.tgz 2>/dev/null || true
+          curl -s -o /dev/null -w '%{http_code} %{url_effective}\n' -L --max-time 30 https://github.com/IstiN/flutter_agent_harness/releases/download/v0.1.357/fa-linux-x64.tar.gz || true

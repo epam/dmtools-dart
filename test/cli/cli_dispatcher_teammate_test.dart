@@ -46,6 +46,7 @@ void main() {
   });
 
   _testTeammateNoOpRun();
+  _testTeammatePreparedInput();
   _testTeammateCwdHermeticity();
 }
 
@@ -91,6 +92,45 @@ void _testTeammateNoOpRun() {
                   },
                 }));
               expect(await _dispatcher.dispatch(['run', configFile.path]), 0);
+            }));
+  });
+}
+
+void _testTeammatePreparedInput() {
+  group('run <teammate-config>.json prepared input', () {
+    test(
+        'passes a prepared <cwd>/input/ticket.md through to one CliAgent run',
+        () => _withFakeCwd(() async {
+              Directory('${_tmp.path}/input').createSync();
+              File('${_tmp.path}/input/ticket.md').writeAsStringSync(
+                  'Synthetic prepared ticket\nBody of the prepared ticket.');
+              final configFile = File('${_tmp.path}/teammate3.json')
+                ..writeAsStringSync(jsonEncode({
+                  'name': 'Teammate',
+                  'params': {
+                    'cliCommands': ['echo done'],
+                    'cleanupInputFolder': false,
+                    'metadata': {'contextId': 'prepared-issue'},
+                  },
+                }));
+              final code = await _dispatcher.dispatch(['run', configFile.path]);
+              expect(code, 0);
+              final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+              expect(result['success'], isTrue);
+              final results = result['results'] as List<dynamic>;
+              expect(results, hasLength(1));
+              expect(results.single['ticket'], 'prepared-issue');
+              expect(results.single['success'], isTrue);
+              expect(results.single['response'], contains('done'));
+              // The probe must resolve against the ZONE cwd: only the
+              // synthetic ticket may feed the CliAgent context folder — a
+              // probe that regresses to a relative path would pick up the
+              // process cwd's own input/ticket.md instead.
+              final contextTicket =
+                  File('${_tmp.path}/input/prepared-issue/ticket.md');
+              expect(contextTicket.existsSync(), isTrue);
+              expect(contextTicket.readAsStringSync(),
+                  contains('Synthetic prepared ticket'));
             }));
   });
 }

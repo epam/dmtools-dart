@@ -58,13 +58,6 @@ case "$(uname -m)" in
     ;;
 esac
 
-# linux-arm64 has no prebuilt asset yet.
-if [ "$os" = "linux" ] && [ "$arch" = "arm64" ]; then
-  err "no prebuilt binary for linux-arm64 yet — build from source:"
-  err "  dart pub get && make native && dart compile exe bin/dmtools.dart -o dmtools"
-  exit 1
-fi
-
 asset="dmtools-${os}-${arch}.tar.gz"
 
 # ── 2. Resolve version ──────────────────────────────────────────────────────

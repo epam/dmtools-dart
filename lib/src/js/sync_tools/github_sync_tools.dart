@@ -19,6 +19,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
+import 'github_pr_comments.dart';
 import 'github_release_assets.dart';
 import 'github_workflow_logs.dart';
 
@@ -257,15 +258,9 @@ const Map<String, dynamic> _emptyDiffStats = {
 /// Java `pullRequestComments`: paginates `pulls/{id}/comments` and
 /// `issues/{id}/comments`, concatenates both, sorts by creation date.
 String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) {
-  final ({
-    List<Map<String, dynamic>> inline,
-    List<Map<String, dynamic>> issue
-  }) pages;
-  try {
-    pages = _prCommentPages(c, a);
-  } on StateError catch (e) {
-    return syncErr(e.message);
-  }
+  final r = _prCommentPagesOrError(c, a);
+  if (r.error != null) return r.error!;
+  final pages = r.pages!;
   final all = [...pages.inline, ...pages.issue];
   all.sort(
       (x, y) => syncAsStr(x['created']).compareTo(syncAsStr(y['created'])));
@@ -279,60 +274,21 @@ String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) {
 /// Java `GitHubConversation.toJSON` shape), then appends one entry per
 /// issue-style discussion comment.
 String _getPrConversations(GhSyncConfig c, Map<String, dynamic> a) {
-  final ({
-    List<Map<String, dynamic>> inline,
-    List<Map<String, dynamic>> issue
-  }) pages;
-  try {
-    pages = _prCommentPages(c, a);
-  } on StateError catch (e) {
-    return syncErr(e.message);
-  }
-  return jsonEncode(_groupConversations(pages.inline, pages.issue));
+  final r = _prCommentPagesOrError(c, a);
+  if (r.error != null) return r.error!;
+  final pages = r.pages!;
+  return jsonEncode(groupConversations(pages.inline, pages.issue));
 }
 
-/// Fetches both comment listings of a PR: inline review comments and
-/// issue-style discussion comments.
-({List<Map<String, dynamic>> inline, List<Map<String, dynamic>> issue})
-    _prCommentPages(GhSyncConfig c, Map<String, dynamic> a) => (
-          inline: _fetchPages(c, '${c.baseUrl}/${_prSeg(a)}/comments'),
-          issue: _fetchPages(
-            c,
-            '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
-          ),
-        );
-
-/// Groups [inline] comments into conversations, appends [issue] entries.
-List<Map<String, dynamic>> _groupConversations(
-  List<Map<String, dynamic>> inline,
-  List<Map<String, dynamic>> issue,
-) {
-  final conversations = <Map<String, dynamic>>[];
-  final byRootId = <String, Map<String, dynamic>>{};
-  for (final comment in inline) {
-    final id = syncAsStr(comment['id']);
-    final replyTo = comment['in_reply_to_id'];
-    final parent = replyTo == null ? null : byRootId[syncAsStr(replyTo)];
-    if (parent == null) {
-      final conversation = _conversation(comment);
-      byRootId[id] = conversation;
-      conversations.add(conversation);
-    } else {
-      (parent['replies'] as List).add(comment);
-      parent['totalComments'] = 1 + (parent['replies'] as List).length;
-    }
-  }
-  conversations.addAll(issue.map(_conversation));
-  return conversations;
-}
-
-/// Builds one `GitHubConversation.toJSON()` object for [root].
-Map<String, dynamic> _conversation(Map<String, dynamic> root) => {
-      'path': root['path'],
-      'rootComment': root,
-      'replies': <dynamic>[],
-      'totalComments': 1,
-    };
+/// Both PR comment listings for [a]'s pull request, or a sync tool error
+/// JSON on a non-OK page.
+({String? error, PrCommentPages? pages}) _prCommentPagesOrError(
+        GhSyncConfig c, Map<String, dynamic> a) =>
+    prCommentPagesOrError(
+      headers: c.headers,
+      inlineUrl: '${c.baseUrl}/${_prSeg(a)}/comments',
+      issueUrl: '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
+    );
 
 /// `github_get_pr_review_threads` — GraphQL `reviewThreads` query.
 String _getPrReviewThreads(GhSyncConfig c, Map<String, dynamic> a) {
@@ -768,29 +724,6 @@ String _prSeg(Map<String, dynamic> a) => '${_repoSeg(a)}/pulls/${_prId(a)}';
 /// `pullRequestID`.
 String _prId(Map<String, dynamic> a) =>
     syncAsStr(a['pullRequestId'] ?? a['pullRequestID']);
-
-/// Fetches all pages of a comment listing endpoint (100 per page).
-List<Map<String, dynamic>> _fetchPages(GhSyncConfig c, String urlBase) {
-  final out = <Map<String, dynamic>>[];
-  for (var page = 1;; page++) {
-    final resp = SyncHttpClient.get('$urlBase?per_page=100&page=$page',
-        headers: c.headers);
-    // Java `AbstractRestClient.execute` throws a RestClientException on any
-    // non-OK page (retrying retryable codes) — the paging loop in
-    // `pullRequestComments` breaks only on a null/empty body (the empty
-    // last page). Breaking on every non-OK silently reported 401/403/5xx
-    // as "no comments".
-    if (!resp.isOk) {
-      throw StateError('HTTP ${resp.statusCode} fetching comments '
-          '(page $page): ${resp.body}');
-    }
-    final decoded = syncTryDecode(resp.body);
-    if (decoded is! List) break;
-    out.addAll(decoded.whereType<Map>().cast<Map<String, dynamic>>());
-    if (decoded.length < 100) break;
-  }
-  return out;
-}
 
 /// GETs [url] and decodes the JSON body; `null` on failure or non-2xx.
 dynamic _getJson(GhSyncConfig c, String url) {

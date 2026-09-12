@@ -186,6 +186,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   positional-optional parameters to named ones (`args`, `envVars`) and
   gained an injectable `OutputLineSink? mirror` (the stderr target, for
   tests) — a compile-breaking change for external callers.
+  `executeCommand` additionally accepts the `workingDirectory` the
+  `cli_execute_command` schema always advertised: the async executor now
+  forwards it to the child process instead of silently ignoring it (the
+  JS-bridge path already resolved it per Java `resolveWorkingDirectory`).
 
 ## [0.1.0] — 2026-08-13
 

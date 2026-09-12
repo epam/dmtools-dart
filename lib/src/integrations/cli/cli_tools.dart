@@ -116,11 +116,17 @@ class CliToolExecutor {
   /// Executes [command] with optional [args], mirroring every output line
   /// live to dmtools' stderr ([mirror] overrides the target for tests).
   ///
+  /// [workingDirectory] runs the child inside that directory (absolute, or
+  /// relative to the process CWD) instead of silently ignoring it — the
+  /// parameter the tool schema advertises. When null the child inherits the
+  /// process CWD, as before.
+  ///
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
   Future<Map<String, dynamic>> executeCommand(
     String command, {
     List<String>? args,
+    String? workingDirectory,
     OutputLineSink? mirror,
   }) async {
     if (!isAllowed(command)) {
@@ -129,6 +135,7 @@ class CliToolExecutor {
     final result = await runCaptured(
       command,
       args ?? const [],
+      workingDirectory: workingDirectory,
       mirror: mirror,
     );
     return _resultMap(result);
@@ -194,6 +201,7 @@ class CliToolExecutor {
     'cli_execute_command': (a) => executeCommand(
           a['command'] as String,
           args: _parseArgs(a['args']),
+          workingDirectory: a['workingDirectory'] as String?,
         ),
     'cli_execute_command_with_env': (a) => executeCommandWithEnv(
           a['command'] as String,

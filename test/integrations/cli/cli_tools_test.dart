@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -10,6 +12,7 @@ void main() {
   executeCommandTests();
   executeDispatchTests();
   liveMirrorTests();
+  workingDirectoryTests();
 }
 
 /// Catalog shape: tool name, integration, params.
@@ -163,6 +166,57 @@ void executeDispatchTests() {
         () => executor.execute('cli_unknown', {'command': 'git'}),
         throwsArgumentError,
       );
+    });
+  });
+}
+
+/// The advertised `workingDirectory` param must reach the child process:
+/// silently dropping it made an agent's explicit CWD request a no-op that
+/// still reported success (the JS-bridge path always honored it).
+void workingDirectoryTests() {
+  group('cli_execute_command workingDirectory', () {
+    test('dispatch runs the command inside workingDirectory', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final tmp = await Directory.systemTemp.createTemp('cli_wd');
+      try {
+        final executor = CliToolExecutor(PropertyReader());
+        final result = await executor.execute('cli_execute_command', {
+          'command': 'sh',
+          'args': ['-c', 'pwd'],
+          'workingDirectory': tmp.path,
+        });
+        expect(result['stdout'].trim(), tmp.resolveSymbolicLinksSync());
+        expect(result['exitCode'], 0);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('executeCommand forwards workingDirectory to the process', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final tmp = await Directory.systemTemp.createTemp('cli_wd');
+      try {
+        final executor = CliToolExecutor(PropertyReader());
+        final result = await executor.executeCommand(
+          'sh',
+          args: ['-c', 'pwd'],
+          workingDirectory: tmp.path,
+        );
+        expect(result['stdout'].trim(), tmp.resolveSymbolicLinksSync());
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('still runs in the process CWD when workingDirectory is omitted',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final result = await executor.execute('cli_execute_command', {
+        'command': 'sh',
+        'args': ['-c', 'pwd'],
+      });
+      expect(result['stdout'].trim(), Directory.current.path);
     });
   });
 }

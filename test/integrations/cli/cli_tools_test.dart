@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -9,6 +11,10 @@ void main() {
   whitelistTests();
   executeCommandTests();
   executeDispatchTests();
+  liveMirrorTests();
+  workingDirectoryTests();
+  workingDirectoryValidationTests();
+  workingDirectoryFallbackTests();
 }
 
 /// Catalog shape: tool name, integration, params.
@@ -95,7 +101,7 @@ void executeCommandTests() {
     test('executes a whitelisted command and captures output', () async {
       PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'echo'});
       final executor = CliToolExecutor(PropertyReader());
-      final result = await executor.executeCommand('echo', ['hello']);
+      final result = await executor.executeCommand('echo', args: ['hello']);
       expect(result['stdout'].trim(), 'hello');
       expect(result['stderr'], '');
       expect(result['exitCode'], 0);
@@ -111,7 +117,7 @@ void executeCommandTests() {
     test('throws ArgumentError for a non-whitelisted command', () {
       final executor = CliToolExecutor();
       expect(
-        () => executor.executeCommand('rm', ['-rf', '/']),
+        () => executor.executeCommand('rm', args: ['-rf', '/']),
         throwsArgumentError,
       );
     });
@@ -162,6 +168,194 @@ void executeDispatchTests() {
         () => executor.execute('cli_unknown', {'command': 'git'}),
         throwsArgumentError,
       );
+    });
+  });
+}
+
+/// The advertised `workingDirectory` param must reach the child process:
+/// silently dropping it made an agent's explicit CWD request a no-op that
+/// still reported success (the JS-bridge path always honored it).
+void workingDirectoryTests() {
+  group('cli_execute_command workingDirectory', () {
+    test('dispatch runs the command inside workingDirectory', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final tmp = await Directory.systemTemp.createTemp('cli_wd');
+      try {
+        final executor = CliToolExecutor(PropertyReader());
+        final result = await executor.execute('cli_execute_command', {
+          'command': 'sh',
+          'args': ['-c', 'pwd'],
+          'workingDirectory': tmp.path,
+        });
+        expect(result['stdout'].trim(), tmp.resolveSymbolicLinksSync());
+        expect(result['exitCode'], 0);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('executeCommand forwards workingDirectory to the process', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final tmp = await Directory.systemTemp.createTemp('cli_wd');
+      try {
+        final executor = CliToolExecutor(PropertyReader());
+        final result = await executor.executeCommand(
+          'sh',
+          args: ['-c', 'pwd'],
+          workingDirectory: tmp.path,
+        );
+        expect(result['stdout'].trim(), tmp.resolveSymbolicLinksSync());
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('still runs in the process CWD when workingDirectory is omitted',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final result = await executor.execute('cli_execute_command', {
+        'command': 'sh',
+        'args': ['-c', 'pwd'],
+      });
+      expect(result['stdout'].trim(), Directory.current.path);
+    });
+  });
+}
+
+/// Allowed-base validation on the async executor (Java
+/// `validateWithinAllowedBase` parity): the two surfaces of
+/// `cli_execute_command` — the JS-bridge path and this executor — must
+/// enforce the same sandbox on a caller-supplied `workingDirectory`, not
+/// disagree on a security-flavored behavior.
+void workingDirectoryValidationTests() {
+  group('cli_execute_command workingDirectory allowed-base validation', () {
+    test('rejects a directory outside the allowed bases', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      await expectLater(
+        () => executor.executeCommand(
+          'sh',
+          args: ['-c', 'pwd'],
+          workingDirectory: '/etc',
+        ),
+        throwsException,
+      );
+    });
+
+    test('still runs inside a directory within the allowed bases', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      // A repo-relative directory resolves against the process CWD (the
+      // base) and stays within it — allowed. System-temp targets (an
+      // allowed base themselves) are pinned by the forwarding tests above.
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: 'test',
+      );
+      expect(result['stdout'].trim(), endsWith('/test'));
+      expect(result['exitCode'], 0);
+    });
+  });
+}
+
+/// Java `resolveWorkingDirectory` parity for directories that do not
+/// exist: the same resolution the JS-bridge path applies — fall back to
+/// the git root of the base (then the base) instead of surfacing a
+/// ProcessException the bridge never produces.
+void workingDirectoryFallbackTests() {
+  group('cli_execute_command workingDirectory non-existent fallback', () {
+    // The two surfaces of the tool must agree on a typo'd
+    // workingDirectory: the bridge resolves a missing directory to the
+    // git root (Java parity); the async executor used to throw
+    // ProcessException for the exact same input.
+    test('a non-existent absolute directory falls back to the git root',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final expected =
+          gitRepositoryRoot(Directory.current.path) ?? Directory.current.path;
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: '${Directory.current.path}/does-not-exist-gh50',
+      );
+      expect(result['exitCode'], 0);
+      expect(result['stdout'].trim(), expected);
+    });
+
+    test('a non-existent relative directory falls back to the git root',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final expected =
+          gitRepositoryRoot(Directory.current.path) ?? Directory.current.path;
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: 'does-not-exist-gh50',
+      );
+      expect(result['exitCode'], 0);
+      expect(result['stdout'].trim(), expected);
+    });
+  });
+}
+
+/// Live stderr mirroring: every output line is mirrored as it arrives while
+/// the returned `{stdout, stderr, exitCode}` capture stays byte-identical.
+void liveMirrorTests() {
+  group('CliToolExecutor.executeCommand live mirror', () {
+    test('mirrors each output line and keeps the captured result', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'echo'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommand(
+        'echo',
+        args: ['hello'],
+        mirror: mirrored.add,
+      );
+      expect(result['stdout'], 'hello\n');
+      expect(result['stderr'], '');
+      expect(result['exitCode'], 0);
+      expect(mirrored, ['hello']);
+    });
+
+    test('mirrors multi-line output from a single command', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommand('sh',
+          args: ['-c', 'echo a; echo b; echo c'], mirror: mirrored.add);
+      expect(mirrored, ['a', 'b', 'c']);
+      expect(result['stdout'], 'a\nb\nc\n');
+    });
+
+    test('mirrors stderr lines too, captured separately', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommand('sh',
+          args: ['-c', 'echo out; echo err 1>&2'], mirror: mirrored.add);
+      expect(mirrored, containsAll(['out', 'err']));
+      expect(result['stdout'], 'out\n');
+      expect(result['stderr'], 'err\n');
+    });
+  });
+
+  group('CliToolExecutor.executeCommandWithEnv live mirror', () {
+    test('mirrors lines and applies env vars', () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final mirrored = <String>[];
+      final result = await executor.executeCommandWithEnv(
+        'sh',
+        args: ['-c', 'echo \$MIRROR_PROBE'],
+        envVars: {'MIRROR_PROBE': 'env-value'},
+        mirror: mirrored.add,
+      );
+      expect(mirrored, ['env-value']);
+      expect(result['stdout'], 'env-value\n');
     });
   });
 }

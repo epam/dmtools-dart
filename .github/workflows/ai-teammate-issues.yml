@@ -412,21 +412,18 @@ jobs:
           # github-actions[bot]. Same PAT-first fallback as auto-update-prs.yml.
           GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN || github.token }}
         run: |
-          # Live FULL session trace: run-agent.sh passes FA_LOG_FILE to
-          # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91) which
-          # tees every line fa prints — assistant text and tool calls,
-          # untruncated — to the file. dmtools captures fa's own stdout and
-          # echoes it only at the end as one escaped JSON blob (unreadable
-          # in the Actions UI), so we tail the log file here instead:
-          # full messages stream into this step's log as [fa]-prefixed
-          # lines while the agent works.
+          # FULL session trace: run-agent.sh passes FA_LOG_FILE to
+          # `fa --log-file` (fa >= v0.1.335, flutter_agent_harness#91),
+          # which tees every line fa prints — assistant text and tool
+          # calls, untruncated — to the file, uploaded as an artifact
+          # below. dmtools mirrors child output live to its own stderr
+          # (gh-50), so the agent's work already streams into this step's
+          # log as it happens; the follower side-channel is gone.
           FA_LOG_FILE="${GITHUB_WORKSPACE}/.dmtools/fa-trace.log"
           export FA_LOG_FILE
           mkdir -p "$(dirname "${FA_LOG_FILE}")"
           touch "${FA_LOG_FILE}"
           echo "fa full trace: ${FA_LOG_FILE}"
-          tail -n +1 -F "${FA_LOG_FILE}" 2>/dev/null | sed -u 's/^/[fa] /' &
-          FOLLOWER_PID=$!
           # Capture the run output for the verdict step below: the final
           # dmtools result is a JSON blob ({"success":…,"results":[{
           # "response":"# PR … verdict: …"}]}) — tee keeps it visible in
@@ -436,8 +433,6 @@ jobs:
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
             --ciRunUrl "${CI_RUN_URL}" --debug 2>&1 | tee "${RUN_OUTPUT}"
           RC=${PIPESTATUS[0]}
-          pkill -P "${FOLLOWER_PID}" 2>/dev/null || true
-          kill "${FOLLOWER_PID}" 2>/dev/null || true
           exit "${RC}"
 
       - name: Apply the review verdict (review runs only)
@@ -717,7 +712,10 @@ jobs:
         # Must run AFTER the memory-persist push: the artifact is the durable
         # copy of the run (readable after log expiry), so it has to include
         # the final helper invocation from the memory push above — uploaded
-        # earlier it would silently miss the last push of the run.
+        # earlier it would silently miss the last push of the run. The step
+        # log streams the agent's output live via dmtools' stderr mirroring
+        # (gh-50); the artifact keeps the run readable after log expiry or
+        # outside the Actions UI.
         if: always()
         uses: actions/upload-artifact@v4
         with:

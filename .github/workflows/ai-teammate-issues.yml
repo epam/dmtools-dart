@@ -46,7 +46,12 @@
 # Sessions: run-agent.sh resumes a deterministic named fa session per
 #   repo:GH-<n>:group (bug/story/rework share dev-write — a rework continues
 #   the ticket's dev conversation; review has its own dev-review), and the
-#   cache steps carry the session directory across CI runs.
+#   session directory travels between runs via the Actions cache. Issues
+#   tokens can only READ caches (the service flags such jobs
+#   actions_cache_mode=read no matter what `permissions:` says — gh-72), so
+#   the save happens in the dispatch-triggered ai-teammate-session-sink.yml,
+#   which holds a write-mode token and stores the bundle under exactly the
+#   keys this workflow restores from (restore-keys prefix → resume).
 #
 # Self-contained on purpose: unlike the Jira-era reusable ai-teammate.yml,
 # this template must prepare the ticket input (issue body) BEFORE the run,
@@ -78,8 +83,9 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  # Cache saves were denied ("token has no writable scopes") without this:
-  # actions/cache@v6 save phase needs actions:write on github.token.
+  # actions:write lets this job list caches and dispatch the sink workflow
+  # (gh workflow run) that saves the session — issues tokens are read-only
+  # for the cache no matter what, but workflow_dispatch still works (gh-72).
   actions: write
 
 env:
@@ -185,7 +191,12 @@ jobs:
         run: bash agents/setup/cache.sh keys fa-session
 
       - name: Restore fa session (resume the ticket conversation)
-        uses: actions/cache@v6
+        # restore-only: issues-triggered runs get a read-only cache token
+        # (the service flags the job `actions_cache_mode=read` regardless of
+        # `permissions:`), so the combo action's post-save would always be
+        # denied — the session is SAVED by the sink run below instead.
+        id: session_restore
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.FA_SESSION_CACHE_PATH }}
           key: ${{ env.FA_SESSION_CACHE_KEY }}
@@ -195,6 +206,7 @@ jobs:
         # 'latest' must never be cached — a cached "latest" freezes the
         # first version it saw and defeats the point.
         if: env.FA_VERSION != 'latest'
+        id: fa_restore
         uses: actions/cache@v6
         with:
           path: |
@@ -203,6 +215,7 @@ jobs:
           key: fa-${{ env.FA_VERSION }}-${{ runner.os }}-${{ runner.arch }}
 
       - name: Cache dmtools CLI (by version)
+        id: dmtools_restore
         uses: actions/cache@v6
         with:
           path: ~/.dmtools/bin
@@ -470,6 +483,87 @@ jobs:
           else
             echo "no new fa memory to persist"
           fi
+
+      - name: Bundle session + fresh CLIs for the cache sink
+        # Issues-triggered runs hold a READ-only cache token (the service
+        # flags the job actions_cache_mode=read regardless of `permissions:`,
+        # gh-72 — every save attempt here was always denied), so the cache
+        # saves this job used to attempt never landed. Instead: bundle what
+        # the NEXT run needs and let the dispatch sink save it.
+        #   session — always (the ticket conversation itself)
+        #   fa/dmtools CLIs — only when their restore missed, i.e. they were
+        #     just downloaded and their cache key does not exist yet
+        if: always()
+        env:
+          FA_HIT: ${{ steps.fa_restore.outputs.cache-hit }}
+          DMTOOLS_HIT: ${{ steps.dmtools_restore.outputs.cache-hit }}
+        run: |
+          mkdir -p sink-bundle/session sink-bundle/fa/bin sink-bundle/fa/lib sink-bundle/dmtools
+          cp -a "${FA_SESSION_CACHE_PATH:-/nonexistent}/." sink-bundle/session/ 2>/dev/null || true
+          if [ "${FA_HIT:-}" != "true" ] && [ "${FA_VERSION:-latest}" != "latest" ]; then
+            cp -a "$HOME/.local/bin/fa" sink-bundle/fa/bin/fa 2>/dev/null || true
+            cp -a "$HOME/lib/." sink-bundle/fa/lib/ 2>/dev/null || true
+          fi
+          if [ "${DMTOOLS_HIT:-}" != "true" ]; then
+            cp -a "$HOME/.dmtools/bin/." sink-bundle/dmtools/bin/ 2>/dev/null || true
+          fi
+          find sink-bundle -maxdepth 2 | sort
+          echo "bundle bytes: $(du -sb sink-bundle | cut -f1)"
+
+      - name: Upload the sink bundle
+        # Artifacts ARE writable from issues runs (unlike caches) — the
+        # trace artifact proves it every run. 1-day retention: the sink
+        # consumes it minutes after upload.
+        if: always()
+        id: sink_bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: fa-sink-bundle-gh-${{ github.event.issue.number }}-${{ github.run_id }}
+          path: sink-bundle
+          retention-days: 1
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+      - name: Save the session through the dispatch sink
+        # workflow_dispatch runs get a WRITE-mode cache token (proven by the
+        # gh-72 bisect run 34699810563: "Cache mode: write" + "Cache saved
+        # with key" — the first successful cache save in this repo). Dispatch
+        # the sink with this job's github.token (actions:write allows it —
+        # proven by the same bisect), then wait for the session key to land:
+        # the per-issue concurrency group queues the NEXT run of this ticket
+        # behind THIS job, so landing the key before exit guarantees the next
+        # run resumes the conversation.
+        if: always() && steps.sink_bundle.outputs.artifact-id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.sink_bundle.outputs.artifact-id }}
+          SESSION_KEY: ${{ env.FA_SESSION_CACHE_KEY }}
+          FA_KEY: ${{ env.FA_VERSION != 'latest' && format('fa-{0}-{1}-{2}', env.FA_VERSION, runner.os, runner.arch) || '' }}
+          DMTOOLS_KEY: dmtools-${{ env.DMTOOLS_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+        run: |
+          gh workflow run ai-teammate-session-sink.yml \
+            --repo "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}" \
+            -f artifact_id="$ARTIFACT_ID" \
+            -f session_key="$SESSION_KEY" \
+            -f fa_key="$FA_KEY" \
+            -f dmtools_key="$DMTOOLS_KEY"
+          echo "→ sink dispatched (artifact ${ARTIFACT_ID}, session key ${SESSION_KEY})"
+          if [ -z "$SESSION_KEY" ]; then
+            echo "no session key exported — nothing to wait for"
+            exit 0
+          fi
+          deadline=$((SECONDS + 240))
+          # --sort created_at (desc) keeps the just-saved key on the first
+          # page no matter how many prior fa-session entries exist.
+          until gh cache list --repo "$GITHUB_REPOSITORY" --key "$SESSION_KEY" --limit 5 --sort created_at --json key --jq '.[].key' \
+            | grep -qxF "$SESSION_KEY"; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::warning::sink has not landed ${SESSION_KEY} within 4 min — the next run of this ticket may resume one round behind"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "→ session persisted to the Actions cache: ${SESSION_KEY}"
 
       - name: Hand the issue to the reviewer (dev runs only)
         # The dev agent opened (or updated) the PR — label the issue

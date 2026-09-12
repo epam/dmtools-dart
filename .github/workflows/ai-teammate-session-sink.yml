@@ -1,0 +1,150 @@
+# AI Teammate cache sink — writes what issues-triggered runs cannot.
+#
+# GitHub's Actions service scopes every job to a cache mode BEFORE any
+# workflow `permissions:` block applies (runner job-message feature flag
+# `actions_cache_mode`, printed as "Cache mode: read|write" in Set up job):
+#
+#   issues events   → read   → every actions/cache save is denied with
+#                              "cache write denied: token has no writable
+#                              scopes", no matter what permissions declare
+#   push / schedule / workflow_dispatch → write
+#
+# The ai-teammate-issues runs are all issues-triggered, so their session and
+# CLI cache saves never landed (repo cache stayed empty forever). This sink
+# closes the gap: the issues-run uploads its session (and freshly installed
+# CLIs) as an artifact — artifacts ARE writable from issues runs — dispatches
+# this workflow with `gh workflow run` (github.token has actions:write), and
+# this run, holding a write-mode cache token, saves the payload into the
+# Actions cache under the exact keys the issues-run restores from
+# (restore-keys prefix → next issues-run resumes the ticket conversation).
+#
+# Inputs come from the dispatching run; all but artifact_id are optional.
+# Dispatched with --ref main by ai-teammate-issues.yml; safe to run by hand.
+
+name: 'AI Teammate : cache sink'
+
+run-name: '📦 cache sink · ${{ inputs.session_key || inputs.fa_key || inputs.dmtools_key }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: 'Artifact id holding the sink bundle (required)'
+        required: true
+        type: string
+      session_key:
+        description: 'Full cache key for the fa session (empty = skip)'
+        required: false
+        type: string
+        default: ''
+      fa_key:
+        description: 'Cache key for the fa CLI install (empty = skip)'
+        required: false
+        type: string
+        default: ''
+      dmtools_key:
+        description: 'Cache key for the dmtools CLI install (empty = skip)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  # The whole point of this run: a cache-WRITE-capable token. On a
+  # workflow_dispatch event the service grants actions_cache_mode=write.
+  actions: write
+
+concurrency:
+  # Idempotent saves (unique keys) — group per bundle just to collapse
+  # accidental double dispatches of the same artifact.
+  group: ai-teammate-cache-sink-${{ inputs.artifact_id }}
+  cancel-in-progress: false
+
+jobs:
+  save:
+    if: inputs.artifact_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download the sink bundle
+        # REST API, not actions/download-artifact@v4: the action cannot
+        # resolve other runs' artifacts by name here ("Artifact not found"),
+        # while the same token downloads the same artifact via the API fine.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/${ARTIFACT_ID}/zip" > bundle.zip
+          mkdir -p bundle
+          python3 -c "import zipfile; zipfile.ZipFile('bundle.zip').extractall('bundle')"
+          echo "→ bundle contents:"
+          find bundle -maxdepth 3 | sort | head -30
+
+      - name: Save the fa session
+        # Unique key per producer run (suffix = that run id) — no dedup
+        # needed; the producer's restore-keys prefix picks the newest.
+        # Skipped when the session directory has no files (agent never
+        # got far enough to create one).
+        if: inputs.session_key != ''
+        id: session
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ inputs.session_key }}
+        run: |
+          if [ -n "$(find bundle/session -type f -print -quit 2>/dev/null)" ]; then
+            echo "files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::bundle carries no session files — nothing to save under ${KEY}"
+          fi
+      - if: inputs.session_key != '' && steps.session.outputs.files == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: bundle/session
+          key: ${{ inputs.session_key }}
+
+      - name: Save the fa CLI (only when the key is not cached yet)
+        if: inputs.fa_key != ''
+        id: fa
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ inputs.fa_key }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --key "$KEY" --limit 100 --json key --jq '.[].key' \
+            | grep -qxF "$KEY"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "→ fa CLI cache already present: ${KEY}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: inputs.fa_key != '' && steps.fa.outputs.exists == 'false'
+        uses: actions/cache/save@v6
+        with:
+          # Order and types mirror the producer's restore paths:
+          # (~/.local/bin/fa file, ~/lib dir) ← (bundle/fa/bin/fa file,
+          # bundle/fa/lib dir).
+          path: |
+            bundle/fa/bin/fa
+            bundle/fa/lib
+          key: ${{ inputs.fa_key }}
+
+      - name: Save the dmtools CLI (only when the key is not cached yet)
+        if: inputs.dmtools_key != ''
+        id: dmtools
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ inputs.dmtools_key }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --key "$KEY" --limit 100 --json key --jq '.[].key' \
+            | grep -qxF "$KEY"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "→ dmtools CLI cache already present: ${KEY}"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: inputs.dmtools_key != '' && steps.dmtools.outputs.exists == 'false'
+        uses: actions/cache/save@v6
+        with:
+          # Mirrors the producer's restore path ~/.dmtools/bin (a dir).
+          path: bundle/dmtools/bin
+          key: ${{ inputs.dmtools_key }}

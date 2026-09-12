@@ -163,6 +163,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matrix and exercises `dmtools --version` / `dmtools list`; `dash -n` +
   `shellcheck` the installer on every PR.
 
+### Fixed
+
+- Actions-cache saves never worked on this machine (gh-72): every
+  `issues`-triggered run is issued a **read-only** cache token by the
+  Actions service — the job-level `actions_cache_mode` flag is `read`
+  regardless of the workflow `permissions:` block — so all
+  `actions/cache` saves were denied ("token has no writable scopes"),
+  fa sessions never persisted and no cache entry ever existed. The
+  machine now bundles the session dir (plus freshly installed fa/dmtools
+  CLIs) as an artifact — artifacts are writable from issues runs — and
+  dispatches the new `ai-teammate-session-sink.yml`
+  (`workflow_dispatch` runs hold a write-mode cache token), which stores
+  the bundle under the exact keys `ai-teammate-issues.yml` restores
+  from. Dev/rework/review runs on the same issue now resume the prior
+  conversation instead of starting cold, and the CLI caches finally
+  populate.
+
 ## [0.1.0] — 2026-08-13
 
 Initial feature-complete release. Dart port of [DMTools](https://github.com/epam/dm.ai)

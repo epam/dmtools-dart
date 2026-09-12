@@ -241,7 +241,32 @@ jobs:
       - name: Install prerequisites (fa; no-op on cache hit)
         # register_path in the setup script exports PATH immediately and
         # persists it to GITHUB_PATH — no manual PATH edits needed here.
-        run: bash agents/setup/install.sh "fa:${FA_VERSION}"
+        #
+        # Pre-download via the AUTHENTICATED gh api path first: anonymous
+        # release-asset downloads hit GitHub edge caches that served
+        # stale 404s for hours after the harness repo re-cut its releases
+        # (observed 16:04–17:49 UTC 2026-09-12; the authenticated path —
+        # proven by the diag run — bypasses them). fa.sh then sees the
+        # binary in its FA_INSTALL_DIR and no-ops.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! command -v fa >/dev/null 2>&1 && [ ! -x "${HOME}/.local/bin/fa" ]; then
+            case "$(uname -m)" in
+              x86_64) FA_ARCH="x64" ;;
+              *)      FA_ARCH="arm64" ;;
+            esac
+            tmp="$(mktemp -d)"
+            gh release download "${FA_VERSION}" \
+              --repo IstiN/flutter_agent_harness \
+              --pattern "fa-linux-${FA_ARCH}.tar.gz" --dir "${tmp}" --clobber
+            tar -xzf "${tmp}/fa-linux-${FA_ARCH}.tar.gz" -C "${tmp}"
+            mkdir -p "${HOME}/.local/bin" "${HOME}/.local/lib"
+            cp "${tmp}/bundle/bin/fa" "${HOME}/.local/bin/fa"
+            chmod +x "${HOME}/.local/bin/fa"
+            cp -R "${tmp}/bundle/lib/." "${HOME}/.local/lib/" 2>/dev/null || true
+          fi
+          bash agents/setup/install.sh "fa:${FA_VERSION}"
 
       - name: Install dmtools CLI (pinned release bundle)
         # Prebuilt AOT binary + the QuickJS shared library it loads, from

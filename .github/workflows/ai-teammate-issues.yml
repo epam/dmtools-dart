@@ -766,7 +766,18 @@ jobs:
           git config user.name "dm.ai"
           git config user.email "dm.ai@epam.com"
           git fetch --depth 1 origin "refs/heads/$FA_SESS_BRANCH" || true
+          # Snapshot the session tree OUTSIDE the repo before switching:
+          # `git switch --orphan` removes TRACKED files from the working
+          # tree, and restored sessions can be tracked (the restore-step
+          # staging leak) — without the snapshot, `git add -f` then dies
+          # on "pathspec did not match any files" (run 34716859005).
+          SESS_SNAP="$(mktemp -d)"
+          cp -a .dmtools/fa-sessions "$SESS_SNAP/"
           git switch --orphan "$FA_SESS_BRANCH" 2>/dev/null || git switch -C "$FA_SESS_BRANCH"
+          rm -rf .dmtools/fa-sessions
+          mkdir -p .dmtools
+          cp -a "$SESS_SNAP/fa-sessions" .dmtools/
+          rm -rf "$SESS_SNAP"
           git add -f .dmtools/fa-sessions
           if git diff --cached --quiet; then
             echo "fa session staged nothing (ignored/empty) — nothing to persist"

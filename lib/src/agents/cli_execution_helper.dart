@@ -8,6 +8,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../integrations/cli/process_output_tee.dart';
+
 /// The output response file name (both folders use the same file).
 const String responseFileName = 'response.md';
 
@@ -164,7 +166,9 @@ class CliExecutionHelper {
   ///
   /// Each command is run via `/bin/sh -c` to allow arbitrary shell syntax.
   /// [workingDirectory] sets the subprocess CWD. [environment] replaces the
-  /// inherited OS env when non-null.
+  /// inherited OS env when non-null. Every output line is mirrored live to
+  /// dmtools' stderr while it streams ([mirror] overrides the target for
+  /// tests) — the captured `commandResponses` stay byte-identical.
   ///
   /// Returns a [CliExecutionResult] with accumulated responses and the
   /// output response file content (if present).
@@ -173,6 +177,7 @@ class CliExecutionHelper {
     String? workingDirectory,
     Map<String, String>? environment,
     OutputFolderPreference preference = OutputFolderPreference.outputsFirst,
+    OutputLineSink? mirror,
   }) async {
     final responses = StringBuffer();
     var hasFatal = false;
@@ -181,7 +186,8 @@ class CliExecutionHelper {
 
     for (final command in commands) {
       if (command.trim().isEmpty) continue;
-      final result = await _runOne(command, workingDirectory, environment);
+      final result =
+          await _runOne(command, workingDirectory, environment, mirror);
       responses.write('CLI Command: $command\n');
       if (result.exitCode != 0) {
         // Providers print their diagnostics on stdout (run-agent.sh echoes
@@ -192,7 +198,7 @@ class CliExecutionHelper {
         responses.write('\n');
         hasFatal = true;
         exitCode = result.exitCode;
-        errorMsg = result.stderr.toString();
+        errorMsg = result.stderr;
       } else {
         responses.write('Response:\n${result.stdout}\n\n');
       }
@@ -208,17 +214,19 @@ class CliExecutionHelper {
     );
   }
 
-  /// Runs a single shell command.
-  Future<ProcessResult> _runOne(
+  /// Runs a single shell command with live output mirroring.
+  Future<CapturedProcessResult> _runOne(
     String command,
     String? workingDirectory,
     Map<String, String>? environment,
+    OutputLineSink? mirror,
   ) {
-    return Process.run(
+    return runCaptured(
       '/bin/sh',
       ['-c', command.trim()],
       workingDirectory: workingDirectory,
       environment: environment,
+      mirror: mirror,
     );
   }
 
@@ -232,14 +240,16 @@ class CliExecutionHelper {
   /// each command is streamed line-by-line (stdout+stderr merged, mirroring the
   /// Java `redirectErrorStream` behaviour) so [CliExecutionCallbacks.lineStopPredicate]
   /// can stop mid-output; a background [Timer] fires [CliExecutionCallbacks.timerAction]
-  /// periodically and once more after the batch (final tick). Port of Java
-  /// `executeCliCommandsWithResult`.
+  /// periodically and once more after the batch (final tick). Every streamed
+  /// line is mirrored live to dmtools' stderr ([mirror] overrides the target
+  /// for tests). Port of Java `executeCliCommandsWithResult`.
   Future<CliExecutionResult> executeCommandsWithCallbacks(
     List<String> commands, {
     String? workingDirectory,
     Map<String, String>? environment,
     CliExecutionCallbacks? callbacks,
     OutputFolderPreference preference = OutputFolderPreference.outputsFirst,
+    OutputLineSink? mirror,
   }) async {
     if (callbacks == null || !callbacks.hasHooks) {
       return executeCommands(
@@ -247,6 +257,7 @@ class CliExecutionHelper {
         workingDirectory: workingDirectory,
         environment: environment,
         preference: preference,
+        mirror: mirror,
       );
     }
     final timer = _startTimer(callbacks);
@@ -256,6 +267,7 @@ class CliExecutionHelper {
         workingDirectory,
         environment,
         callbacks,
+        mirror,
       );
       return CliExecutionResult(
         commandResponses: outcome.responses,
@@ -287,12 +299,14 @@ class CliExecutionHelper {
   }
 
   /// Runs the full command batch with monitoring, returning the accumulated
-  /// responses and the last fatal-error signal.
+  /// responses and the last fatal-error signal. [mirror] receives every
+  /// output line as it streams.
   Future<_BatchOutcome> _runMonitoredBatch(
     List<String> commands,
     String? workDir,
     Map<String, String>? env,
     CliExecutionCallbacks cb,
+    OutputLineSink? mirror,
   ) async {
     final responses = StringBuffer();
     var hasFatal = false;
@@ -307,6 +321,7 @@ class CliExecutionHelper {
         env,
         responses,
         cb,
+        mirror,
       );
       if (one.stopped) {
         responses.write(
@@ -335,14 +350,17 @@ class CliExecutionHelper {
   /// Streams one command's merged stdout/stderr line-by-line.
   ///
   /// Updates [CliExecutionCallbacks.liveOutput] after each line so a concurrent
-  /// timer tick sees partial output. When the line-stop predicate returns
-  /// `true`, the process is killed and execution stops.
+  /// timer tick sees partial output, and mirrors every line live via [mirror]
+  /// (dmtools' own stderr when null; best-effort, like [safeMirrorLine]).
+  /// When the line-stop predicate returns `true`, the process is killed and
+  /// execution stops.
   Future<_CommandOutcome> _runStreamedCommand(
     String command,
     String? workDir,
     Map<String, String>? env,
     StringBuffer responses,
     CliExecutionCallbacks cb,
+    OutputLineSink? mirror,
   ) async {
     final proc = await Process.start(
       '/bin/sh',
@@ -351,20 +369,43 @@ class CliExecutionHelper {
       environment: env,
     );
     final output = StringBuffer();
+    final lineMirror = mirror ?? mirrorLineToStderr;
     var stopped = false;
     String? stopLine;
-    await for (final line in proc.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())) {
-      output.writeln(line);
-      final live = cb.liveOutput;
-      if (live != null) live.value = '$responses$output';
-      if (cb.lineStopPredicate != null && cb.lineStopPredicate!(line)) {
-        stopLine = line;
-        stopped = true;
-        proc.kill(ProcessSignal.sigkill);
-        break;
+    var streamFailed = false;
+    // Lenient UTF-8 (allowMalformed: true) matches the buffered path's
+    // captureAndMirror decode: malformed child output becomes U+FFFD on
+    // both CliAgent paths instead of throwing mid-batch only here.
+    try {
+      await for (final line in proc.stdout
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())) {
+        output.writeln(line);
+        safeMirrorLine(lineMirror, line);
+        final live = cb.liveOutput;
+        if (live != null) live.value = '$responses$output';
+        if (cb.lineStopPredicate != null && cb.lineStopPredicate!(line)) {
+          stopLine = line;
+          stopped = true;
+          proc.kill(ProcessSignal.sigkill);
+          break;
+        }
       }
+    } on Object {
+      streamFailed = true;
+      rethrow;
+    } finally {
+      // No-op when the process already exited (stdout EOF means the shell
+      // has exited, so the success path's exit code is untouched) or when
+      // the stop path already SIGKILLed it; kills runaways when the
+      // predicate (a JS callback) or the liveOutput setter threw
+      // mid-stream, so the child cannot outlive the failed batch detached.
+      // The rethrow above propagates only after this await, so the kill is
+      // complete when the caller sees the error.
+      if (streamFailed) {
+        proc.kill(ProcessSignal.sigkill);
+      }
+      await proc.exitCode;
     }
     final code = await proc.exitCode;
     return _CommandOutcome(output.toString(), code, stopped, stopLine);

@@ -232,6 +232,17 @@ void _testRunCliAgent() {
   });
 
   group('run <teammate-config>.json', () {
+    // Hermetic cwd: with no inputJql, TeammateJob probes
+    // <Directory.current>/input/ticket.md for the prepared-input
+    // pass-through. A repo root with a harness-prepared input/ticket.md
+    // would flip the no-op branch into a full CliAgent run — pin cwd to
+    // the per-test temp dir for the whole group.
+    late String _savedCwd;
+    setUp(() {
+      _savedCwd = Directory.current.path;
+      Directory.current = _tmp.path;
+    });
+    tearDown(() => Directory.current = _savedCwd);
     test('executes a teammate job without inputJql as a no-op success',
         () async {
       final configFile = File('${_tmp.path}/teammate.json')

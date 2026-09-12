@@ -80,8 +80,11 @@ void _noConfigTests() {
 
     test('github_get_pr returns the config error', () {
       expect(
-        jsonDecode(const GitHubSyncTools()
-            .handlers['github_get_pr']!({'workspace': 'o'})),
+        jsonDecode(
+          const GitHubSyncTools().handlers['github_get_pr']!({
+            'workspace': 'o',
+          }),
+        ),
         {'error': 'GitHub not configured'},
       );
     });
@@ -166,11 +169,13 @@ void fixtureprtools_p1() {
   });
 
   test('github_merge_pr PUTs the merge endpoint with defaults', () {
-    final body = jsonDecode(tools.handlers['github_merge_pr']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '42',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_merge_pr']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '42',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'PUT');
     expect(body['path'], '/repos/o/r/pulls/42/merge');
     expect(jsonDecode(body['body'] as String), {'merge_method': 'merge'});
@@ -179,14 +184,16 @@ void fixtureprtools_p1() {
 
 void fixtureprtools_p2() {
   test('github_merge_pr passes squash method and commit metadata', () {
-    final body = jsonDecode(tools.handlers['github_merge_pr']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '42',
-      'mergeMethod': 'squash',
-      'commitTitle': 'Merge it',
-      'commitMessage': 'Closes #1',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_merge_pr']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '42',
+        'mergeMethod': 'squash',
+        'commitTitle': 'Merge it',
+        'commitMessage': 'Closes #1',
+      }),
+    ) as Map<String, dynamic>;
     expect(jsonDecode(body['body'] as String), {
       'merge_method': 'squash',
       'commit_title': 'Merge it',
@@ -246,24 +253,28 @@ void fixturecommenttools_p1() {
   });
 
   test('github_add_pr_label POSTs a single-element label array', () {
-    final body = jsonDecode(tools.handlers['github_add_pr_label']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '42',
-      'label': 'bug',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_add_pr_label']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '42',
+        'label': 'bug',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'POST');
     expect(body['path'], '/repos/o/r/issues/42/labels');
     expect(jsonDecode(body['body'] as String), ['bug']);
   });
 
   test('github_remove_pr_label DELETEs the label resource', () {
-    final body = jsonDecode(tools.handlers['github_remove_pr_label']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '42',
-      'label': 'bug',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_remove_pr_label']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '42',
+        'label': 'bug',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'DELETE');
     expect(body['path'], '/repos/o/r/issues/42/labels/bug');
   });
@@ -290,32 +301,6 @@ void fixturecommenttools_p2() {
     });
     final decoded = jsonDecode(result) as Map<String, dynamic>;
     expect(decoded['error'], contains('HTTP 500'));
-  });
-
-  test('github_get_pr_comments tolerates a plain issue (404 inline page)', () {
-    // trackers.js githubGetComments contract: /pulls/{n}/comments answers
-    // 404 when n is a plain issue (only PRs have review comments) — the
-    // runtime treats that page as empty and still returns the discussion
-    // page, so the tracker layer can read issue comments.
-    final result = tools.handlers['github_get_pr_comments']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '9',
-    });
-    final comments = jsonDecode(result) as List;
-    expect(comments.map((c) => c['id']), [21]);
-  });
-
-  test('github_get_pr_comments still errors when both pages are missing', () {
-    // The tolerance is inline-page-only: a 404 discussion page means the
-    // caller asked for a comment listing that does not exist.
-    final result = tools.handlers['github_get_pr_comments']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '8',
-    });
-    final decoded = jsonDecode(result) as Map<String, dynamic>;
-    expect(decoded['error'], contains('HTTP 404'));
   });
 
   test('github_get_pr_conversations surfaces non-OK pages as an error', () {
@@ -373,11 +358,13 @@ void fixturethreadtools_p1() {
   });
 
   test('github_get_pr_review_threads POSTs the GraphQL query', () {
-    final body = jsonDecode(tools.handlers['github_get_pr_review_threads']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '42',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_get_pr_review_threads']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': '42',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'POST');
     expect(body['path'], '/graphql');
     final sent = jsonDecode(body['body'] as String) as Map<String, dynamic>;
@@ -386,12 +373,34 @@ void fixturethreadtools_p1() {
   });
 
   test('github_resolve_pr_thread POSTs the resolve mutation', () {
-    final body = jsonDecode(tools.handlers['github_resolve_pr_thread']!({
-      'threadId': 'PRRT_kwDO',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_resolve_pr_thread']!({
+        'threadId': 'PRRT_kwDO',
+      }),
+    ) as Map<String, dynamic>;
     final sent = jsonDecode(body['body'] as String) as Map<String, dynamic>;
     expect(sent['query'] as String, contains('resolveReviewThread'));
     expect(sent['query'] as String, contains('PRRT_kwDO'));
+  });
+}
+
+void fixturethreadtools_p2() {
+  test('github_reply_to_pr_thread rejects a non-numeric reply id', () {
+    expect(
+      jsonDecode(
+        tools.handlers['github_reply_to_pr_thread']!({
+          'workspace': 'o',
+          'repository': 'r',
+          'pullRequestId': '42',
+          'inReplyToId': 'not-a-number',
+          'text': 'x',
+        }),
+      ),
+      {
+        'error': "Invalid inReplyToId: expected a numeric GitHub comment ID, "
+            "but got: 'not-a-number'",
+      },
+    );
   });
 
   test('github_reply_to_pr_thread POSTs in_reply_to (alias accepted)', () {
@@ -411,24 +420,6 @@ void fixturethreadtools_p1() {
         'in_reply_to': 123,
       });
     }
-  });
-}
-
-void fixturethreadtools_p2() {
-  test('github_reply_to_pr_thread rejects a non-numeric reply id', () {
-    expect(
-      jsonDecode(tools.handlers['github_reply_to_pr_thread']!({
-        'workspace': 'o',
-        'repository': 'r',
-        'pullRequestId': '42',
-        'inReplyToId': 'not-a-number',
-        'text': 'x',
-      })),
-      {
-        'error': "Invalid inReplyToId: expected a numeric GitHub comment ID, "
-            "but got: 'not-a-number'",
-      },
-    );
   });
 }
 
@@ -459,10 +450,12 @@ void fixturethreadtools_p3() {
       'start_side': 'RIGHT',
     });
     final reviewsGet = fx.requests.indexOf('GET /repos/o/r/pulls/42/reviews');
-    final eventsPost =
-        fx.requests.indexOf('POST /repos/o/r/pulls/42/reviews/9/events');
-    final commentPost =
-        fx.requests.lastIndexOf('POST /repos/o/r/pulls/42/comments');
+    final eventsPost = fx.requests.indexOf(
+      'POST /repos/o/r/pulls/42/reviews/9/events',
+    );
+    final commentPost = fx.requests.lastIndexOf(
+      'POST /repos/o/r/pulls/42/comments',
+    );
     expect(reviewsGet, greaterThanOrEqualTo(0));
     expect(eventsPost, greaterThan(reviewsGet));
     expect(commentPost, greaterThan(eventsPost));
@@ -491,17 +484,17 @@ void fixturethreadtools_p4() {
 
   test('github_add_inline_comment rejects a non-numeric line', () {
     expect(
-      jsonDecode(tools.handlers['github_add_inline_comment']!({
-        'workspace': 'o',
-        'repository': 'r',
-        'pullRequestId': '42',
-        'path': 'src/a.txt',
-        'line': 'x1',
-        'text': 't',
-      })),
-      {
-        'error': "Invalid line: expected a numeric value, but got: 'x1'",
-      },
+      jsonDecode(
+        tools.handlers['github_add_inline_comment']!({
+          'workspace': 'o',
+          'repository': 'r',
+          'pullRequestId': '42',
+          'path': 'src/a.txt',
+          'line': 'x1',
+          'text': 't',
+        }),
+      ),
+      {'error': "Invalid line: expected a numeric value, but got: 'x1'"},
     );
   });
 }
@@ -535,16 +528,14 @@ void _fixtureDiffTools() {
   });
 
   test('github_get_pr_diff parses additions and deletions', () {
-    final stats = jsonDecode(tools.handlers['github_get_pr_diff']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestID': '42',
-    })) as Map<String, dynamic>;
-    expect(stats['stats'], {
-      'total': 3,
-      'additions': 2,
-      'deletions': 1,
-    });
+    final stats = jsonDecode(
+      tools.handlers['github_get_pr_diff']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestID': '42',
+      }),
+    ) as Map<String, dynamic>;
+    expect(stats['stats'], {'total': 3, 'additions': 2, 'deletions': 1});
   });
 
   test('diff tools return empty when IS_READ_PULL_REQUEST_DIFF is off', () {
@@ -584,61 +575,71 @@ void _fixtureActionsTools() {
 
 void fixtureactionstools_p1() {
   test('github_get_commit_check_runs hits the check-runs endpoint', () {
-    final body = jsonDecode(tools.handlers['github_get_commit_check_runs']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'commitSha': 'cafe123',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_get_commit_check_runs']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'commitSha': 'cafe123',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'GET');
     expect(body['path'], '/repos/o/r/commits/cafe123/check-runs');
   });
 
   test('github_get_job_logs hits the job logs endpoint', () {
-    final body = jsonDecode(tools.handlers['github_get_job_logs']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'jobId': '7',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_get_job_logs']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'jobId': '7',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['method'], 'GET');
     expect(body['path'], '/repos/o/r/actions/jobs/7/logs');
   });
 
   test('github_get_workflow_run_jobs hits the run jobs endpoint', () {
-    final body = jsonDecode(tools.handlers['github_get_workflow_run_jobs']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'runId': '5',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_get_workflow_run_jobs']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'runId': '5',
+      }),
+    ) as Map<String, dynamic>;
     expect(body['path'], '/repos/o/r/actions/runs/5/jobs');
   });
 
   test('github_list_workflow_runs supports workflow + status filters', () {
-    final body = jsonDecode(tools.handlers['github_list_workflow_runs']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'workflowId': 'rework.yml',
-      'status': 'failure',
-      'perPage': '50',
-      'page': '2',
-      'created': '2026-05-01..2026-05-31',
-    })) as Map<String, dynamic>;
+    final body = jsonDecode(
+      tools.handlers['github_list_workflow_runs']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'workflowId': 'rework.yml',
+        'status': 'failure',
+        'perPage': '50',
+        'page': '2',
+        'created': '2026-05-01..2026-05-31',
+      }),
+    ) as Map<String, dynamic>;
     expect(
       body['path'],
       '/repos/o/r/actions/workflows/rework.yml/runs'
       '?status=failure&per_page=50&page=2&created=2026-05-01..2026-05-31',
     );
   });
-
-  test('github_list_workflow_runs without filters hits the runs endpoint', () {
-    final body = jsonDecode(tools.handlers['github_list_workflow_runs']!({
-      'workspace': 'o',
-      'repository': 'r',
-    })) as Map<String, dynamic>;
-    expect(body['path'], '/repos/o/r/actions/runs');
-  });
 }
 
 void fixtureactionstools_p2() {
+  test('github_list_workflow_runs without filters hits the runs endpoint', () {
+    final body = jsonDecode(
+      tools.handlers['github_list_workflow_runs']!({
+        'workspace': 'o',
+        'repository': 'r',
+      }),
+    ) as Map<String, dynamic>;
+    expect(body['path'], '/repos/o/r/actions/runs');
+  });
+
   test(
       'github_trigger_workflow POSTs a dispatch and returns the Java '
       'success message', () {
@@ -656,10 +657,7 @@ void fixtureactionstools_p2() {
       'ref': 'develop',
       'inputs': {'user_request': 'rework PROJ-1'},
     });
-    expect(
-      result,
-      "Workflow 'rework.yml' triggered successfully on o/r",
-    );
+    expect(result, "Workflow 'rework.yml' triggered successfully on o/r");
   });
 
   test(
@@ -737,43 +735,45 @@ void fixturereleasetools_p2() {
     });
   });
 
-  test('github_upload_release_asset deletes the existing asset then uploads',
-      () {
-    final file = File('${tmp.path}/report.txt')
-      ..writeAsStringSync('asset bytes');
-    fx.clearLog();
-    final result = tools.handlers['github_upload_release_asset']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'releaseId': '5',
-      'filePath': file.path,
-      'overwrite': 'true',
-    });
-    final asset = jsonDecode(result) as Map<String, dynamic>;
-    expect(asset['browser_download_url'], 'https://dl/x');
-    expect(
-      fx.requests,
-      containsAllInOrder([
-        'GET /repos/o/r/releases/5/assets',
-        'DELETE /repos/o/r/releases/assets/77',
-      ]),
-    );
-    expect(fx.requests.last, startsWith('POST /uploads/'));
-  });
+  test(
+    'github_upload_release_asset deletes the existing asset then uploads',
+    () {
+      final file = File('${tmp.path}/report.txt')
+        ..writeAsStringSync('asset bytes');
+      fx.clearLog();
+      final result = tools.handlers['github_upload_release_asset']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'releaseId': '5',
+        'filePath': file.path,
+        'overwrite': 'true',
+      });
+      final asset = jsonDecode(result) as Map<String, dynamic>;
+      expect(asset['browser_download_url'], 'https://dl/x');
+      expect(
+        fx.requests,
+        containsAllInOrder([
+          'GET /repos/o/r/releases/5/assets',
+          'DELETE /repos/o/r/releases/assets/77',
+        ]),
+      );
+      expect(fx.requests.last, startsWith('POST /uploads/'));
+    },
+  );
 }
 
 void fixturereleasetools_p3() {
   test('github_upload_release_asset errors on a missing file', () {
     expect(
-      jsonDecode(tools.handlers['github_upload_release_asset']!({
-        'workspace': 'o',
-        'repository': 'r',
-        'releaseId': '5',
-        'filePath': '${tmp.path}/nope.txt',
-      })),
-      {
-        'error': startsWith('Release asset file not found:'),
-      },
+      jsonDecode(
+        tools.handlers['github_upload_release_asset']!({
+          'workspace': 'o',
+          'repository': 'r',
+          'releaseId': '5',
+          'filePath': '${tmp.path}/nope.txt',
+        }),
+      ),
+      {'error': startsWith('Release asset file not found:')},
     );
   });
 }

@@ -25,6 +25,7 @@ import 'package:test/test.dart';
 
 void main() {
   verdictFromReviewJsonTests();
+  verdictNormalizationTests();
   verdictOverrideTests();
   verdictMarkerCrossCheckTests();
   verdictMarkerOverrideStillAppliesTests();
@@ -33,9 +34,11 @@ void main() {
   roundCapProgressionTests();
   roundCapEscalationTests();
   roundCapBookkeepingTests();
+  roundCapConfigTests();
   threadSummaryTests();
   wiringTests();
   verdictLabelWiringTests();
+  escalationThreadSummaryWiringTests();
 }
 
 /// Verdict resolution, layer 1: `outputs/pr_review.json` is authoritative.
@@ -49,11 +52,6 @@ void verdictFromReviewJsonTests() {
       expect(d['decision'], 'approve');
       expect(d['override'], 'false');
       expect(d['source'], 'pr_review_json');
-    });
-
-    test('APPROVED is normalized to approve', () {
-      final d = _decide(reviewJson: '{"recommendation":"APPROVED"}');
-      expect(d['decision'], 'approve');
     });
 
     test('REQUEST_CHANGES with 1 blocking finding → rework', () {
@@ -80,6 +78,39 @@ void verdictFromReviewJsonTests() {
       );
       expect(d['decision'], 'rework');
       expect(d['override'], 'false');
+    });
+  });
+}
+
+/// Recommendation tokens arrive in several spellings — the schema enum,
+/// GitHub's native review states, lower-cased LLM output. The machine layer
+/// must normalize all of them: an unrecognized token yields decision=unknown,
+/// which labels nothing (the loop silently stalls instead of converging or
+/// capping).
+void verdictNormalizationTests() {
+  group('decide: recommendation normalization', () {
+    test('APPROVED is normalized to approve', () {
+      final d = _decide(reviewJson: '{"recommendation":"APPROVED"}');
+      expect(d['decision'], 'approve');
+    });
+
+    test('CHANGES_REQUESTED is normalized to a rework verdict', () {
+      // GitHub's native review-state spelling must not fall through to
+      // decision=unknown (nothing labeled — the loop silently stalls).
+      final d = _decide(
+        reviewJson: '{"recommendation":"CHANGES_REQUESTED","issueCounts":'
+            '{"blocking":1,"important":0,"suggestions":0}}',
+      );
+      expect(d['decision'], 'rework');
+      expect(d['source'], 'pr_review_json');
+    });
+
+    test('lower-case CHANGES_REQUESTED is normalized too', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"changes_requested","issueCounts":'
+            '{"blocking":1,"important":0,"suggestions":0}}',
+      );
+      expect(d['decision'], 'rework');
     });
   });
 }
@@ -395,6 +426,62 @@ void roundCapBookkeepingTests() {
   });
 }
 
+/// MAX_ROUNDS arrives from a free-text repo variable
+/// (`vars.MAX_AUTO_REWORK_ROUNDS || 2`) — garbage input must degrade to the
+/// documented default instead of silently disabling the cap (a non-integer
+/// used to error inside the `-ge` condition, which `set -e` does not trap,
+/// leaving escalate=false forever: the unbounded loop gh-71 caps).
+void roundCapConfigTests() {
+  group('decide: MAX_ROUNDS robustness', () {
+    test('a non-numeric MAX_ROUNDS falls back to the default cap', () {
+      final d = _decide(
+        issueLabels: 'rework-round-2',
+        maxRounds: 'two',
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":1,"important":0,"suggestions":0}}',
+      );
+      expect(d['decision'], 'rework');
+      expect(d['escalate'], 'true');
+    });
+
+    test('a non-numeric MAX_ROUNDS warns on stderr', () {
+      final result = Process.runSync(
+        'bash',
+        [_script.absolute.path, 'decide'],
+        workingDirectory: Directory.systemTemp.path,
+        environment: {
+          ...Platform.environment,
+          'MAX_ROUNDS': ' 2x',
+          'ISSUE_LABELS': '',
+        },
+      );
+      expect(result.exitCode, 0, reason: result.stdout);
+      expect(result.stderr, contains('MAX_ROUNDS'));
+      expect(result.stderr, contains('defaulting to 2'));
+    });
+
+    test('MAX_ROUNDS=0 escalates on the first rework verdict', () {
+      final d = _decide(
+        maxRounds: '0',
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":1,"important":0,"suggestions":0}}',
+      );
+      expect(d['decision'], 'rework');
+      expect(d['escalate'], 'true');
+    });
+
+    test('a numeric MAX_ROUNDS is honored (no false warning)', () {
+      final d = _decide(
+        issueLabels: 'rework-round-2',
+        maxRounds: '2',
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":1,"important":0,"suggestions":0}}',
+      );
+      expect(d['escalate'], 'true');
+    });
+  });
+}
+
 /// The escalation comment lists unresolved PR review threads — rendered from
 /// the GitHub GraphQL reviewThreads payload.
 void threadSummaryTests() {
@@ -447,6 +534,68 @@ void threadSummaryTests() {
       expect(out, isEmpty);
     });
   });
+}
+
+/// Contract tests: the escalation path's thread summary — the literal
+/// GraphQL query embedded in the workflow is the bridge between the fetch
+/// and the `threads` renderer, and nothing else exercises it (gh-71 review:
+/// an unbalanced query made GitHub reject the call with a syntax error that
+/// the `|| true` swallow turned into an always-empty thread summary).
+void escalationThreadSummaryWiringTests() {
+  group('machine wiring: escalation thread summary', () {
+    test('the embedded reviewThreads GraphQL query is balanced', () {
+      final query = _workflowGraphqlQuery();
+      expect(
+        '{'.allMatches(query).length,
+        '}'.allMatches(query).length,
+        reason: 'unbalanced GraphQL query — gh api graphql rejects it with a '
+            'syntax error and the needs-human comment renders an empty '
+            '"Unresolved review threads" section',
+      );
+    });
+
+    test('the query fetches every field the threads renderer consumes', () {
+      final query = _workflowGraphqlQuery();
+      for (final field in const [
+        'reviewThreads',
+        'isResolved',
+        'path',
+        'line',
+        'comments',
+        'body',
+        'author',
+        'login',
+      ]) {
+        expect(query, contains(field),
+            reason: 'the threads renderer reads ".$field" — a renamed or '
+                'dropped field silently renders as "(no comment text)"/'
+                '"unknown"');
+      }
+      expect(query, contains('first:100'),
+          reason: 'a PR with >30 (default page) review threads would lose '
+              'threads from the summary');
+    });
+
+    test('a failed thread fetch is surfaced as a warning, not swallowed', () {
+      final yml =
+          File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
+      expect(yml, contains('reviewThreads fetch failed'),
+          reason: 'the error JSON of a failed gh api graphql call parses to '
+              'zero threads — without an annotation the empty summary looks '
+              'like "no unresolved threads"');
+    });
+  });
+}
+
+/// Extracts the escalation path's `-f query='…'` GraphQL string from the
+/// workflow (there is exactly one).
+String _workflowGraphqlQuery() {
+  final yml =
+      File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
+  final match = RegExp(r"-f query='([^']+)'").firstMatch(yml);
+  expect(match, isNotNull,
+      reason: 'no -f query=… GraphQL string in ai-teammate-issues.yml');
+  return match!.group(1)!;
 }
 
 /// Contract tests: the bounded verdict's label wiring — the dynamic
@@ -568,7 +717,7 @@ Map<String, String> _decide({
   String? reviewJsonAlt,
   String? runOutput,
   String issueLabels = '',
-  int maxRounds = 2,
+  Object maxRounds = 2,
   Map<String, String> commentFiles = const {},
 }) {
   final dir = Directory.systemTemp.createTempSync('review_verdict_');
@@ -594,6 +743,7 @@ Map<String, String> _decide({
     env['RUN_OUTPUT'] = write('run-output.txt', runOutput);
   }
   env['ISSUE_LABELS'] = issueLabels;
+  // Object: an int cap or a raw repo-var string (garbage-in robustness).
   env['MAX_ROUNDS'] = '$maxRounds';
 
   final result = Process.runSync(

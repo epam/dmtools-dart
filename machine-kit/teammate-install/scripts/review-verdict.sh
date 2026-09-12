@@ -40,9 +40,13 @@
 set -euo pipefail
 
 # Normalizes a recommendation token (stdin → stdout): APPROVED → APPROVE,
+# CHANGES_REQUESTED → REQUEST_CHANGES (GitHub's native review-state spelling
+# — the token-grep fallback accepts it, so the JSON path must too),
 # upper-cased, empty when absent.
 normalize_recommendation() {
-    tr '[:lower:]' '[:upper:]' < /dev/stdin | sed -e 's/^APPROVED$/APPROVE/'
+    tr '[:lower:]' '[:upper:]' < /dev/stdin \
+        | sed -e 's/^APPROVED$/APPROVE/' \
+              -e 's/^CHANGES_REQUESTED$/REQUEST_CHANGES/'
 }
 
 # Reads recommendation + blocking count from one pr_review.json candidate.
@@ -165,7 +169,16 @@ decide() {
     esac
 
     # Round cap: the highest rework-round-<n> label wins.
+    # MAX_ROUNDS comes from a free-text repo variable — a non-integer would
+    # make the `-ge` test below error INSIDE the `if` condition (which
+    # `set -e` does not trap): the condition just evaluates false and the
+    # cap never fires — the unbounded loop gh-71 caps, silently. Validate
+    # once and default on garbage.
     local max_rounds="${MAX_ROUNDS:-2}"
+    if ! [[ "$max_rounds" =~ ^[0-9]+$ ]]; then
+        echo "WARNING: MAX_ROUNDS='$max_rounds' is not a non-negative integer — defaulting to 2" >&2
+        max_rounds=2
+    fi
     local rounds_done=0 next_round=0 escalate="false"
     local round_labels=() label n
     for label in ${ISSUE_LABELS:-}; do

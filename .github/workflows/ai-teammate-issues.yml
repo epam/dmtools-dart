@@ -425,6 +425,26 @@ jobs:
               strip_round_labels
               ensure_label "needs-human" "B60205"
               gh issue edit "$NUMBER" --repo "$repo" --add-label "needs-human"
+              # Fetch the thread summary BEFORE composing the comment: a
+              # failed `gh api graphql` call returns an error JSON that the
+              # renderer parses to zero threads — indistinguishable from
+              # "no unresolved threads" unless the failure is annotated
+              # (gh-71 review: the old pipe-into-renderer `|| true` hid it).
+              thread_summary=""
+              if [ -n "$pr" ]; then
+                owner="${GITHUB_REPOSITORY%%/*}"
+                name="${GITHUB_REPOSITORY#*/}"
+                threads_json="$(mktemp)"
+                if gh api graphql \
+                  -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved path line comments(first:1){nodes{body author{login}}}}}}}}' \
+                  -f owner="$owner" -f name="$name" -F number="$pr" \
+                  > "$threads_json"; then
+                  thread_summary="$(bash machine-kit/teammate-install/scripts/review-verdict.sh threads "$threads_json")"
+                else
+                  echo "::warning::reviewThreads fetch failed — the needs-human comment cannot list unresolved threads (the findings live in the PR review comments)"
+                fi
+                rm -f "$threads_json"
+              fi
               body_file="$(mktemp)"
               {
                 echo "🛑 **Auto-rework loop capped** — ${rounds_done} automatic rework rounds without an APPROVE verdict (cap: ${MAX_ROUNDS}). The machine stopped labeling \`agent:rework\`."
@@ -432,13 +452,9 @@ jobs:
                 if [ -n "$pr" ]; then
                   echo "### Unresolved review threads on PR #${pr}"
                   echo ""
-                  owner="${GITHUB_REPOSITORY%%/*}"
-                  name="${GITHUB_REPOSITORY#*/}"
-                  gh api graphql \
-                    -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved path line comments(first:1){nodes{body author{login}}' \
-                    -f owner="$owner" -f name="$name" -F number="$pr" \
-                    | bash machine-kit/teammate-install/scripts/review-verdict.sh threads /dev/stdin \
-                    || true
+                  if [ -n "$thread_summary" ]; then
+                    printf '%s\n' "$thread_summary"
+                  fi
                   echo ""
                   echo "_If no threads are listed, the findings live in the PR general comments._"
                 else

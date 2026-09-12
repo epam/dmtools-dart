@@ -739,7 +739,11 @@ jobs:
           FA_SESS_BRANCH: fa-sess/gh-${{ github.event.issue.number }}
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
-          if [ ! -d .dmtools/fa-sessions ] || [ -z "$(ls -A .dmtools/fa-sessions 2>/dev/null)" ]; then
+          # A file, not just the directory: fa's install/config time can
+          # create empty session dirs before the agent ever runs — an
+          # empty tree would make `git commit` die on "nothing added".
+          if [ ! -d .dmtools/fa-sessions ] || \
+             [ -z "$(find .dmtools/fa-sessions -type f -print -quit 2>/dev/null)" ]; then
             echo "no fa session to persist"
             exit 0
           fi
@@ -748,6 +752,10 @@ jobs:
           git fetch --depth 1 origin "refs/heads/$FA_SESS_BRANCH" || true
           git switch --orphan "$FA_SESS_BRANCH" 2>/dev/null || git switch -C "$FA_SESS_BRANCH"
           git add -f .dmtools/fa-sessions
+          if git diff --cached --quiet; then
+            echo "fa session staged nothing (ignored/empty) — nothing to persist"
+            exit 0
+          fi
           git commit -m "fa sessions: GH-${{ github.event.issue.number }} (${{ needs.guard.outputs.config }}) [skip ci]"
           if git push origin "HEAD:$FA_SESS_BRANCH" --force; then
             echo "→ fa session persisted to $FA_SESS_BRANCH"

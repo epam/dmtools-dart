@@ -41,6 +41,8 @@ void main() {
   _dryRunAssertsHelperServedUsername();
   _persistStepReassertsPurge();
   _checkoutStopsPersistingAppToken();
+  _extraheaderValueRedaction();
+  _helperOperationGuard();
 }
 
 /// BLOCKING review thread 1 (YAML side): neither YAML file may install the
@@ -280,19 +282,48 @@ void _identityRegex() {
       );
     });
 
-    test('malformed identities are rejected, real ones accepted', () {
-      // Mirror of the script's grep guard, pinned here so a regex regression
-      // in the script shows up as a failing expectation on these vectors.
-      // (Dart RegExp has no POSIX classes: [^[:space:]@] == [^\s@].)
-      final good = RegExp(r'^[0-9]+\+[^\s@]+$');
-      expect(good.hasMatch('123456+octocat'), isTrue);
-      expect(good.hasMatch('1+a'), isTrue);
-      expect(good.hasMatch('123x+login'), isFalse, reason: 'id must be digits');
-      expect(good.hasMatch('123+log in'), isFalse, reason: 'login has a space');
-      expect(good.hasMatch('123+log@in'), isFalse, reason: 'login has an @');
-      expect(good.hasMatch(''), isFalse);
+    test(
+        'malformed identities are rejected, real ones accepted — by the script',
+        () async {
+      // Execute the regex SHIPPED IN the script, not a Dart re-implementation
+      // of it (review thread 14): a hand-copied mirror tests the copy, so a
+      // regex drift in the script (e.g. losing the `+`) goes unnoticed. Dart
+      // RegExp has no POSIX classes ([^[:space:]@]), so run the real guard
+      // through grep and judge its exit status.
+      final script = _read(_scriptPath);
+      final match = RegExp("grep -qE '([^']+)'").firstMatch(script);
+      expect(match, isNotNull,
+          reason: 'the script must contain its grep identity guard');
+      final guard = match!.group(1)!;
+      const good = ['123456+octocat', '1+a'];
+      const bad = [
+        '123x+login', // id must be digits
+        '123+log in', // login has a space
+        '123+log@in', // login has an @
+        '',
+      ];
+      for (final vector in good) {
+        expect(await _scriptGrepMatches(guard, vector), isTrue,
+            reason: 'a real <id>+<login> identity must pass the script guard '
+                '(`$guard`): "$vector"');
+      }
+      for (final vector in bad) {
+        expect(await _scriptGrepMatches(guard, vector), isFalse,
+            reason: 'a malformed identity must be rejected by the script '
+                'guard (`$guard`): "$vector"');
+      }
     });
   });
+}
+
+/// Runs the exact grep pattern extracted from the script against [input] and
+/// reports whether the guard accepts it (the shipped regex is the one under
+/// test — review thread 14).
+Future<bool> _scriptGrepMatches(String pattern, String input) async {
+  final process = await Process.start('grep', ['-qE', pattern]);
+  process.stdin.write(input);
+  await process.stdin.close();
+  return await process.exitCode == 0;
 }
 
 /// PR #68 review threads 7+8: actions/checkout (verified against the shipped
@@ -417,10 +448,12 @@ void _persistStepReassertsPurge() {
               're-assertion (review thread 10)',
         );
         expect(
-          source.contains(
-              'git config --show-origin --get-all http.https://github.com/.extraheader || true'),
+          source.contains(RegExp(
+              r"--show-origin --get-all http\.https://github\.com/\.extraheader \| sed -E '")),
           isTrue,
-          reason: 'the post-agent trace must name the config origin, so the '
+          reason: 'the post-agent trace must name the config origin — '
+              'redacted, because on a leftover the raw dump prints the '
+              'base64 App token (review threads 11 and 12) — so the '
               'run log answers WHEN the extraheader reappeared '
               '(ticket Task 1)',
         );
@@ -452,5 +485,140 @@ void _checkoutStopsPersistingAppToken() {
         );
       });
     }
+  });
+}
+
+/// Review threads 11+12 (round 3): the purge gates' FAILURE paths printed the
+/// raw `http.https://github.com/.extraheader` value —
+/// `AUTHORIZATION: basic <base64(x-access-token:<APP_TOKEN>)>`. GitHub's log
+/// masking matches the raw token string, not its base64 form, so in exactly
+/// the failure scenario the gate exists to catch, the run log ends up with a
+/// working, trivially decodable App installation token. Everywhere the value
+/// could print (the LEFTOVER probe echo, every `--show-origin` dump of the
+/// extraheader — trace step AND memory-persist step, workflow AND template)
+/// the value must be redacted while the origin/submodule path stays visible.
+void _extraheaderValueRedaction() {
+  group('extraheader value is redacted everywhere it could print (gh-63)', () {
+    for (final path in _credentialYamlFiles) {
+      _leftoverProbeRedaction(path);
+      _showOriginDumpsRedacted(path);
+      _showOriginRedactionActuallyWorks(path);
+    }
+  });
+}
+
+/// The LEFTOVER probe names the armed submodule but must never echo the
+/// extraheader VALUE it found (threads 11+12).
+void _leftoverProbeRedaction(String path) {
+  test('$path LEFTOVER probe never echoes the raw value', () {
+    final source = _read(path);
+    expect(
+      source.contains(r'LEFTOVER ${sm_path}: <redacted>'),
+      isTrue,
+      reason: 'on a still-armed submodule config the probe echoes the '
+          'extraheader value — AUTHORIZATION: basic <base64(App token)>, '
+          'decodable and NOT masked by GitHub log redaction; keep the '
+          'submodule path, redact the value (review threads 11 and 12)',
+    );
+    expect(
+      source.contains(r'LEFTOVER ${sm_path}: ${c}'),
+      isFalse,
+      reason: 'the raw extraheader value must never reach the run log',
+    );
+  });
+}
+
+/// Every `--show-origin` dump of the extraheader must pipe through a
+/// redacting sed, or the raw value prints on a leftover (threads 11+12).
+void _showOriginDumpsRedacted(String path) {
+  test('$path redacts every extraheader --show-origin dump', () {
+    final dumps = _read(path)
+        .split('\n')
+        .where((line) => line.contains(
+            '--show-origin --get-all http.https://github.com/.extraheader'))
+        .toList();
+    expect(dumps, isNotEmpty,
+        reason: 'the trace evidence must keep naming the config origin (ticket '
+            'Task 1)');
+    for (final dump in dumps) {
+      expect(
+        dump.contains(RegExp(r"\|\s*sed\s+-E\s+'")),
+        isTrue,
+        reason: 'a --show-origin dump prints the raw extraheader VALUE on a '
+            'leftover — pipe it through a redacting sed '
+            '(review threads 11 and 12); offending line: '
+            '${dump.trim()}',
+      );
+    }
+  });
+}
+
+/// Behavior, not a hand-copied pattern (review thread 14's lesson): run the
+/// sed program SHIPPED IN the dump line against a poisoned `--show-origin`
+/// output line and assert the value cannot survive. (git prints
+/// `<origin>\t<value>` — no `key=` — so the initially suggested
+/// `sed 's/=.*$/=<redacted>/'` trimmed only from the first `=` INSIDE the
+/// base64 and leaked the rest; this test fails for it.)
+void _showOriginRedactionActuallyWorks(String path) {
+  test('$path redacting sed provably redacts a poisoned dump line', () async {
+    final dumpLine = _read(path).split('\n').map((l) => l.trim()).firstWhere(
+        (l) => l.contains(
+            '--show-origin --get-all http.https://github.com/.extraheader'));
+    final sedMatch =
+        RegExp(r"\| sed -E '((?:[^'\\]|\\.)*)'").firstMatch(dumpLine);
+    expect(sedMatch, isNotNull,
+        reason: "the dump must pipe through `sed -E '…'` — line: $dumpLine");
+    final sedProgram = sedMatch!.group(1)!;
+    final poisoned = 'file:.git/config\tAUTHORIZATION: basic QUJDREVGRw==';
+    final result = await Process.run('bash', [
+      '-c',
+      'printf "%s\\n" "\$DUMP_LINE" | sed -E "\$SED_PROGRAM"',
+    ], environment: {
+      'DUMP_LINE': poisoned,
+      'SED_PROGRAM': sedProgram,
+    });
+    final out = '${result.stdout}';
+    expect(out, contains('file:.git/config'),
+        reason: 'the origin must stay visible (ticket Task 1 evidence)');
+    expect(out, contains('<redacted>'),
+        reason: 'the value must be replaced with the redaction marker');
+    expect(
+      out.contains('QUJDREVGRw'),
+      isFalse,
+      reason: 'the sed program shipped in the dump line leaked the '
+          'poisoned extraheader value: program `$sedProgram` produced $out',
+    );
+  });
+}
+
+/// Review thread 13 (round 3): git invokes credential helpers as
+/// `f <operation>` where the operation is `get`, `store`, or `erase`. The
+/// helper must answer only `get` — answering store/erase is discarded by git
+/// today, but the guard keeps the contract explicit and keeps the evidence
+/// log free of phantom "served" lines if anything ever runs
+/// `git credential approve`/`reject`.
+void _helperOperationGuard() {
+  group('the SOURCE helper answers only the get operation (gh-63)', () {
+    final script = _read(_scriptPath);
+
+    test(r'the helper guards on $1 = get before reading stdin', () {
+      expect(
+        script.contains(r'[ "$1" = "get" ] || return 0;'),
+        isTrue,
+        reason: 'git invokes helpers as `f get|store|erase` — the helper '
+            'must answer only `get` so store/erase can never log a served '
+            'line (review thread 13)',
+      );
+      final guard = script.indexOf(r'[ "$1" = "get" ] || return 0;');
+      final stdinRead = script.indexOf(r'input="$(cat)"');
+      expect(guard, greaterThan(-1));
+      expect(stdinRead, greaterThan(-1));
+      expect(
+        guard,
+        lessThan(stdinRead),
+        reason: 'the operation guard must run before the stdin read — a '
+            'store/erase invocation must not consume input or log anything',
+      );
+    });
   });
 }

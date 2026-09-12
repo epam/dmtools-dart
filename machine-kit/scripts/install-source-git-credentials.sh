@@ -71,12 +71,15 @@ git submodule foreach --recursive \
 # ── 2. The credential that must win: SOURCE_GITHUB_TOKEN, github.com only ──
 # One line on purpose: `git config` rejects multi-line values. Inner quoting
 # is double-quote only (the whole value is single-quoted here).
-# --replace-all on the resets: this script runs more than once per job and a
-# plain single-value write on a multi-valued key errors out under bash -e.
+# Guards, in order: the OPERATION ($1 = get|store|erase — only `get` is
+# answered, so approve/reject can never log a phantom "served" line), then
+# the HOST from stdin. --replace-all on the resets: this script runs more
+# than once per job and a plain single-value write on a multi-valued key
+# errors out under bash -e.
 # The empty `credential.helper ''` value is a marker that RESETS the helper
 # list accumulated from system/global scope; the same reset for the
 # github.com-scoped key wipes any inherited scoped helper.
-helper='!f() { input="$(cat)"; host="$(printf "%s\n" "$input" | sed -n "s/^host=//p" | head -n 1)"; [ "$host" = "github.com" ] || return 0; echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; mkdir -p "${GITHUB_WORKSPACE:-.}/.dmtools" 2>/dev/null || true; printf "[%s] SOURCE_GITHUB_TOKEN credential served (%s)\n" "$(date -u +%FT%TZ)" "${CRED_HELPER_CONTEXT:-git}" >> "${GITHUB_WORKSPACE:-.}/.dmtools/credential-helper.log" 2>/dev/null || true; echo "credential-helper: served SOURCE_GITHUB_TOKEN for github.com (context: ${CRED_HELPER_CONTEXT:-git})" >&2; }; f'
+helper='!f() { [ "$1" = "get" ] || return 0; input="$(cat)"; host="$(printf "%s\n" "$input" | sed -n "s/^host=//p" | head -n 1)"; [ "$host" = "github.com" ] || return 0; echo "username=x-access-token"; echo "password=${SOURCE_GITHUB_TOKEN}"; mkdir -p "${GITHUB_WORKSPACE:-.}/.dmtools" 2>/dev/null || true; printf "[%s] SOURCE_GITHUB_TOKEN credential served (%s)\n" "$(date -u +%FT%TZ)" "${CRED_HELPER_CONTEXT:-git}" >> "${GITHUB_WORKSPACE:-.}/.dmtools/credential-helper.log" 2>/dev/null || true; echo "credential-helper: served SOURCE_GITHUB_TOKEN for github.com (context: ${CRED_HELPER_CONTEXT:-git})" >&2; }; f'
 git config --local --replace-all credential.helper ''
 git config --local --replace-all credential.https://github.com.helper ''
 git config --local --add credential.https://github.com.helper "$helper"

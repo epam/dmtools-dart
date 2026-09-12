@@ -389,7 +389,8 @@ jobs:
           }
           pr="$(find_linked_pr)"
           # Decision (pure logic, eval-safe key=value output): decision,
-          # source, override, rounds_done, next_round, escalate, round_labels.
+          # source, override, blocking_markers, rounds_done, next_round,
+          # escalate, round_labels.
           eval "$(MAX_ROUNDS="${MAX_ROUNDS}" \
             PR_REVIEW_JSON="outputs/pr_review.json" \
             PR_REVIEW_JSON_ALT="outputs/gh-${NUMBER}/pr_review.json" \
@@ -408,11 +409,21 @@ jobs:
               gh issue edit "$NUMBER" --repo "$repo" --remove-label "$lbl" || true
             done
           }
+          # gh issue edit --add-label hard-fails on a label that does not
+          # exist yet ("could not add label: 'x' not found") — and this step
+          # runs under bash -e, so a missing label would abort the verdict
+          # transition before agent:rework is ever queued. Create-or-update
+          # first: --force is an idempotent no-op when the label already
+          # exists with this color.
+          ensure_label() {
+            gh label create "$1" --repo "$repo" --color "$2" --force >/dev/null 2>&1 || true
+          }
           if [ "$decision" = "rework" ]; then
             if [ "$escalate" = "true" ]; then
               # Cap reached: hand over to a human with a summary of the
               # unresolved review threads — no more automatic rounds.
               strip_round_labels
+              ensure_label "needs-human" "B60205"
               gh issue edit "$NUMBER" --repo "$repo" --add-label "needs-human"
               body_file="$(mktemp)"
               {
@@ -443,12 +454,26 @@ jobs:
             fi
             # Bounded auto-rework: bump the round counter, clear a stale
             # needs-human (a human re-arm may have left it behind), then
-            # queue the rework run. The rework-round-<n> label event itself
-            # only produces a harmless guard-bail run (no agent:* label).
+            # queue the rework run.
+            #
+            # Ordering is load-bearing (gh-71 review): agent:rework goes
+            # FIRST. The rework-round-<n> labeled event fires while
+            # agent:review is still on the issue ("Close the review cycle"
+            # strips it only after this step), so that event's guard would
+            # route to an unplanned REVIEW run, not bail. What keeps that in
+            # check is the concurrency group (ai-teammate-issue-<n>): at
+            # most one pending run survives, and the agent:rework event —
+            # queued first — supersedes the round-label run. Even if a
+            # superseded run ever started, its guard routes on agent:rework
+            # (highest priority). If agent:rework were added second and its
+            # add failed after the round label succeeded, the pending
+            # round-label run WOULD start — with agent:review still present
+            # → a wasted 15–20 min review run.
             gh issue edit "$NUMBER" --repo "$repo" --remove-label "needs-human" || true
             strip_round_labels
-            gh issue edit "$NUMBER" --repo "$repo" --add-label "rework-round-${next_round}"
             gh issue edit "$NUMBER" --repo "$repo" --add-label "agent:rework"
+            ensure_label "rework-round-${next_round}" "BFD4F2"
+            gh issue edit "$NUMBER" --repo "$repo" --add-label "rework-round-${next_round}"
             echo "→ labeled agent:rework (round ${next_round}/${MAX_ROUNDS}) — rework run queued (re-review follows automatically)"
             exit 0
           fi

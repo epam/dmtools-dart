@@ -18,6 +18,8 @@
 #         decision=approve|rework|unknown
 #         source=pr_review_json|run_output|none
 #         override=true|false   REQUEST_CHANGES downgraded by zero blocking
+#         blocking_markers=<int> inline comments that are blocking regardless
+#                               of the issueCounts counter (override gate)
 #         rounds_done=<int>     completed auto-rework rounds (from labels)
 #         next_round=<int>      round this rework verdict would start
 #         escalate=true|false   cap reached → needs-human instead of rework
@@ -56,6 +58,40 @@ read_review_json() {
     printf '%s|%s\n' "$rec" "$blocking"
 }
 
+# Self-consistency guard for the blocking-0 override (gh-71 review): the
+# issueCounts counter is written by the same reviewer that produced the
+# verdict, so a misclassified finding must not convert an explicit
+# REQUEST_CHANGES into an approval. Counts inline comments that are
+# blocking regardless of the counter:
+#   1. a `severity` field of "BLOCKING" (the protocol's structured marker), or
+#   2. a referenced comment file carrying the 🚨 marker (the protocol's
+#      every-BLOCKING-comment prefix) — catches a mislabeled severity.
+# Comment paths resolve repo-root-relative first (the schema's
+# "outputs/pr_review_comments/…" form), then relative to the JSON's dir.
+inline_blocking_markers() {
+    local file="$1"
+    [ -n "$file" ] && [ -r "$file" ] || { echo 0; return 0; }
+    local markers
+    markers="$(jq -r '
+        [(.inlineComments // [])[]
+        | select((.severity // "") | ascii_upcase == "BLOCKING")]
+        | length' "$file" 2>/dev/null || echo 0)"
+    [ "${markers:-0}" -gt 0 ] 2>/dev/null || markers=0
+    local base hits=0 severity path candidate
+    base="$(dirname "$file")"
+    while IFS="$(printf '\t')" read -r severity path; do
+        [ -n "$path" ] || continue
+        for candidate in "$path" "$base/$path"; do
+            if [ -r "$candidate" ] && grep -q "🚨" "$candidate" 2>/dev/null; then
+                hits=$((hits + 1))
+                break
+            fi
+        done
+    done < <(jq -r '(.inlineComments // [])[] | [.severity // "", .comment // ""] | @tsv' \
+        "$file" 2>/dev/null)
+    echo "$((markers + hits))"
+}
+
 # Token-greps the run output (stricter tokens first). Emits the normalized
 # recommendation or nothing.
 read_run_output_verdict() {
@@ -75,16 +111,17 @@ read_run_output_verdict() {
 
 decide() {
     local decision="unknown" source="none" override="false"
-    local rec="" blocking=""
+    local rec="" blocking="" review_json_file=""
 
     # 1) pr_review.json is authoritative.
-    local pair
-    for pair in "$(read_review_json "${PR_REVIEW_JSON:-}")" \
-        "$(read_review_json "${PR_REVIEW_JSON_ALT:-}")"; do
+    local pair file
+    for file in "${PR_REVIEW_JSON:-}" "${PR_REVIEW_JSON_ALT:-}"; do
+        pair="$(read_review_json "$file")"
         [ -n "$pair" ] || continue
         rec="${pair%%|*}"
         blocking="${pair#*|}"
         source="pr_review_json"
+        review_json_file="$file"
         break
     done
 
@@ -107,8 +144,14 @@ decide() {
             # findings. blocking==0 → nothing correctness-level was reported,
             # so the verdict converges to approve (approve-with-suggestions).
             # A non-numeric blocking count is treated as blocking (safe side).
+            # Cross-check (gh-71 review): the override additionally requires
+            # the review's own inline comments to agree on zero blocking —
+            # a miscounted severity must not auto-merge the PR.
+            local markers
+            markers="$(inline_blocking_markers "$review_json_file")"
             if [ "$source" = "pr_review_json" ] \
-                && [ "${blocking:-0}" -eq 0 ] 2>/dev/null; then
+                && [ "${blocking:-0}" -eq 0 ] 2>/dev/null \
+                && [ "${markers:-0}" -eq 0 ]; then
                 decision="approve"
                 override="true"
                 echo "WARNING: REQUEST_CHANGES with 0 blocking findings → approve (approve-with-suggestions, gh-71)" >&2
@@ -146,6 +189,7 @@ decide() {
     printf 'decision=%s\n' "$decision"
     printf 'source=%s\n' "$source"
     printf 'override=%s\n' "$override"
+    printf 'blocking_markers=%s\n' "${markers:-0}"
     printf 'rounds_done=%s\n' "$rounds_done"
     printf 'next_round=%s\n' "$next_round"
     printf 'escalate=%s\n' "$escalate"

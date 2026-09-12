@@ -36,6 +36,10 @@ and must **not** trigger another rework round.
 - ❌ `REQUEST_CHANGES` while `issueCounts.blocking` is `0` — the machine
   treats that as an approval and skips the rework round. Keep
   `issueCounts` accurate: it is the machine's source of truth, not prose.
+  The machine also cross-checks the counter against your inline comments
+  (a `severity: "BLOCKING"` entry or a 🚨 marker in the referenced comment
+  file) before honoring a blocking-0 approval — if any finding is truly
+  blocking, set `recommendation: REQUEST_CHANGES` with `blocking: 1`+.
 - ❌ Verdict-by-prose: never phrase the verdict only in the summary text.
   The `recommendation` field of `outputs/pr_review.json` is the verdict.
 - ❌ Re-opening a thread that the rework demonstrably fixed in this diff —

@@ -26,6 +26,8 @@ import 'package:test/test.dart';
 void main() {
   verdictFromReviewJsonTests();
   verdictOverrideTests();
+  verdictMarkerCrossCheckTests();
+  verdictMarkerOverrideStillAppliesTests();
   verdictSourcePriorityTests();
   verdictFallbackToRunOutputTests();
   roundCapProgressionTests();
@@ -33,6 +35,7 @@ void main() {
   roundCapBookkeepingTests();
   threadSummaryTests();
   wiringTests();
+  verdictLabelWiringTests();
 }
 
 /// Verdict resolution, layer 1: `outputs/pr_review.json` is authoritative.
@@ -125,6 +128,86 @@ void verdictOverrideTests() {
       );
       expect(d['decision'], 'approve');
       expect(d['source'], 'pr_review_json');
+    });
+  });
+}
+
+/// The blocking-0 override must cross-check the review's own inline
+/// comments before it converts an explicit REQUEST_CHANGES into an
+/// approval: issueCounts is written by the same reviewer that produced the
+/// verdict, so a miscount has an irreversible consequence (auto-merge).
+/// The override only fires when the counter AND the inline-comment marker
+/// scan agree on zero blocking findings.
+void verdictMarkerCrossCheckTests() {
+  group('decide: blocking-marker cross-check (inline comments)', () {
+    test('a severity=BLOCKING inline comment keeps the rework verdict', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":0,"important":0,"suggestions":2},"inlineComments":'
+            '[{"path":"lib/a.dart","line":3,"severity":"BLOCKING",'
+            '"comment":"pr_review_comments/c1.md"}]}',
+      );
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
+    });
+
+    test(
+        'a 🚨 marker in the referenced comment file counts even when the '
+        'severity field was mislabeled', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":0,"important":1,"suggestions":0},"inlineComments":'
+            '[{"path":"lib/a.dart","line":3,"severity":"IMPORTANT",'
+            '"comment":"pr_review_comments/c1.md"}]}',
+        commentFiles: const {
+          'pr_review_comments/c1.md':
+              '🚨 **BLOCKING: off-by-one**\nthe loop drops the last element',
+        },
+      );
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
+    });
+  });
+}
+
+/// The cross-check must not eat the override it guards: suggestion-level
+/// (or unreadable) inline comments leave the approve convergence intact.
+void verdictMarkerOverrideStillAppliesTests() {
+  group('decide: marker cross-check keeps the override usable', () {
+    test('suggestion-level inline comments do not block the override', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":0,"important":0,"suggestions":2},"inlineComments":'
+            '[{"path":"lib/a.dart","line":3,"severity":"SUGGESTION",'
+            '"comment":"pr_review_comments/c1.md"}]}',
+        commentFiles: const {
+          'pr_review_comments/c1.md': '💡 reword the dartdoc reference',
+        },
+      );
+      expect(d['decision'], 'approve');
+      expect(d['override'], 'true');
+    });
+
+    test(
+        'inline comments without severities or readable files keep the '
+        'override', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":0},"inlineComments":'
+            '[{"path":"lib/a.dart","line":3},{"path":"lib/b.dart","line":9,'
+            '"severity":"IMPORTANT","comment":"pr_review_comments/missing.md"}]}',
+      );
+      expect(d['decision'], 'approve');
+      expect(d['override'], 'true');
+    });
+
+    test('the marker scan is reported in the emitted assignments', () {
+      final d = _decide(
+        reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
+            '{"blocking":0},"inlineComments":'
+            '[{"path":"lib/a.dart","line":3,"severity":"BLOCKING"}]}',
+      );
+      expect(d['blocking_markers'], '1');
     });
   });
 }
@@ -366,6 +449,62 @@ void threadSummaryTests() {
   });
 }
 
+/// Contract tests: the bounded verdict's label wiring — the dynamic
+/// rework-round-<n> / needs-human labels and the workflow that drives them
+/// (gh-71 review threads: labels must exist before --add-label; the queue
+/// label must be added before the counter).
+void verdictLabelWiringTests() {
+  group('machine wiring: bounded-verdict labels', () {
+    test('quality job checks out the agents submodule (wiring tests need it)',
+        () {
+      final yml = File('.github/workflows/quality.yml').readAsStringSync();
+      expect(
+        yml.split('agents-suite:').first,
+        contains('submodules: true'),
+        reason: 'the machine-wiring tests resolve the runner parents under '
+            'agents/ (a git submodule) — the dart test job must check it '
+            'out, or parent-config resolution dies with '
+            'PathNotFoundException (observed on CI, gh-71 rework)',
+      );
+    });
+
+    test('dynamic verdict labels are created before they are added', () {
+      final yml =
+          File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
+      // gh issue edit --add-label hard-fails on an unknown label ("not
+      // found") — and the step runs under bash -e, so a missing label
+      // definition would abort the verdict transition mid-way (the loop
+      // dies on the very first bounded verdict).
+      expect(yml, contains('ensure_label()'));
+      for (final label in const ['needs-human', 'rework-round-']) {
+        final ensure = yml.indexOf('ensure_label "$label');
+        final add = yml.indexOf('--add-label "$label');
+        expect(ensure, greaterThanOrEqualTo(0),
+            reason: 'no ensure_label call for "$label"');
+        expect(add, greaterThan(ensure),
+            reason: '"$label" must be created (ensure_label) before it is '
+                'passed to --add-label');
+      }
+    });
+
+    test(
+        'agent:rework is labeled before the round counter '
+        '(supersession-safe order)', () {
+      final yml =
+          File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
+      final rework = yml.indexOf('--add-label "agent:rework"');
+      final round = yml.indexOf('--add-label "rework-round-');
+      expect(rework, greaterThanOrEqualTo(0));
+      expect(round, greaterThan(rework),
+          reason: 'the round-label event fires while agent:review is still '
+              'on the issue ("Close the review cycle" strips it later); the '
+              'concurrency group keeps one pending run, so the queue label '
+              'must be added first — a superseded pending run then still '
+              'resolves to agent:rework even if the round-label add fails');
+    });
+  });
+}
+
 /// Contract tests: the runners + workflow must stay wired to the script and
 /// the verdict-rules instruction file.
 void wiringTests() {
@@ -430,6 +569,7 @@ Map<String, String> _decide({
   String? runOutput,
   String issueLabels = '',
   int maxRounds = 2,
+  Map<String, String> commentFiles = const {},
 }) {
   final dir = Directory.systemTemp.createTempSync('review_verdict_');
   addTearDown(() => dir.deleteSync(recursive: true));
@@ -443,6 +583,9 @@ Map<String, String> _decide({
   final env = <String, String>{...Platform.environment};
   if (reviewJson != null) {
     env['PR_REVIEW_JSON'] = write('pr_review.json', reviewJson);
+    for (final entry in commentFiles.entries) {
+      write(entry.key, entry.value);
+    }
   }
   if (reviewJsonAlt != null) {
     env['PR_REVIEW_JSON_ALT'] = write('gh-57/pr_review.json', reviewJsonAlt);

@@ -7,6 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # agents/ — the machine-wiring tests (test/machine_kit/) resolve
+          # the runner configs' parents under agents/ (a submodule); without
+          # the checkout, RunCommandProcessor dies with PathNotFoundException.
+          submodules: true
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable

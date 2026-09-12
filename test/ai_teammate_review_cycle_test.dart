@@ -84,8 +84,44 @@ void verdictParserTests(String workflow) {
     });
   });
 
+  verdictClassificationPins(workflow);
+
   verdictExtractionTests();
 }
+
+/// Locks the verdict-classification regex lines to the workflow, not just
+/// the extraction line: [_verdictSnippet] duplicates them, and without
+/// these pins a workflow-side edit (e.g. a new verdict token) leaves the
+/// copy — and the semantics the functional group claims to test —
+/// silently stale while every structural pin stays green.
+void verdictClassificationPins(String workflow) {
+  group('ai-teammate-issues.yml verdict classification regexes', () {
+    test('rework classification line is pinned', () {
+      expect(
+        workflow,
+        contains(
+          r"""if echo "$response" | grep -qE 'CHANGES[_ ]REQUESTED|REQUEST_CHANGES|\bBLOCK(ED)?\b'; then""",
+        ),
+      );
+    });
+
+    test('approve classification line is pinned', () {
+      expect(
+        workflow,
+        contains(
+            r"""elif echo "$response" | grep -qE '\bAPPROVE(D)?\b'; then"""),
+      );
+    });
+  });
+}
+
+/// `jq` drives the functional extraction tests exactly the way the
+/// workflow's verdict step uses it. CI runners ship it, but it is not part
+/// of the repo's documented local dev loop (AGENTS.md §3) — on a machine
+/// without it the group skips with a clear reason instead of failing with
+/// an opaque "jq: not found" buried in the temp script.
+bool jqAvailable() =>
+    Process.runSync('/bin/sh', ['-c', 'command -v jq']).exitCode == 0;
 
 /// Functional check of the extraction semantics pinned above, driven
 /// through /bin/sh + jq exactly the way the verdict step runs them.
@@ -134,12 +170,17 @@ void verdictExtractionTests() {
       );
       expect(verdict, isEmpty);
     });
-  });
+  },
+      skip: jqAvailable()
+          ? null
+          : 'jq not found in PATH — the functional '
+              'verdict-extraction pipeline needs it (CI runners have it)');
 }
 
 /// The verdict extraction+classification pipeline, mirroring the
 /// "Apply the review verdict" step's shell (kept in sync by the
-/// `parses only the trailing single-line result JSON blob` pin).
+/// `parses only the trailing single-line result JSON blob` and
+/// `verdict classification regexes` pins).
 const String _verdictSnippet = '''
 RUN_OUTPUT="\$1"
 result_line="\$(grep '^\{' "\$RUN_OUTPUT" 2>/dev/null | tail -1 || true)"

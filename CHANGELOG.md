@@ -180,7 +180,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   feeding the artifact upload). The synchronous JS-bridge capture
   (`executeToolViaJava`) cannot mirror — FFI host calls are synchronous
   and `dart:io` has no synchronous streaming API — so its captured-string
-  contract is unchanged.
+  contract is unchanged. Public API note for package consumers: the
+  `CliToolExecutor.executeCommand` / `executeCommandWithEnv` signatures
+  (exported via `lib/dmtools.dart`) changed from trailing
+  positional-optional parameters to named ones (`args`, `envVars`) and
+  gained an injectable `OutputLineSink? mirror` (the stderr target, for
+  tests) — a compile-breaking change for external callers.
 
 ## [0.1.0] — 2026-08-13
 

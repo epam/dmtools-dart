@@ -125,7 +125,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Push commit and tag
+        # gh-63 family: the checkout's App token (github-actions[bot])
+        # cannot push to the protected main — install the SOURCE PAT as
+        # the winning credential first (same idempotent installer every
+        # other push path in this repo uses).
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
         run: |
+          bash machine-kit/scripts/install-source-git-credentials.sh
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
           git push origin "HEAD:${{ github.ref_name }}"
           git push origin "v$NEW_VERSION"

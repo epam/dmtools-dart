@@ -17,11 +17,18 @@ typedef PrCommentPages = ({
 /// Fetches all pages of a comment listing endpoint (100 per page).
 ///
 /// Java `AbstractRestClient.execute` throws a `RestClientException` on
-/// any non-OK response (retrying retryable codes) — the `pullRequestComments`
+/// any non-OK response — the `pullRequestComments`
 /// paging loop breaks only on a null/empty body (the empty last page).
 /// Breaking on every non-OK here silently reported 401/403/5xx as
 /// "no comments", so a non-OK page surfaces as a [StateError] instead;
 /// callers convert it into a sync tool error result.
+///
+/// Deviation: Java retries retryable codes (429/502/503) before failing;
+/// the Dart sync transport ([SyncHttpClient]) does not retry anywhere, so
+/// a transient non-OK fails the whole comments fetch immediately —
+/// consistent with the rest of the `SyncHttpClient` callers. If Java
+/// parity on transient failures ever matters here, the retry belongs in
+/// [SyncHttpClient], not in this loop.
 List<Map<String, dynamic>> fetchCommentPages({
   required Map<String, String> headers,
   required String urlBase,

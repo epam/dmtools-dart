@@ -291,6 +291,19 @@ void fixturecommenttools_p2() {
     final decoded = jsonDecode(result) as Map<String, dynamic>;
     expect(decoded['error'], contains('HTTP 500'));
   });
+
+  test('github_get_pr_conversations surfaces non-OK pages as an error', () {
+    // Same AbstractRestClient parity for the conversations tool: both call
+    // sites changed identically, so the non-OK branch needs coverage here
+    // too — the old swallow loop reported "no conversations".
+    final result = tools.handlers['github_get_pr_conversations']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'pullRequestId': '7',
+    });
+    final decoded = jsonDecode(result) as Map<String, dynamic>;
+    expect(decoded['error'], contains('HTTP 500'));
+  });
 }
 
 /// Review-thread tools (REST grouping + GraphQL).

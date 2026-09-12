@@ -67,7 +67,7 @@ env:
   # Prerequisite versions — pinned (cache-by-version); repo vars override.
   # fa is self-contained (every runner goes through AI_AGENT_PROVIDER=fa —
   # the kimi backend is FA_PROVIDER_CONFIG inside fa, no kimi CLI needed).
-  FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.324' }}
+  FA_VERSION: ${{ vars.FA_VERSION || 'v0.1.357' }}
   FLUTTER_VERSION: ${{ vars.FLUTTER_VERSION || '3.44.4' }}
   RUNNER_BUG: machine-kit/teammate-install/runners/fa-bug-dev.json
   RUNNER_STORY: machine-kit/teammate-install/runners/fa-story-dev.json

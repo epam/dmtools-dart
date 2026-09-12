@@ -130,3 +130,16 @@ runtime, unmodified) is the **primary acceptance gate** — see GOAL.md.
   enforce this; design around it rather than fighting it).
 - Generated code (`*.g.dart`, `*.freezed.dart`) is gate-excluded by default —
   don't hand-edit, regenerate.
+
+## 8. fa session reuse (CI machine)
+
+The ai-teammate machine resumes one fa session per ticket instead of starting
+cold on every run. Sessions are named deterministically per `repo:GH-<n>:group` —
+bug/story/rework share the `dev-write` conversation (a rework continues the
+ticket's dev thread), review has its own `dev-review`. The session directory
+(`.dmtools/fa-sessions`) travels across CI runs on a dedicated per-issue branch
+`fa-sess/gh-<n>`: restored before the run, force-pushed after it, never merged.
+For live debugging, `FA_LOG_FILE` (`fa --log-file`) captures the full
+untruncated agent transcript, uploaded as the `fa-trace-*` run artifact;
+dmtools also streams the agent's output live into the step log via stderr
+mirroring (gh-50). Wiring: `.github/workflows/ai-teammate-issues.yml`.

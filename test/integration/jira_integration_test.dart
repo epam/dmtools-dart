@@ -4,9 +4,10 @@
 /// [ToolBridge.execute] — the exact function the CLI's `_toolDispatch` calls
 /// for a direct tool invocation — which routes HTTP tools through
 /// [SyncToolDispatcher]. Auth (base path + token) is built from [PropertyReader]
-/// using the standard resolution chain (real env → `dmtools.env` →
-/// `dmtools-local.env`), the same path production uses. No test-specific config,
-/// no hardcoded values.
+/// using the standard resolution chain (overrides → `config.properties` →
+/// `dmtools.env` → OS env; the file is loaded from the project root first,
+/// then the working directory), the same path production uses. No
+/// test-specific config, no hardcoded values.
 ///
 /// Gated on `DMTOOLS_IT_JIRA_PROJECT` (the sandbox project to target) and
 /// `DMTOOLS_IT_JIRA_ISSUE_TYPE` (issue type for the throwaway ticket, default

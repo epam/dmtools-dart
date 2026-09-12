@@ -138,6 +138,7 @@ jobs:
         #     between checkout and here.
         env:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }} # gh api check-run creation
         run: |
           bash machine-kit/scripts/install-source-git-credentials.sh
           NEW_VERSION="${{ steps.new_version.outputs.version }}"

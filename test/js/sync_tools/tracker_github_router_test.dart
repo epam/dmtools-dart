@@ -29,6 +29,9 @@ void main() {
   group('TrackerGitHubRouter routing fires', _routingFireTests);
   group('TrackerGitHubRouter routing suppressed', _routingSuppressTests);
   group('TrackerGitHubRouter dispatch logging', _routingLogTests);
+  group('TrackerGitHubRouter config errors', _configErrorTests);
+  group(
+      'TrackerGitHubRouter config errors (repo shapes)', _configErrorRepoTests);
   if (hasPython3()) {
     group('TrackerGitHubRouter read tools (fixture)', _fixtureReadTools);
     group('TrackerGitHubRouter label tools (fixture)', _fixtureLabelTools);
@@ -178,6 +181,82 @@ void _routingLogTests() {
     TrackerGitHubRouter(logger: lines.add)
         .maybeRoute('jira_add_label', {'key': 'gh-7', 'label': 'x'});
     expect(lines, isEmpty);
+  });
+}
+
+/// The two config-missing failure modes stay distinguishable: the error
+/// envelope names exactly the piece that is missing — the token, or the
+/// tracker repo (with the offending value) — so an operator knows which
+/// env var to fix without guessing.
+void _configErrorTests() {
+  tearDown(PropertyReader.clearOverrides);
+
+  test('missing token names SOURCE_GITHUB_TOKEN, not the tracker repo', () {
+    PropertyReader.setOverrides(const {});
+    final error = _errOf(
+      const TrackerGitHubRouter().maybeRoute('jira_get_ticket', {
+        'key': 'gh-50',
+      })!,
+    );
+    expect(error, contains('SOURCE_GITHUB_TOKEN is not configured'));
+    expect(error, isNot(contains('tracker repo')));
+  });
+
+  test("malformed GITHUB_REPOSITORY ('noslash') names the tracker repo", () {
+    PropertyReader.setOverrides(const {
+      'SOURCE_GITHUB_TOKEN': 'ghp-test',
+      'GITHUB_REPOSITORY': 'noslash',
+    });
+    final error = _errOf(
+      const TrackerGitHubRouter().maybeRoute('jira_move_to_status', {
+        'key': 'gh-50',
+        'status': 'In Review',
+      })!,
+    );
+    expect(error, contains('tracker repo'));
+    expect(error, contains('"noslash"'));
+    expect(error, isNot(contains('SOURCE_GITHUB_TOKEN')));
+  });
+}
+
+/// The malformed/absent tracker-repo shapes `_repoSegment` rejects
+/// surface the tracker-repo error envelope — never a routing miss or a
+/// confusing token complaint.
+void _configErrorRepoTests() {
+  tearDown(PropertyReader.clearOverrides);
+
+  test("malformed GITHUB_REPOSITORY ('owner/') names the tracker repo", () {
+    PropertyReader.setOverrides(const {
+      'SOURCE_GITHUB_TOKEN': 'ghp-test',
+      'GITHUB_REPOSITORY': 'owner/',
+    });
+    final error = _errOf(
+      const TrackerGitHubRouter().maybeRoute('jira_add_label', {
+        'key': 'gh-50',
+        'label': 'pr_approved',
+      })!,
+    );
+    expect(error, contains('tracker repo'));
+    expect(error, contains('"owner/"'));
+  });
+
+  test('all repo vars absent names the tracker repo error', () {
+    // Explicit empty overrides pin the repo chain absent even when the
+    // host environment carries GITHUB_REPOSITORY.
+    PropertyReader.setOverrides(const {
+      'SOURCE_GITHUB_TOKEN': 'ghp-test',
+      'DMTOOLS_TRACKER_REPO': '',
+      'GITHUB_REPOSITORY': '',
+      'SOURCE_GITHUB_REPOSITORY': '',
+    });
+    final error = _errOf(
+      const TrackerGitHubRouter().maybeRoute('jira_get_ticket', {
+        'key': 'gh-50',
+      })!,
+    );
+    expect(error, contains('tracker repo'));
+    expect(error, contains('not configured or malformed'));
+    expect(error, isNot(contains('SOURCE_GITHUB_TOKEN')));
   });
 }
 

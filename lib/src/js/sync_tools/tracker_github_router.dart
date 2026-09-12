@@ -132,14 +132,13 @@ class TrackerGitHubRouter {
         ? 'tracker: gh-$number → github issues'
         : 'tracker: $toolName → github issues');
     final config = _githubConfig(reader);
-    if (config == null) {
-      return syncErr('GitHub tracker routing unavailable: '
-          'SOURCE_GITHUB_TOKEN and a tracker repo (DMTOOLS_TRACKER_REPO or '
-          'GITHUB_REPOSITORY, owner/repo form) are required');
+    if (config is String) {
+      return syncErr('GitHub tracker routing unavailable: $config');
     }
+    final gh = config as _GhRouteConfig;
     return isSearch
-        ? _searchByJql(config, args)
-        : _routeKeyTool(toolName, number!, config, args);
+        ? _searchByJql(gh, args)
+        : _routeKeyTool(toolName, number!, gh, args);
   }
 
   void _log(String line) => (_logger ?? print)(line);
@@ -153,16 +152,24 @@ class TrackerGitHubRouter {
     return token != null && token.isNotEmpty;
   }
 
-  /// GitHub config for the routed call, or `null` when the token or the
-  /// tracker repo is missing/malformed.
-  _GhRouteConfig? _githubConfig(PropertyReader reader) {
+  /// GitHub config for the routed call, or — as an error-message
+  /// `String` — the exact missing piece: `SOURCE_GITHUB_TOKEN is not
+  /// configured`, or the tracker-repo failure with the offending value
+  /// (`tracker repo … is not configured or malformed: "<value>"`), so
+  /// run logs say which env var to fix.
+  Object _githubConfig(PropertyReader reader) {
     final token = reader.getGithubToken();
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) {
+      return 'SOURCE_GITHUB_TOKEN is not configured';
+    }
     final repo = reader.getValue('DMTOOLS_TRACKER_REPO') ??
         reader.getValue('GITHUB_REPOSITORY') ??
         reader.getGithubRepository();
     final seg = _repoSegment(repo);
-    if (seg == null) return null;
+    if (seg == null) {
+      return 'tracker repo (DMTOOLS_TRACKER_REPO / GITHUB_REPOSITORY, '
+          'owner/repo form) is not configured or malformed: "$repo"';
+    }
     return (
       baseUrl: reader.getGithubBasePath(),
       headers: {
@@ -272,9 +279,11 @@ class TrackerGitHubRouter {
   ) {
     final stale =
         _labelNames(issue['labels']).where((l) => l.startsWith('status:'));
+    // Best-effort: a failed stale-label delete must not block the move —
+    // the new status label is what matters.
     for (final label in stale) {
-      _deleteLabel(c, number, label); // best-effort: stale labels must not
-    } // block the move even when one delete fails
+      _deleteLabel(c, number, label);
+    }
     final added = _postJson(c, '${_issueUrl(c, number)}/labels', {
       'labels': ['status:$status'],
     });

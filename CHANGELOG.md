@@ -184,6 +184,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matrix and exercises `dmtools --version` / `dmtools list`; `dash -n` +
   `shellcheck` the installer on every PR.
 
+### Changed
+
+- Live child-output streaming (gh-50): the process paths behind
+  `cli_execute_command` and the CliAgent command phases — buffered and
+  monitored — now mirror every child output line to dmtools' own stderr as
+  it arrives (line-buffered, always on; no flags or env toggles) while the
+  captured strings stay byte-identical for well-formed UTF-8 output
+  (malformed byte sequences decode leniently to U+FFFD on both the
+  buffered and monitored paths where the previous strict decode threw a
+  `FormatException`; mirroring itself is best-effort — a failing stderr
+  sink never aborts the capture or the batch).
+  `dmtools run <config>` therefore streams the inner agent's work into the
+  CI step log live, and the ai-teammate workflow drops its `FA_LOG_FILE` +
+  `tail -F | sed` follower side-channel (the trace file itself stays,
+  feeding the artifact upload). The synchronous JS-bridge capture
+  (`executeToolViaJava`) cannot mirror — FFI host calls are synchronous
+  and `dart:io` has no synchronous streaming API — so its captured-string
+  contract is unchanged. Public API note for package consumers: the
+  `CliToolExecutor.executeCommand` / `executeCommandWithEnv` signatures
+  (exported via `lib/dmtools.dart`) changed from trailing
+  positional-optional parameters to named ones (`args`, `envVars`) and
+  gained an injectable `OutputLineSink? mirror` (the stderr target, for
+  tests) — a compile-breaking change for external callers.
+  `executeCommand` additionally accepts the `workingDirectory` the
+  `cli_execute_command` schema always advertised: the async executor now
+  forwards it to the child process instead of silently ignoring it (the
+  JS-bridge path already resolved it per Java `resolveWorkingDirectory`),
+  validated within the allowed base directories (process CWD, its git
+  root, the system temp dir — Java `validateWithinAllowedBase` parity)
+  through the same shared check the JS-bridge path uses, so both surfaces
+  of the tool enforce the same sandbox; a directory outside them throws.
+  Both surfaces also agree on a directory that does not exist: it falls
+  back to the git root of the base (then the base), the
+  `resolveWorkingDirectory` resolution the bridge always applied, instead
+  of failing the executor with a `ProcessException` — and the shared
+  containment check is separator-aware (`pathIsWithin`), so Windows
+  backslash paths validate exactly like POSIX ones (Java
+  `Path.startsWith` parity). The CliAgent monitored path kills its child
+  process when a JS line-stop callback throws mid-stream, so a failed
+  batch can no longer leave the agent run executing detached.
+
 ## [0.1.0] — 2026-08-13
 
 Initial feature-complete release. Dart port of [DMTools](https://github.com/epam/dm.ai)

@@ -22,6 +22,13 @@ late CliDispatcher _dispatcher;
 /// [setUp] before any per-group cwd override can be active.
 late String _processCwd;
 
+/// In-zone `Directory.current` writes reported by [_withFakeCwd]'s setter
+/// override. Production code under these tests must never chdir: an entry
+/// here means TeammateJob/CliAgent changed cwd as real behavior while
+/// observing the fake dir — the dispatch tests assert it stays empty so a
+/// future production chdir surfaces loudly instead of being absorbed.
+final List<String> _swallowedChdirs = [];
+
 void main() {
   setUpAll(() => PropertyReader.testIsolation = true);
   tearDownAll(() {
@@ -33,6 +40,7 @@ void main() {
     _processCwd = Directory.current.path;
     PropertyReader.setOverrides({});
     _lines = [];
+    _swallowedChdirs.clear();
     _dispatcher = CliDispatcher(
       writer: _lines.add,
       propertyReader: PropertyReader(basePath: _tmp.path),
@@ -54,12 +62,14 @@ void main() {
 /// `Directory.current`, so production code inside [body] observes [_tmp]
 /// via IOOverrides — without the process-global `Directory.current = …`
 /// chdir that every isolate of the test process would otherwise see.
-/// The `setCurrentDirectory` no-op swallows in-zone writes, so a stray
-/// chdir inside the fake cannot escape to the process either.
+/// In-zone writes cannot escape to the process (the setter override
+/// intercepts them) and are recorded in [_swallowedChdirs], so a future
+/// production chdir surfaces in the dispatch tests instead of being
+/// absorbed silently.
 Future<T> _withFakeCwd<T>(Future<T> Function() body) => IOOverrides.runZoned(
       body,
       getCurrentDirectory: () => Directory(_tmp.path),
-      setCurrentDirectory: (_) {},
+      setCurrentDirectory: (path) => _swallowedChdirs.add(path),
     );
 
 void _testTeammateNoOpRun() {
@@ -79,6 +89,10 @@ void _testTeammateNoOpRun() {
               final result = jsonDecode(_lines.last) as Map<String, dynamic>;
               expect(result['success'], isTrue);
               expect(result['results'], isEmpty);
+              // Production must not chdir inside the fake: a swallowed
+              // write here means the run changed cwd while observing the
+              // fake dir — behavior no real process would have.
+              expect(_swallowedChdirs, isEmpty);
             }));
 
     test(
@@ -92,6 +106,7 @@ void _testTeammateNoOpRun() {
                   },
                 }));
               expect(await _dispatcher.dispatch(['run', configFile.path]), 0);
+              expect(_swallowedChdirs, isEmpty);
             }));
   });
 }
@@ -131,6 +146,9 @@ void _testTeammatePreparedInput() {
               expect(contextTicket.existsSync(), isTrue);
               expect(contextTicket.readAsStringSync(),
                   contains('Synthetic prepared ticket'));
+              // Same no-chdir guard as the no-op group above: the
+              // pass-through path runs TeammateJob → CliAgent end to end.
+              expect(_swallowedChdirs, isEmpty);
             }));
   });
 }
@@ -150,6 +168,18 @@ void _testTeammateCwdHermeticity() {
         expect(Directory.current.path, _tmp.path);
         expect(await Isolate.run(() => Directory.current.path), _processCwd);
       });
+      expect(await Isolate.run(() => Directory.current.path), _processCwd);
+    });
+
+    test('records in-zone chdir attempts instead of absorbing them', () async {
+      // Regression: the setter must not be a silent sink. A production
+      // chdir inside the fake has to surface in [_swallowedChdirs] — the
+      // dispatch tests pin that list empty — and the swallowed write must
+      // not leak process-wide either.
+      await _withFakeCwd(() async {
+        Directory.current = _tmp.parent.path;
+      });
+      expect(_swallowedChdirs, [_tmp.parent.path]);
       expect(await Isolate.run(() => Directory.current.path), _processCwd);
     });
   });

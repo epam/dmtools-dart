@@ -1,10 +1,13 @@
-# TEMPORARY diagnostic for the cache-write denial (remove after #72-style fix).
-# One cache step, unique key per run (always a miss → always attempts a save),
-# two triggers to compare how the cache service scopes the job token:
-#   workflow_dispatch  vs  issues.labeled
-name: cache-diag
+# TEMPORARY diagnostic (v2 — fresh file so GitHub re-registers the triggers;
+# the first copy created from a branch never picked up dispatch/issues events).
+# Question: which arm can save an Actions cache?
+#   push (merge itself)  vs  workflow_dispatch  vs  issues.labeled
+# Each step uses a unique key so every run attempts a real save.
+name: cache-diag2
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   issues:
     types: [labeled]
@@ -17,26 +20,26 @@ jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - name: Try cache save (v6, actions: write)
+      - name: A) cache v6 + actions:write
         uses: actions/cache@v6
         with:
           path: /tmp/diag-a
-          key: diag-a-${{ github.run_id }}
+          key: diag2-a-${{ github.run_id }}
       - run: mkdir -p /tmp/diag-a && date > /tmp/diag-a/marker
 
-      - name: Try cache save (v6, write-all)
+      - name: B) cache v6 + write-all
         permissions: write-all
         uses: actions/cache@v6
         with:
           path: /tmp/diag-b
-          key: diag-b-${{ github.run_id }}
+          key: diag2-b-${{ github.run_id }}
       - run: mkdir -p /tmp/diag-b && date > /tmp/diag-b/marker
 
-      - name: Try cache save (v4)
+      - name: C) cache v4
         uses: actions/cache@v4
         with:
           path: /tmp/diag-c
-          key: diag-c-${{ github.run_id }}
+          key: diag2-c-${{ github.run_id }}
       - run: mkdir -p /tmp/diag-c && date > /tmp/diag-c/marker
 
       - name: Report

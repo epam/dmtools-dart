@@ -10,7 +10,11 @@
 #         (runner = thin child of a dmtools-agents agent; only envVariables
 #          overridden: AI_AGENT_PROVIDER=fa + FA_PROVIDER_TYPE/CONFIG)
 #     → agent develops → PR with "Closes #NN"
-#     → merge-trigger-issues.yml: pr_approved label → checks green → squash
+#     → review run verdict (THIS workflow, zero human steps):
+#         APPROVE + green CI on the PR head → pr_approved label →
+#           merge-trigger.yml: pr_approved label → checks green → squash
+#         CHANGES_REQUESTED / BLOCK → agent:rework label → rework run →
+#           re-review (the labeled event re-fires this same workflow)
 #
 # Runner selection (agent configs run AS-IS — Teammate fills input/ from
 # the issue body and executes the config through CliAgent):
@@ -294,19 +298,130 @@ jobs:
           echo "fa full trace: ${FA_LOG_FILE}"
           tail -n +1 -F "${FA_LOG_FILE}" 2>/dev/null | sed -u 's/^/[fa] /' &
           FOLLOWER_PID=$!
+          # Capture the run output for the verdict step below: the final
+          # dmtools result is a JSON blob ({"success":…,"results":[{
+          # "response":"# PR … verdict: …"}]}) — tee keeps it visible in
+          # the step log AND on disk for `Apply the review verdict`.
+          RUN_OUTPUT="${GITHUB_WORKSPACE}/.dmtools/run-output.txt"
           dmtools run "${RUNNER}" \
             --metadata '{"contextId":"gh-${{ github.event.issue.number }}"}' \
-            --ciRunUrl "${CI_RUN_URL}" --debug
-          RC=$?
+            --ciRunUrl "${CI_RUN_URL}" --debug 2>&1 | tee "${RUN_OUTPUT}"
+          RC=${PIPESTATUS[0]}
           pkill -P "${FOLLOWER_PID}" 2>/dev/null || true
           kill "${FOLLOWER_PID}" 2>/dev/null || true
           exit "${RC}"
+
+      - name: Apply the review verdict (review runs only)
+        # Zero-maintainer keystone: convert the review agent's verdict into
+        # the label that drives the next machine step — nobody reads logs.
+        #   APPROVE (+ green CI on the PR head) → pr_approved on the issue →
+        #     merge-trigger.yml picks it up and squash-merges the linked PR.
+        #   CHANGES_REQUESTED / BLOCK           → agent:rework on the issue →
+        #     the labeled event re-fires this workflow with the rework runner.
+        # The CI-green gate applies to the APPROVE path only: gating rework
+        # on green CI would deadlock exactly when CI is red because the code
+        # needs rework — and merge-trigger independently requires a CLEAN
+        # merge state, so a red PR can never be merged by a stale label.
+        # A PAT is REQUIRED for labeling: label events created with
+        # GITHUB_TOKEN do not trigger workflows (recursion guard), the PAT
+        # does — same reason as the reviewer hand-off below.
+        if: needs.guard.outputs.kind == 'review'
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          RUN_OUTPUT: .dmtools/run-output.txt
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::SOURCE_GITHUB_TOKEN not set — verdict labels would not trigger workflows; skipping (a maintainer must label manually)"
+            exit 0
+          fi
+          repo="${{ github.repository }}"
+          # Agent response from the run JSON blob; fall back to the raw
+          # output when --debug lines surround it and jq cannot parse.
+          response="$(jq -r '.results[0].response // .response // empty' \
+            "${RUN_OUTPUT}" 2>/dev/null || true)"
+          [ -n "$response" ] || response="$(cat "${RUN_OUTPUT}" 2>/dev/null || true)"
+          # Verdict tokens, stricter first (a response mentioning both must
+          # resolve to rework). The agent emits "CHANGES REQUESTED" /
+          # CHANGES_REQUESTED / REQUEST_CHANGES or a BLOCK verdict; APPROVE
+          # covers the normalized APPROVED form. 💡 SUGGESTION-only rounds
+          # end in APPROVE (allowApproveWithSuggestions) — they never
+          # produce a changes token.
+          verdict=""
+          if echo "$response" | grep -qE 'CHANGES[_ ]REQUESTED|REQUEST_CHANGES|\bBLOCK(ED)?\b'; then
+            verdict="rework"
+          elif echo "$response" | grep -qE '\bAPPROVE(D)?\b'; then
+            verdict="approve"
+          fi
+          if [ -z "$verdict" ]; then
+            echo "::warning::no verdict token found in the run output — skipping labeling"
+            exit 0
+          fi
+          echo "→ review verdict: ${verdict}"
+          if [ "$verdict" = "rework" ]; then
+            gh issue edit "$NUMBER" --repo "$repo" --add-label "agent:rework"
+            echo "→ labeled agent:rework — rework run queued (re-review follows automatically)"
+            exit 0
+          fi
+          # APPROVE: trust the verdict only when CI on the PR head is green.
+          # Linked-PR resolution mirrors merge-trigger.yml: "Closes #NN" in
+          # the body, or an NN-… / ai/gh-NN branch.
+          pr="$(gh pr list --repo "$repo" --state open \
+            --json number,body,headRefName --jq '
+            [.[] | select(
+                ((.body // "") | test("(?i)\\b(closes|fixes|resolves)\\s+#'"$NUMBER"'\\b"))
+                or (.headRefName | test("^'"$NUMBER"'[-_.]"))
+                or (.headRefName | test("(^|[-_./])gh-0*'"$NUMBER"'$")))
+              | .number] | first // empty')"
+          if [ -z "$pr" ]; then
+            echo "::warning::APPROVE verdict but no linked open PR for #${NUMBER} — skipping pr_approved"
+            exit 0
+          fi
+          echo "→ linked PR #${pr} — waiting for green checks (≤10 min)"
+          deadline=$((SECONDS + 600))
+          while :; do
+            # statusCheckRollup (unlike `gh pr checks`) never fails the
+            # command on pending checks, so fail vs pending stays
+            # distinguishable here.
+            states="$(gh pr view "$pr" --repo "$repo" --json statusCheckRollup \
+              --jq '.statusCheckRollup[] | if .status and .status != "COMPLETED"
+                    then "PENDING" else (.conclusion // .state // "PENDING") end' \
+              2>/dev/null || true)"
+            if [ -n "$states" ]; then
+              if echo "$states" | grep -qxE 'FAILURE|ERROR|CANCELLED|TIMED_OUT|ACTION_REQUIRED|STARTUP_FAILURE|STALE'; then
+                echo "::warning::PR #${pr} checks FAILED — verdict not trusted, no label (a fresh dev/rework round must fix CI first)"
+                exit 0
+              fi
+              if ! echo "$states" | grep -qvxE 'SUCCESS|SKIPPED|NEUTRAL'; then
+                echo "→ PR #${pr} checks green"
+                break
+              fi
+            fi
+            # empty rollup (checks not registered yet) or pending → wait
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::warning::PR #${pr} checks still pending after 10 min — skipping pr_approved (re-label or re-run to retry)"
+              exit 0
+            fi
+            sleep 30
+          done
+          gh issue edit "$NUMBER" --repo "$repo" --add-label "pr_approved"
+          echo "→ labeled pr_approved — merge-trigger will squash-merge PR #${pr} once CLEAN"
 
       - name: Close the review cycle (review runs only)
         # A review run must never re-queue itself: whatever the agent did
         # during the session (it has been observed re-adding agent:review —
         # live loop on #49), strip the queue label at completion. Removing
         # a label fires no `labeled` event, so no new run starts.
+        #
+        # Accepted residual race (documented, deliberately not engineered
+        # further): if the agent re-adds agent:review near the end of its
+        # run, that `labeled` event has ALREADY queued one extra run in the
+        # concurrency group before this step strips the label. The queued
+        # run starts after this one, the guard sees no agent:* label and
+        # bails — exactly one harmless bail run, never a loop (the label is
+        # gone, so the bail run queues nothing further). cancel-in-progress
+        # must stay false: cancelling this run mid-cleanup would leave
+        # agent:review in place and re-open the loop.
         if: always() && needs.guard.outputs.kind == 'review'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -323,7 +438,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fa-trace-gh-${{ github.event.issue.number }}-${{ github.run_id }}
-          path: .dmtools/fa-trace.log
+          path: |
+            .dmtools/fa-trace.log
+            .dmtools/run-output.txt
           if-no-files-found: ignore
 
       - name: Persist fa project memory into the repository
@@ -361,11 +478,17 @@ jobs:
           # Remove-then-add: re-adding an existing label is a silent no-op
           # event-wise (no `labeled` event), so the re-review would never
           # start. Removing first (ignore failure) guarantees the event fires.
+          # agent:rework must go too: it survives the rework run that added
+          # it, and the guard routes on it with PRIORITY over agent:review —
+          # left in place, the next labeled event would re-fire the rework
+          # runner instead of the reviewer (wrong loop).
+          gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+            --remove-label "agent:rework" || true
           gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
             --remove-label "agent:review" || true
           gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
             --add-label "agent:review"
-          echo "→ labeled agent:review — pr_review run queued"
+          echo "→ labeled agent:review (agent:rework stripped) — pr_review run queued"
 
       - name: Link the run back to the issue
         if: always()

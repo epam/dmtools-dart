@@ -14,6 +14,7 @@ void main() {
   liveMirrorTests();
   workingDirectoryTests();
   workingDirectoryValidationTests();
+  workingDirectoryFallbackTests();
 }
 
 /// Catalog shape: tool name, integration, params.
@@ -255,6 +256,48 @@ void workingDirectoryValidationTests() {
       );
       expect(result['stdout'].trim(), endsWith('/test'));
       expect(result['exitCode'], 0);
+    });
+  });
+}
+
+/// Java `resolveWorkingDirectory` parity for directories that do not
+/// exist: the same resolution the JS-bridge path applies — fall back to
+/// the git root of the base (then the base) instead of surfacing a
+/// ProcessException the bridge never produces.
+void workingDirectoryFallbackTests() {
+  group('cli_execute_command workingDirectory non-existent fallback', () {
+    // The two surfaces of the tool must agree on a typo'd
+    // workingDirectory: the bridge resolves a missing directory to the
+    // git root (Java parity); the async executor used to throw
+    // ProcessException for the exact same input.
+    test('a non-existent absolute directory falls back to the git root',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final expected =
+          gitRepositoryRoot(Directory.current.path) ?? Directory.current.path;
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: '${Directory.current.path}/does-not-exist-gh50',
+      );
+      expect(result['exitCode'], 0);
+      expect(result['stdout'].trim(), expected);
+    });
+
+    test('a non-existent relative directory falls back to the git root',
+        () async {
+      PropertyReader.setOverrides({'CLI_ALLOWED_COMMANDS': 'sh'});
+      final executor = CliToolExecutor(PropertyReader());
+      final expected =
+          gitRepositoryRoot(Directory.current.path) ?? Directory.current.path;
+      final result = await executor.executeCommand(
+        'sh',
+        args: ['-c', 'pwd'],
+        workingDirectory: 'does-not-exist-gh50',
+      );
+      expect(result['exitCode'], 0);
+      expect(result['stdout'].trim(), expected);
     });
   });
 }

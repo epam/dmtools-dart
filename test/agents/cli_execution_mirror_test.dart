@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -10,6 +12,8 @@ void main() {
   monitoredPathTests();
   mirrorResilienceTests();
   lenientDecodeTests();
+  predicateThrowLeakTests();
+  monitoredExitCodeTests();
 }
 
 /// Buffered path (`executeCommands`): mirror + exact response formats.
@@ -181,3 +185,98 @@ void lenientDecodeTests() {
 
 /// Line-stop predicate for the monitored-path mirror tests.
 bool _stopOnKeepGoing(String line) => line == 'keep-going';
+
+/// A throwing `lineStopPredicate` (a JS `cliOutputLineJSAction` through the
+/// bridge) fails the batch — but the child must not outlive it: the process
+/// is killed on the error path instead of executing detached.
+void predicateThrowLeakTests() {
+  group('CliExecutionHelper throwing-lineStopPredicate resilience', () {
+    test('a throwing predicate fails the batch and kills the child', () async {
+      final marker = '${Directory.systemTemp.path}/gh50_leak_probe_'
+          '${DateTime.now().microsecondsSinceEpoch}.txt';
+      final file = File(marker);
+      // Emits a stdout line (so the predicate is invoked and throws on
+      // the first one) and ticks a marker file every 100 ms; if the child
+      // survives the failed batch (the pre-fix leak), the file keeps
+      // growing.
+      final ticker = 'i=0; while [ \$i -lt 100 ]; do i=\$((i+1)); '
+          "echo tick; echo tick >> '$marker'; sleep 0.1; done";
+      addTearDown(() {
+        try {
+          file.deleteSync();
+        } catch (_) {}
+      });
+      await expectLater(
+        () => const CliExecutionHelper().executeCommandsWithCallbacks(
+          [ticker],
+          callbacks: CliExecutionCallbacks(
+            timerIntervalSeconds: 0,
+            lineStopPredicate: _throwingPredicate,
+          ),
+          mirror: (_) {},
+        ),
+        throwsStateError,
+      );
+      // The exception propagated; now prove the child is gone: the marker
+      // file must stop growing. A leaked child appends ~6 more ticks in
+      // this window; a killed one, none.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final countAfterThrow = _lineCount(file);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(
+        _lineCount(file),
+        countAfterThrow,
+        reason: 'the child process must be killed when the line-stop '
+            'predicate throws, not left running detached',
+      );
+    });
+  });
+}
+
+/// The success path never kills (stdout EOF means the shell already
+/// exited), so exit codes keep their meaning under the kill guard.
+void monitoredExitCodeTests() {
+  group('CliExecutionHelper monitored exit codes under the kill guard', () {
+    test('the success path is untouched: exit codes keep their meaning',
+        () async {
+      final r = await const CliExecutionHelper().executeCommandsWithCallbacks(
+        ['sh -c "exit 0"'],
+        callbacks: CliExecutionCallbacks(
+          timerIntervalSeconds: 0,
+          lineStopPredicate: (line) {
+            throw StateError('never called on a silent command');
+          },
+        ),
+        mirror: (_) {},
+      );
+      expect(r.hasFatalError, isFalse);
+      expect(r.lastExitCode, isNull);
+      expect(
+          r.commandResponses, 'CLI Command: sh -c "exit 0"\nResponse:\n\n\n');
+    });
+
+    test('a non-zero exit code survives the kill guard', () async {
+      final r = await const CliExecutionHelper().executeCommandsWithCallbacks(
+        ['sh -c "echo boom; exit 7"'],
+        callbacks: CliExecutionCallbacks(
+          timerIntervalSeconds: 0,
+          lineStopPredicate: (_) => false,
+        ),
+        mirror: (_) {},
+      );
+      expect(r.hasFatalError, isTrue);
+      expect(r.lastExitCode, 7);
+      expect(r.commandResponses, contains('exit code 7'));
+    });
+  });
+}
+
+/// A hook that always throws — models a JS callback erroring mid-stream.
+bool _throwingPredicate(String line) {
+  throw StateError('predicate JS action failed');
+}
+
+int _lineCount(File file) {
+  if (!file.existsSync()) return 0;
+  return file.readAsLinesSync().length;
+}

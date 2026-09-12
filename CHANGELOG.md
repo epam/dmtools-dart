@@ -194,6 +194,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   root, the system temp dir — Java `validateWithinAllowedBase` parity)
   through the same shared check the JS-bridge path uses, so both surfaces
   of the tool enforce the same sandbox; a directory outside them throws.
+  Both surfaces also agree on a directory that does not exist: it falls
+  back to the git root of the base (then the base), the
+  `resolveWorkingDirectory` resolution the bridge always applied, instead
+  of failing the executor with a `ProcessException` — and the shared
+  containment check is separator-aware (`pathIsWithin`), so Windows
+  backslash paths validate exactly like POSIX ones (Java
+  `Path.startsWith` parity). The CliAgent monitored path kills its child
+  process when a JS line-stop callback throws mid-stream, so a failed
+  batch can no longer leave the agent run executing detached.
 
 ## [0.1.0] — 2026-08-13
 

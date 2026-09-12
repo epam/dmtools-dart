@@ -372,22 +372,40 @@ class CliExecutionHelper {
     final lineMirror = mirror ?? mirrorLineToStderr;
     var stopped = false;
     String? stopLine;
+    var streamFailed = false;
     // Lenient UTF-8 (allowMalformed: true) matches the buffered path's
     // captureAndMirror decode: malformed child output becomes U+FFFD on
     // both CliAgent paths instead of throwing mid-batch only here.
-    await for (final line in proc.stdout
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .transform(const LineSplitter())) {
-      output.writeln(line);
-      safeMirrorLine(lineMirror, line);
-      final live = cb.liveOutput;
-      if (live != null) live.value = '$responses$output';
-      if (cb.lineStopPredicate != null && cb.lineStopPredicate!(line)) {
-        stopLine = line;
-        stopped = true;
-        proc.kill(ProcessSignal.sigkill);
-        break;
+    try {
+      await for (final line in proc.stdout
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())) {
+        output.writeln(line);
+        safeMirrorLine(lineMirror, line);
+        final live = cb.liveOutput;
+        if (live != null) live.value = '$responses$output';
+        if (cb.lineStopPredicate != null && cb.lineStopPredicate!(line)) {
+          stopLine = line;
+          stopped = true;
+          proc.kill(ProcessSignal.sigkill);
+          break;
+        }
       }
+    } on Object {
+      streamFailed = true;
+      rethrow;
+    } finally {
+      // No-op when the process already exited (stdout EOF means the shell
+      // has exited, so the success path's exit code is untouched) or when
+      // the stop path already SIGKILLed it; kills runaways when the
+      // predicate (a JS callback) or the liveOutput setter threw
+      // mid-stream, so the child cannot outlive the failed batch detached.
+      // The rethrow above propagates only after this await, so the kill is
+      // complete when the caller sees the error.
+      if (streamFailed) {
+        proc.kill(ProcessSignal.sigkill);
+      }
+      await proc.exitCode;
     }
     final code = await proc.exitCode;
     return _CommandOutcome(output.toString(), code, stopped, stopLine);

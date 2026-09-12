@@ -26,14 +26,30 @@ void validateWithinAllowedBase(String dirPath, String base) {
   final dir = canonical(dirPath);
   bool within(String? candidate) {
     if (candidate == null) return false;
-    final c = canonical(candidate);
-    return dir == c || dir.startsWith('$c/');
+    return pathIsWithin(dir, canonical(candidate));
   }
 
   if (within(base) || within(gitRepositoryRoot(base))) return;
   if (within(Directory.systemTemp.path)) return;
   throw Exception('Working directory is outside allowed base paths '
       '(user.dir, git root, tmpdir): $dirPath');
+}
+
+/// Returns `true` when the canonical [dir] equals [base] or lies inside
+/// it, comparing path prefixes with [separator] (null — the default —
+/// means [Platform.pathSeparator]).
+///
+/// Java `Path.startsWith` parity: separator-aware, so Windows
+/// backslash-separated paths (`Directory.resolveSymbolicLinksSync`
+/// returns those there) behave exactly like POSIX ones — a hard-coded
+/// `/` separator would false-reject legitimate nested directories on
+/// Windows (`C:\src\repo\sub` within `C:\src\repo`) on the allow-list
+/// side of the sandbox check.
+bool pathIsWithin(String dir, String base, {String? separator}) {
+  final sep = separator ?? Platform.pathSeparator;
+  if (dir == base) return true;
+  if (base.isEmpty) return false;
+  return dir.startsWith('$base$sep');
 }
 
 /// Detects the git repository root containing [base], or `null` when

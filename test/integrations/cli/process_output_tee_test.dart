@@ -249,9 +249,17 @@ void drainTests() {
       // unhandled zone error instead of the awaited throw.
       outCtrl.addError(StateError('pipe read error'));
       exitCode.complete(0);
-      await outCtrl.close();
-      await errCtrl.close();
-      await expectLater(done, throwsStateError);
+      // Await the drained error and both controller closes TOGETHER: a
+      // single-subscription controller's close-future surfaces the stream's
+      // error when it completes before the buffered error event was
+      // delivered, so awaiting the closes separately (before `done`) turns
+      // the same error into an unhandled zone error. Waiting on all three
+      // in one Future.wait gives every future an error listener; the first
+      // error still surfaces as the awaited throw under test.
+      await expectLater(
+        Future.wait([done, errCtrl.close(), outCtrl.close()]),
+        throwsStateError,
+      );
     });
   });
 }

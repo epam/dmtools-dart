@@ -150,15 +150,24 @@ class CliToolExecutor {
   /// within the allowed bases (Java `validateWithinAllowedBase` parity) —
   /// the same check the JS-bridge path applies, so both surfaces of the
   /// tool enforce the same sandbox. Null inherits the process CWD.
+  ///
+  /// A specified directory that does not exist falls back to the git root
+  /// of the base (then the base), the same resolution the JS-bridge path
+  /// applies (Java `resolveWorkingDirectory` parity) — `Process.start`
+  /// would otherwise throw a [ProcessException] for the exact input the
+  /// bridge resolves, so a typo'd `workingDirectory` would fail on this
+  /// surface while succeeding in the git root on the bridge.
   String? _validatedWorkingDir(String? workingDirectory) {
     if (workingDirectory == null || workingDirectory.trim().isEmpty) {
       return null;
     }
     final base = Directory.current.path;
     final specified = Directory(workingDirectory.trim());
-    final resolved = specified.isAbsolute
-        ? specified
-        : Directory('$base/${specified.path}');
+    final resolved =
+        specified.isAbsolute ? specified : Directory('$base/${specified.path}');
+    if (!resolved.existsSync()) {
+      return gitRepositoryRoot(base) ?? base;
+    }
     validateWithinAllowedBase(resolved.absolute.path, base);
     return resolved.path;
   }

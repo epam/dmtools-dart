@@ -143,25 +143,26 @@ void verdictClassificationPins(String workflow) {
 bool jqAvailable() =>
     Process.runSync('/bin/sh', ['-c', 'command -v jq']).exitCode == 0;
 
+/// Runs [_verdictSnippet] against [transcript] through `/bin/sh` + `jq`,
+/// exactly the way the workflow's verdict step consumes a run output file.
+Future<String> extractVerdict(String transcript) async {
+  final dir = await Directory.systemTemp.createTemp('dmtools_verdict_');
+  try {
+    final runOutput = File('${dir.path}/run-output.txt');
+    await runOutput.writeAsString(transcript);
+    final script = File('${dir.path}/verdict.sh');
+    await script.writeAsString(_verdictSnippet);
+    final result = await Process.run('/bin/sh', [script.path, runOutput.path]);
+    return result.stdout.trim();
+  } finally {
+    await dir.delete(recursive: true);
+  }
+}
+
 /// Functional check of the extraction semantics pinned above, driven
 /// through /bin/sh + jq exactly the way the verdict step runs them.
 void verdictExtractionTests() {
   group('verdict extraction semantics (the pipeline pinned above)', () {
-    Future<String> extractVerdict(String transcript) async {
-      final dir = await Directory.systemTemp.createTemp('dmtools_verdict_');
-      try {
-        final runOutput = File('${dir.path}/run-output.txt');
-        await runOutput.writeAsString(transcript);
-        final script = File('${dir.path}/verdict.sh');
-        await script.writeAsString(_verdictSnippet);
-        final result =
-            await Process.run('/bin/sh', [script.path, runOutput.path]);
-        return result.stdout.trim();
-      } finally {
-        await dir.delete(recursive: true);
-      }
-    }
-
     test('a verdict token quoted in the transcript cannot flip APPROVE',
         () async {
       final verdict = await extractVerdict(

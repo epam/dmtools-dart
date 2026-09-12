@@ -143,7 +143,10 @@ jobs:
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
           SHA=$(git rev-parse HEAD)
 
-          git push origin "HEAD:refs/heads/release-temp-v$NEW_VERSION"
+          # Temp branch is disposable: force-push over a stale one left by a
+          # failed earlier attempt (non-fast-forward rejection), delete it
+          # after the main push lands so the next run starts clean.
+          git push --force origin "HEAD:refs/heads/release-temp-v$NEW_VERSION"
 
           for ctx in quality agents-suite; do
             gh api -X POST "repos/${{ github.repository }}/check-runs" \
@@ -164,6 +167,7 @@ jobs:
             git rebase "origin/${{ github.ref_name }}"
           done
           git push origin "v$NEW_VERSION"
+          git push origin --delete "refs/heads/release-temp-v$NEW_VERSION" || true
 
   build:
     name: build ${{ matrix.platform }}-${{ matrix.arch }}

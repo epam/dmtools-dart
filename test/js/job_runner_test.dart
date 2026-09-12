@@ -107,6 +107,39 @@ void _testContextInjection() {
         dir.deleteSync(recursive: true);
       }
     });
+
+    test('flattens extraGlobals into the params object (Java parity)', () {
+      // Java JavaScriptExecutor.execute(): every .with(key, value) binding
+      // (inputFolderPath, workingDirectory, customParams, ...) is a member
+      // of the SAME params object the script receives — regression for
+      // preparePRForReview.js's params.inputFolderPath.split('/').
+      final dir = Directory.systemTemp.createTempSync('dmtools_flat');
+      try {
+        final script = _writeScript(
+          dir,
+          'test.js',
+          _action(
+            "params.inputFolderPath.split('/').pop()"
+            " + ':' + params.workingDirectory"
+            " + ':' + (params.customParams ? 'has' : 'none')",
+          ),
+        );
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          config: JsRunConfig(
+            extraGlobals: {
+              'inputFolderPath': 'input/gh-85',
+              'workingDirectory': dir.path,
+              'customParams': const {'a': 1},
+            },
+          ),
+        );
+        expect(jsonDecode(result!), 'gh-85:${dir.path}:has');
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
   });
 }
 
@@ -525,3 +558,8 @@ void _testCliExecuteDispatchWorkingDir() {
     });
   });
 }
+
+// Java JavaScriptExecutor.execute() parity: the params object is ONE
+// flattened map — .with() bindings (inputFolderPath & co) live inside it.
+// Regression: preparePRForReview.js read params.inputFolderPath and got a
+// TypeError serialized as '{}' (run 34713005482).

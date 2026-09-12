@@ -176,7 +176,13 @@ class JsJobRunner {
     String? workingDirectory,
     JsRunConfig config,
   ) {
-    _injectContext(rt, jobParams, ticket, config.contextParams);
+    _injectContext(
+      rt,
+      jobParams,
+      ticket,
+      config.contextParams,
+      config.extraGlobals,
+    );
     _injectExtraGlobals(rt, config.extraGlobals);
     installRequireLoader(rt);
     final wrappers = _buildWrappers(registry, config.integrationFilter);
@@ -186,16 +192,27 @@ class JsJobRunner {
   }
 
   /// Injects `params` into the JS global scope.
+  ///
+  /// Java `JavaScriptExecutor.execute()` parity: the `params` the script
+  /// sees is ONE flattened map — `jobParams`, `ticket`, `response` and
+  /// every `.with(key, value)` binding (inputFolderPath, workingDirectory,
+  /// customParams, initiator, …) are members of that same object
+  /// (`parameters` → single JSONObject → `params`). Scripts read
+  /// `params.inputFolderPath` / `params.customParams` directly, so the
+  /// extra globals must land inside `params` too (they ALSO stay top-level
+  /// — a superset that keeps both access styles working).
   void _injectContext(
     QuickjsRuntime rt,
     Map<String, dynamic> jobParams,
     Map<String, dynamic>? ticket,
     Map<String, dynamic>? contextParams,
+    Map<String, dynamic>? extraGlobals,
   ) {
     rt.setGlobal('params', {
       'jobParams': jobParams,
       if (ticket != null) 'ticket': ticket,
       ...?contextParams,
+      ...?extraGlobals,
     });
   }
 

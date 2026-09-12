@@ -39,6 +39,13 @@ void main() {
     group('TrackerGitHubRouter search tools (fixture)', _fixtureSearchTools);
     group(
         'TrackerGitHubRouter search clauses (fixture)', _fixtureSearchClauses);
+    group('TrackerGitHubRouter multi-value clauses (fixture)',
+        _fixtureMultiValueClauses);
+    group('TrackerGitHubRouter key-scoped search (fixture)',
+        _fixtureKeyScopedSearch);
+    group('TrackerGitHubRouter key-scoped honesty (fixture)',
+        _fixtureKeyScopedErrors);
+    group('TrackerGitHubRouter search paging (fixture)', _fixtureSearchPaging);
     group('TrackerGitHubRouter entry points (fixture)', _fixtureEntryPoints);
     group('TrackerGitHubRouter opt-in (Jira configured)', _optInTests);
   }
@@ -507,6 +514,168 @@ void _fixtureSearchClauses() {
     });
     fx.tools.dispatch('jira_get_ticket', {'key': 'gh-50'});
     expect(fx.server.requests, contains('GET /repos/x/y/issues/50'));
+  });
+}
+
+/// Multi-value `in` clauses outside a key scope: GitHub's list endpoint
+/// cannot express JQL `in` = ANY (it ANDs comma-joined labels and takes
+/// one state/assignee), so they must error honestly, not narrow.
+void _fixtureMultiValueClauses() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
+
+  test('keyless multi-value labels are an honest unsupported-JQL error', () {
+    final error = _errOf(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'labels in (agent:review, agent:design)',
+    }));
+    expect(error, contains('unsupported JQL for GitHub tracker routing'));
+    expect(
+      fx.server.requests.where((r) => r.startsWith('GET /repos/o/r/issues?')),
+      isEmpty,
+    );
+  });
+
+  test('keyless multi-value status is an honest unsupported-JQL error', () {
+    final error = _errOf(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'status in (Open, Done)',
+    }));
+    expect(error, contains('unsupported JQL for GitHub tracker routing'));
+    expect(
+      fx.server.requests.where((r) => r.startsWith('GET /repos/o/r/issues?')),
+      isEmpty,
+    );
+  });
+}
+
+/// `key` combined with AND-ed filters: the key clause never short-
+/// circuits the other filters — key-scoped searches fetch by number and
+/// apply labels/status/assignee client-side (JQL `in` = ANY semantics).
+void _fixtureKeyScopedSearch() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
+
+  test('key AND labels filters client-side (no list-endpoint call)', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key in (gh-50, gh-61) AND labels = agent:review',
+    })) as List;
+    expect(result.map((t) => (t as Map)['key']), ['gh-50']);
+    expect(fx.server.requests, contains('GET /repos/o/r/issues/50'));
+    expect(fx.server.requests, contains('GET /repos/o/r/issues/61'));
+    expect(
+      fx.server.requests.where((r) => r.startsWith('GET /repos/o/r/issues?')),
+      isEmpty,
+    );
+  });
+
+  test('key AND status filters on the status-label-derived name', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key = gh-50 AND status = Done',
+    })) as List;
+    // gh-50's status: label says In Progress — not a Done match.
+    expect(result, isEmpty);
+  });
+
+  test('key AND assignee filters on the issue assignee', () {
+    final miss = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key = gh-50 AND assignee = hubot',
+    })) as List;
+    expect(miss, isEmpty);
+    final hit = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': "key = gh-50 AND assignee = 'octocat'",
+    })) as List;
+    expect(hit.map((t) => (t as Map)['key']), ['gh-50']);
+  });
+
+  test('key-scoped multi-value labels are ANY-of (JQL in semantics)', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key in (gh-50, gh-61) AND labels in (agent:review, none)',
+    })) as List;
+    expect(result.map((t) => (t as Map)['key']), ['gh-50']);
+  });
+}
+
+/// Honesty around key-scoped fetches: non-gh key values are an honest
+/// error; absent issues (404) are skipped while transport/5xx failures
+/// still surface.
+void _fixtureKeyScopedErrors() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
+
+  test('a non-gh key value is an honest unsupported-JQL error', () {
+    final error = _errOf(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key in (gh-50, PROJ-1)',
+    }));
+    expect(error, contains('unsupported JQL for GitHub tracker routing'));
+    expect(error, contains('PROJ-1'));
+  });
+
+  test('an absent key-scoped issue is skipped, not an error', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key in (gh-50, gh-999)',
+    })) as List;
+    expect(result.map((t) => (t as Map)['key']), ['gh-50']);
+    expect(fx.server.requests, contains('GET /repos/o/r/issues/999'));
+  });
+
+  test('a failing key-scoped issue fetch still surfaces the error', () {
+    final error = _errOf(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'key in (gh-50, gh-777)',
+    }));
+    expect(error, contains('HTTP 500'));
+  });
+}
+
+/// Search/comments paging: results walk `page=` until a short page
+/// instead of silently capping at the first 100 items.
+void _fixtureSearchPaging() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
+
+  test('jira_get_comments walks comment pages', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_get_comments', {
+      'key': 'gh-61',
+    })) as Map<String, dynamic>;
+    expect(result['comments'], hasLength(101));
+    expect(
+      fx.server.requests,
+      contains('GET /repos/o/r/issues/61/comments?per_page=100'),
+    );
+    expect(
+      fx.server.requests,
+      contains('GET /repos/o/r/issues/61/comments?per_page=100&page=2'),
+    );
+  });
+
+  test('jira_search_by_jql walks issues-list pages', () {
+    final result = jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'assignee = pager',
+    })) as List;
+    expect(result, hasLength(101));
+    expect((result.last as Map)['key'], 'gh-99');
+    expect(
+      fx.server.requests,
+      contains(
+        'GET /repos/o/r/issues?state=all&assignee=pager&per_page=100',
+      ),
+    );
+    expect(
+      fx.server.requests,
+      contains(
+        'GET /repos/o/r/issues?state=all&assignee=pager&per_page=100'
+        '&page=2',
+      ),
+    );
+  });
+
+  test('a short first page makes no second request', () {
+    jsonDecode(fx.tools.dispatch('jira_search_by_jql', {
+      'jql': 'labels = agent:review',
+    })) as List;
+    expect(fx.server.requests.where((r) => r.contains('&page=')), isEmpty);
   });
 }
 

@@ -19,10 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bridge, CLI direct dispatch, and JS-generated wrappers alike.
   `jira_move_to_status` swaps the `status:<name>` label and closes/reopens
   the issue for Done-ish/Open-ish names; `jira_search_by_jql` supports
-  key/labels/status/assignee filters and reports an honest
-  "unsupported JQL" error otherwise. Any real Jira config keeps the Jira
-  path — zero regression for Java-parity environments. This unblocks the
-  agents' `postPRReviewComments` `pr_approved` hand-off on `gh-N` tickets.
+  key/labels/status/assignee filters — a `key` clause combined with other
+  filters fetches by number and applies them client-side with JQL `in` =
+  ANY semantics (absent issues skipped), keyless queries map single-value
+  filters onto the issues list (multi-value `in` clauses there are an
+  honest "unsupported JQL" error, since GitHub's list endpoint cannot
+  express ANY) — and reports an honest "unsupported JQL" error for
+  anything else; search and comments walk `per_page=100` pages instead of
+  silently capping at the first 100 items. Any real Jira config keeps the
+  Jira path — zero regression for Java-parity environments. This unblocks
+  the agents' `postPRReviewComments` `pr_approved` hand-off on `gh-N`
+  tickets.
 - TestRail section-aware case creation, porting Java PR
   [epam/dm.ai#462](https://github.com/epam/dm.ai/pull/462):
   `testrail_get_sections` (`project_name` + optional `suite_id`, paginated,

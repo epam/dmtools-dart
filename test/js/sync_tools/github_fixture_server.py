@@ -22,6 +22,7 @@ import io
 import json
 import sys
 import zipfile
+from urllib.parse import parse_qs, urlparse
 
 FIXTURE_PR = {
     "number": 42,
@@ -55,6 +56,7 @@ FIXTURE_ISSUE = {
     "body": "issue body text",
     "state": "open",
     "labels": [{"name": "agent:review"}, {"name": "status:In Progress"}],
+    "assignee": {"login": "octocat"},
     "user": {"login": "octocat"},
 }
 
@@ -111,6 +113,31 @@ def build_zip():
         zf.writestr("job2.txt", "step two log\n")
         zf.writestr("skip.bin", "not a text entry")
     return buf.getvalue()
+
+
+def _comment(i):
+    return {"id": 1000 + i, "body": "comment %d" % i,
+            "created_at": "2024-02-01T00:00:%02dZ" % (i % 60),
+            "updated_at": "2024-02-01T00:00:%02dZ" % (i % 60),
+            "user": {"login": "octocat"}}
+
+
+def _paged_issue(n):
+    return {"number": n, "title": "Paged issue %d" % n, "body": "",
+            "state": "open", "labels": [], "user": {"login": "octocat"}}
+
+
+# Full first page (100 items) + short second page (1) for the paging
+# walk (served for issue 61's comments and the assignee=pager list).
+PAGE1_COMMENTS = [_comment(i) for i in range(100)]
+PAGE2_COMMENTS = [_comment(100)]
+PAGE1_ISSUES = [_paged_issue(200 + i) for i in range(100)]
+PAGE2_ISSUES = [_paged_issue(99)]
+
+
+def _query_param(path, name):
+    values = parse_qs(urlparse(path).query).get(name, [])
+    return values[0] if values else None
 
 
 class FixtureState(object):
@@ -211,6 +238,21 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # Tracker-routing fixtures (gh-N keys → GitHub Issues).
+        if base == "/repos/o/r/issues/61/comments" and self.command == "GET":
+            self._record(body)
+            if _query_param(path, "page") == "2":
+                self._respond(200, PAGE2_COMMENTS)
+            else:
+                self._respond(200, PAGE1_COMMENTS)
+            return
+        if base == "/repos/o/r/issues/999" and self.command == "GET":
+            self._record(body)
+            self._respond(404, {"message": "Not Found"})
+            return
+        if base == "/repos/o/r/issues/777" and self.command == "GET":
+            self._record(body)
+            self._respond(500, {"message": "boom"})
+            return
         if base == "/repos/o/r/issues/50/comments" and self.command == "GET":
             self._record(body)
             self._respond(200, FIXTURE_ISSUE_COMMENTS)
@@ -244,6 +286,12 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         if base == "/repos/o/r/issues" and self.command == "GET":
             self._record(body)
+            if _query_param(path, "assignee") == "pager":
+                if _query_param(path, "page") == "2":
+                    self._respond(200, PAGE2_ISSUES)
+                else:
+                    self._respond(200, PAGE1_ISSUES)
+                return
             self._respond(200, FIXTURE_ISSUES_LIST)
             return
         if base.endswith("/pulls/42/reviews"):

@@ -292,6 +292,32 @@ void fixturecommenttools_p2() {
     expect(decoded['error'], contains('HTTP 500'));
   });
 
+  test('github_get_pr_comments tolerates a plain issue (404 inline page)', () {
+    // trackers.js githubGetComments contract: /pulls/{n}/comments answers
+    // 404 when n is a plain issue (only PRs have review comments) — the
+    // runtime treats that page as empty and still returns the discussion
+    // page, so the tracker layer can read issue comments.
+    final result = tools.handlers['github_get_pr_comments']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'pullRequestId': '9',
+    });
+    final comments = jsonDecode(result) as List;
+    expect(comments.map((c) => c['id']), [21]);
+  });
+
+  test('github_get_pr_comments still errors when both pages are missing', () {
+    // The tolerance is inline-page-only: a 404 discussion page means the
+    // caller asked for a comment listing that does not exist.
+    final result = tools.handlers['github_get_pr_comments']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'pullRequestId': '8',
+    });
+    final decoded = jsonDecode(result) as Map<String, dynamic>;
+    expect(decoded['error'], contains('HTTP 404'));
+  });
+
   test('github_get_pr_conversations surfaces non-OK pages as an error', () {
     // Same AbstractRestClient parity for the conversations tool: both call
     // sites changed identically, so the non-OK branch needs coverage here

@@ -1,8 +1,8 @@
-# TEMPORARY diagnostic (v2 — fresh file so GitHub re-registers the triggers;
-# the first copy created from a branch never picked up dispatch/issues events).
-# Question: which arm can save an Actions cache?
-#   push (merge itself)  vs  workflow_dispatch  vs  issues.labeled
-# Each step uses a unique key so every run attempts a real save.
+# TEMPORARY diagnostic v3 (v2 had step-level permissions - invalid syntax).
+# Question: which combination can save an Actions cache?
+#   arms: push (merge itself) / workflow_dispatch / issues.labeled
+#   scopes: workflow-level actions:write vs job-level write-all
+#   versions: actions/cache v6 vs v4
 name: cache-diag2
 
 on:
@@ -17,25 +17,17 @@ permissions:
   contents: read
 
 jobs:
-  diag:
+  granular:
     runs-on: ubuntu-latest
     steps:
-      - name: A) cache v6 + actions:write
+      - name: A) cache v6 + workflow-level actions:write
         uses: actions/cache@v6
         with:
           path: /tmp/diag-a
           key: diag2-a-${{ github.run_id }}
       - run: mkdir -p /tmp/diag-a && date > /tmp/diag-a/marker
 
-      - name: B) cache v6 + write-all
-        permissions: write-all
-        uses: actions/cache@v6
-        with:
-          path: /tmp/diag-b
-          key: diag2-b-${{ github.run_id }}
-      - run: mkdir -p /tmp/diag-b && date > /tmp/diag-b/marker
-
-      - name: C) cache v4
+      - name: C) cache v4 + workflow-level actions:write
         uses: actions/cache@v4
         with:
           path: /tmp/diag-c
@@ -44,3 +36,14 @@ jobs:
 
       - name: Report
         run: echo "actor=${{ github.actor }} event=${{ github.event_name }} label=${{ github.event.label.name }}"
+
+  write-all:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: B) cache v6 + job-level write-all
+        uses: actions/cache@v6
+        with:
+          path: /tmp/diag-b
+          key: diag2-b-${{ github.run_id }}
+      - run: mkdir -p /tmp/diag-b && date > /tmp/diag-b/marker

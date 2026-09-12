@@ -91,7 +91,7 @@ is a reusable (`workflow_call`) runner for dmtools-agents configs.
 ## Configuration
 
 Every integration is configured through environment variables resolved in a
-fixed chain: real env → `dmtools.env` → `dmtools-local.env` (git-ignored). A
+fixed chain: overrides → `config.properties` → `dmtools.env` → OS env vars. A
 config that works with Java DMTools works unchanged here. Check what is wired
 up with:
 

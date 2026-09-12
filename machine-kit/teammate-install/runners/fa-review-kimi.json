@@ -2,6 +2,7 @@
   "parent": {
     "path": "../../../agents/pr_review.json"
   },
+  "merge": ["params.cliPrompts"],
   "params": {
     "envVariables": {
       "AI_AGENT_PROVIDER": "fa",
@@ -11,6 +12,9 @@
     "inputJql": "",
     "customParams": {
       "allowApproveWithSuggestions": true
-    }
+    },
+    "cliPrompts": [
+      "machine-kit/teammate-install/instructions/review-verdict-rules.md"
+    ]
   }
 }

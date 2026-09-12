@@ -46,31 +46,38 @@ jobs:
         run: shellcheck install.sh
 
   install:
-    name: install on ${{ matrix.os }}
+    name: install on ${{ matrix.platform }}-${{ matrix.arch }}
     needs: syntax
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest]
+        include:
+          - { os: ubuntu-latest, platform: linux, arch: x64 }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64 }
+          - { os: macos-15-intel, platform: macos, arch: x64 }
+          - { os: macos-latest, platform: macos, arch: arm64 }
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check a release exists to install
+      - name: Check a release with this platform's asset exists
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ASSET="dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+          # Skips (not fails) when there is no release at all yet, or when
+          # the latest release predates a platform joining the matrix —
+          # the asset lands with the next release-cli run.
           if gh api "repos/${{ github.repository }}/releases/latest" \
-            --jq .tag_name > /tmp/tag 2>/dev/null; then
+            --jq '.assets[].name' 2>/dev/null | grep -qx "$ASSET"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Latest release: $(cat /tmp/tag)"
+            echo "Latest release carries $ASSET"
           else
-            # No releases yet (first release-cli run lands after this PR).
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No releases yet — skipping live install."
+            echo "::notice::Latest release has no $ASSET — skipping live install."
           fi
 
       - name: Run install.sh (latest)

@@ -14,9 +14,9 @@ name: Release CLI
 # Trigger is dispatch-only (like dm.ai) — the workflow itself pushes the tag,
 # so a tag-push trigger would double-fire.
 #
-# Platform matrix: linux-x64, macos-x64, macos-arm64. linux-arm64 has no
-# prebuilt asset yet — GitHub's free arm64 runners for public repos would
-# cover it (follow-up). Windows needs MinGW-w64 + a PowerShell installer.
+# Platform matrix: linux-x64, linux-arm64, macos-x64, macos-arm64 (GitHub's
+# free arm64 runners cover both ARM targets on public repos). Windows needs
+# MinGW-w64 + a PowerShell installer.
 
 on:
   workflow_dispatch:
@@ -140,6 +140,9 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, platform: linux, arch: x64 }
+          # GitHub's free Arm64 runner for public repos — builds native
+          # linux-arm64 (Docker on Apple Silicon, Raspberry Pi, Graviton).
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64 }
           # macos-15-intel is GitHub's last x86_64 image (sunsets Aug 2027);
           # macos-13 was retired 2025-12-04 and its label queues forever.
           # After 2027-08: build x64 via Rosetta on arm64 or a self-hosted Mac.

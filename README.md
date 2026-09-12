@@ -28,9 +28,9 @@ still honored as an optional override for API rate limits or private forks.)
 This installs a standalone AOT binary plus the QuickJS shared library it
 loads to `~/.dmtools/bin` and puts it on your `PATH`. Install a specific
 version with `... | sh -s -- v0.1.0` (or `DMTOOLS_VERSION=v0.1.0`).
-Prebuilt platforms: `linux-x64`, `macos-x64`, `macos-arm64`; on anything
-else build from source (below). Releases are cut dm.ai-style by pressing
-the **Run workflow** button in
+Prebuilt platforms: `linux-x64`, `linux-arm64`, `macos-x64`, `macos-arm64`;
+on anything else build from source (below). Releases are cut dm.ai-style by
+pressing the **Run workflow** button in
 [release-cli.yml](.github/workflows/release-cli.yml) — the patch version
 auto-increments from `pubspec.yaml` (or set a custom version), the bump
 is committed and tagged, assets and `dmtools-checksums.sha256` are

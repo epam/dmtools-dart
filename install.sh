@@ -53,17 +53,10 @@ case "$(uname -m)" in
   arm64 | aarch64) arch=arm64 ;;
   *)
     err "unsupported architecture: $(uname -m)."
-    err "Prebuilt binaries: linux-x64, macos-x64, macos-arm64."
+    err "Prebuilt binaries: linux-x64, linux-arm64, macos-x64, macos-arm64."
     exit 1
     ;;
 esac
-
-# linux-arm64 has no prebuilt asset yet.
-if [ "$os" = "linux" ] && [ "$arch" = "arm64" ]; then
-  err "no prebuilt binary for linux-arm64 yet — build from source:"
-  err "  dart pub get && make native && dart compile exe bin/dmtools.dart -o dmtools"
-  exit 1
-fi
 
 asset="dmtools-${os}-${arch}.tar.gz"
 

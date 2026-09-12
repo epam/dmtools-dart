@@ -438,9 +438,60 @@ jobs:
             --remove-label "agent:review" || true
           echo "→ review cycle closed (agent:review removed)"
 
+      - name: Scrub secrets from the fa trace (pre-upload)
+        # The trace tees fa's FULL stdout — assistant text plus every tool
+        # call/output — and tool outputs pass through tracker/SCM API
+        # responses, so run tokens can land in it. GitHub masks secret
+        # VALUES in step logs (the live [fa] tail above is covered), but
+        # uploaded ARTIFACTS are NOT masked — redact in place before
+        # upload: the exact values of this run's secrets plus well-known
+        # token shapes (GitHub PATs, bearer/token headers, key/token
+        # params). Best effort (if: always()); pairs with the 7-day
+        # artifact retention below to bound the exposure window.
+        if: always()
+        env:
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+          KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          MASK = '***REDACTED***'
+          keys = ('SOURCE_GITHUB_TOKEN', 'ZAI_CODE_KEY', 'KIMI_REVIEW_KEY')
+          literal = [re.escape(os.environ[k]) for k in keys
+                     if len(os.environ.get(k) or '') >= 8]
+          shaped = [
+              r'gh[posur]_[A-Za-z0-9]{36,255}',
+              r'github_pat_[A-Za-z0-9_]{22,255}',
+              r'(?i:(authorization["\']?\s*[:=]\s*["\']?(?:bearer|token)\s+))\S+',
+              r'(?i:((?:api[_-]?key|access[_-]?token|refresh[_-]?token'
+              r'|token|password|secret)["\']?\s*[:=]\s*["\']?))'
+              r'[^\s"\',;&]+',
+          ]
+          rx = re.compile('|'.join(literal + shaped))
+          for path in ('.dmtools/fa-trace.log', '.dmtools/run-output.txt'):
+              if not os.path.exists(path):
+                  print(f'{path}: absent, nothing to scrub')
+                  continue
+              with open(path, encoding='utf-8', errors='replace') as f:
+                  text = f.read()
+              redacted = rx.sub(
+                  lambda m: next((g for g in m.groups() if g is not None), '')
+                  + MASK, text)
+              if redacted != text:
+                  with open(path, 'w', encoding='utf-8') as f:
+                      f.write(redacted)
+                  print(f'::warning::{path}: secret-shaped material redacted before upload')
+              else:
+                  print(f'{path}: clean')
+          PY
+
       - name: Upload the full fa session trace
         # The same file the step log streamed — kept as an artifact so the
         # run can be read after log expiry or outside the Actions UI.
+        # Scrubbed by the step above (artifacts are not secret-masked) and
+        # retention-capped: traces are debug aids, not audit records.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -449,6 +500,7 @@ jobs:
             .dmtools/fa-trace.log
             .dmtools/run-output.txt
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:

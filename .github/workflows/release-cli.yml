@@ -14,8 +14,9 @@ name: Release CLI
 # Trigger is dispatch-only (like dm.ai) — the workflow itself pushes the tag,
 # so a tag-push trigger would double-fire.
 #
-# Platform matrix: linux-x64, linux-arm64 (free public-repo arm runners),
-# macos-x64, macos-arm64. Windows needs MinGW-w64 + a PowerShell installer.
+# Platform matrix: linux-x64/arm64, macos-x64/arm64, windows-x64
+# (MinGW-w64 builds the QuickJS bridge; the zip carries dmtools.exe +
+# the bridge + a dmtools.cmd launcher that pins JSR_QUICKJS_LIB).
 
 on:
   workflow_dispatch:
@@ -200,6 +201,19 @@ jobs:
           # After 2027-08: build x64 via Rosetta on arm64 or a self-hosted Mac.
           - { os: macos-15-intel, platform: macos, arch: x64 }
           - { os: macos-latest, platform: macos, arch: arm64 }
+          # Windows parity with dm.ai: MinGW-w64 builds the QuickJS bridge
+          # (GCC atomics — same toolchain family as the POSIX builds) and
+          # `dart compile exe` produces dmtools.exe. The bridge keeps its
+          # `libquickjs_bridge.so` filename on Windows on purpose: FFI's
+          # LoadLibrary ignores extensions, and the resolver
+          # (quickjs_ffi.dart) hardcodes the .so name — one name everywhere.
+          - { os: windows-latest, platform: windows, arch: x64 }
+
+    # bash on every builder (git-bash on Windows) — the steps are POSIX
+    # shell; without this the windows runner would default to pwsh.
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -227,28 +241,65 @@ jobs:
           done
           exit 1
 
+      - name: Install MinGW + make (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # MinGW-w64 (gcc with the GCC atomics the bridge needs) + GNU
+          # make for `make native`. Both are choco-cached on GH runners.
+          choco install -y --no-progress make mingw
+          # The Makefile resolves the quickjs_runtime checkout via
+          # `python3`; Windows images only expose `python` — shim it.
+          mkdir -p "$RUNNER_TEMP/shim"
+          printf '@python %%*\r\n' > "$RUNNER_TEMP/shim/python3.cmd"
+          echo "$RUNNER_TEMP/shim" >> "$GITHUB_PATH"
+          echo "C:\\ProgramData\\mingw64\\mingw64\\bin" >> "$GITHUB_PATH"
+
       - name: Build QuickJS bridge library
         run: make native
 
       - name: Compile AOT binary
-        run: dart compile exe bin/dmtools.dart -o dmtools
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            dart compile exe bin/dmtools.dart -o dmtools.exe
+          else
+            dart compile exe bin/dmtools.dart -o dmtools
+          fi
 
       - name: Assemble and smoke-test the bundle
         run: |
           LIB="$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")/native/quickjs/libquickjs_bridge.so"
           mkdir -p dist/dmtools/native/quickjs
-          cp dmtools dist/dmtools/dmtools
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Launcher pins JSR_QUICKJS_LIB to the bundled library: in an
+            # AOT build Platform.script does not resolve to the installed
+            # exe (dm.ai#dmtools-dart#10) and there is no package_config
+            # next to an installed binary — same reason install.sh ships
+            # a POSIX launcher.
+            printf '@echo off\r\nset "JSR_QUICKJS_LIB=%%~dp0native\\quickjs\\libquickjs_bridge.so"\r\n"%%~dp0dmtools.exe" %%*\r\n' > dist/dmtools/dmtools.cmd
+            cp dmtools.exe dist/dmtools/dmtools.exe
+          else
+            cp dmtools dist/dmtools/dmtools
+          fi
           cp "$LIB" dist/dmtools/native/quickjs/libquickjs_bridge.so
           # The installed layout is binary + native/quickjs next to it — prove
           # the pair works together before shipping it.
-          ./dist/dmtools/dmtools --version
-          ./dist/dmtools/dmtools list | head -n 5
-          tar -czf "dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C dist dmtools
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ./dist/dmtools/dmtools.exe --version
+            ./dist/dmtools/dmtools.exe list | head -n 5
+            powershell -NoProfile -Command \
+              "Compress-Archive -Path dist/dmtools -DestinationPath dmtools-${{ matrix.platform }}-${{ matrix.arch }}.zip"
+          else
+            ./dist/dmtools/dmtools --version
+            ./dist/dmtools/dmtools list | head -n 5
+            tar -czf "dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C dist dmtools
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: dmtools-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+          path: |
+            dmtools-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+            dmtools-${{ matrix.platform }}-${{ matrix.arch }}.zip
           if-no-files-found: error
 
   release:
@@ -276,7 +327,7 @@ jobs:
         run: |
           cp install.sh dist/install.sh
           cd dist
-          sha256sum dmtools-*.tar.gz install.sh > dmtools-checksums.sha256
+          sha256sum dmtools-*.tar.gz dmtools-*.zip install.sh > dmtools-checksums.sha256
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

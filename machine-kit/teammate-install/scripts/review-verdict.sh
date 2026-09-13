@@ -2,7 +2,7 @@
 # review-verdict.sh — pure decision logic for the ai-teammate review loop
 # (gh-71: cap auto-rework rounds + make approve-with-suggestions real).
 #
-# The workflow step (ai-teammate-issues.yml → "Apply the review verdict")
+# The workflow step (ai-teammate.yml → "Apply the review verdict")
 # is a thin wrapper around this script: gh/network calls stay there, every
 # decision lives here so it can be unit-tested (test/machine_kit/).
 #

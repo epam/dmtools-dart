@@ -98,7 +98,7 @@ void inputJqlGuardTests() {
   });
 }
 
-/// Caller-prepared `input/ticket.md` (the ai-teammate-issues convention)
+/// Caller-prepared `input/ticket.md` (the ai-teammate convention)
 /// passes through as a single synthetic ticket.
 void inputPassthroughTest() {
   test('no inputJql + prepared input/ticket.md → single CliAgent pass-through',

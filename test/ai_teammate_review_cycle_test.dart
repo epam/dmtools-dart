@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// Pins the review-cycle wiring of [ai-teammate-issues.yml] to the
+/// Pins the review-cycle wiring of [ai-teammate.yml] to the
 /// gh-71 verdict machinery: the decision comes from
 /// machine-kit/teammate-install/scripts/review-verdict.sh (unit-tested in
 /// test/machine_kit/review_verdict_test.dart — pr_review.json is
@@ -14,8 +14,7 @@ import 'package:test/test.dart';
 /// reasoning lines) and flip a genuine APPROVE into a spurious
 /// agent:rework loop.
 void main() {
-  final workflow =
-      File('.github/workflows/ai-teammate-issues.yml').readAsStringSync();
+  final workflow = File('.github/workflows/ai-teammate.yml').readAsStringSync();
 
   _reviewCycleGroup(workflow);
   _verdictDelegationGroup(workflow);
@@ -26,7 +25,7 @@ void main() {
 /// captures (gh-50: captured via tee while dmtools mirrors child output
 /// live to stderr — no `tail -F` follower side-channel).
 void _reviewCycleGroup(String workflow) {
-  group('ai-teammate-issues.yml review cycle', () {
+  group('ai-teammate.yml review cycle', () {
     test('verdict step survives the gh-50 rewrite', () {
       expect(workflow, contains('- name: Apply the review verdict'));
     });
@@ -63,8 +62,7 @@ void _reviewCycleGroup(String workflow) {
 /// labels, run output) and must not grow an inline parser copy that
 /// could drift from the tested script.
 void _verdictDelegationGroup(String workflow) {
-  group('ai-teammate-issues.yml verdict step delegates to review-verdict.sh',
-      () {
+  group('ai-teammate.yml verdict step delegates to review-verdict.sh', () {
     test('decision comes from review-verdict.sh, not an inline parser', () {
       expect(
         workflow,

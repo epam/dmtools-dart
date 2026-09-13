@@ -253,6 +253,15 @@ jobs:
           printf '@python %%*\r\n' > "$RUNNER_TEMP/shim/python3.cmd"
           echo "$RUNNER_TEMP/shim" >> "$GITHUB_PATH"
           echo "C:\\ProgramData\\mingw64\\mingw64\\bin" >> "$GITHUB_PATH"
+          # mingw-w64 ships no libdl (dl* lives in kernel32) and
+          # quickjs_runtime's build_quickjs.sh links -ldl unconditionally
+          # (upstream fix pending in that repo). Satisfy -ldl with an
+          # empty archive — the bridge uses no dl symbols — exposed to gcc
+          # via LIBRARY_PATH, so the upstream script links as-is.
+          stub="$RUNNER_TEMP/mingw-stubs"
+          mkdir -p "$stub"
+          ar cr "$stub/libdl.a"
+          printf 'LIBRARY_PATH=%s\n' "$stub" >> "$GITHUB_ENV"
 
       - name: Build QuickJS bridge library
         run: make native

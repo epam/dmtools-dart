@@ -277,6 +277,12 @@ jobs:
       - name: Assemble and smoke-test the bundle
         run: |
           LIB="$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")/native/quickjs/libquickjs_bridge.so"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # rootUri is file:///C:/... — strip to C:/... and cygpath to a
+            # real MSYS path, exactly like the Makefile does (the raw
+            # "/C:/..." form made cp fail with "cannot stat").
+            LIB="$(cygpath -u "$(echo "$LIB" | sed 's|^/||')")/native/quickjs/libquickjs_bridge.so"
+          fi
           mkdir -p dist/dmtools/native/quickjs
           if [ "$RUNNER_OS" = "Windows" ]; then
             # Launcher pins JSR_QUICKJS_LIB to the bundled library: in an

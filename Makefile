@@ -41,7 +41,18 @@ endif
 # QuickJS lives in the `quickjs_runtime` package (vendored there); the shared
 # library is built inside that package's pub-cache checkout, where its FFI
 # layer looks it up via .dart_tool/package_config.json.
-QUICKJS_PKG   := $(shell python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))" 2>/dev/null)
+QUICKJS_PKG_RAW := $(shell python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))" 2>/dev/null)
+ifeq ($(OS),Windows_NT)
+# package_config rootUri on Windows is file:///C:/... — after the strip above
+# the path is "/C:/Users/...", which MSYS bash cannot open (the first windows
+# release build died exactly here: `bash "/C:/.../build_quickjs.sh": No such
+# file or directory`). Drop the leading slash and hand the C:/ form to
+# cygpath for a proper MSYS path (/c/...); if cygpath is missing, the plain
+# C:/ form still works for most tools.
+QUICKJS_PKG := $(shell cygpath -u "$(patsubst /%,%,$(QUICKJS_PKG_RAW))" 2>/dev/null || echo "$(patsubst /%,%,$(QUICKJS_PKG_RAW))")
+else
+QUICKJS_PKG := $(QUICKJS_PKG_RAW)
+endif
 LIB_OUT       := $(QUICKJS_PKG)/native/quickjs/libquickjs_bridge.so
 EXE_OUT       := dmtools$(EXE_EXT)
 

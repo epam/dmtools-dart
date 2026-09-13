@@ -144,3 +144,73 @@ jobs:
             echo "::endgroup::"
           done
           echo "summary: merged=$merged skipped=$skipped"
+
+  # CI-failure feedback loop (the dark-factory's missing re-arm):
+  # a RED Quality run on a machine branch (ai/gh-<n>) re-queues the agent
+  # on the ticket — the rework run's input preparation fetches the failed
+  # check logs (ci_failures.md / ci_failures_full.log via
+  # preCliReworkSetup step 4.7), so the agent resumes the dev-write
+  # session with the exact failure context. Without this trigger the loop
+  # only closed through a review verdict: a PR whose review approved and
+  # whose LATER push broke CI would sit red forever.
+  # Round cap mirrors the verdict step: past MAX_AUTO_REWORK_ROUNDS the
+  # machine escalates to needs-human instead of re-queueing.
+  ci-failure-rework:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    concurrency:
+      group: ci-failure-rework-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MAX_AUTO_REWORK_ROUNDS: 2
+    steps:
+      - name: Re-queue agent on CI failure (ai/gh-* branches only)
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          repo="${{ github.repository }}"
+          # Machine branches only — a HUMAN's failed PR must never wake
+          # the agent (their ticket, their rules).
+          n=$(echo "$BRANCH" | grep -oE '^ai/gh-([0-9]+)$' | grep -oE '[0-9]+' || true)
+          if [ -z "$n" ]; then
+            echo "branch '$BRANCH' is not a machine branch (ai/gh-<n>) — not our failure to fix"
+            exit 0
+          fi
+          state=$(gh issue view "$n" --repo "$repo" --json state --jq .state 2>/dev/null || true)
+          if [ "$state" != "OPEN" ]; then
+            echo "issue #$n is ${state:-absent} — terminal, nothing to re-queue"
+            exit 0
+          fi
+          labels=$(gh issue view "$n" --repo "$repo" --json labels --jq '[.labels[].name] | join(" ")')
+          if echo "$labels" | grep -qw agent:skip; then
+            echo "issue #$n carries agent:skip — machine bypassed"
+            exit 0
+          fi
+          if echo "$labels" | grep -qw needs-human; then
+            echo "issue #$n already escalated (needs-human) — waiting for a human"
+            exit 0
+          fi
+          # Round cap (verdict-step parity): count rework-round-<n> labels.
+          rounds=$(echo "$labels" | grep -oE 'rework-round-[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1 || echo 0)
+          if [ "${rounds:-0}" -ge "$MAX_AUTO_REWORK_ROUNDS" ]; then
+            gh issue edit "$n" --repo "$repo" --add-label needs-human || true
+            gh issue comment "$n" --repo "$repo" --body \
+              "🤖 CI red on \`$BRANCH\` ([run](${CI_RUN_URL:-run})) after $rounds rework round(s) — cap reached, escalating. The rework session's input (\`ci_failures.md\`) has the full failure context." || true
+            echo "→ escalated issue #$n to needs-human (cap $MAX_AUTO_REWORK_ROUNDS)"
+            exit 0
+          fi
+          # remove-then-add: a no-op add on an already-labeled issue fires
+          # no event; the rework run strips the label at completion, but
+          # belt-and-suspenders in case of a crash before the strip.
+          gh issue edit "$n" --repo "$repo" --remove-label agent:rework >/dev/null 2>&1 || true
+          gh issue edit "$n" --repo "$repo" --add-label agent:rework
+          gh issue comment "$n" --repo "$repo" --body \
+            "🔧 CI red on \`$BRANCH\` ([run](${CI_RUN_URL:-run})) — rework queued (round $((rounds + 1))); the agent will resume with the failed-check logs." || true
+          echo "→ agent:rework queued on issue #$n (round $((rounds + 1)))"

@@ -9,7 +9,7 @@ review, bounded rework, and the final merge — with zero human steps in between
 issue assigned/labeled
    │
    ▼
-┌─────────────────────────── ai-teammate-issues.yml ───────────────────────────┐
+┌─────────────────────────── ai-teammate.yml ───────────────────────────┐
 │ guard (decide) → restore fa session → install fa + dmtools → write input/    │
 │   → dmtools run <runner>.json → fa agent works (live-streamed to run log)    │
 │   → persist session + project memory → hand off to reviewer                  │
@@ -37,7 +37,7 @@ Everything below is the concrete wiring, in the order you would set it up.
 
 | Piece | What it is | Where it lives here |
 |---|---|---|
-| **Trigger workflow** | Turns issue events into agent runs | `.github/workflows/ai-teammate-issues.yml` |
+| **Trigger workflow** | Turns issue events into agent runs | `.github/workflows/ai-teammate.yml` |
 | **Merge trigger** | Squash-merges `pr_approved` PRs once CI is green | `.github/workflows/merge-trigger.yml` |
 | **machine-kit** | Installer, runner configs, templates | `machine-kit/` (in-repo) |
 | **agents submodule** | Agent instructions, job configs, `run-agent.sh` (provider layer) | `agents/` → [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents) |
@@ -114,7 +114,7 @@ inside the fa subprocess scope.
 
 ## 6. The workflows
 
-Copy `.github/workflows/ai-teammate-issues.yml` and `merge-trigger.yml`.
+Copy `.github/workflows/ai-teammate.yml` and `merge-trigger.yml`.
 Things you will likely touch:
 
 - `AGENT_HANDLE: ai-teammate` — your bot's login.
@@ -290,6 +290,6 @@ Ground truth for why the odd-looking parts look odd:
 
 ---
 
-*Wiring reference in this repo: `.github/workflows/ai-teammate-issues.yml`
+*Wiring reference in this repo: `.github/workflows/ai-teammate.yml`
 (the machine), `machine-kit/README.md` (installer), `agents/AGENTS.md`
 (agent-side conventions), `AGENTS.md` §8 (session reuse operating manual).*

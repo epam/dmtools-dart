@@ -67,7 +67,7 @@
 # this template must prepare the ticket input (issue body) BEFORE the run,
 # so the reusable workflow_call cannot be used here.
 
-name: 'AI Teammate : issue assigned'
+name: 'AI Teammate'
 
 # Run title in the Actions list — mirrors the dm.ai original, where every
 # run names its agent and ticket. The agent kind is derived from the event:

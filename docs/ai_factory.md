@@ -18,7 +18,7 @@ PR #57).
 ```
 human files issue, assigns ai-teammate (or labels agent:dev)
    │
-   ▼  ai-teammate-issues.yml (AI Teammate : issue assigned)
+   ▼  ai-teammate.yml (AI Teammate : issue assigned)
 guard ─► session restore ─► fa + dmtools install ─► input/gh-<n>/ ─► agent runs
    │                                                          │
    │                                     live harness lines in the run log
@@ -44,13 +44,13 @@ dev, review, rework and any pipeline-added label all re-enter the same gate).
 
 | Workflow | Role |
 |---|---|
-| `ai-teammate-issues.yml` | The factory trigger. `on: issues [assigned, labeled]`; one `teammate` job per run. |
+| `ai-teammate.yml` | The factory trigger. `on: issues [assigned, labeled]`; one `teammate` job per run. |
 | `merge-trigger.yml` | Squash-merges the PR linked to a `pr_approved` issue once required checks are green. Fired by `check_suite completed` and `issues labeled pr_approved`. |
 | `quality.yml` | The gates every PR must pass: format → analyze → tests+coverage → crap4dart check/analyze → agents suite. These are the "CI green" the merge trigger waits for. |
 | `release-cli.yml` | Dispatch-only release: version bump + tag → AOT builds (linux x64/arm64, macos x64/arm64, windows x64) → GitHub release with checksums. Idempotent: re-dispatching an existing version is a clean no-op. |
 | `auto-update-prs.yml` | Keeps open PR branches fresh against main. |
 
-Key `ai-teammate-issues.yml` env (top of the file):
+Key `ai-teammate.yml` env (top of the file):
 
 ```yaml
 AGENT_HANDLE: ai-teammate                     # bot account issues are assigned to
@@ -213,7 +213,7 @@ task → let the review pass run → done (detailed steps in
 ## 10. Where everything lives
 
 ```
-.github/workflows/ai-teammate-issues.yml   the factory (guard → run → verdict → persist)
+.github/workflows/ai-teammate.yml   the factory (guard → run → verdict → persist)
 .github/workflows/merge-trigger.yml        pr_approved + green CI → squash-merge
 machine-kit/teammate-install/runners/*.json provider pinning (this page §3)
 machine-kit/teammate-install/install.sh     dmtools bundle installer (linux/macos/windows)

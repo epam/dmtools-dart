@@ -3,11 +3,14 @@
 # behind main — the auto-actualization half of the dark-factory merge loop
 # (the auto-merge half lives in merge-trigger.yml).
 #
-# Uses PAT_TOKEN rather than GITHUB_TOKEN because pushes made with the
+# Uses a PAT rather than GITHUB_TOKEN because pushes made with the
 # workflow's own GITHUB_TOKEN do not trigger downstream PR CI, so the fresh
-# checks merge-trigger relies on would never run. Until a PAT_TOKEN secret is
-# added to this repo it falls back to github.token: branches still update,
-# but PR checks will not re-run automatically.
+# checks merge-trigger relies on would never run. Token chain:
+# PAT_TOKEN (owner PAT) → SOURCE_GITHUB_TOKEN (machine account) →
+# github.token (last resort). Never let the bot identity push if a real
+# account is available: pushes by github-actions[bot] DO fire pull_request
+# synchronize events, and the bot is not a collaborator — every such run
+# lands in action_required ("approve run") and stalls the merge loop.
 #
 #   gh workflow run auto-update-prs.yml   # manual top-up
 
@@ -33,7 +36,7 @@ jobs:
     steps:
       - name: Update open PRs that are behind main
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.SOURCE_GITHUB_TOKEN || github.token }}
         run: |
           # After a push to main, GitHub invalidates cached mergeability for all
           # open PRs and recomputes asynchronously — returning "UNKNOWN" until

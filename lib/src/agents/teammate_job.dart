@@ -80,7 +80,7 @@ class TeammateJob {
     final inputJql = (params['inputJql'] as String?)?.trim() ?? '';
     if (inputJql.isEmpty) {
       // Issues-driven pass-through: the caller prepared `input/ticket.md`
-      // (e.g. the ai-teammate-issues workflow wrote the issue body). Run
+      // (e.g. the ai-teammate workflow wrote the issue body). Run
       // the config AS-IS through one [CliAgent] with a synthetic ticket —
       // the canonical `input/<contextId>/` context is built from it.
       // Without a prepared input this is Java parity: "skipping ticket

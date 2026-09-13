@@ -2,8 +2,8 @@
 // in the AI Teammate workflows must never leak the workflows-capable PAT to
 // non-github hosts (PR #68 review, BLOCKING thread) and must keep its
 // at-push-time evidence honest. These tests pin the invariants of
-//   .github/workflows/ai-teammate-issues.yml
-//   machine-kit/templates/ai-teammate-issues.yml
+//   .github/workflows/ai-teammate.yml
+//   machine-kit/templates/ai-teammate.yml
 //   machine-kit/scripts/install-source-git-credentials.sh
 // so a future edit cannot silently reintroduce the generic-helper leak or
 // weaken the purge evidence.
@@ -11,8 +11,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-const _workflowPath = '.github/workflows/ai-teammate-issues.yml';
-const _templatePath = 'machine-kit/templates/ai-teammate-issues.yml';
+const _workflowPath = '.github/workflows/ai-teammate.yml';
+const _templatePath = 'machine-kit/templates/ai-teammate.yml';
 const _scriptPath = 'machine-kit/scripts/install-source-git-credentials.sh';
 
 /// All YAML files that carry the credential machinery (workflow + template —

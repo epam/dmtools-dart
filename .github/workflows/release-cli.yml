@@ -278,10 +278,12 @@ jobs:
         run: |
           LIB="$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")/native/quickjs/libquickjs_bridge.so"
           if [ "$RUNNER_OS" = "Windows" ]; then
-            # rootUri is file:///C:/... — strip to C:/... and cygpath to a
-            # real MSYS path, exactly like the Makefile does (the raw
-            # "/C:/..." form made cp fail with "cannot stat").
-            LIB="$(cygpath -u "$(echo "$LIB" | sed 's|^/||')")/native/quickjs/libquickjs_bridge.so"
+            # rootUri is file:///C:/... — strip the leading slash and the
+            # bridge suffix, cygpath the PACKAGE base to a real MSYS path,
+            # then re-append the suffix once (appending to the full path
+            # doubled it — attempt 4 died exactly there).
+            BASE="$(echo "$LIB" | sed 's|^/||; s|/native/quickjs/libquickjs_bridge\.so$||')"
+            LIB="$(cygpath -u "$BASE")/native/quickjs/libquickjs_bridge.so"
           fi
           mkdir -p dist/dmtools/native/quickjs
           if [ "$RUNNER_OS" = "Windows" ]; then

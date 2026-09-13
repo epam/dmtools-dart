@@ -293,3 +293,5 @@ Ground truth for why the odd-looking parts look odd:
 *Wiring reference in this repo: `.github/workflows/ai-teammate-issues.yml`
 (the machine), `machine-kit/README.md` (installer), `agents/AGENTS.md`
 (agent-side conventions), `AGENTS.md` §8 (session reuse operating manual).*
+
+<!-- probe 2026-09-13: does a PR run still need approval? -->

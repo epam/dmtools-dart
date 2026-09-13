@@ -677,6 +677,23 @@ jobs:
             --remove-label "agent:review" || true
           echo "→ review cycle closed (agent:review removed)"
 
+      - name: Close the rework cycle (rework runs only)
+        # Symmetric strip for rework: the verdict step (or the CI-failure
+        # feedback loop in merge-trigger.yml) queues agent:rework, the run
+        # consumes it, and the label must come OFF afterwards — a no-op
+        # label add fires no event, so a stale agent:rework would silently
+        # swallow every later CI-failure re-arm (and any human re-label).
+        # Same no-loop reasoning as the review strip above: removing a
+        # label never starts a run.
+        if: always() && contains(needs.guard.outputs.runner, 'rework')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$NUMBER" --repo "${{ github.repository }}" \
+            --remove-label "agent:rework" || true
+          echo "→ rework cycle closed (agent:rework removed)"
+
       - name: Persist fa project memory into the repository
         # fa stores project memory under <git-root>/.fah/memory (area:
         # project notes) — committing it makes agent knowledge survive

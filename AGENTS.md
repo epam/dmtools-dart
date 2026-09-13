@@ -142,4 +142,4 @@ ticket's dev thread), review has its own `dev-review`. The session directory
 For live debugging, `FA_LOG_FILE` (`fa --log-file`) captures the full
 untruncated agent transcript, uploaded as the `fa-trace-*` run artifact;
 dmtools also streams the agent's output live into the step log via stderr
-mirroring (gh-50). Wiring: `.github/workflows/ai-teammate-issues.yml`.
+mirroring (gh-50). Wiring: `.github/workflows/ai-teammate.yml`.

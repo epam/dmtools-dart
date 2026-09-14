@@ -83,30 +83,7 @@ jobs:
         if: steps.release.outputs.exists == 'true'
         env:
           DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
-        # xtrace round: previous legs installed a 154-byte sh launcher INTO
-        # dmtools.exe although the script copies the 8.7MB exe there first
-        # (merge-ref inspected) — trace + dir listings to see what actually
-        # runs and lands on disk.
-        run: |
-          # Movie mode: snapshot bin/ before EVERY line (trap DEBUG) —
-          # catches the exact command at which dmtools.exe shrinks from
-          # 8.7MB (copied by cp, confirmed by xtrace) to the 154-byte
-          # launcher that later rounds observed.
-          trace_ls() { echo "[bin] $(ls -l "$HOME/.dmtools/bin" 2>/dev/null | tail -n +2 | awk '{print $5, $9}' | tr '\n' ' ')" >&2; }
-          export -f trace_ls 2>/dev/null || true
-          BASH_XTRACEFD=2 sh -x install.sh &
-          SHPID=$!
-          (
-            while kill -0 $SHPID 2>/dev/null; do
-              echo "[bin] $(ls -l "$HOME/.dmtools/bin" 2>/dev/null | tail -n +2 | awk '{print $5, $9}' | tr '\n' ' ')"
-              sleep 1
-            done
-          ) &
-          WATCH=$!
-          wait $SHPID || true
-          kill $WATCH 2>/dev/null || true
-          echo "== final bin/ =="
-          ls -l "$HOME/.dmtools/bin"
+        run: sh install.sh
 
       - name: Run install.sh (pinned version)
         if: >
@@ -116,51 +93,6 @@ jobs:
         env:
           DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
         run: sh install.sh "${{ github.event.inputs.version }}"
-
-      - name: Diagnose git-bash invocation (windows)
-        # The bash smoke hung for 10+ minutes while the PowerShell one
-        # passed — probe each invocation shape with hard timeouts and
-        # print rc/output so the actual difference is visible in the log.
-        if: >
-          steps.release.outputs.exists == 'true' &&
-          runner.os == 'Windows'
-        run: |
-          bin="$HOME/.dmtools/bin"
-          echo "== on-disk exe: size + sha256 =="
-          ls -l "$bin/dmtools.exe"
-          sha256sum "$bin/dmtools.exe" || certutil -hashfile "$(cygpath -w "$bin/dmtools.exe")" SHA256
-          echo "== first 32 bytes =="
-          head -c 32 "$bin/dmtools.exe" | od -An -tx1 | head -2
-
-          # A/B: v0.1.11 (known-good under the ps1 leg) vs v0.1.12 (latest)
-          # side by side, identical conditions.
-          ab_dir="$(mktemp -d)"
-          for v in v0.1.11 v0.1.12; do
-            curl -fsSL "https://github.com/epam/dmtools-dart/releases/download/$v/dmtools-windows-x64.zip" -o "$ab_dir/$v.zip"
-          done
-          cat > "$ab_dir/ab.ps1" <<'PS1'
-          param($dir)
-          $ErrorActionPreference = 'Stop'
-          foreach ($v in 'v0.1.11','v0.1.12') {
-            Expand-Archive -LiteralPath (Join-Path $dir "$v.zip") -DestinationPath (Join-Path $dir "$v-x") -Force
-          }
-          PS1
-          powershell -NoProfile -ExecutionPolicy Bypass -File "$ab_dir/ab.ps1" "$ab_dir"
-          probe() {
-            label="$1"; shift
-            rc=0
-            out="$(timeout 25 "$@" 2>&1)" || rc=$?
-            echo "::group::probe: $label (rc=$rc)"
-            printf '%s\n' "$out" | head -n 5
-            echo "::endgroup::"
-          }
-          for v in v0.1.11 v0.1.12; do
-            probe "$v direct"  "$ab_dir/$v-x/dmtools/dmtools.exe" --version
-            probe "$v cmd //c"  cmd //c "$(cygpath -w "$ab_dir/$v-x/dmtools/dmtools.exe")" --version
-            probe "$v powershell" powershell -NoProfile -Command "& '$(cygpath -w "$ab_dir/$v-x/dmtools/dmtools.exe")' --version"
-          done
-          probe "installed cmd //c" cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
-          exit 0
 
       - name: Exercise the installed binary
         if: steps.release.outputs.exists == 'true'

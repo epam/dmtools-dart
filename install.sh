@@ -200,13 +200,16 @@ fi
 
 rm -rf "$install_bin/native"
 if [ "$os" = "windows" ]; then
-  cp "$src/$BINARY.exe" "$install_bin/$BINARY.exe"
   mkdir -p "$install_bin/native/quickjs"
   cp "$src/native/quickjs/libquickjs_bridge.so" \
     "$install_bin/native/quickjs/libquickjs_bridge.so"
 
-  # Launcher for Git Bash users (execs the exe; JSR_QUICKJS_LIB pinned to the
-  # library installed beside it — same reason as the POSIX launcher below).
+  # ORDER MATTERS (msys/cygwin .exe magic): the launchers must be written
+  # while no dmtools.exe exists yet. `cat > dmtools` in git-bash resolves
+  # the target to the existing dmtools.exe and OVERWRITES the real binary
+  # with the launcher script — exactly how the first windows CI legs ended
+  # up with a 154-byte dmtools.exe and a self-exec loop. The exe copy goes
+  # LAST, after every launcher write.
   cat > "$install_bin/$BINARY" <<LAUNCHER
 #!/bin/sh
 DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
@@ -214,11 +217,16 @@ export JSR_QUICKJS_LIB="\$DIR/native/quickjs/libquickjs_bridge.so"
 exec "\$DIR/dmtools.exe" "\$@"
 LAUNCHER
   # Launcher for cmd.exe / PowerShell users (dm.ai installs dmtools.cmd too).
+  # Single backslashes: cmd.exe does not escape backslashes — doubled ones
+  # leak into JSR_QUICKJS_LIB verbatim.
   cat > "$install_bin/$BINARY.cmd" <<LAUNCHER
 @echo off
-set "JSR_QUICKJS_LIB=%~dp0native\\quickjs\\libquickjs_bridge.so"
+set "JSR_QUICKJS_LIB=%~dp0native\quickjs\libquickjs_bridge.so"
 "%~dp0dmtools.exe" %*
 LAUNCHER
+
+  # The real binary, LAST (see the ORDER MATTERS note above).
+  cp "$src/$BINARY.exe" "$install_bin/$BINARY.exe"
 
   # Best-effort: put the install bin on the Windows USER Path so cmd/PowerShell
   # sessions see it too (the rc-file block below covers Git Bash). Runs from

@@ -107,6 +107,10 @@ jobs:
     needs: syntax
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      # Job-level: BOTH steps need it (the exercise step resolves the
+      # installed cmd by this path; step-level env left it empty once).
+      DMTOOLS_INSTALL_DIR: ${{ github.workspace }}\.dmtools-ps1
     steps:
       - uses: actions/checkout@v4
 

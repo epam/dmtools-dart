@@ -167,7 +167,10 @@ mkdir -p "$install_bin"
 mkdir -p "$tmpdir/extract"
 if [ "$os" = "windows" ]; then
   # Git Bash ships no unzip; GNU tar cannot read zip archives. Expand-Archive
-  # is present on every supported Windows (PowerShell 5+).
+  # is present on every supported Windows (PowerShell 5+). The call runs from
+  # a generated .ps1 file: inline -Command strings with nested quoting can
+  # hang the interpreter (an unclosed quote makes it wait on stdin forever —
+  # the first CI leg timed out exactly like that).
   pwsh_exe=""
   if command -v powershell >/dev/null 2>&1; then
     pwsh_exe="powershell"
@@ -177,8 +180,13 @@ if [ "$os" = "windows" ]; then
     err "neither powershell nor pwsh is available to extract the zip."
     exit 1
   fi
-  "$pwsh_exe" -NoProfile -Command \
-    "Expand-Archive -LiteralPath '$(cygpath -w "$archive" 2>/dev/null || echo "$archive")' -DestinationPath '$(cygpath -w "$tmpdir/extract" 2>/dev/null || echo "$tmpdir/extract")' -Force"
+  win_archive="$(cygpath -w "$archive" 2>/dev/null || echo "$archive")"
+  win_extract="$(cygpath -w "$tmpdir/extract" 2>/dev/null || echo "$tmpdir/extract")"
+  cat > "$tmpdir/extract.ps1" <<PS1
+\$ErrorActionPreference = 'Stop'
+Expand-Archive -LiteralPath '$win_archive' -DestinationPath '$win_extract' -Force
+PS1
+  "$pwsh_exe" -NoProfile -ExecutionPolicy Bypass -File "$tmpdir/extract.ps1"
 else
   tar -xzf "$archive" -C "$tmpdir/extract"
 fi
@@ -213,10 +221,19 @@ set "JSR_QUICKJS_LIB=%~dp0native\\quickjs\\libquickjs_bridge.so"
 LAUNCHER
 
   # Best-effort: put the install bin on the Windows USER Path so cmd/PowerShell
-  # sessions see it too (the rc-file block below covers Git Bash).
+  # sessions see it too (the rc-file block below covers Git Bash). Runs from
+  # a generated .ps1 file — inline -Command quoting can hang the interpreter.
   if command -v powershell >/dev/null 2>&1; then
     win_bin="$(cygpath -w "$install_bin" 2>/dev/null || echo "$install_bin")"
-    powershell -NoProfile -Command "\$p=[Environment]::GetEnvironmentVariable('Path','User'); if (\$p -notlike \"*\$win_bin*\") { [Environment]::SetEnvironmentVariable('Path', (\$p.TrimEnd(';') + ';' + '$win_bin'), 'User') }" \
+    cat > "$tmpdir/addpath.ps1" <<PS1
+\$bin = '$win_bin'
+\$p = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (\$null -eq \$p) { \$p = '' }
+if (\$p -notlike ('*' + \$bin + '*')) {
+  [Environment]::SetEnvironmentVariable('Path', (\$p.TrimEnd(';') + ';' + \$bin), 'User')
+}
+PS1
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$tmpdir/addpath.ps1" \
       >/dev/null 2>&1 || true
   fi
 else

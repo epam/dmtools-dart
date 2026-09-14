@@ -8,6 +8,12 @@
       "FA_PROVIDER_TYPE": "zai",
       "FA_PROVIDER_CONFIG": "{\"baseUrl\":\"https://api.z.ai/api/coding/paas/v4\",\"model\":\"glm-5.3-flash\",\"apiKeyEnvVar\":\"ZAI_CODE_KEY\"}"
     },
-    "inputJql": ""
+    "inputJql": "",
+    "customParams": {
+      "targetRepository": {
+        "workingDir": ".",
+        "baseBranch": "main"
+      }
+    }
   }
 }

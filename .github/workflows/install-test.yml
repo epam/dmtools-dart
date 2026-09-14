@@ -103,9 +103,26 @@ jobs:
           runner.os == 'Windows'
         run: |
           bin="$HOME/.dmtools/bin"
-          # rc must survive set -e: the assignment's command substitution
-          # returns the probe's rc, so take it with `|| rc=$?` (a bare
-          # `out="$(...)"` aborts the whole step on the first timeout).
+          echo "== on-disk exe: size + sha256 =="
+          ls -l "$bin/dmtools.exe"
+          sha256sum "$bin/dmtools.exe" || certutil -hashfile "$(cygpath -w "$bin/dmtools.exe")" SHA256
+          echo "== first 32 bytes =="
+          head -c 32 "$bin/dmtools.exe" | od -An -tx1 | head -2
+
+          # A/B: v0.1.11 (known-good under the ps1 leg) vs v0.1.12 (latest)
+          # side by side, identical conditions.
+          ab_dir="$(mktemp -d)"
+          for v in v0.1.11 v0.1.12; do
+            curl -fsSL "https://github.com/epam/dmtools-dart/releases/download/$v/dmtools-windows-x64.zip" -o "$ab_dir/$v.zip"
+          done
+          cat > "$ab_dir/ab.ps1" <<'PS1'
+          param($dir)
+          $ErrorActionPreference = 'Stop'
+          foreach ($v in 'v0.1.11','v0.1.12') {
+            Expand-Archive -LiteralPath (Join-Path $dir "$v.zip") -DestinationPath (Join-Path $dir "$v-x") -Force
+          }
+          PS1
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$ab_dir/ab.ps1" "$ab_dir"
           probe() {
             label="$1"; shift
             rc=0
@@ -114,15 +131,12 @@ jobs:
             printf '%s\n' "$out" | head -n 5
             echo "::endgroup::"
           }
-          probe "exe --version"      "$bin/dmtools.exe" --version
-          probe "exe --help"         "$bin/dmtools.exe" --help
-          probe "exe no args"        "$bin/dmtools.exe"
-          probe "exe, stdin closed"  sh -c '"$1" --version < /dev/null' sh "$bin/dmtools.exe"
-          probe "exe, MSYS env scrubbed" env -u MSYSTEM -u TERM "$bin/dmtools.exe" --version
-          probe "exe, clean env"     env -i "$bin/dmtools.exe" --version
-          probe "bash launcher"      "$bin/dmtools" --version
-          probe "cmd //c under bash" cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
-          probe "exe with JSR set"   env "JSR_QUICKJS_LIB=$bin/native/quickjs/libquickjs_bridge.so" "$bin/dmtools.exe" --version
+          for v in v0.1.11 v0.1.12; do
+            probe "$v direct"  "$ab_dir/$v-x/dmtools/dmtools.exe" --version
+            probe "$v cmd //c"  cmd //c "$(cygpath -w "$ab_dir/$v-x/dmtools/dmtools.exe")" --version
+            probe "$v powershell" powershell -NoProfile -Command "& '$(cygpath -w "$ab_dir/$v-x/dmtools/dmtools.exe")' --version"
+          done
+          probe "installed cmd //c" cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
           exit 0
 
       - name: Exercise the installed binary

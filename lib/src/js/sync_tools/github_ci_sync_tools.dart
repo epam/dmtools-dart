@@ -5,6 +5,9 @@
 /// sync config/HTTP helpers.
 part of 'github_sync_tools.dart';
 
+/// The shared check-run/comment body-text argument and output key.
+const String _textField = 'text';
+
 /// Synchronous executors for the CI/PR-activity tools.
 class GitHubCiSyncTools {
   /// Creates the CI/PR-activity sync tooling.
@@ -43,7 +46,7 @@ class GitHubCiSyncTools {
       body['output'] = {
         'title': title != null ? syncAsStr(title) : syncAsStr(a['name']),
         'summary': summary != null ? syncAsStr(summary) : '',
-        if (!syncIsBlank(a['text'])) 'text': syncAsStr(a['text']),
+        if (!syncIsBlank(a[_textField])) _textField: syncAsStr(a[_textField]),
       };
     }
     return _postJson(
@@ -63,7 +66,7 @@ class GitHubCiSyncTools {
       body['output'] = {
         if (title != null) 'title': syncAsStr(title),
         if (summary != null) 'summary': syncAsStr(summary),
-        if (syncIsBlank(a['text'])) 'text': syncAsStr(a['text']),
+        if (!syncIsBlank(a[_textField])) _textField: syncAsStr(a[_textField]),
       };
     }
     return _putJson(
@@ -116,7 +119,7 @@ class GitHubCiSyncTools {
         c,
         '${c.baseUrl}/${_repoSeg(a)}'
         '/issues/comments/${syncAsStr(a['commentId'])}',
-        {'body': syncAsStr(a['text'])},
+        {'body': syncAsStr(a[_textField])},
       );
 
   /// `github_delete_pr_comment` — DELETE

@@ -343,8 +343,10 @@ jobs:
       - name: Generate checksums
         run: |
           cp install.sh dist/install.sh
+          cp install.ps1 dist/install.ps1
+          cp install.bat dist/install.bat
           cd dist
-          sha256sum dmtools-*.tar.gz dmtools-*.zip install.sh > dmtools-checksums.sha256
+          sha256sum dmtools-*.tar.gz dmtools-*.zip install.sh install.ps1 > dmtools-checksums.sha256
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

@@ -103,23 +103,26 @@ jobs:
           runner.os == 'Windows'
         run: |
           bin="$HOME/.dmtools/bin"
+          # rc must survive set -e: the assignment's command substitution
+          # returns the probe's rc, so take it with `|| rc=$?` (a bare
+          # `out="$(...)"` aborts the whole step on the first timeout).
           probe() {
             label="$1"; shift
-            out=""
-            if command -v timeout >/dev/null 2>&1; then
-              out="$(timeout 25 "$@" 2>&1)"; rc=$?
-            else
-              out="$("$@" 2>&1)"; rc=$?
-            fi
+            rc=0
+            out="$(timeout 25 "$@" 2>&1)" || rc=$?
             echo "::group::probe: $label (rc=$rc)"
             printf '%s\n' "$out" | head -n 5
             echo "::endgroup::"
           }
-          probe "exe direct"        "$bin/dmtools.exe" --version
-          probe "exe, stdin closed" sh -c '"$1" --version < /dev/null' sh "$bin/dmtools.exe"
-          probe "bash launcher"     "$bin/dmtools" --version
-          probe "cmd via cmd //c"   cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
-          probe "exe with JSR set"  env "JSR_QUICKJS_LIB=$bin/native/quickjs/libquickjs_bridge.so" "$bin/dmtools.exe" --version
+          probe "exe --version"      "$bin/dmtools.exe" --version
+          probe "exe --help"         "$bin/dmtools.exe" --help
+          probe "exe no args"        "$bin/dmtools.exe"
+          probe "exe, stdin closed"  sh -c '"$1" --version < /dev/null' sh "$bin/dmtools.exe"
+          probe "exe, MSYS env scrubbed" env -u MSYSTEM -u TERM "$bin/dmtools.exe" --version
+          probe "exe, clean env"     env -i "$bin/dmtools.exe" --version
+          probe "bash launcher"      "$bin/dmtools" --version
+          probe "cmd //c under bash" cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
+          probe "exe with JSR set"   env "JSR_QUICKJS_LIB=$bin/native/quickjs/libquickjs_bridge.so" "$bin/dmtools.exe" --version
           exit 0
 
       - name: Exercise the installed binary

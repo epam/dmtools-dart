@@ -27,68 +27,75 @@ void main() {
 /// `github_create_check_run` — POST `repos/{w}/{r}/check-runs`.
 void checkRunTests() {
   group('GithubClient.createCheckRun', () {
-    test('POSTs name + head_sha only when optional fields are absent',
-        () async {
-      final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
-      await f.client
-          .createCheckRun('epm', 'dm.ai', 'dmtools / review', 'abc123');
-      final call = f.adapter.calls.single;
-      expect(call.method, 'POST');
-      expect(call.path, endsWith('/repos/epm/dm.ai/check-runs'));
-      expect(jsonDecode(call.data as String), {
-        'name': 'dmtools / review',
-        'head_sha': 'abc123',
-      });
-    });
+    checkRunCreateTests();
+  });
+  group('GithubClient.updateCheckRun', () {
+    checkRunUpdateTests();
+  });
+}
 
-    test('defaults the output title to the name and summary to empty',
-        () async {
-      final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
-      await f.client.createCheckRun('epm', 'dm.ai', 'review', 'abc123',
-          status: 'in_progress', summary: 'started', externalId: 'KEY-1');
-      expect(jsonDecode(f.adapter.calls.single.data as String), {
-        'name': 'review',
-        'head_sha': 'abc123',
-        'status': 'in_progress',
-        'external_id': 'KEY-1',
-        'output': {'title': 'review', 'summary': 'started'},
-      });
+/// Create-side body shaping: required fields, defaults, blank handling.
+void checkRunCreateTests() {
+  test('POSTs name + head_sha only when optional fields are absent', () async {
+    final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
+    await f.client.createCheckRun('epm', 'dm.ai', 'dmtools / review', 'abc123');
+    final call = f.adapter.calls.single;
+    expect(call.method, 'POST');
+    expect(call.path, endsWith('/repos/epm/dm.ai/check-runs'));
+    expect(jsonDecode(call.data as String), {
+      'name': 'dmtools / review',
+      'head_sha': 'abc123',
     });
+  });
 
-    test('includes output text only when non-blank', () async {
-      final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
-      await f.client.createCheckRun('epm', 'dm.ai', 'review', 'abc123',
-          title: 'AI Review', text: '  ');
-      final body = jsonDecode(f.adapter.calls.single.data as String)
-          as Map<String, dynamic>;
-      expect(body['output'], {'title': 'AI Review', 'summary': ''});
+  test('defaults the output title to the name and summary to empty', () async {
+    final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
+    await f.client.createCheckRun('epm', 'dm.ai', 'review', 'abc123',
+        status: 'in_progress', summary: 'started', externalId: 'KEY-1');
+    expect(jsonDecode(f.adapter.calls.single.data as String), {
+      'name': 'review',
+      'head_sha': 'abc123',
+      'status': 'in_progress',
+      'external_id': 'KEY-1',
+      'output': {'title': 'review', 'summary': 'started'},
     });
+  });
 
-    test('updateCheckRun PATCHes status/conclusion/output', () async {
-      final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
-      await f.client.updateCheckRun('epm', 'dm.ai', '9', 'completed',
-          conclusion: 'success', title: 'done', summary: 'ok', text: 'all');
-      final call = f.adapter.calls.single;
-      expect(call.method, 'PATCH');
-      expect(call.path, endsWith('/repos/epm/dm.ai/check-runs/9'));
-      expect(jsonDecode(call.data as String), {
-        'status': 'completed',
-        'conclusion': 'success',
-        'output': {'title': 'done', 'summary': 'ok', 'text': 'all'},
-      });
+  test('includes output text only when non-blank', () async {
+    final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
+    await f.client.createCheckRun('epm', 'dm.ai', 'review', 'abc123',
+        title: 'AI Review', text: '  ');
+    final body = jsonDecode(f.adapter.calls.single.data as String)
+        as Map<String, dynamic>;
+    expect(body['output'], {'title': 'AI Review', 'summary': ''});
+  });
+}
+
+/// Update-side body shaping: status/conclusion/output and blanks.
+void checkRunUpdateTests() {
+  test('PATCHes status/conclusion/output', () async {
+    final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
+    await f.client.updateCheckRun('epm', 'dm.ai', '9', 'completed',
+        conclusion: 'success', title: 'done', summary: 'ok', text: 'all');
+    final call = f.adapter.calls.single;
+    expect(call.method, 'PATCH');
+    expect(call.path, endsWith('/repos/epm/dm.ai/check-runs/9'));
+    expect(jsonDecode(call.data as String), {
+      'status': 'completed',
+      'conclusion': 'success',
+      'output': {'title': 'done', 'summary': 'ok', 'text': 'all'},
     });
+  });
 
-    test('updateCheckRun omits a blank conclusion', () async {
-      final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
-      await f.client.updateCheckRun('epm', 'dm.ai', '9', 'in_progress');
-      expect(jsonDecode(f.adapter.calls.single.data as String), {
-        'status': 'in_progress',
-      });
+  test('omits a blank conclusion', () async {
+    final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
+    await f.client.updateCheckRun('epm', 'dm.ai', '9', 'in_progress');
+    expect(jsonDecode(f.adapter.calls.single.data as String), {
+      'status': 'in_progress',
     });
   });
 }
 
-/// `github_create_commit_status` — POST `repos/{w}/{r}/statuses/{sha}`.
 void commitStatusTests() {
   group('GithubClient.createCommitStatus', () {
     test('POSTs state plus optional fields', () async {

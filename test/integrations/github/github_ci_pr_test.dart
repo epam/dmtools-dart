@@ -181,6 +181,12 @@ void prActivitiesTests() {
 
 /// `github_list_prs_filtered` — state normalization + regex filtering.
 void listPrsFilteredTests() {
+  listPrsFilteredTestsP1();
+  listPrsFilteredTestsP2();
+}
+
+/// Filtered-listing happy paths: state synonyms and merged.
+void listPrsFilteredTestsP1() {
   group('GithubClient.listPullRequestsFiltered', () {
     test('filters by title regex and normalizes opened→open', () async {
       final f = mockGithub(
@@ -210,7 +216,12 @@ void listPrsFilteredTests() {
           await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'open', '.*');
       expect(result, hasLength(1));
     });
+  });
+}
 
+/// Filtered-listing edge branches: null titles and payloads.
+void listPrsFilteredTestsP2() {
+  group('GithubClient.listPullRequestsFiltered', () {
     test('normalizes declined to the closed state parameter', () async {
       final f = mockGithub(
         (o) => routeByPath({'/pulls': '[]'}, o),

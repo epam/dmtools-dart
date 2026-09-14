@@ -574,7 +574,10 @@ void _searchIssuesTests() {
   });
 
   test('github_search_issues skips scoping without defaults', () {
+    // setOverrides replaces the whole map — keep the fixture wiring.
     PropertyReader.setOverrides({
+      'SOURCE_GITHUB_TOKEN': 'ghp_testtoken',
+      'SOURCE_GITHUB_BASE_PATH': 'http://127.0.0.1:${fx.port}',
       'SOURCE_GITHUB_WORKSPACE': '',
       'SOURCE_GITHUB_REPOSITORY': '',
     });

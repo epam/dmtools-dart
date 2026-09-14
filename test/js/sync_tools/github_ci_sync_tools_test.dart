@@ -701,6 +701,48 @@ void _createIssueTests() {
     _call('github_create_issue', {'owner': 'w', 'title': 'Bug'});
     expect(_lastRequest['path'], '/repos/w/r/issues');
   });
+
+  test('github_create_issue ignores a key without a slash', () {
+    // Java treats the key as a composite project reference only when it
+    // carries owner/repo — a plain word falls through to the defaults.
+    _call('github_create_issue', {'key': 'plainproject', 'title': 'Bug'});
+    expect(_lastRequest['path'], '/repos/o/r/issues');
+  });
+
+  test('github_create_issue accepts the composite project key', () {
+    _call('github_create_issue', {'key': 'myorg/myrepo', 'title': 'Bug'});
+    expect(_lastRequest['path'], '/repos/myorg/myrepo/issues');
+    expect(jsonDecode(_lastRequest['body'] as String), {'title': 'Bug'});
+  });
+
+  test('github_create_issue without any repo reference fails', () {
+    // setOverrides replaces the whole map — keep the fixture wiring.
+    PropertyReader.setOverrides({
+      'SOURCE_GITHUB_TOKEN': 'ghp_testtoken',
+      'SOURCE_GITHUB_BASE_PATH': 'http://127.0.0.1:${fx.port}',
+      'SOURCE_GITHUB_WORKSPACE': '',
+      'SOURCE_GITHUB_REPOSITORY': '',
+    });
+    final raw = _call('github_create_issue', {'title': 'Bug'});
+    expect(jsonDecode(raw), {
+      'error': "github_create_issue requires owner/repo or a composite "
+          "key/project 'owner/repo'.",
+    });
+  });
+
+  test('github_assign_issue POSTs the assignees list', () {
+    _call('github_assign_issue', {
+      'owner': 'o',
+      'repo': 'r',
+      'number': 50,
+      'user': 'octocat',
+    });
+    expect(_lastRequest['method'], 'POST');
+    expect(_lastRequest['path'], '/repos/o/r/issues/50/assignees');
+    expect(jsonDecode(_lastRequest['body'] as String), {
+      'assignees': ['octocat'],
+    });
+  });
 }
 
 void _issueRefTests() {
@@ -730,6 +772,11 @@ void _issueRefTests() {
       'number': '51',
     });
     expect(_lastRequest['path'], '/repos/o/r/issues/51');
+  });
+
+  test('issue tools resolve a bare number through the defaults', () {
+    _call('github_get_issue', {'key': '9'});
+    expect(_lastRequest['path'], '/repos/o/r/issues/9');
   });
 
   test('a gh- prefixed key is rejected by the sync family', () {

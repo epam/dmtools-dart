@@ -210,6 +210,45 @@ void listPrsFilteredTests() {
           await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'open', '.*');
       expect(result, hasLength(1));
     });
+
+    test('normalizes declined to the closed state parameter', () async {
+      final f = mockGithub(
+        (o) => routeByPath({'/pulls': '[]'}, o),
+      );
+      await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'declined', '.*');
+      expect(f.adapter.calls.single.queryParameters['state'], 'closed');
+    });
+
+    test('a non-list payload yields an empty listing', () async {
+      final f = mockGithub(
+        (o) => routeByPath({'/pulls': '{"message":"not a list"}'}, o),
+      );
+      expect(
+        await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'open', '.*'),
+        isEmpty,
+      );
+    });
+
+    test('an empty page yields an empty listing', () async {
+      final f = mockGithub(
+        (o) => routeByPath({'/pulls': '[]'}, o),
+      );
+      expect(
+        await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'open', '.*'),
+        isEmpty,
+      );
+    });
+
+    test('non-map page entries are skipped', () async {
+      final f = mockGithub(
+        (o) => routeByPath({
+          '/pulls': '["nope",{"number":4,"title":"feat: x"}]',
+        }, o),
+      );
+      final result = await f.client
+          .listPullRequestsFiltered('epm', 'dm.ai', 'open', '^feat');
+      expect(result.map((pr) => pr['number']), [4]);
+    });
   });
 }
 

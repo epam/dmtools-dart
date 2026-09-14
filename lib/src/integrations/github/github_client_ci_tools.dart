@@ -187,15 +187,27 @@ extension GithubCiPrTools on GithubClient {
       );
       final decoded = jsonDecode(body);
       if (decoded is! List || decoded.isEmpty) break;
-      for (final pr in decoded) {
-        if (pr is! Map<String, dynamic>) continue;
-        if (isMerged && pr['merged_at'] == null) continue;
-        final title = pr['title'] as String? ?? '';
-        if (pattern.hasMatch(title)) out.add(pr);
-      }
-      if (decoded.length < 100) break;
+      if (_collectMatchingPrPage(decoded, isMerged, pattern, out)) break;
     }
     return out;
+  }
+
+  /// Appends one decoded page's PRs matching [pattern] (merged-only when
+  /// [isMerged]) into [out]; returns whether the page was partial (the
+  /// pagination loop's stop condition).
+  static bool _collectMatchingPrPage(
+    List<Object?> decoded,
+    bool isMerged,
+    RegExp pattern,
+    List<Map<String, dynamic>> out,
+  ) {
+    for (final pr in decoded) {
+      if (pr is! Map<String, dynamic>) continue;
+      if (isMerged && pr['merged_at'] == null) continue;
+      final title = pr['title'] as String? ?? '';
+      if (pattern.hasMatch(title)) out.add(pr);
+    }
+    return decoded.length < 100;
   }
 
   /// `github_get_workflow_run` — GET

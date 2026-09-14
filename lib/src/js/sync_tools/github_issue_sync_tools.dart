@@ -40,19 +40,16 @@ Object _resolveSyncIssueRef(Map<String, dynamic> args) {
       _firstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
   final key = syncAsStr(args['key']).trim();
   if (key.isNotEmpty) {
-    final composite = _syncCompositeKey.firstMatch(key);
-    if (composite != null) {
-      number = int.parse(composite.group(1)!);
-      owner = key.substring(0, key.indexOf('/'));
-      repo = key.substring(key.indexOf('/') + 1, key.indexOf('#'));
-    } else if (_syncBareNumber.hasMatch(key)) {
-      number = int.parse(key);
-    } else {
+    final fromKey = _applyIssueKey(key, owner, repo, number);
+    if (fromKey == null) {
       return syncErr(
         "Cannot parse GitHub issue key: '$key'. Expected 'owner/repo#123' "
         'or a bare issue number.',
       );
     }
+    owner = fromKey.owner;
+    repo = fromKey.repo;
+    number = fromKey.number;
   }
   final reader = PropertyReader();
   if (owner.trim().isEmpty) {
@@ -68,6 +65,37 @@ Object _resolveSyncIssueRef(Map<String, dynamic> args) {
     );
   }
   return _SyncIssueRef(owner, repo, number);
+}
+
+/// Applies a composite `owner/repo#123` or bare-number [key] onto the
+/// partially-resolved reference parts; `null` when [key] parses as
+/// neither form.
+_SyncIssueRefParts? _applyIssueKey(
+  String key,
+  String owner,
+  String repo,
+  int? number,
+) {
+  final composite = _syncCompositeKey.firstMatch(key);
+  if (composite != null) {
+    return _SyncIssueRefParts(
+      key.substring(0, key.indexOf('/')),
+      key.substring(key.indexOf('/') + 1, key.indexOf('#')),
+      int.parse(composite.group(1)!),
+    );
+  }
+  if (_syncBareNumber.hasMatch(key)) {
+    return _SyncIssueRefParts(owner, repo, int.parse(key));
+  }
+  return null;
+}
+
+/// Mutable carrier for the reference parts while a `key` is applied.
+class _SyncIssueRefParts {
+  final String owner;
+  final String repo;
+  final int? number;
+  const _SyncIssueRefParts(this.owner, this.repo, this.number);
 }
 
 /// Runs [fn] with the resolved issue reference, or returns the JSON error.

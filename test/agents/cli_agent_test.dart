@@ -22,6 +22,10 @@ void main() {
   lifecycleContextTests();
   lifecycleEnvTests();
   lifecycleTicketDataTests();
+  ticketHydrationTests();
+  ticketTimerHydrationTests();
+  ticketHydrationEdgeTests();
+  ticketHydrationPrecedenceTests();
   factoryTests();
 }
 
@@ -585,6 +589,139 @@ void lifecycleTicketDataTests() {
           workingDirectory: tmp.path,
         )).run();
         expect(Directory('${tmp.path}/input/cli-agent').listSync(), isEmpty);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void ticketHydrationTests() {
+  group('CliAgent ticket hydration', () {
+    test('hydrates params.ticket from input/<contextId>/ticket.json', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/ticket_key.log';
+      final js = File(
+        '${tmp.path}/post_cb.js',
+      )..writeAsStringSync(
+          'function action(params) { '
+          'file_write({path: "$log", content: params.ticket.key}); }',
+        );
+      try {
+        Directory('${tmp.path}/input/gh-77').createSync(recursive: true);
+        File('${tmp.path}/input/gh-77/ticket.json').writeAsStringSync(
+          '{"key":"gh-77","number":77,"title":"Port the thing"}',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = {'contextId': 'gh-77'}
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'gh-77');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void ticketTimerHydrationTests() {
+  group('CliAgent timer ticket hydration', () {
+    test(
+      'timer context action sees params.ticket hydrated from ticket.json',
+      () async {
+        final tmp = await _createTempDir();
+        final log = '${tmp.path}/timer_key.log';
+        final js = File(
+          '${tmp.path}/timer_cb.js',
+        )..writeAsStringSync(
+            'function action(params) { '
+            'file_write({path: "$log", content: params.ticket.key}); }',
+          );
+        try {
+          Directory('${tmp.path}/input/gh-78').createSync(recursive: true);
+          File('${tmp.path}/input/gh-78/ticket.json').writeAsStringSync(
+            '{"key":"gh-78","number":78,"title":"T"}',
+          );
+          final agent = CliAgent(
+            params: CliAgentParams()
+              ..cliCommands = ['echo done']
+              ..metadata = {'contextId': 'gh-78'}
+              ..timerJSAction = js.path
+              ..timerIntervalSeconds = 0
+              ..cleanupInputFolder = false,
+            workingDirectory: tmp.path,
+          );
+          await agent.run();
+          expect((await File(log).readAsString()).trim(), 'gh-78');
+        } finally {
+          await tmp.delete(recursive: true);
+        }
+      },
+    );
+  });
+}
+
+void ticketHydrationEdgeTests() {
+  group('CliAgent ticket hydration edge cases', () {
+    test('malformed ticket.json behaves as no ticket', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/ticket_key.log';
+      final js = File(
+        '${tmp.path}/post_cb.js',
+      )..writeAsStringSync(
+          'function action(params) { '
+          'file_write({path: "$log", content: String(!params.ticket)}); }',
+        );
+      try {
+        Directory('${tmp.path}/input/gh-79').createSync(recursive: true);
+        File('${tmp.path}/input/gh-79/ticket.json')
+            .writeAsStringSync('{not json');
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = {'contextId': 'gh-79'}
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'true');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void ticketHydrationPrecedenceTests() {
+  group('CliAgent ticket hydration precedence', () {
+    test('explicit ticketData wins over the ticket.json convention', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/ticket_key.log';
+      final js = File(
+        '${tmp.path}/post_cb.js',
+      )..writeAsStringSync(
+          'function action(params) { '
+          'file_write({path: "$log", content: params.ticket.key}); }',
+        );
+      try {
+        Directory('${tmp.path}/input/gh-80').createSync(recursive: true);
+        File('${tmp.path}/input/gh-80/ticket.json').writeAsStringSync(
+          '{"key":"gh-80"}',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = {'contextId': 'gh-80'}
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+          ticketData: {'key': 'PROJ-9'},
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'PROJ-9');
       } finally {
         await tmp.delete(recursive: true);
       }

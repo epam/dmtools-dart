@@ -8,8 +8,10 @@
 ///   `dart test` run — run it explicitly with
 ///   `dart test -P integration -t integration`;
 /// - gated on [gateVar] (`BITRISE_TOKEN`), resolved through the standard Phase 1
-///   [PropertyReader] chain (real env → `dmtools.env` → `dmtools-local.env`) —
-///   the same path production uses, so a token in `dmtools.env` is honoured;
+///   [PropertyReader] chain (overrides → `config.properties` → `dmtools.env` →
+///   OS env; the file is loaded from the project root first, then the working
+///   directory) — the same path production uses, so a token in `dmtools.env`
+///   is honoured;
 /// - skipped locally when the gate is absent; `DMTOOLS_IT_REQUIRE_CREDS=true`
 ///   turns that skip into a failure in the CI integration job so a rotting
 ///   secret cannot hide;

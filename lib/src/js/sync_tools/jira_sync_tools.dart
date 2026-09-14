@@ -20,11 +20,21 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
+import 'tracker_github_router.dart';
 
 /// Executes `jira_*` MCP tool calls synchronously over curl subprocess.
 class JiraSyncTools {
   /// Creates Jira tooling; config is resolved per call.
-  const JiraSyncTools();
+  ///
+  /// [trackerRouter] routes `gh-<number>` ticket calls to GitHub Issues
+  /// when Jira is unconfigured (see [TrackerGitHubRouter]); tests inject a
+  /// logger-capturing instance.
+  const JiraSyncTools({TrackerGitHubRouter trackerRouter = _defaultRouter})
+      : _trackerRouter = trackerRouter;
+
+  static const _defaultRouter = TrackerGitHubRouter();
+
+  final TrackerGitHubRouter _trackerRouter;
 
   /// Jira tool executors: canonical `@MCPTool` names plus the dispatch
   /// aliases (`jira_assign`, `jira_create_ticket`, `tracker_*`).
@@ -63,10 +73,14 @@ class JiraSyncTools {
 
   /// Dispatches a Jira tool call against [handlers].
   ///
-  /// Mirrors the dispatcher's error contract: unknown names yield
-  /// `{"error": "Unsupported Jira tool: …"}`, missing config yields
-  /// `{"error": "Jira not configured"}`.
+  /// Tracker-shaped calls on `gh-<number>` keys route to GitHub Issues
+  /// first when Jira is unconfigured ([TrackerGitHubRouter]); everything
+  /// else keeps the Jira path. Mirrors the dispatcher's error contract:
+  /// unknown names yield `{"error": "Unsupported Jira tool: …"}`, missing
+  /// config yields `{"error": "Jira not configured"}`.
   String dispatch(String toolName, Map<String, dynamic> args) {
+    final routed = _trackerRouter.maybeRoute(toolName, args);
+    if (routed != null) return routed;
     final fn = handlers[toolName];
     if (fn == null) return _err('Unsupported Jira tool: $toolName');
     return fn(args);

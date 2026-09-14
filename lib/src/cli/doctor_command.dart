@@ -2,7 +2,7 @@
 ///
 /// Phase 2 scope: verifies that the environment variables required by each
 /// integration are present via [PropertyReader] (overrides → `dmtools.env`
-/// → `dmtools-local.env` → OS env). Connectivity tests arrive with the
+/// → OS env). Connectivity tests arrive with the
 /// Phase 3 integration ports; the report says so in its closing note.
 library;
 

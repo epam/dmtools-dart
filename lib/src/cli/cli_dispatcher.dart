@@ -483,8 +483,8 @@ Environment Variables:
   DMTOOLS_INTEGRATIONS    Comma-separated list of integrations (jira,confluence,figma)
 
 Environment Files:
-  The tool automatically loads environment variables from dmtools.env and
-  dmtools-local.env in the current working directory.
+  The tool automatically loads environment variables from dmtools.env
+  (project root first, then the current working directory).
 
   Common variables:
   - JIRA_BASE_PATH, JIRA_EMAIL, JIRA_API_TOKEN

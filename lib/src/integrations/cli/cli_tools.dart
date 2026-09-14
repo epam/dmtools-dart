@@ -11,6 +11,8 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
+import 'allowed_base.dart';
+import 'process_output_tee.dart';
 
 /// Built-in whitelist of allowed CLI commands.
 const Set<String> defaultAllowedCommands = {
@@ -81,7 +83,10 @@ List<ToolDefinition> cliTools() => [
       ),
     ];
 
-/// Executes CLI MCP tools via [Process.run], enforcing the command whitelist.
+/// Executes CLI MCP tools via a streaming capture process run, enforcing
+/// the command whitelist. Output lines are mirrored live to dmtools' stderr
+/// (see [runCaptured]) while the `{stdout, stderr, exitCode}` result
+/// stays byte-identical to a full-buffer capture.
 class CliToolExecutor {
   /// Creates a CLI tool executor.
   ///
@@ -111,44 +116,89 @@ class CliToolExecutor {
   /// Returns the full whitelist as a sorted array.
   List<String> getAllowedCommands() => (allowedCommands.toList()..sort());
 
-  /// Executes [command] with optional [args] via [Process.run].
+  /// Executes [command] with optional [args], mirroring every output line
+  /// live to dmtools' stderr ([mirror] overrides the target for tests).
+  ///
+  /// [workingDirectory] runs the child inside that directory (absolute, or
+  /// relative to the process CWD). It is validated within the allowed base
+  /// directories — the process CWD, its git root, the system temp dir —
+  /// per Java `validateWithinAllowedBase` parity, the same sandbox the
+  /// JS-bridge path for this tool enforces; a directory outside them
+  /// throws. When null the child inherits the process CWD, as before.
   ///
   /// Returns a map with `stdout`, `stderr`, and `exitCode`.
   /// Throws [ArgumentError] if the command is not whitelisted.
   Future<Map<String, dynamic>> executeCommand(
-    String command, [
+    String command, {
     List<String>? args,
-  ]) async {
+    String? workingDirectory,
+    OutputLineSink? mirror,
+  }) async {
     if (!isAllowed(command)) {
       throw ArgumentError('Command not allowed: $command');
     }
-    final result = await Process.run(command, args ?? const []);
-    return _resultMap(result);
-  }
-
-  /// Executes [command] with [args] and extra [envVars] via [Process.run].
-  ///
-  /// Returns a map with `stdout`, `stderr`, and `exitCode`.
-  /// Throws [ArgumentError] if the command is not whitelisted.
-  Future<Map<String, dynamic>> executeCommandWithEnv(
-    String command, [
-    List<String>? args,
-    Map<String, String>? envVars,
-  ]) async {
-    if (!isAllowed(command)) {
-      throw ArgumentError('Command not allowed: $command');
-    }
-    final result = await Process.run(
+    final result = await runCaptured(
       command,
       args ?? const [],
-      environment: envVars,
+      workingDirectory: _validatedWorkingDir(workingDirectory),
+      mirror: mirror,
     );
     return _resultMap(result);
   }
 
-  Map<String, dynamic> _resultMap(ProcessResult result) => {
-        'stdout': result.stdout.toString(),
-        'stderr': result.stderr.toString(),
+  /// Resolves [workingDirectory] against the process CWD and validates it
+  /// within the allowed bases (Java `validateWithinAllowedBase` parity) —
+  /// the same check the JS-bridge path applies, so both surfaces of the
+  /// tool enforce the same sandbox. Null inherits the process CWD.
+  ///
+  /// A specified directory that does not exist falls back to the git root
+  /// of the base (then the base), the same resolution the JS-bridge path
+  /// applies (Java `resolveWorkingDirectory` parity) — `Process.start`
+  /// would otherwise throw a [ProcessException] for the exact input the
+  /// bridge resolves, so a typo'd `workingDirectory` would fail on this
+  /// surface while succeeding in the git root on the bridge.
+  String? _validatedWorkingDir(String? workingDirectory) {
+    if (workingDirectory == null || workingDirectory.trim().isEmpty) {
+      return null;
+    }
+    final base = Directory.current.path;
+    final specified = Directory(workingDirectory.trim());
+    final resolved =
+        specified.isAbsolute ? specified : Directory('$base/${specified.path}');
+    if (!resolved.existsSync()) {
+      return gitRepositoryRoot(base) ?? base;
+    }
+    validateWithinAllowedBase(resolved.absolute.path, base);
+    return resolved.path;
+  }
+
+  /// Executes [command] with [args] and extra [envVars], mirroring every
+  /// output line live to dmtools' stderr ([mirror] overrides the target for
+  /// tests).
+  ///
+  /// Returns a map with `stdout`, `stderr`, and `exitCode`.
+  /// Throws [ArgumentError] if the command is not whitelisted.
+  Future<Map<String, dynamic>> executeCommandWithEnv(
+    String command, {
+    List<String>? args,
+    Map<String, String>? envVars,
+    OutputLineSink? mirror,
+  }) async {
+    if (!isAllowed(command)) {
+      throw ArgumentError('Command not allowed: $command');
+    }
+    final result = await runCaptured(
+      command,
+      args ?? const [],
+      environment: envVars,
+      mirror: mirror,
+    );
+    return _resultMap(result);
+  }
+
+  Map<String, dynamic> _resultMap(CapturedProcessResult result) => {
+        'stdout': result.stdout,
+        'stderr': result.stderr,
         'exitCode': result.exitCode,
       };
 
@@ -181,12 +231,13 @@ class CliToolExecutor {
       Future<Map<String, dynamic>> Function(Map<String, dynamic>)> _handlers = {
     'cli_execute_command': (a) => executeCommand(
           a['command'] as String,
-          _parseArgs(a['args']),
+          args: _parseArgs(a['args']),
+          workingDirectory: a['workingDirectory'] as String?,
         ),
     'cli_execute_command_with_env': (a) => executeCommandWithEnv(
           a['command'] as String,
-          _parseArgs(a['args']),
-          _parseEnv(a['env_vars']),
+          args: _parseArgs(a['args']),
+          envVars: _parseEnv(a['env_vars']),
         ),
     'cli_list_allowed_commands': (a) async =>
         {'commands': getAllowedCommands()},

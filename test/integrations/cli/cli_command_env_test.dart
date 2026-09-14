@@ -60,8 +60,8 @@ void executeCommandWithEnvTests() {
       final env = {...Platform.environment, 'DMTOOLS_TEST_VAR': 'hello-env'};
       final result = await executor.executeCommandWithEnv(
         'printenv',
-        ['DMTOOLS_TEST_VAR'],
-        env,
+        args: ['DMTOOLS_TEST_VAR'],
+        envVars: env,
       );
       expect(result['stdout'].trim(), 'hello-env');
       expect(result['exitCode'], 0);
@@ -77,7 +77,11 @@ void executeCommandWithEnvTests() {
     test('throws ArgumentError for a non-whitelisted command', () {
       final executor = CliToolExecutor();
       expect(
-        () => executor.executeCommandWithEnv('curl', const [], {'X': '1'}),
+        () => executor.executeCommandWithEnv(
+          'curl',
+          args: const [],
+          envVars: {'X': '1'},
+        ),
         throwsArgumentError,
       );
     });

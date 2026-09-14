@@ -46,8 +46,8 @@ dart test -P integration
   tag is silently ignored — the runner will then run the test by default and
   `-t integration` will not match it.
 
-- **Credentials** come from the standard resolution chain — real env vars,
-  then `dmtools.env`, then `dmtools-local.env` — the same Phase 1
+- **Credentials** come from the standard resolution chain — overrides,
+  `config.properties`, `dmtools.env`, then OS env vars — the same Phase 1
   `PropertyReader` path production uses. Locally that means a git-ignored
   `dmtools.env` with real keys; in CI the same variables arrive as injected
   secrets. No test-specific config files, no hardcoded values anywhere.

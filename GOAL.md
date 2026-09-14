@@ -26,6 +26,46 @@ https://github.com/IstiN/dmtools-agents — also cloned when needed.
 
 ---
 
+## Core abstractions (how dmtools thinks)
+
+Every integration dmtools exposes belongs to one of two unified abstractions.
+Agent scripts, job configs, and the port itself must be written against the
+abstraction — never against a concrete vendor.
+
+### 1. Tracker — any work-tracking system
+
+Jira, ADO Boards, GitHub Issues, Rally, … — one interface:
+`tracker_get_ticket`, `tracker_search`, `tracker_post_comment`,
+`tracker_move_to_status`, `tracker_add_label`, … Every concrete
+`jira_*` / `ado_*` / `github_*` issue tool is an implementation of the same
+contract, and the `tracker_*` surface must route to whichever tracker the
+environment configures (`DEFAULT_TRACKER`). A script written against
+`params.ticket.key` + tracker tools must run unchanged on any tracker
+backend. Context hydration follows the same contract: `params.ticket` /
+`params.ticketKey` carry the ticket key and data regardless of vendor.
+
+### 2. SCM — any source-control system
+
+GitHub, GitLab, Bitbucket, ADO Repos, … — one interface for PR / branch /
+commit / review operations (the `js/common/scm.js` provider abstraction in
+the agent ecosystem; `github_*` / `gitlab_*` / `bitbucket_*` sync tools
+underneath). Review, rework, and development flows must be SCM-agnostic:
+ticket → PR → review → rework → merge works the same regardless of vendor.
+
+### Consequences
+
+- **Porting rule:** a vendor integration is "done" only when its tools are
+  reachable through the unified interface (tracker routing, SCM providers) —
+  native tool names alone are not enough.
+- **Runtime rule:** context hydration, JS actions, and post-actions must
+  resolve `params.ticket` and the ticket key the same way for every tracker
+  (no `jira_post_comment("gh-35")`-style cross-vendor calls that silently
+  fail — route through the tracker abstraction).
+- The `tracker_*` aliases and `scm.js` providers are the contract surface;
+  vendor tools are the implementation detail.
+
+---
+
 ## Hard constraints (non-negotiable)
 
 ### 1. Signature parity with Java DMTools
@@ -149,14 +189,12 @@ dart run bin/dmtools.dart run agents/js/unit-tests/run_all.json
 Reference: `dmtools-core/.../common/utils/PropertyReader.java` (1567 lines),
 `common/config/ApplicationConfiguration.java`.
 
-- [x] Config resolution order identical to Java: real env vars → `dmtools.env` →
-      `dmtools-local.env` → defaults; real env always wins (mirrors
-      `run-teammate-local.sh` semantics).
-      **Note:** Java `PropertyReader.getValue()` actually checks OS env *last*
-      (overrides → config.properties → dmtools.env → OS env). The Dart port
-      follows the Java source (the spec per AGENTS.md), so `dmtools.env` in CWD
-      overrides real OS env vars. `dmtools-local.env` sits between the two
-      (replaces the shell-launcher `export` from `dmtools.sh`).
+- [x] Config resolution order identical to Java: overrides → `config.properties`
+      → `dmtools.env` → OS env; OS env is checked *last* (mirrors
+      `PropertyReader.getValue()`, so `dmtools.env` in CWD overrides real OS
+      env vars).
+      **Note:** the `dmtools-local.env` tier was removed per the 2026-08-24
+      audit — Java has no such tier (P6-CFG-03).
 - [x] Thread-local/zone-local overrides (`PropertyReader.getOverrides()` equivalent)
       — required by `CLI_ALLOWED_COMMANDS` and job-level `envVariables`.
 - [x] Every env var getter used by integrations (Jira, ADO, GitHub, GitLab,
@@ -338,7 +376,7 @@ record — update a wave's `status:` header AND this table together.
 |------|------|-------|--------|------------|--------|
 | W0 | `phases/phase6-w0-owner-regressions.md` | 2 | **done** | — | — |
 | W1 | `phases/phase6-w1-jira-sync.md` | 18 | in-progress | W6 | — |
-| W2 | `phases/phase6-w2-config.md` | 13 | open | — | W3 |
+| W2 | `phases/phase6-w2-config.md` | 13 | in-progress | — | W3 |
 | W3 | `phases/phase6-w3-runners-cli.md` | 28 | open | W2 | — |
 | W4 | `phases/phase6-w4-vcs-sync.md` | 23 | open | W6 | — |
 | W5 | `phases/phase6-w5-ci-docs-sync.md` | 35 | open | W6 | — |
@@ -442,6 +480,19 @@ full gate sequence green; unblock dependents in this table).
   again (per the standing rule: fuse only while the runtime lags
   upstream). Suite output shape `{"success":true,"passed":882,
   "failed":0}` is the new baseline.
+- **2026-09-11 (session 5, first full e2e subagent run):** W2 opened:
+  P6-CFG-01..05 closed via a four-agent pipeline (explore research →
+  implement → review → review-fix), score 13/221. The config chain is
+  now Java-exact: overrides → config.properties (disk
+  `<root>/src/main/resources` wins even when empty, else the
+  setConfigFile resource) → dmtools.env (project root FIRST, then CWD;
+  empty-parse file skipped; unreadable file warns + continues) → OS
+  env. Empty values fall through file tiers; root marker is
+  settings.gradle(.kts) with CWD fallback; the dmtools-local.env tier
+  is REMOVED (P6-CFG-03 — Java has none; GOAL.md Phase-1 note and the
+  integration-strategy credentials line updated accordingly). Gates
+  green: format/analyze/2363 tests/coverage 98.9%/crap4dart (Max CRAP
+  8.00)/agents suite 917/917.
 
 **Phase 6 done when:** `scripts/parity_progress.sh` prints score == max,
 the catalog parity test reports zero gaps against a fresh Java clone, and
@@ -473,9 +524,9 @@ destabilize the default quality loop.
 - Live tests live under `test/` tagged `@Tags(['integration'])` with a
   `dart_test.yaml` that **excludes the tag by default**; run explicitly via
   `dart test -t integration`.
-- **Credentials come from the standard resolution chain** — real env vars first,
-  then `dmtools.env`, then `dmtools-local.env` (the Phase 1 config layer, same path
-  production uses). Locally the expected setup is a git-ignored `dmtools.env` with
+- **Credentials come from the standard resolution chain** — overrides →
+  `config.properties` → `dmtools.env` → OS env vars (the Phase 1 config layer,
+  same path production uses). Locally the expected setup is a git-ignored `dmtools.env` with
   real keys; in CI the same variables arrive as injected secrets. No test-specific
   config files, no hardcoded values anywhere.
 - **Sandbox targeting** via test-scoped overrides: `DMTOOLS_IT_JIRA_PROJECT`,

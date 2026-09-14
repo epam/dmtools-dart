@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 void main() {
   _testBasicExecution();
   _testContextInjection();
+  _testExtraGlobalsFlatten();
   _testHostFunctions();
   _testErrorDispatch();
   _testWrapperDispatch();
@@ -103,6 +104,43 @@ void _testContextInjection() {
           ),
         );
         expect(jsonDecode(result!), 'resp:me');
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+/// Java `JavaScriptExecutor.execute()` parity: every `.with(key, value)`
+/// binding (inputFolderPath, workingDirectory, customParams, …) is a member
+/// of the SAME params object the script receives — regression for
+/// preparePRForReview.js's `params.inputFolderPath.split('/')`.
+void _testExtraGlobalsFlatten() {
+  group('extraGlobals flattening (Java parity)', () {
+    test('flattens extraGlobals into the params object', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_flat');
+      try {
+        final script = _writeScript(
+          dir,
+          'test.js',
+          _action(
+            "params.inputFolderPath.split('/').pop()"
+            " + ':' + params.workingDirectory"
+            " + ':' + (params.customParams ? 'has' : 'none')",
+          ),
+        );
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          config: JsRunConfig(
+            extraGlobals: {
+              'inputFolderPath': 'input/gh-85',
+              'workingDirectory': dir.path,
+              'customParams': const {'a': 1},
+            },
+          ),
+        );
+        expect(jsonDecode(result!), 'gh-85:${dir.path}:has');
       } finally {
         dir.deleteSync(recursive: true);
       }
@@ -383,6 +421,21 @@ void _testCliExecuteDispatch() {
       expect(result, 'hello');
     });
 
+    test('inherits the parent process environment (ProcessBuilder parity)',
+        () async {
+      // Java CommandLineUtils.runCommand builds the child environment from
+      // ProcessBuilder.environment() (a copy of the parent process env) and
+      // merges the extras on top — vars the host exported (e.g. the
+      // machine-kit FA_LOG_FILE) must reach the command.
+      final marker = Platform.environment['HOME'];
+      final result = await _runCliToolScript('''
+        var res = executeToolViaJava('cli_execute_command',
+            {command: 'printenv HOME'});
+        function action(params) { return res; }
+      ''', overrides: {'CLI_ALLOWED_COMMANDS': 'printenv'});
+      expect(result, marker);
+    });
+
     test('interprets the full command line via shell', () async {
       final result = await _runCliToolScript('''
         var res = executeToolViaJava('cli_execute_command',
@@ -510,3 +563,8 @@ void _testCliExecuteDispatchWorkingDir() {
     });
   });
 }
+
+// Java JavaScriptExecutor.execute() parity: the params object is ONE
+// flattened map — .with() bindings (inputFolderPath & co) live inside it.
+// Regression: preparePRForReview.js read params.inputFolderPath and got a
+// TypeError serialized as '{}' (run 34713005482).

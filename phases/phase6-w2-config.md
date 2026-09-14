@@ -1,6 +1,6 @@
 ---
 wave: W2
-status: open   # open | in-progress | done
+status: in-progress   # open | in-progress | done
 blocked-by: []
 blocks: [W3]
 items: 13
@@ -9,17 +9,17 @@ note: No upstream; doctor wording (W3) settles after the config chain is final.
 
 # Phase 6 W2 — Config chain (13 items)
 
-- [ ] **P6-CFG-01** add config.properties tier (project-root
+- [x] **P6-CFG-01** add config.properties tier (project-root
       src/main/resources, classpath fallback) + `setConfigFile()` — dart
       property_reader.dart:130 / java PropertyReader.java:163-241 — S
-- [ ] **P6-CFG-02** empty value must NOT block fall-through (Java: non-null
+- [x] **P6-CFG-02** empty value must NOT block fall-through (Java: non-null
       AND non-empty to accept a tier) — dart property_reader.dart:137 /
       java PropertyReader.java:226 — S
-- [ ] **P6-CFG-03** remove the dmtools-local.env tier (Java has none) — dart
+- [x] **P6-CFG-03** remove the dmtools-local.env tier (Java has none) — dart
       property_reader.dart:141 / java PropertyReader.java:112-161 — S
-- [ ] **P6-CFG-04** dmtools.env search order: project root FIRST, then CWD —
+- [x] **P6-CFG-04** dmtools.env search order: project root FIRST, then CWD —
       dart property_reader.dart:185 / java PropertyReader.java:122 — S
-- [ ] **P6-CFG-05** project-root marker is settings.gradle(.kts), not
+- [x] **P6-CFG-05** project-root marker is settings.gradle(.kts), not
       pubspec.yaml — dart property_reader.dart:30,204 / java
       PropertyReader.java:82-105 — S
 - [ ] **P6-CFG-06** unreadable dmtools.env: warn + continue (no crash) —

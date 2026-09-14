@@ -317,10 +317,21 @@ case ":${PATH}:" in
 esac
 
 # ── 7. Smoke-test the installed binary ──────────────────────────────────────
-if "$install_bin/$BINARY" --version >/dev/null 2>&1; then
-  ok "$("$install_bin/$BINARY" --version)"
+# Timeout-guarded: the first windows CI legs timed out because the smoke
+# hung the whole job (10+ minutes until the job timeout killed it). A
+# smoke that cannot hang beats a smoke that sometimes proves the point.
+smoke_rc=0
+smoke_out=""
+if command -v timeout >/dev/null 2>&1; then
+  smoke_out="$(timeout 30 "$install_bin/$BINARY" --version 2>&1)" || smoke_rc=$?
 else
-  warn "installed binary failed to start; try setting JSR_QUICKJS_LIB to"
+  smoke_out="$("$install_bin/$BINARY" --version 2>&1)" || smoke_rc=$?
+fi
+if [ "$smoke_rc" -eq 0 ] && [ -n "$smoke_out" ]; then
+  ok "$smoke_out"
+else
+  warn "installed binary failed the smoke test (rc=$smoke_rc): $smoke_out"
+  warn "try setting JSR_QUICKJS_LIB to"
   warn "$install_bin/native/quickjs/libquickjs_bridge.so"
 fi
 

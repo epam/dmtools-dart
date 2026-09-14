@@ -94,6 +94,34 @@ jobs:
           DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
         run: sh install.sh "${{ github.event.inputs.version }}"
 
+      - name: Diagnose git-bash invocation (windows)
+        # The bash smoke hung for 10+ minutes while the PowerShell one
+        # passed — probe each invocation shape with hard timeouts and
+        # print rc/output so the actual difference is visible in the log.
+        if: >
+          steps.release.outputs.exists == 'true' &&
+          runner.os == 'Windows'
+        run: |
+          bin="$HOME/.dmtools/bin"
+          probe() {
+            label="$1"; shift
+            out=""
+            if command -v timeout >/dev/null 2>&1; then
+              out="$(timeout 25 "$@" 2>&1)"; rc=$?
+            else
+              out="$("$@" 2>&1)"; rc=$?
+            fi
+            echo "::group::probe: $label (rc=$rc)"
+            printf '%s\n' "$out" | head -n 5
+            echo "::endgroup::"
+          }
+          probe "exe direct"        "$bin/dmtools.exe" --version
+          probe "exe, stdin closed" sh -c '"$1" --version < /dev/null' sh "$bin/dmtools.exe"
+          probe "bash launcher"     "$bin/dmtools" --version
+          probe "cmd via cmd //c"   cmd //c "$(cygpath -w "$bin/dmtools.cmd")" --version
+          probe "exe with JSR set"  env "JSR_QUICKJS_LIB=$bin/native/quickjs/libquickjs_bridge.so" "$bin/dmtools.exe" --version
+          exit 0
+
       - name: Exercise the installed binary
         if: steps.release.outputs.exists == 'true'
         run: |

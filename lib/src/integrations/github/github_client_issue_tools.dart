@@ -33,8 +33,8 @@ final RegExp _ghBareNumber = RegExp(r'^\d+$');
 /// parts (a composite key fills all three, a bare number only the number);
 /// blank parts fall back to the configured defaults; anything still missing
 /// throws [ArgumentError] with the Java message.
-GhIssueRef resolveGhIssueRef(String? key, String? owner, String? repo,
-    int? number) {
+GhIssueRef resolveGhIssueRef(
+    String? key, String? owner, String? repo, int? number) {
   var resolvedOwner = owner;
   var resolvedRepo = repo;
   var resolvedNumber = number;
@@ -135,11 +135,7 @@ extension GithubIssueTrackerTools on GithubClient {
     String? key,
   }) async {
     final ref = resolveGhIssueRef(key, owner, repo, number);
-    final response = await _http.patch(
-      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}',
-      body: jsonEncode({'state': 'open'}),
-    );
-    return jsonDecode(response) as Map<String, dynamic>;
+    return _patchIssueState(ref, 'open');
   }
 
   /// `github_assign_issue` — POST
@@ -153,13 +149,9 @@ extension GithubIssueTrackerTools on GithubClient {
     String? key,
   }) async {
     final ref = resolveGhIssueRef(key, owner, repo, number);
-    final response = await _http.post(
-      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}/assignees',
-      body: jsonEncode({
-        'assignees': [user],
-      }),
-    );
-    return jsonDecode(response) as Map<String, dynamic>;
+    return _postToIssue(ref, '/assignees', {
+      'assignees': [user],
+    });
   }
 
   /// `github_move_issue_to_status` — close/reopen/label semantics.

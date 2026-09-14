@@ -30,8 +30,8 @@ void checkRunTests() {
     test('POSTs name + head_sha only when optional fields are absent',
         () async {
       final f = mockGithub((o) => routeByPath({'/check-runs': _runBody}, o));
-      await f.client.createCheckRun('epm', 'dm.ai', 'dmtools / review',
-          'abc123');
+      await f.client
+          .createCheckRun('epm', 'dm.ai', 'dmtools / review', 'abc123');
       final call = f.adapter.calls.single;
       expect(call.method, 'POST');
       expect(call.path, endsWith('/repos/epm/dm.ai/check-runs'));
@@ -65,8 +65,7 @@ void checkRunTests() {
     });
 
     test('updateCheckRun PATCHes status/conclusion/output', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
+      final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
       await f.client.updateCheckRun('epm', 'dm.ai', '9', 'completed',
           conclusion: 'success', title: 'done', summary: 'ok', text: 'all');
       final call = f.adapter.calls.single;
@@ -80,8 +79,7 @@ void checkRunTests() {
     });
 
     test('updateCheckRun omits a blank conclusion', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
+      final f = mockGithub((o) => routeByPath({'/check-runs/9': _runBody}, o));
       await f.client.updateCheckRun('epm', 'dm.ai', '9', 'in_progress');
       expect(jsonDecode(f.adapter.calls.single.data as String), {
         'status': 'in_progress',
@@ -111,8 +109,8 @@ void commitStatusTests() {
     test('omits blank optional fields', () async {
       final f = mockGithub((o) => routeByPath({'/statuses': '{}'}, o));
       await f.client.createCommitStatus('epm', 'dm.ai', 'abc123', 'success');
-      expect(
-          jsonDecode(f.adapter.calls.single.data as String), {'state': 'success'});
+      expect(jsonDecode(f.adapter.calls.single.data as String),
+          {'state': 'success'});
     });
   });
 }
@@ -121,10 +119,8 @@ void commitStatusTests() {
 void prCommentManagementTests() {
   group('PR comment management', () {
     test('update PATCHes issues/comments/{id} with the new body', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/issues/comments/5': '{}'}, o));
-      await f.client
-          .updatePullRequestComment('epm', 'dm.ai', '5', '✅ done');
+      final f = mockGithub((o) => routeByPath({'/issues/comments/5': '{}'}, o));
+      await f.client.updatePullRequestComment('epm', 'dm.ai', '5', '✅ done');
       final call = f.adapter.calls.single;
       expect(call.method, 'PATCH');
       expect(call.path, endsWith('/repos/epm/dm.ai/issues/comments/5'));
@@ -132,8 +128,7 @@ void prCommentManagementTests() {
     });
 
     test('delete DELETEs issues/comments/{id}', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/issues/comments/5': ''}, o));
+      final f = mockGithub((o) => routeByPath({'/issues/comments/5': ''}, o));
       await f.client.deletePullRequestComment('epm', 'dm.ai', '5');
       final call = f.adapter.calls.single;
       expect(call.method, 'DELETE');
@@ -195,8 +190,8 @@ void listPrsFilteredTests() {
       final f = mockGithub(
         (o) => routeByPath({'/pulls': _prsPage}, o),
       );
-      final result =
-          await f.client.listPullRequestsFiltered('epm', 'dm.ai', 'merged', '.');
+      final result = await f.client
+          .listPullRequestsFiltered('epm', 'dm.ai', 'merged', '.');
       expect(result.map((pr) => pr['number']), [2]);
     });
 
@@ -300,8 +295,8 @@ void commitsFromBranchesTests() {
         }
         return '[]';
       });
-      final commits = await f.client
-          .getCommitsFromBranches('epm', 'dm.ai', '^feature/');
+      final commits =
+          await f.client.getCommitsFromBranches('epm', 'dm.ai', '^feature/');
       // c1 appears on both branches; released on master is excluded.
       expect(commits.map((c) => c['sha']), ['c1', 'c2', 'c3']);
     });
@@ -338,8 +333,7 @@ void ciExecutorTests() {
     });
 
     test('routes github_list_prs_filtered', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/pulls': _prsPage}, o));
+      final f = mockGithub((o) => routeByPath({'/pulls': _prsPage}, o));
       final result = await GithubToolExecutor(f.client)
           .execute('github_list_prs_filtered', {
         'workspace': 'epm',
@@ -431,8 +425,7 @@ const _inlinePage = '[{"id":5,"body":"inline note"}]';
 const _discussionPage = '[{"id":6,"body":"discussion"}]';
 
 /// PR listing page: two PRs, one merged.
-const _prsPage =
-    '[{"number":1,"title":"feat: add x","merged_at":null},'
+const _prsPage = '[{"number":1,"title":"feat: add x","merged_at":null},'
     '{"number":2,"title":"chore: y","merged_at":"2026-01-02T00:00:00Z"}]';
 
 /// Branch listing: two feature branches + one non-matching.

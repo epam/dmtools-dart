@@ -239,6 +239,10 @@ void _testRunCliAgent() {
           'name': 'Teammate',
           'params': {
             'cliCommands': ['echo done'],
+            // Pin the prepared-input lookup to the empty temp dir — the
+            // process cwd may carry an input/ticket.md that would turn
+            // this into a single-ticket run.
+            'workingDirectory': _tmp.path,
           },
         }));
       final code = await _dispatcher.dispatch(['run', configFile.path]);

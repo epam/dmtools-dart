@@ -17,14 +17,12 @@ class GitHubCiSyncTools {
         'github_create_commit_status': (args) =>
             _run(_createCommitStatus, args),
         'github_get_workflow_run': (args) => _run(_getWorkflowRun, args),
-        'github_repository_dispatch': (args) =>
-            _run(_repositoryDispatch, args),
+        'github_repository_dispatch': (args) => _run(_repositoryDispatch, args),
         'github_update_pr_comment': (args) => _run(_updatePrComment, args),
         'github_delete_pr_comment': (args) => _run(_deletePrComment, args),
         'github_get_pr_activities': (args) => _run(_getPrActivities, args),
         'github_list_prs_filtered': (args) => _run(_listPrsFiltered, args),
-        'github_list_release_assets': (args) =>
-            _run(_listReleaseAssets, args),
+        'github_list_release_assets': (args) => _run(_listReleaseAssets, args),
         'github_delete_release_asset': (args) =>
             _run(_deleteReleaseAsset, args),
         'github_get_commits_from_branches': (args) =>
@@ -114,8 +112,7 @@ class GitHubCiSyncTools {
 
   /// `github_update_pr_comment` — PATCH
   /// `repos/{w}/{r}/issues/comments/{id}` with `{"body": text}`.
-  String _updatePrComment(GhSyncConfig c, Map<String, dynamic> a) =>
-      _putJson(
+  String _updatePrComment(GhSyncConfig c, Map<String, dynamic> a) => _putJson(
         c,
         '${c.baseUrl}/${_repoSeg(a)}'
         '/issues/comments/${syncAsStr(a['commentId'])}',
@@ -133,36 +130,39 @@ class GitHubCiSyncTools {
 
   /// `github_get_pr_activities` — reviews + inline comments + discussion
   /// comments in Java's aggregation order; comments wrapped as
-  /// `{"action": "COMMENTED", "comment": {...}}`.
+  /// `{"action": "COMMENTED", "comment": {...}}`. Reviews pages are
+  /// strict (Java `execute` throws on non-OK); the comment pages are
+  /// best-effort (Java catches and logs per page family).
   String _getPrActivities(GhSyncConfig c, Map<String, dynamic> a) {
     final activities = <dynamic>[];
-    activities.addAll(_fetchPages(c, '${_prUrl(c, a)}/reviews'));
-    final inline = SyncHttpClient.get(
-      '${_prUrl(c, a)}/comments?per_page=100',
-      headers: c.headers,
-    );
-    if (inline.isOk) {
-      final decoded = syncTryDecode(inline.body);
-      if (decoded is List) {
-        for (final comment in decoded) {
-          activities.add({'action': 'COMMENTED', 'comment': comment});
-        }
-      }
+    try {
+      activities.addAll(_fetchPages(c, '${_prUrl(c, a)}/reviews'));
+    } on StateError catch (e) {
+      return syncErr(e.message);
     }
-    final issue = SyncHttpClient.get(
-      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments'
-      '?per_page=100',
-      headers: c.headers,
-    );
-    if (issue.isOk) {
-      final decoded = syncTryDecode(issue.body);
-      if (decoded is List) {
-        for (final comment in decoded) {
-          activities.add({'action': 'COMMENTED', 'comment': comment});
-        }
-      }
-    }
+    activities.addAll(_bestEffortComments(
+      c,
+      '${_prUrl(c, a)}/comments',
+    ));
+    activities.addAll(_bestEffortComments(
+      c,
+      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
+    ));
     return jsonEncode(activities);
+  }
+
+  /// The first page of a comment listing, wrapped as COMMENTED activities
+  /// — failures degrade to an empty page (Java catches around each
+  /// comments block in `pullRequestActivities`).
+  List<dynamic> _bestEffortComments(GhSyncConfig c, String url) {
+    final resp = SyncHttpClient.get('$url?per_page=100', headers: c.headers);
+    if (!resp.isOk) return const [];
+    final decoded = syncTryDecode(resp.body);
+    if (decoded is! List) return const [];
+    return [
+      for (final comment in decoded)
+        if (comment is Map) {'action': 'COMMENTED', 'comment': comment},
+    ];
   }
 
   /// `github_list_prs_filtered` — all pages, state synonyms normalized,
@@ -177,25 +177,55 @@ class GitHubCiSyncTools {
     final pattern = RegExp(syncAsStr(a['titleRegex']));
     final out = <Map<String, dynamic>>[];
     for (var page = 1;; page++) {
-      final url =
-          '${c.baseUrl}/${_repoSeg(a)}/pulls'
+      final url = '${c.baseUrl}/${_repoSeg(a)}/pulls'
           '?state=$normalized&sort=updated&direction=desc'
           '&per_page=100&page=$page';
-      final resp = SyncHttpClient.get(url, headers: c.headers);
-      if (!resp.isOk) break;
-      final decoded = syncTryDecode(resp.body);
-      if (decoded is! List || decoded.isEmpty) break;
-      for (final pr in decoded) {
-        if (pr is! Map) continue;
-        if (requested == 'merged' && pr['merged_at'] == null) continue;
-        final title = syncAsStr(pr['title']);
-        if (pattern.hasMatch(title)) {
-          out.add(pr.cast<String, dynamic>());
-        }
-      }
-      if (decoded.length < 100) break;
+      final decoded = _filteredPrPage(c, url, page);
+      if (decoded.error != null) return decoded.error!;
+      final list = decoded.page!;
+      _collectMatchingPrs(list, requested, pattern, out);
+      if (list.length < 100) break;
     }
     return jsonEncode(out);
+  }
+
+  /// One filtered-listing page, or an error envelope on a non-OK
+  /// response (Java parity: a failed page fails the listing).
+  ({String? error, List? page}) _filteredPrPage(
+    GhSyncConfig c,
+    String url,
+    int page,
+  ) {
+    final resp = SyncHttpClient.get(url, headers: c.headers);
+    if (!resp.isOk) {
+      return (
+        error: syncErr('HTTP ${resp.statusCode} listing pull requests '
+            '(page $page): ${resp.body}'),
+        page: null,
+      );
+    }
+    final decoded = syncTryDecode(resp.body);
+    return (
+      error: decoded is List ? null : syncErr('unexpected PR list payload'),
+      page: decoded is List ? decoded : null,
+    );
+  }
+
+  /// Appends the PRs of one page matching [pattern] (and the merged-only
+  /// filter) into [out].
+  void _collectMatchingPrs(
+    List page,
+    String requested,
+    RegExp pattern,
+    List<Map<String, dynamic>> out,
+  ) {
+    for (final pr in page) {
+      if (pr is! Map) continue;
+      if (requested == 'merged' && pr['merged_at'] == null) continue;
+      if (pattern.hasMatch(syncAsStr(pr['title']))) {
+        out.add(pr.cast<String, dynamic>());
+      }
+    }
   }
 
   /// `github_list_release_assets` — GET
@@ -219,28 +249,53 @@ class GitHubCiSyncTools {
     final since = syncAsStr(a['since']).trim();
     final seenShas = <String>{};
     final out = <dynamic>[];
-    for (final branch in _fetchPages(c, '${_repoSeg(a)}/branches')) {
-      final name = syncAsStr(branch['name']);
-      if (name.isEmpty || !pattern.hasMatch(name)) continue;
-      for (final commit in _branchCommits(c, name, since)) {
-        final sha = commit['sha'];
-        final key = sha == null ? '' : syncAsStr(sha);
-        if (key.isEmpty || !seenShas.add(key)) continue;
-        out.add(commit);
+    try {
+      for (final branch in _fetchPages(c, '${_repoSeg(a)}/branches')) {
+        out.addAll(
+            _matchedBranchCommits(c, a, branch, pattern, since, seenShas));
       }
+    } on StateError catch (e) {
+      return syncErr(e.message);
     }
     return jsonEncode(out);
   }
 
+  /// The not-yet-seen commits of one branch matching [pattern], appended
+  /// into [seenShas]-deduplicated [out]-shaped list entries.
+  List<dynamic> _matchedBranchCommits(
+    GhSyncConfig c,
+    Map<String, dynamic> a,
+    Map<String, dynamic> branch,
+    RegExp pattern,
+    String since,
+    Set<String> seenShas,
+  ) {
+    final name = syncAsStr(branch['name']);
+    if (name.isEmpty || !pattern.hasMatch(name)) return const [];
+    final out = <dynamic>[];
+    for (final commit in _branchCommits(c, a, name, since)) {
+      final sha = commit['sha'];
+      final key = sha == null ? '' : syncAsStr(sha);
+      if (key.isEmpty || !seenShas.add(key)) continue;
+      out.add(commit);
+    }
+    return out;
+  }
+
   /// All pages of one branch's commit list (Java `getCommitsFromBranch`).
-  List<dynamic> _branchCommits(GhSyncConfig c, String branch, String since) {
+  List<dynamic> _branchCommits(
+    GhSyncConfig c,
+    Map<String, dynamic> a,
+    String branch,
+    String since,
+  ) {
     final out = <dynamic>[];
     final query = 'sha=${Uri.encodeQueryComponent(branch)}'
         '${since.isEmpty ? '' : '&since=$since T00:00:00Z'.trim()}'
         '&per_page=100';
     for (var page = 1;; page++) {
       final resp = SyncHttpClient.get(
-        '${c.baseUrl}/${_repoSeg(c.args)}/commits?$query&page=$page',
+        '${c.baseUrl}/${_repoSeg(a)}/commits?$query&page=$page',
         headers: c.headers,
       );
       if (!resp.isOk) break;

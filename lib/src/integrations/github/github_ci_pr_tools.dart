@@ -5,6 +5,15 @@ part of 'github_tools.dart';
 
 /// Check-run and commit-status tools (Java category `pull_requests`).
 List<ToolDefinition> _ciStatusTools() => [
+      ..._createCheckRunTool(),
+      ..._updateCheckRunTool(),
+      ..._createCommitStatusTool(),
+      ..._getWorkflowRunTool(),
+      ..._repositoryDispatchTool(),
+    ];
+
+/// `github_create_check_run` — one rich CI check per PR.
+List<ToolDefinition> _createCheckRunTool() => [
       ToolDefinition(
         name: 'github_create_check_run',
         description: 'Create a GitHub Check Run — a rich CI check with '
@@ -56,6 +65,10 @@ List<ToolDefinition> _ciStatusTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_update_check_run` — finalize a check run.
+List<ToolDefinition> _updateCheckRunTool() => [
       ToolDefinition(
         name: 'github_update_check_run',
         description: 'Update an existing GitHub Check Run — set it to '
@@ -99,11 +112,15 @@ List<ToolDefinition> _ciStatusTools() => [
           const ToolParam(
             name: 'text',
             description: 'Updated detailed Markdown content (full analysis, '
-            'annotations etc.)',
+                'annotations etc.)',
             required: false,
           ),
         ],
       ),
+    ];
+
+/// `github_create_commit_status` — the commit status dot.
+List<ToolDefinition> _createCommitStatusTool() => [
       ToolDefinition(
         name: 'github_create_commit_status',
         description: 'Create a commit status (the colored dot in PR checks). '
@@ -145,6 +162,10 @@ List<ToolDefinition> _ciStatusTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_get_workflow_run` + `github_repository_dispatch`.
+List<ToolDefinition> _getWorkflowRunTool() => [
       ToolDefinition(
         name: 'github_get_workflow_run',
         description: 'Get details of a specific GitHub Actions workflow run '
@@ -190,6 +211,12 @@ List<ToolDefinition> _ciStatusTools() => [
 
 /// PR comment-management and activity tools.
 List<ToolDefinition> _prActivityTools() => [
+      ..._prCommentAdminTools(),
+      ..._prActivityReadTools(),
+    ];
+
+/// `github_update_pr_comment` + `github_delete_pr_comment`.
+List<ToolDefinition> _prCommentAdminTools() => [
       ToolDefinition(
         name: 'github_update_pr_comment',
         description: 'Update (edit) an existing comment on a GitHub pull '
@@ -227,6 +254,10 @@ List<ToolDefinition> _prActivityTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_get_pr_activities` + `github_list_prs_filtered`.
+List<ToolDefinition> _prActivityReadTools() => [
       ToolDefinition(
         name: 'github_get_pr_activities',
         aliases: ['source_code_get_pr_activities'],
@@ -273,6 +304,12 @@ List<ToolDefinition> _prActivityTools() => [
 
 /// Release-asset and cross-branch commit tools.
 List<ToolDefinition> _releaseAssetTools() => [
+      ..._releaseAssetAdminTools(),
+      ..._commitsFromBranchesTool(),
+    ];
+
+/// `github_list_release_assets` + `github_delete_release_asset`.
+List<ToolDefinition> _releaseAssetAdminTools() => [
       ToolDefinition(
         name: 'github_list_release_assets',
         description: 'List all assets attached to a GitHub release. Returns '
@@ -306,6 +343,10 @@ List<ToolDefinition> _releaseAssetTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_get_commits_from_branches` — regex-selected branch commits.
+List<ToolDefinition> _commitsFromBranchesTool() => [
       ToolDefinition(
         name: 'github_get_commits_from_branches',
         description: 'Fetch commits from all branches whose name matches a '
@@ -335,86 +376,108 @@ List<ToolDefinition> _releaseAssetTools() => [
     ];
 
 /// Executor routes for the CI/PR-activity/release-asset tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)> _ciPrHandlers(
+        GithubClient client) =>
+    {
+      ..._ciStatusHandlers(client),
+      ..._prActivityHandlers(client),
+      ..._releaseAssetHandlers(client),
+    };
+
+/// Executor routes for the check-run/commit-status/workflow tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)> _ciStatusHandlers(
+        GithubClient client) =>
+    {
+      'github_create_check_run': (a) => client.createCheckRun(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['name'] as String,
+            a['headSha'] as String,
+            status: a['status'] as String?,
+            title: a['title'] as String?,
+            summary: a['summary'] as String?,
+            text: a['text'] as String?,
+            externalId: a['externalId'] as String?,
+          ),
+      'github_update_check_run': (a) => client.updateCheckRun(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['checkRunId'] as String,
+            a['status'] as String,
+            conclusion: a['conclusion'] as String?,
+            title: a['title'] as String?,
+            summary: a['summary'] as String?,
+            text: a['text'] as String?,
+          ),
+      'github_create_commit_status': (a) => client.createCommitStatus(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['sha'] as String,
+            a['state'] as String,
+            description: a['description'] as String?,
+            context: a['context'] as String?,
+            targetUrl: a['targetUrl'] as String?,
+          ),
+      'github_get_workflow_run': (a) => client.getWorkflowRun(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['runId'].toString(),
+          ),
+      'github_repository_dispatch': (a) => client.repositoryDispatch(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['eventType'] as String,
+            a['clientPayload'] as String?,
+          ),
+    };
+
+/// Executor routes for the PR comment/activity tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)> _prActivityHandlers(
+        GithubClient client) =>
+    {
+      'github_update_pr_comment': (a) => client.updatePullRequestComment(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['commentId'].toString(),
+            a['text'] as String,
+          ),
+      'github_delete_pr_comment': (a) => client.deletePullRequestComment(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['commentId'].toString(),
+          ),
+      'github_get_pr_activities': (a) => client.pullRequestActivities(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['pullRequestId'].toString(),
+          ),
+      'github_list_prs_filtered': (a) => client.listPullRequestsFiltered(
+            a['workspace'] as String,
+            a['repository'] as String,
+            a['state'] as String,
+            a['titleRegex'] as String,
+          ),
+    };
+
+/// Executor routes for the release-asset/branch-commit tools.
 Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-    _ciPrHandlers(GithubClient client) => {
-        'github_create_check_run': (a) => client.createCheckRun(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['name'] as String,
-              a['headSha'] as String,
-              status: a['status'] as String?,
-              title: a['title'] as String?,
-              summary: a['summary'] as String?,
-              text: a['text'] as String?,
-              externalId: a['externalId'] as String?,
-            ),
-        'github_update_check_run': (a) => client.updateCheckRun(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['checkRunId'] as String,
-              a['status'] as String,
-              conclusion: a['conclusion'] as String?,
-              title: a['title'] as String?,
-              summary: a['summary'] as String?,
-              text: a['text'] as String?,
-            ),
-        'github_create_commit_status': (a) => client.createCommitStatus(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['sha'] as String,
-              a['state'] as String,
-              description: a['description'] as String?,
-              context: a['context'] as String?,
-              targetUrl: a['targetUrl'] as String?,
-            ),
-        'github_get_workflow_run': (a) => client.getWorkflowRun(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['runId'].toString(),
-            ),
-        'github_repository_dispatch': (a) => client.repositoryDispatch(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['eventType'] as String,
-              a['clientPayload'] as String?,
-            ),
-        'github_update_pr_comment': (a) => client.updatePullRequestComment(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['commentId'].toString(),
-              a['text'] as String,
-            ),
-        'github_delete_pr_comment': (a) => client.deletePullRequestComment(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['commentId'].toString(),
-            ),
-        'github_get_pr_activities': (a) => client.pullRequestActivities(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['pullRequestId'].toString(),
-            ),
-        'github_list_prs_filtered': (a) => client.listPullRequestsFiltered(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['state'] as String,
-              a['titleRegex'] as String,
-            ),
-        'github_list_release_assets': (a) => client.listReleaseAssets(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['releaseId'].toString(),
-            ),
-        'github_delete_release_asset': (a) => client.deleteReleaseAsset(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['assetId'].toString(),
-            ),
-        'github_get_commits_from_branches': (a) =>
-            client.getCommitsFromBranches(
-              a['workspace'] as String,
-              a['repository'] as String,
-              a['branchNameRegex'] as String,
-              a['since'] as String?,
-            ),
+    _releaseAssetHandlers(GithubClient client) =>
+        {
+          'github_list_release_assets': (a) => client.listReleaseAssets(
+                a['workspace'] as String,
+                a['repository'] as String,
+                a['releaseId'].toString(),
+              ),
+          'github_delete_release_asset': (a) => client.deleteReleaseAsset(
+                a['workspace'] as String,
+                a['repository'] as String,
+                a['assetId'].toString(),
+              ),
+          'github_get_commits_from_branches': (a) =>
+              client.getCommitsFromBranches(
+                a['workspace'] as String,
+                a['repository'] as String,
+                a['branchNameRegex'] as String,
+                a['since'] as String?,
+              ),
         };

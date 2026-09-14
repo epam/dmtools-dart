@@ -36,7 +36,8 @@ final RegExp _syncBareNumber = RegExp(r'^\d+$');
 Object _resolveSyncIssueRef(Map<String, dynamic> args) {
   var owner = _firstStr(args, const ['owner', 'workspace']);
   var repo = _firstStr(args, const ['repo', 'repository']);
-  var number = _firstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
+  var number =
+      _firstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
   final key = syncAsStr(args['key']).trim();
   if (key.isNotEmpty) {
     final composite = _syncCompositeKey.firstMatch(key);
@@ -76,7 +77,9 @@ String _withIssueRef(
 ) =>
     _run((config, args) {
       final resolved = _resolveSyncIssueRef(args);
-      return resolved is _SyncIssueRef ? fn(config, resolved) : resolved as String;
+      return resolved is _SyncIssueRef
+          ? fn(config, resolved)
+          : resolved as String;
     }, args);
 
 /// First non-blank string among [names] in [args].
@@ -112,8 +115,7 @@ class GitHubIssueSyncTools {
         'github_create_issue': (args) => _run(_createIssue, args),
         'github_close_issue': (args) => _run(_closeIssue, args),
         'github_reopen_issue': (args) => _run(_reopenIssue, args),
-        'github_move_issue_to_status': (args) =>
-            _run(_moveIssueToStatus, args),
+        'github_move_issue_to_status': (args) => _run(_moveIssueToStatus, args),
         'github_assign_issue': (args) => _run(_assignIssue, args),
         'github_add_labels': (args) => _run(_addIssueLabels, args),
         'github_remove_label': (args) => _run(_removeIssueLabel, args),
@@ -122,8 +124,9 @@ class GitHubIssueSyncTools {
       };
 
   /// `github_get_issue` — GET `repos/{o}/{r}/issues/{n}`.
-  String _getIssue(GhSyncConfig c, Map<String, dynamic> a) =>
-      _withIssueRef(a, (c, ref) => syncBodyOrError(SyncHttpClient.get(
+  String _getIssue(GhSyncConfig c, Map<String, dynamic> a) => _withIssueRef(
+      a,
+      (c, ref) => syncBodyOrError(SyncHttpClient.get(
             '${c.baseUrl}/${ref.issueSeg}',
             headers: c.headers,
           )));
@@ -215,8 +218,9 @@ class GitHubIssueSyncTools {
   }
 
   /// `github_assign_issue` — POST `repos/{o}/{r}/issues/{n}/assignees`.
-  String _assignIssue(GhSyncConfig c, Map<String, dynamic> a) =>
-      _withIssueRef(a, (c, ref) => syncBodyOrError(SyncHttpClient.post(
+  String _assignIssue(GhSyncConfig c, Map<String, dynamic> a) => _withIssueRef(
+      a,
+      (c, ref) => syncBodyOrError(SyncHttpClient.post(
             '${c.baseUrl}/${ref.issueSeg}/assignees',
             headers: c.headers,
             body: jsonEncode({
@@ -237,41 +241,37 @@ class GitHubIssueSyncTools {
       _withIssueRef(
         a,
         (c, ref) => syncBodyOrError(SyncHttpClient.delete(
-              '${c.baseUrl}/${ref.issueSeg}'
-              '/labels/${Uri.encodeComponent(syncAsStr(a['label']))}',
-              headers: c.headers,
-            )),
+          '${c.baseUrl}/${ref.issueSeg}'
+          '/labels/${Uri.encodeComponent(syncAsStr(a['label']))}',
+          headers: c.headers,
+        )),
       );
 
   /// `github_create_comment` — POST
   /// `repos/{o}/{r}/issues/{n}/comments` with the comment body.
   String _createComment(GhSyncConfig c, Map<String, dynamic> a) =>
-      _withIssueRef(a, (c, ref) => _syncPostIssueComment(c, ref,
-          syncAsStr(a['body'] ?? a['text'] ?? a['comment'])));
+      _withIssueRef(
+          a,
+          (c, ref) => _syncPostIssueComment(
+              c, ref, syncAsStr(a['body'] ?? a['text'] ?? a['comment'])));
 
   /// `github_get_pr_comments` — inline + discussion comments, sorted.
   ///
   /// Java `GitHubIssues.pullRequestComments`: paginates
   /// `pulls/{n}/comments` (404-tolerant — plain issues have no inline
   /// comments) and `issues/{n}/comments`, concatenates both, sorts by
-  /// creation date.
+  /// creation date. Any other non-OK page is a sync tool error — a 401,
+  /// 403, or 5xx must never read as "no comments".
   String _getPrComments(GhSyncConfig c, Map<String, dynamic> a) =>
       _withIssueRef(a, (c, ref) {
-        final inline = <Map<String, dynamic>>[];
-        final resp = SyncHttpClient.get(
-          '${c.baseUrl}/${ref.repoSeg}/pulls/${ref.number}/comments'
-          '?per_page=100',
+        final r = prCommentPagesOrError(
           headers: c.headers,
+          inlineUrl: '${c.baseUrl}/${ref.repoSeg}/pulls/${ref.number}/comments',
+          issueUrl: '${c.baseUrl}/${ref.issueSeg}/comments',
         );
-        if (resp.isOk) {
-          final decoded = syncTryDecode(resp.body);
-          if (decoded is List) {
-            inline.addAll(
-                decoded.whereType<Map>().cast<Map<String, dynamic>>());
-          }
-        }
-        final issue = _syncIssueComments(c, ref);
-        final all = [...inline, ...issue];
+        if (r.error != null) return r.error!;
+        final pages = r.pages!;
+        final all = [...pages.inline, ...pages.issue];
         all.sort((x, y) =>
             syncAsStr(x['created']).compareTo(syncAsStr(y['created'])));
         return jsonEncode(all);
@@ -314,19 +314,3 @@ String _syncPostIssueComment(GhSyncConfig c, _SyncIssueRef ref, String text) =>
       headers: c.headers,
       body: jsonEncode({'body': text}),
     ));
-
-/// GETs the issue-style discussion comments page.
-List<Map<String, dynamic>> _syncIssueComments(
-  GhSyncConfig c,
-  _SyncIssueRef ref,
-) {
-  final resp = SyncHttpClient.get(
-    '${c.baseUrl}/${ref.issueSeg}/comments?per_page=100',
-    headers: c.headers,
-  );
-  if (!resp.isOk) return const [];
-  final decoded = syncTryDecode(resp.body);
-  return decoded is List
-      ? decoded.whereType<Map>().cast<Map<String, dynamic>>().toList()
-      : const [];
-}

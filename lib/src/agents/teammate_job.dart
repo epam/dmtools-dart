@@ -21,6 +21,7 @@ import 'dart:io';
 
 import 'cli_agent.dart';
 import 'github_ticket_source.dart';
+import 'github_tracker_client.dart';
 import 'cli_agent_params.dart';
 
 /// Fetches the hydrated tickets for [inputJql]: each ticket is a raw tracker
@@ -185,14 +186,25 @@ class TeammateJob {
 
   /// Posts the CI-run trace comment when `ciRunUrl` is set and comments are
   /// enabled (`alwaysPostComments` or non-`none` `outputType`).
+  ///
+  /// The default sink follows the ticket source: GitHub-sourced tickets
+  /// post through [GithubTrackerClient] (Java `trackerClient.postComment`
+  /// with `DEFAULT_TRACKER=github`), everything else through
+  /// `jira_post_comment`. A failed trace comment never fails the job —
+  /// Java catches, warns, and continues.
   Future<void> _postTraceComment(String key) async {
     final ciRunUrl = (params['ciRunUrl'] as String?)?.trim() ?? '';
-    if (ciRunUrl.isEmpty || !_shouldPostComments || _sourceIsGithub) return;
-    final poster = commentPoster ?? _jiraCommentPoster;
-    await poster(
-        key,
-        '${_agentNamePrefix()}'
-        'Processing started. CI Run: $ciRunUrl');
+    if (ciRunUrl.isEmpty || !_shouldPostComments) return;
+    final poster = commentPoster ??
+        (_sourceIsGithub ? _githubCommentPoster : _jiraCommentPoster);
+    try {
+      await poster(
+          key,
+          '${_agentNamePrefix()}'
+          'Processing started. CI Run: $ciRunUrl');
+    } catch (_) {
+      // Advisory comment only — processing continues (Java parity).
+    }
   }
 
   /// Java `AbstractJob.shouldPostComments`: `alwaysPostComments` wins, else
@@ -250,6 +262,12 @@ Future<List<Map<String, dynamic>>> jiraTicketSource(String inputJql) async {
 Future<void> _jiraCommentPoster(String key, String body) async {
   final dispatcher = SyncToolDispatcher(PropertyReader());
   dispatcher.execute('jira_post_comment', {'key': key, 'comment': body});
+}
+
+/// Default comment sink for GitHub-sourced tickets: the write-side
+/// GitHub issues tracker client (Java `GitHubTrackerClient.postComment`).
+Future<void> _githubCommentPoster(String key, String body) async {
+  GithubTrackerClient().postComment(key, body);
 }
 
 /// Merges a raw ticket payload and a raw comments payload into one ticket

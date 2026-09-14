@@ -98,9 +98,31 @@ class GithubClient {
       repository,
       _ghIntOrNull(pullRequestId),
     );
+    return _postToIssue(ref, '/comments', {'body': body});
+  }
+
+  /// POSTs [payload] to the issue endpoint [suffix] for [ref] and decodes
+  /// the JSON object response (shared by the issue-family POST calls).
+  Future<Map<String, dynamic>> _postToIssue(
+    GhIssueRef ref,
+    String suffix,
+    Map<String, dynamic> payload,
+  ) async {
     final response = await _http.post(
-      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}/comments',
-      body: jsonEncode({'body': body}),
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}$suffix',
+      body: jsonEncode(payload),
+    );
+    return jsonDecode(response) as Map<String, dynamic>;
+  }
+
+  /// PATCHes the issue [state] for [ref] (shared by close/reopen).
+  Future<Map<String, dynamic>> _patchIssueState(
+    GhIssueRef ref,
+    String state,
+  ) async {
+    final response = await _http.patch(
+      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}',
+      body: jsonEncode({'state': state}),
     );
     return jsonDecode(response) as Map<String, dynamic>;
   }
@@ -465,11 +487,7 @@ class GithubClient {
     String? key,
   }) async {
     final ref = resolveGhIssueRef(key, owner, repo, number);
-    final response = await _http.patch(
-      'repos/${ref.owner}/${ref.repo}/issues/${ref.number}',
-      body: jsonEncode({'state': 'closed'}),
-    );
-    return jsonDecode(response) as Map<String, dynamic>;
+    return _patchIssueState(ref, 'closed');
   }
 
   /// `github_add_labels` — POST

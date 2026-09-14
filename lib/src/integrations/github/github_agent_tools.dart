@@ -71,6 +71,12 @@ List<ToolDefinition> _agentPrCommentTools() => [
 
 /// PR review-thread read tools.
 List<ToolDefinition> _agentPrReviewReadTools() => [
+      ..._prCommentsTool(),
+      ..._prConversationsTools(),
+    ];
+
+/// `github_get_pr_comments` — merged inline + discussion comments.
+List<ToolDefinition> _prCommentsTool() => [
       ToolDefinition(
         name: 'github_get_pr_comments',
         description:
@@ -105,6 +111,10 @@ List<ToolDefinition> _agentPrReviewReadTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_get_pr_conversations` + `github_get_pr_review_threads`.
+List<ToolDefinition> _prConversationsTools() => [
       ToolDefinition(
         name: 'github_get_pr_conversations',
         description:

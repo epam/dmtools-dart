@@ -171,8 +171,8 @@ void catalogParamTests() {
         ['workspace', 'repository', 'pullRequestId', 'body', 'key'],
       );
       expect(tool.params.take(3).every((p) => !p.required), isTrue);
-      expect(tool.params.where((p) => p.name == 'body').single.required,
-          isTrue);
+      expect(
+          tool.params.where((p) => p.name == 'body').single.required, isTrue);
     });
   });
 
@@ -213,8 +213,7 @@ void catalogIssueParamTests() {
   group('github_get_issue', () {
     final tool = toolNamed('github_get_issue');
 
-    test('declares optional workspace/repository/issueNumber + key (#543)',
-        () {
+    test('declares optional workspace/repository/issueNumber + key (#543)', () {
       expect(tool.params.map((p) => p.name),
           ['workspace', 'repository', 'issueNumber', 'key']);
       expect(tool.params.map((p) => p.type), const [
@@ -479,8 +478,8 @@ class _SpyGithubClient extends GithubClient {
     String? key,
   }) {
     calls.add('createComment:$workspace:$repository:$pullRequestId:$body');
-    return super.createComment(workspace, repository, pullRequestId, body,
-        key: key);
+    return super
+        .createComment(workspace, repository, pullRequestId, body, key: key);
   }
 
   @override

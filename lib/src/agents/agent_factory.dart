@@ -27,7 +27,10 @@ class AgentFactory {
       case 'cliagent':
         return CliAgent(params: CliAgentParams.fromJson(params));
       case 'teammate':
-        return TeammateJob(params: params);
+        return TeammateJob(
+          params: params,
+          workingDirectory: params['workingDirectory'] as String?,
+        );
       case 'jsrunner':
         return JsRunnerJob(params);
       default:

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -42,8 +41,7 @@ void searchIssuesTests() {
       await f.client.searchIssues('is:open label:bug');
       final call = f.adapter.calls.single;
       expect(call.path, contains('/search/issues'));
-      expect(call.queryParameters['q'],
-          'repo:epm/dm.ai is:open label:bug');
+      expect(call.queryParameters['q'], 'repo:epm/dm.ai is:open label:bug');
       expect(call.queryParameters['per_page'], '100');
     });
 
@@ -94,8 +92,7 @@ void reopenIssueTests() {
 void assignIssueTests() {
   group('GithubClient.assignIssue', () {
     test('POSTs the single-element assignees array', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
+      final f = mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
       await f.client.assignIssue('epm', 'dm.ai', 7, 'octocat');
       final call = f.adapter.calls.single;
       expect(call.method, 'POST');
@@ -107,10 +104,9 @@ void assignIssueTests() {
 
     test('resolves a composite key against config defaults', () async {
       PropertyReader.setOverrides(_defaults);
-      final f =
-          mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
-      await f.client.assignIssue(null, null, null, 'octocat',
-          key: 'myorg/myrepo#42');
+      final f = mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
+      await f.client
+          .assignIssue(null, null, null, 'octocat', key: 'myorg/myrepo#42');
       expect(
         f.adapter.calls.single.path,
         endsWith('/repos/myorg/myrepo/issues/42/assignees'),
@@ -124,13 +120,11 @@ void moveIssueToStatusTests() {
   group('GithubClient.moveIssueToStatus', () {
     test('done-family statuses close the issue', () async {
       for (final s in const ['Done', 'CLOSED', 'completed', 'resolved']) {
-        final f =
-            mockGithub((o) => routeByPath({'/issues/7': _issueBody}, o));
+        final f = mockGithub((o) => routeByPath({'/issues/7': _issueBody}, o));
         await f.client.moveIssueToStatus('epm', 'dm.ai', 7, s);
         final call = f.adapter.calls.single;
         expect(call.method, 'PATCH', reason: s);
-        expect(jsonDecode(call.data as String), {'state': 'closed'},
-            reason: s);
+        expect(jsonDecode(call.data as String), {'state': 'closed'}, reason: s);
       }
     });
 
@@ -143,8 +137,7 @@ void moveIssueToStatusTests() {
         'backlog',
         'in progress'
       ]) {
-        final f =
-            mockGithub((o) => routeByPath({'/issues/7': _issueBody}, o));
+        final f = mockGithub((o) => routeByPath({'/issues/7': _issueBody}, o));
         await f.client.moveIssueToStatus('epm', 'dm.ai', 7, s);
         final call = f.adapter.calls.single;
         expect(call.method, 'PATCH', reason: s);
@@ -190,7 +183,8 @@ void compositeKeyTests() {
       final f = mockGithub((o) => routeByPath({'/issues/9': _issueBody}, o));
       PropertyReader.setOverrides(_defaults);
       await f.client.getIssue(null, null, null, key: '9');
-      expect(f.adapter.calls.single.path, endsWith('/repos/epm/dm.ai/issues/9'));
+      expect(
+          f.adapter.calls.single.path, endsWith('/repos/epm/dm.ai/issues/9'));
     });
 
     test('a composite key overrides explicit parts (Java behavior)', () async {
@@ -257,8 +251,7 @@ void compositeKeyTests() {
     });
 
     test('github_create_comment accepts a composite key', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/comments': _commentBody}, o));
+      final f = mockGithub((o) => routeByPath({'/comments': _commentBody}, o));
       await f.client.createComment(null, null, null, 'Looks good!',
           key: 'myorg/myrepo#5');
       final call = f.adapter.calls.single;
@@ -320,12 +313,10 @@ void trackerCatalogTests() {
     });
 
     test('carries the Java tracker alias set', () {
-      expect(tool('github_search_issues').aliases,
-          ['tracker_search']);
+      expect(tool('github_search_issues').aliases, ['tracker_search']);
       expect(tool('github_move_issue_to_status').aliases,
           ['tracker_move_to_status']);
-      expect(tool('github_assign_issue').aliases,
-          ['tracker_assign_ticket']);
+      expect(tool('github_assign_issue').aliases, ['tracker_assign_ticket']);
       expect(tool('github_get_issue').aliases,
           ['source_code_get_issue', 'tracker_get_ticket']);
       expect(tool('github_create_issue').aliases, ['tracker_create_ticket']);
@@ -363,8 +354,8 @@ void trackerCatalogTests() {
       expect(query.required, isTrue);
       expect(
         t.params.where((p) => p.name == 'workspace' || p.name == 'repository'),
-        everyElement(isA<ToolParam>()
-            .having((p) => p.required, 'required', isFalse)),
+        everyElement(
+            isA<ToolParam>().having((p) => p.required, 'required', isFalse)),
       );
     });
 
@@ -406,8 +397,7 @@ void trackerCatalogTests() {
       }
     });
 
-    test('github_create_issue gains summary/description/project aliases',
-        () {
+    test('github_create_issue gains summary/description/project aliases', () {
       final t = tool('github_create_issue');
       final byName = {for (final p in t.params) p.name: p};
       expect(byName['title']!.aliases, ['summary']);
@@ -417,10 +407,9 @@ void trackerCatalogTests() {
       expect(byName['repo']!.required, isFalse);
     });
 
-    test('applyParamAliases maps the tracker aliases onto canonical names',
-        () {
-      final args = tool('github_search_issues')
-          .applyParamAliases({'jql': 'is:open'});
+    test('applyParamAliases maps the tracker aliases onto canonical names', () {
+      final args =
+          tool('github_search_issues').applyParamAliases({'jql': 'is:open'});
       expect(args['query'], 'is:open');
 
       final moved = tool('github_move_issue_to_status')
@@ -462,8 +451,7 @@ void trackerExecutorTests() {
     });
 
     test('routes github_assign_issue', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
+      final f = mockGithub((o) => routeByPath({'/assignees': _issueBody}, o));
       await GithubToolExecutor(f.client).execute('github_assign_issue', {
         'owner': 'epm',
         'repo': 'dm.ai',
@@ -496,10 +484,9 @@ void trackerExecutorTests() {
     });
 
     test('routes github_create_comment through a composite key', () async {
-      final f =
-          mockGithub((o) => routeByPath({'/comments': _commentBody}, o));
-      await GithubToolExecutor(f.client).execute('github_create_comment',
-          {'key': 'myorg/myrepo#12', 'body': 'hi'});
+      final f = mockGithub((o) => routeByPath({'/comments': _commentBody}, o));
+      await GithubToolExecutor(f.client).execute(
+          'github_create_comment', {'key': 'myorg/myrepo#12', 'body': 'hi'});
       expect(
         f.adapter.calls.single.path,
         endsWith('/repos/myorg/myrepo/issues/12/comments'),
@@ -509,8 +496,7 @@ void trackerExecutorTests() {
 }
 
 /// Canned search-result body.
-const _searchBody =
-    '{"total_count":1,"items":[{"number":1,"title":"bug"}]}';
+const _searchBody = '{"total_count":1,"items":[{"number":1,"title":"bug"}]}';
 
 /// Canned issue body.
 const _issueBody = '{"number":7,"title":"Bug"}';

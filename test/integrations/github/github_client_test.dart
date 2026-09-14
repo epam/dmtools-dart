@@ -136,8 +136,7 @@ void createCommentTests() {
             {'/issues/42/comments': _commentBody},
             o,
           ));
-      final result =
-          await f.client.createComment('epm', 'dm.ai', '42', 'hi');
+      final result = await f.client.createComment('epm', 'dm.ai', '42', 'hi');
       expect(result['id'], 9001);
       final call = f.adapter.calls.single;
       expect(call.method, 'POST');

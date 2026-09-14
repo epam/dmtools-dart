@@ -44,6 +44,13 @@ List<ToolDefinition> _issueTools() => [
 /// Issue read/create tools: `github_get_issue`, `github_create_issue`,
 /// `github_search_issues`.
 List<ToolDefinition> _issueReadTools() => [
+      ..._getIssueTool(),
+      ..._createIssueTool(),
+      ..._searchIssuesTool(),
+    ];
+
+/// `github_get_issue` — composite-key aware issue fetch.
+List<ToolDefinition> _getIssueTool() => [
       ToolDefinition(
         name: 'github_get_issue',
         aliases: ['source_code_get_issue', 'tracker_get_ticket'],
@@ -69,6 +76,10 @@ List<ToolDefinition> _issueReadTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_create_issue`.
+List<ToolDefinition> _createIssueTool() => [
       ToolDefinition(
         name: 'github_create_issue',
         aliases: ['tracker_create_ticket'],
@@ -99,6 +110,10 @@ List<ToolDefinition> _issueReadTools() => [
           ),
         ],
       ),
+    ];
+
+/// `github_search_issues`.
+List<ToolDefinition> _searchIssuesTool() => [
       ToolDefinition(
         name: 'github_search_issues',
         aliases: ['tracker_search'],
@@ -131,6 +146,13 @@ List<ToolDefinition> _issueReadTools() => [
 
 /// Issue mutation tools: close, reopen, move-to-status, assign, labels.
 List<ToolDefinition> _issueMutationTools() => [
+      ..._issueStateTools(),
+      ..._issueAssignmentTools(),
+      ..._issueLabelTools(),
+    ];
+
+/// `github_close_issue` + `github_reopen_issue`.
+List<ToolDefinition> _issueStateTools() => [
       ToolDefinition(
         name: 'github_close_issue',
         description: 'Close a GitHub issue',
@@ -145,6 +167,10 @@ List<ToolDefinition> _issueMutationTools() => [
         category: 'issues',
         params: _issueRefParams(),
       ),
+    ];
+
+/// `github_move_issue_to_status` + `github_assign_issue`.
+List<ToolDefinition> _issueAssignmentTools() => [
       ToolDefinition(
         name: 'github_move_issue_to_status',
         aliases: ['tracker_move_to_status'],
@@ -179,6 +205,10 @@ List<ToolDefinition> _issueMutationTools() => [
           ..._issueRefParams(),
         ],
       ),
+    ];
+
+/// `github_add_labels` + `github_remove_label`.
+List<ToolDefinition> _issueLabelTools() => [
       ToolDefinition(
         name: 'github_add_labels',
         description: 'Add labels to a GitHub issue',
@@ -280,71 +310,84 @@ ToolParam _ghIssueKeyParam({required String alternative}) => ToolParam(
 /// merge it (part files cannot see instance fields).
 Map<String, Future<dynamic> Function(Map<String, dynamic>)>
     _issueTrackerHandlers(GithubClient client) => {
-        'github_create_comment': (a) => client.createComment(
-              _ghArgStr(a['workspace']),
-              _ghArgStr(a['repository']),
-              _ghArgStr(a['pullRequestId']),
-              _ghArgStr(a['body']) ?? _ghArgStr(a['text']) ?? '',
-              key: _ghArgStr(a['key']),
-            ),
-        'github_get_issue': (a) => client.getIssue(
-              _ghArgStr(a['workspace']),
-              _ghArgStr(a['repository']),
-              _ghArgStr(a['issueNumber']),
-              key: _ghArgStr(a['key']),
-            ),
-        'github_create_issue': (a) => client.createIssue(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgStr(a['title']) ?? '',
-              body: _ghArgStr(a['body']),
-              key: _ghArgStr(a['key']),
-            ),
-        'github_close_issue': (a) => client.closeIssue(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              key: _ghArgStr(a['key']),
-            ),
-        'github_reopen_issue': (a) => client.reopenIssue(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              key: _ghArgStr(a['key']),
-            ),
-        'github_search_issues': (a) => client.searchIssues(
-              _ghArgStr(a['query']) ?? '',
-              _ghArgStr(a['workspace']),
-              _ghArgStr(a['repository']),
-            ),
-        'github_move_issue_to_status': (a) => client.moveIssueToStatus(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              _ghArgStr(a['statusName']) ?? '',
-              key: _ghArgStr(a['key']),
-            ),
-        'github_assign_issue': (a) => client.assignIssue(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              _ghArgStr(a['user']) ?? '',
-              key: _ghArgStr(a['key']),
-            ),
-        'github_add_labels': (a) => client.addLabels(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              (a['labels'] as List).cast<String>(),
-              key: _ghArgStr(a['key']),
-            ),
-        'github_remove_label': (a) => client.removeLabel(
-              _ghArgStr(a['owner']),
-              _ghArgStr(a['repo']),
-              _ghArgInt(a['number']),
-              _ghArgStr(a['label']) ?? '',
-              key: _ghArgStr(a['key']),
-            ),
+          ..._issueReadHandlers(client),
+          ..._issueMutationHandlers(client),
+        };
+
+/// Executor routes for the issue read/create tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)> _issueReadHandlers(
+        GithubClient client) =>
+    {
+      'github_create_comment': (a) => client.createComment(
+            _ghArgStr(a['workspace']),
+            _ghArgStr(a['repository']),
+            _ghArgStr(a['pullRequestId']),
+            _ghArgStr(a['body']) ?? _ghArgStr(a['text']) ?? '',
+            key: _ghArgStr(a['key']),
+          ),
+      'github_get_issue': (a) => client.getIssue(
+            _ghArgStr(a['workspace']),
+            _ghArgStr(a['repository']),
+            _ghArgStr(a['issueNumber']),
+            key: _ghArgStr(a['key']),
+          ),
+      'github_create_issue': (a) => client.createIssue(
+            _ghArgStr(a['owner']),
+            _ghArgStr(a['repo']),
+            _ghArgStr(a['title']) ?? '',
+            body: _ghArgStr(a['body']),
+            key: _ghArgStr(a['key']),
+          ),
+      'github_search_issues': (a) => client.searchIssues(
+            _ghArgStr(a['query']) ?? '',
+            _ghArgStr(a['workspace']),
+            _ghArgStr(a['repository']),
+          ),
+    };
+
+/// Executor routes for the issue mutation tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+    _issueMutationHandlers(GithubClient client) => {
+          'github_close_issue': (a) => client.closeIssue(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                key: _ghArgStr(a['key']),
+              ),
+          'github_reopen_issue': (a) => client.reopenIssue(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                key: _ghArgStr(a['key']),
+              ),
+          'github_move_issue_to_status': (a) => client.moveIssueToStatus(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                _ghArgStr(a['statusName']) ?? '',
+                key: _ghArgStr(a['key']),
+              ),
+          'github_assign_issue': (a) => client.assignIssue(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                _ghArgStr(a['user']) ?? '',
+                key: _ghArgStr(a['key']),
+              ),
+          'github_add_labels': (a) => client.addLabels(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                (a['labels'] as List).cast<String>(),
+                key: _ghArgStr(a['key']),
+              ),
+          'github_remove_label': (a) => client.removeLabel(
+                _ghArgStr(a['owner']),
+                _ghArgStr(a['repo']),
+                _ghArgInt(a['number']),
+                _ghArgStr(a['label']) ?? '',
+                key: _ghArgStr(a['key']),
+              ),
         };
 
 /// Coerces a loosely-typed executor argument to a string (JS numbers arrive

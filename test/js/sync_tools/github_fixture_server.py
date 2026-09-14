@@ -139,7 +139,8 @@ BRANCHES_PAGE1 = [
     {"name": "match-a"},     # matches the test regex
     {"name": ""},            # empty name — skipped
     {"name": "nope"},        # regex no-match — skipped
-] + [{"name": "noise-%02d" % i} for i in range(97)]  # 100-item first page
+    {"name": "paged"},       # 100+1 commit pages
+] + [{"name": "noise-%02d" % i} for i in range(96)]  # 100-item first page
 BRANCHES_PAGE2 = [{"name": "match-b"}]
 
 # Per-branch commit pages. match-a/match-b share c2 so the SHA
@@ -426,17 +427,18 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, {"message": "not a list"})
             return
 
-        # Non-List 200 for the best-effort comment families.
-        if base == "/repos/o/nl/pulls/42/comments":
+        # Non-List 200 for the best-effort comment families (pull 77 —
+        # the pull-42 routes above are generic endswith matches).
+        if base == "/repos/o/nl/pulls/77/comments":
             self._record(body)
             self._respond(200, {"message": "not a list"})
             return
-        if base == "/repos/o/nl/issues/42/comments":
+        if base == "/repos/o/nl/issues/77/comments":
             self._record(body)
             self._respond(200, {"message": "not a list"})
             return
         # Strict reviews-page failure for github_get_pr_activities.
-        if base == "/repos/o/err/pulls/42/reviews":
+        if base == "/repos/o/err/pulls/77/reviews":
             self._record(body)
             self._respond(500, '{"message": "reviews boom"}')
             return

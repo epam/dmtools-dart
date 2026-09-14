@@ -69,12 +69,12 @@ class GitHubCiSyncTools {
         if (!syncIsBlank(a[_textField])) _textField: syncAsStr(a[_textField]),
       };
     }
-    return _putJson(
-      c,
+    return syncBodyOrError(SyncHttpClient.patch(
       '${c.baseUrl}/${_repoSeg(a)}'
       '/check-runs/${syncAsStr(a['checkRunId'])}',
-      body,
-    );
+      headers: c.headers,
+      body: jsonEncode(body),
+    ));
   }
 
   /// `github_create_commit_status` — POST
@@ -115,12 +115,13 @@ class GitHubCiSyncTools {
 
   /// `github_update_pr_comment` — PATCH
   /// `repos/{w}/{r}/issues/comments/{id}` with `{"body": text}`.
-  String _updatePrComment(GhSyncConfig c, Map<String, dynamic> a) => _putJson(
-        c,
+  String _updatePrComment(GhSyncConfig c, Map<String, dynamic> a) =>
+      syncBodyOrError(SyncHttpClient.patch(
         '${c.baseUrl}/${_repoSeg(a)}'
         '/issues/comments/${syncAsStr(a['commentId'])}',
-        {'body': syncAsStr(a[_textField])},
-      );
+        headers: c.headers,
+        body: jsonEncode({'body': syncAsStr(a[_textField])}),
+      ));
 
   /// `github_delete_pr_comment` — DELETE
   /// `repos/{w}/{r}/issues/comments/{id}` (Java: void).
@@ -253,7 +254,8 @@ class GitHubCiSyncTools {
     final seenShas = <String>{};
     final out = <dynamic>[];
     try {
-      for (final branch in _fetchPages(c, '${_repoSeg(a)}/branches')) {
+      for (final branch
+          in _fetchPages(c, '${c.baseUrl}/${_repoSeg(a)}/branches')) {
         out.addAll(
             _matchedBranchCommits(c, a, branch, pattern, since, seenShas));
       }

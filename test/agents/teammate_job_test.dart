@@ -18,6 +18,7 @@ void main() {
   delegationFailureTests();
   inputContextTests();
   tracePostingTests();
+  githubTracePostingTests();
   tracePrefixTests();
   traceDisabledTests();
   resultShapeTests();
@@ -294,6 +295,65 @@ void tracePostingTests() {
         );
         await job.run();
         expect(posted, 1);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void githubTracePostingTests() {
+  group('TeammateJob trace comment — GitHub source', () {
+    test('GitHub-sourced tickets get the trace comment too (gh-35)', () async {
+      final tmp = await _createTempDir();
+      final posted = <String, String>{};
+      try {
+        final job = TeammateJob(
+          params: {
+            'inputJql': 'repo:acme/widgets is:issue is:open label:bug',
+            'cliCommands': ['echo done'],
+            'alwaysPostComments': true,
+            'ciRunUrl': 'ci://run',
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [
+            {
+              'key': 'GH-1',
+              'fields': {'summary': 's', 'description': 'd'},
+            },
+          ],
+          commentPoster: (key, body) async => posted[key] = body,
+        );
+        final result = await job.run();
+        expect(result['success'], isTrue);
+        expect(posted,
+            containsPair('GH-1', 'Processing started. CI Run: ci://run'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('a failing GitHub trace comment does not fail the job', () async {
+      final tmp = await _createTempDir();
+      try {
+        final job = TeammateJob(
+          params: {
+            'inputJql': 'repo:acme/widgets#1',
+            'cliCommands': ['echo done'],
+            'alwaysPostComments': true,
+            'ciRunUrl': 'ci://run',
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [
+            {
+              'key': 'GH-1',
+              'fields': {'summary': 's', 'description': 'd'},
+            },
+          ],
+          commentPoster: (key, _) async => throw StateError('poster down'),
+        );
+        final result = await job.run();
+        expect(result['success'], isTrue, reason: 'Java warns and continues');
       } finally {
         await tmp.delete(recursive: true);
       }

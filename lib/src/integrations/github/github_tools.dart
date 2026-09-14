@@ -12,8 +12,10 @@ import '../github_pr_review_tools.dart';
 
 part 'github_actions_tools.dart';
 part 'github_agent_tools.dart';
+part 'github_ci_pr_tools.dart';
 part 'github_codeowners_tools.dart';
 part 'github_collaborator_tools.dart';
+part 'github_issue_tracker_tools.dart';
 part 'github_pr_state_tools.dart';
 part 'github_pr_update_tools.dart';
 part 'github_repository_tools.dart';
@@ -43,6 +45,9 @@ List<ToolDefinition> githubTools() => [
       ..._agentActionsTools(),
       ..._agentReleaseTools(),
       ...prReviewTools(),
+      ..._ciStatusTools(),
+      ..._prActivityTools(),
+      ..._releaseAssetTools(),
     ];
 
 /// Per-domain catalog functions live in `github_<domain>_tools.dart` part
@@ -131,129 +136,8 @@ ToolDefinition _createPrTool() => ToolDefinition(
       ],
     );
 
-/// Comment tool: `github_create_comment`.
-List<ToolDefinition> _commentTools() => [
-      ToolDefinition(
-        name: 'github_create_comment',
-        description: 'Create a comment on a GitHub pull request',
-        integration: 'github',
-        category: 'comments',
-        params: [
-          _workspaceParam(),
-          _repositoryParam(),
-          _prIdParam(),
-          ToolParam(
-            name: 'body',
-            description: 'The comment body text',
-            required: true,
-          ),
-        ],
-      ),
-    ];
-
-/// Issue tools: get, create, close, add labels, remove label.
-List<ToolDefinition> _issueTools() => [
-      ..._issueReadTools(),
-      ..._issueMutationTools(),
-    ];
-
-/// Issue read/create tools: `github_get_issue`, `github_create_issue`.
-List<ToolDefinition> _issueReadTools() => [
-      ToolDefinition(
-        name: 'github_get_issue',
-        aliases: ['source_code_get_issue'],
-        description: 'Get details of a GitHub issue including title, '
-            'description, state, author, labels, assignees, and comments '
-            'count.',
-        integration: 'github',
-        category: 'issues',
-        params: const [
-          ToolParam(
-            name: 'workspace',
-            description: 'The GitHub owner/organization name',
-            required: true,
-          ),
-          ToolParam(
-            name: 'repository',
-            description: 'The GitHub repository name',
-            required: true,
-          ),
-          ToolParam(
-            name: 'issueNumber',
-            description: 'The issue number',
-            required: true,
-          ),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_create_issue',
-        description: 'Create a GitHub issue',
-        integration: 'github',
-        category: 'issues',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          ToolParam(
-            name: 'title',
-            description: 'The title of the new issue',
-            required: true,
-          ),
-          ToolParam(
-            name: 'body',
-            description: 'The issue description (markdown)',
-            required: false,
-          ),
-        ],
-      ),
-    ];
-
-/// Issue mutation tools: close, add labels, remove label.
-List<ToolDefinition> _issueMutationTools() => [
-      ToolDefinition(
-        name: 'github_close_issue',
-        description: 'Close a GitHub issue',
-        integration: 'github',
-        category: 'issues',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The issue number'),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_add_labels',
-        description: 'Add labels to a GitHub issue',
-        integration: 'github',
-        category: 'issues',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The issue number'),
-          ToolParam(
-            name: 'labels',
-            description: 'The label names to add',
-            type: 'array',
-            required: true,
-          ),
-        ],
-      ),
-      ToolDefinition(
-        name: 'github_remove_label',
-        description: 'Remove a label from a GitHub issue',
-        integration: 'github',
-        category: 'issues',
-        params: [
-          _ownerParam(),
-          _repoParam(),
-          _numberParam('The issue number'),
-          ToolParam(
-            name: 'label',
-            description: 'The name of the label to remove',
-            required: true,
-          ),
-        ],
-      ),
-    ];
+/// Comment and issue tools live in `github_issue_tracker_tools.dart`
+/// (Java `GitHubIssues.java` parity, dm.ai #543).
 
 /// Review tools: `github_create_review`, `github_dismiss_review`.
 List<ToolDefinition> _reviewTools() => [
@@ -534,8 +418,21 @@ class GithubToolExecutor {
   }
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
+  ///
+  /// Core PR/repo/actions routes live here; the issue-tracker family routes
+  /// (Java `GitHubIssues`) and the CI/PR-activity routes live in their part
+  /// files and are merged in.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _handlers = {
+    ..._baseHandlers,
+    ..._issueTrackerHandlers(_client),
+    ..._ciPrHandlers(_client),
+  };
+
+  /// Core handler routes (everything outside the issue family and the
+  /// CI/PR-activity tools).
+  late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+      _baseHandlers = {
     'github_test': (_) => _client.testConnection(),
     'github_get_pr': (a) => _client.getPr(
           a['workspace'] as String,
@@ -546,17 +443,6 @@ class GithubToolExecutor {
           a['workspace'] as String,
           a['repository'] as String,
           a['state'] as String?,
-        ),
-    'github_create_comment': (a) => _client.createComment(
-          a['workspace'] as String,
-          a['repository'] as String,
-          requiredInt(a, 'pullRequestId'),
-          (a['body'] ?? a['text']) as String,
-        ),
-    'github_get_issue': (a) => _client.getIssue(
-          a['workspace'] as String,
-          a['repository'] as String,
-          a['issueNumber'].toString(),
         ),
     'github_submit_pr_review': (a) => _client.submitPullRequestReview(
           a['workspace'] as String,
@@ -639,29 +525,6 @@ class GithubToolExecutor {
           a['content'] as String,
           a['message'] as String,
           a['sha'] as String,
-        ),
-    'github_create_issue': (a) => _client.createIssue(
-          a['owner'] as String,
-          a['repo'] as String,
-          a['title'] as String,
-          a['body'] as String?,
-        ),
-    'github_close_issue': (a) => _client.closeIssue(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
-        ),
-    'github_add_labels': (a) => _client.addLabels(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
-          (a['labels'] as List).cast<String>(),
-        ),
-    'github_remove_label': (a) => _client.removeLabel(
-          a['owner'] as String,
-          a['repo'] as String,
-          requiredInt(a, 'number'),
-          a['label'] as String,
         ),
     'github_delete_branch': (a) => _client.deleteBranch(
           a['owner'] as String,

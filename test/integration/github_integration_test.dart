@@ -126,7 +126,7 @@ void _githubWriteTest(
     final comment = await client().createComment(
       owner,
       repo,
-      number,
+      '$number',
       'it-$runId-smoke comment',
     );
     final commentId = (comment['id'] as num).toInt();

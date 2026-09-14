@@ -134,6 +134,38 @@ PAGE2_COMMENTS = [_comment(100)]
 PAGE1_ISSUES = [_paged_issue(200 + i) for i in range(100)]
 PAGE2_ISSUES = [_paged_issue(99)]
 
+# CI-tool fixtures (github_ci_sync_tools_test.dart).
+BRANCHES_PAGE1 = [
+    {"name": "match-a"},     # matches the test regex
+    {"name": ""},            # empty name — skipped
+    {"name": "nope"},        # regex no-match — skipped
+    {"name": "paged"},       # 100+1 commit pages
+] + [{"name": "noise-%02d" % i} for i in range(96)]  # 100-item first page
+BRANCHES_PAGE2 = [{"name": "match-b"}]
+
+# Per-branch commit pages. match-a/match-b share c2 so the SHA
+# de-duplication is observable across branches; match-a also carries a
+# null sha (empty key — skipped) and paged/ walks the page loop.
+COMMITS_BY_BRANCH = {
+    "match-a": [{"sha": "c1"}, {"sha": None}, {"sha": "c2"}],
+    "match-b": [{"sha": "c2"}, {"sha": "c3"}],
+}
+
+
+def _paged_commit(i):
+    return {"sha": "p%03d" % i, "message": "commit %d" % i}
+
+
+COMMITS_PAGED_PAGE1 = [_paged_commit(i) for i in range(100)]
+COMMITS_PAGED_PAGE2 = [{"sha": "p100"}]
+
+FILTERED_PRS_PAGE1 = [
+    {"number": i, "title": "t%03d" % i, "merged_at": "2024-01-01T00:00:00Z"}
+    for i in range(99)
+] + [{"number": 999, "title": "t-unmerged", "merged_at": None}]
+FILTERED_PRS_PAGE2 = [{"number": 100, "title": "final",
+                       "merged_at": "2024-02-01T00:00:00Z"}]
+
 
 def _query_param(path, name):
     values = parse_qs(urlparse(path).query).get(name, [])
@@ -340,6 +372,86 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._record(body)
             self._respond(200, {"id": 78, "name": "report.txt",
                                 "browser_download_url": "https://dl/x"})
+            return
+
+        # ── CI-tool routes (github_ci_sync_tools_test.dart) ─────────────
+        # Branch listings: o/r pages 100+1; o/err fails the strict
+        # _fetchPages (StateError → error envelope); o/errc succeeds so
+        # the commit fetch can fail independently.
+        if base == "/repos/o/r/branches":
+            self._record(body)
+            if _query_param(path, "page") == "2":
+                self._respond(200, BRANCHES_PAGE2)
+            else:
+                self._respond(200, BRANCHES_PAGE1)
+            return
+        if base == "/repos/o/errc/branches":
+            self._record(body)
+            self._respond(200, [{"name": "x"}])
+            return
+        if base == "/repos/o/err/branches":
+            self._record(body)
+            self._respond(500, '{"message": "branches boom"}')
+            return
+        if base == "/repos/o/r/commits":
+            self._record(body)
+            sha = _query_param(path, "sha") or ""
+            if sha == "paged":
+                if _query_param(path, "page") == "2":
+                    self._respond(200, COMMITS_PAGED_PAGE2)
+                else:
+                    self._respond(200, COMMITS_PAGED_PAGE1)
+                return
+            self._respond(200, COMMITS_BY_BRANCH.get(sha, []))
+            return
+        if base == "/repos/o/errc/commits":
+            self._record(body)
+            self._respond(500, '{"message": "commits boom"}')
+            return
+
+        # Filtered PR listings: o/pager walks 100+1; o/err fails a page
+        # (error envelope); o/bad answers 200 with a non-List payload.
+        if base == "/repos/o/pager/pulls":
+            self._record(body)
+            if _query_param(path, "page") == "2":
+                self._respond(200, FILTERED_PRS_PAGE2)
+            else:
+                self._respond(200, FILTERED_PRS_PAGE1)
+            return
+        if base == "/repos/o/err/pulls":
+            self._record(body)
+            self._respond(500, '{"message": "boom"}')
+            return
+        if base == "/repos/o/bad/pulls":
+            self._record(body)
+            self._respond(200, {"message": "not a list"})
+            return
+
+        # Non-List 200 for the best-effort comment families (pull 77 —
+        # the pull-42 routes above are generic endswith matches).
+        if base == "/repos/o/nl/pulls/77/comments":
+            self._record(body)
+            self._respond(200, {"message": "not a list"})
+            return
+        if base == "/repos/o/nl/issues/77/comments":
+            self._record(body)
+            self._respond(200, {"message": "not a list"})
+            return
+        # Strict reviews-page failure for github_get_pr_activities.
+        if base == "/repos/o/err/pulls/77/reviews":
+            self._record(body)
+            self._respond(500, '{"message": "reviews boom"}')
+            return
+
+        # Issue search: canned hit, or a 500 for the boom query.
+        if base == "/search/issues":
+            self._record(body)
+            q = _query_param(path, "q") or ""
+            if "boom" in q:
+                self._respond(500, '{"message": "search boom"}')
+            else:
+                self._respond(200, {"total_count": 1, "items": [
+                    {"number": 9, "title": "hit"}]})
             return
 
         self._record(body)

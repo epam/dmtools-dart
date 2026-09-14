@@ -50,10 +50,14 @@ jobs:
     needs: syntax
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    defaults:
+      run:
+        # bash = Git Bash on the windows leg (install.sh windows branch)
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest]
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +77,8 @@ jobs:
             echo "::notice::No releases yet — skipping live install."
           fi
 
+      # Git Bash (the runner's default bash) exercises the windows branch of
+      # install.sh — mirrors dm.ai's windows-git-bash-installer-check.
       - name: Run install.sh (latest)
         if: steps.release.outputs.exists == 'true'
         env:
@@ -95,3 +101,40 @@ jobs:
           dmtools --version
           dmtools list | head -n 10
           dmtools doctor || true
+
+  install-ps1:
+    name: install.ps1 on windows
+    needs: syntax
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check a release exists to install
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/releases/latest" \
+            --jq .tag_name > /tmp/tag 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No releases yet — skipping live install."
+          fi
+
+      - name: Run install.ps1 (from the repo checkout)
+        if: steps.release.outputs.exists == 'true'
+        env:
+          DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
+          DMTOOLS_INSTALL_DIR: ${{ github.workspace }}\.dmtools-ps1
+        shell: pwsh
+        run: ./install.ps1
+
+      - name: Exercise the installed binary
+        if: steps.release.outputs.exists == 'true'
+        shell: pwsh
+        run: |
+          & "${env:DMTOOLS_INSTALL_DIR}\bin\dmtools.cmd" --version
+          & "${env:DMTOOLS_INSTALL_DIR}\bin\dmtools.cmd" list | Select-Object -First 10

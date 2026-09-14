@@ -28,14 +28,39 @@ still honored as an optional override for API rate limits or private forks.)
 This installs a standalone AOT binary plus the QuickJS shared library it
 loads to `~/.dmtools/bin` and puts it on your `PATH`. Install a specific
 version with `... | sh -s -- v0.1.0` (or `DMTOOLS_VERSION=v0.1.0`).
-Prebuilt platforms: `linux-x64`, `macos-x64`, `macos-arm64`; on anything
-else build from source (below). Releases are cut dm.ai-style by pressing
+Prebuilt platforms: `linux-x64`, `macos-x64`, `macos-arm64`,
+`windows-x64` (zip). Releases are cut dm.ai-style by pressing
 the **Run workflow** button in
 [release-cli.yml](.github/workflows/release-cli.yml) — the patch version
 auto-increments from `pubspec.yaml` (or set a custom version), the bump
 is committed and tagged, assets and `dmtools-checksums.sha256` are
 published, and installs are exercised on every supported OS by
 [install-test.yml](.github/workflows/install-test.yml).
+
+### Install on Windows
+
+Three entry points, exactly the dm.ai shape:
+
+```bat
+REM cmd.exe / curl — bootstraps the PowerShell installer
+curl -fsSL https://raw.githubusercontent.com/epam/dmtools-dart/main/install.bat -o "%TEMP%\dmtools-install.bat" && "%TEMP%\dmtools-install.bat"
+```
+
+```powershell
+# PowerShell one-liner
+irm https://github.com/epam/dmtools-dart/releases/latest/download/install.ps1 | iex
+```
+
+```bash
+# Git Bash — the same install.sh as on Linux/macOS
+curl -fsSL https://raw.githubusercontent.com/epam/dmtools-dart/main/install.sh | bash
+```
+
+All three install to `%USERPROFILE%\.dmtools\bin` (`dmtools.exe`, the
+QuickJS library under `native\quickjs\`, and a `dmtools.cmd` launcher
+pinning `JSR_QUICKJS_LIB`) and append the bin dir to the user `PATH`.
+The `install.sh` path additionally writes a bash launcher for Git Bash
+sessions and appends to `~/.bashrc`.
 
 ### Install from a source checkout (macOS / Linux)
 
@@ -52,7 +77,7 @@ works from any directory. `install.sh` uses the same launcher layout and
 additionally strips macOS quarantine and ad-hoc re-signs the binary
 (fa1.dev installer pattern). Prints a PATH hint when `~/.local/bin` is not
 on your `PATH` (macOS: add `export PATH="$HOME/.local/bin:$PATH"` to
-`~/.zshrc`). Not supported on Windows — use the prebuilt installer or build
+`~/.zshrc`). macOS/Linux only — Windows users: install.ps1/install.bat or the zip bundle (above);
 with `make build`.
 
 ### Build from source

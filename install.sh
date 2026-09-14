@@ -40,9 +40,10 @@ os=""
 case "$(uname -s)" in
   Linux*) os=linux ;;
   Darwin*) os=macos ;;
+  MINGW* | MSYS* | CYGWIN* | *_NT-*) os=windows ;;
   *)
-    err "unsupported OS: $(uname -s). This installer covers Linux and macOS;"
-    err "Windows users should build from source: make build (MinGW-w64)."
+    err "unsupported OS: $(uname -s). This installer covers Linux, macOS and"
+    err "Windows (Git Bash)."
     exit 1
     ;;
 esac
@@ -53,12 +54,21 @@ case "$(uname -m)" in
   arm64 | aarch64) arch=arm64 ;;
   *)
     err "unsupported architecture: $(uname -m)."
-    err "Prebuilt binaries: linux-x64, macos-x64, macos-arm64."
+    err "Prebuilt binaries: linux-x64, macos-x64, macos-arm64, windows-x64."
     exit 1
     ;;
 esac
 
-asset="dmtools-${os}-${arch}.tar.gz"
+# Windows ships as a zip (Compress-Archive) — same bundle layout inside.
+if [ "$os" = "windows" ]; then
+  if [ "$arch" != "x64" ]; then
+    err "no prebuilt Windows bundle for ${arch}; only windows-x64 exists."
+    exit 1
+  fi
+  asset="dmtools-${os}-${arch}.zip"
+else
+  asset="dmtools-${os}-${arch}.tar.gz"
+fi
 
 # ── 2. Resolve version ──────────────────────────────────────────────────────
 # DMTOOLS_DOWNLOAD_BASE overrides the artifact root (default: GitHub Releases)
@@ -155,25 +165,73 @@ install_bin="$install_root/bin"
 mkdir -p "$install_bin"
 
 mkdir -p "$tmpdir/extract"
-tar -xzf "$archive" -C "$tmpdir/extract"
+if [ "$os" = "windows" ]; then
+  # Git Bash ships no unzip; GNU tar cannot read zip archives. Expand-Archive
+  # is present on every supported Windows (PowerShell 5+).
+  pwsh_exe=""
+  if command -v powershell >/dev/null 2>&1; then
+    pwsh_exe="powershell"
+  elif command -v pwsh >/dev/null 2>&1; then
+    pwsh_exe="pwsh"
+  else
+    err "neither powershell nor pwsh is available to extract the zip."
+    exit 1
+  fi
+  "$pwsh_exe" -NoProfile -Command \
+    "Expand-Archive -LiteralPath '$(cygpath -w "$archive" 2>/dev/null || echo "$archive")' -DestinationPath '$(cygpath -w "$tmpdir/extract" 2>/dev/null || echo "$tmpdir/extract")' -Force"
+else
+  tar -xzf "$archive" -C "$tmpdir/extract"
+fi
 
 src="$tmpdir/extract/dmtools"
-if [ ! -f "$src/$BINARY" ] || [ ! -f "$src/native/quickjs/libquickjs_bridge.so" ]; then
+if [ ! -f "$src/$BINARY" ] && [ ! -f "$src/$BINARY.exe" ] ||
+  [ ! -f "$src/native/quickjs/libquickjs_bridge.so" ]; then
   err "archive is missing expected layout (dmtools/ + dmtools/native/quickjs/):"
-  err "$(tar -tzf "$archive" | head -n 10)"
   exit 1
 fi
 
 rm -rf "$install_bin/native"
-cp "$src/$BINARY" "$install_bin/$BINARY.bin"
-chmod +x "$install_bin/$BINARY.bin"
-mkdir -p "$install_bin/native/quickjs"
-cp "$src/native/quickjs/libquickjs_bridge.so" \
-  "$install_bin/native/quickjs/libquickjs_bridge.so"
+if [ "$os" = "windows" ]; then
+  cp "$src/$BINARY.exe" "$install_bin/$BINARY.exe"
+  mkdir -p "$install_bin/native/quickjs"
+  cp "$src/native/quickjs/libquickjs_bridge.so" \
+    "$install_bin/native/quickjs/libquickjs_bridge.so"
+
+  # Launcher for Git Bash users (execs the exe; JSR_QUICKJS_LIB pinned to the
+  # library installed beside it — same reason as the POSIX launcher below).
+  cat > "$install_bin/$BINARY" <<LAUNCHER
+#!/bin/sh
+DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
+export JSR_QUICKJS_LIB="\$DIR/native/quickjs/libquickjs_bridge.so"
+exec "\$DIR/dmtools.exe" "\$@"
+LAUNCHER
+  # Launcher for cmd.exe / PowerShell users (dm.ai installs dmtools.cmd too).
+  cat > "$install_bin/$BINARY.cmd" <<LAUNCHER
+@echo off
+set "JSR_QUICKJS_LIB=%~dp0native\\quickjs\\libquickjs_bridge.so"
+"%~dp0dmtools.exe" %*
+LAUNCHER
+
+  # Best-effort: put the install bin on the Windows USER Path so cmd/PowerShell
+  # sessions see it too (the rc-file block below covers Git Bash).
+  if command -v powershell >/dev/null 2>&1; then
+    win_bin="$(cygpath -w "$install_bin" 2>/dev/null || echo "$install_bin")"
+    powershell -NoProfile -Command "\$p=[Environment]::GetEnvironmentVariable('Path','User'); if (\$p -notlike \"*\$win_bin*\") { [Environment]::SetEnvironmentVariable('Path', (\$p.TrimEnd(';') + ';' + '$win_bin'), 'User') }" \
+      >/dev/null 2>&1 || true
+  fi
+else
+  cp "$src/$BINARY" "$install_bin/$BINARY.bin"
+  chmod +x "$install_bin/$BINARY.bin"
+  mkdir -p "$install_bin/native/quickjs"
+  cp "$src/native/quickjs/libquickjs_bridge.so" \
+    "$install_bin/native/quickjs/libquickjs_bridge.so"
+fi
 
 # Launcher: sets JSR_QUICKJS_LIB to the absolute library path, then execs
 # the real binary. CWD-independent — works from any directory.
-cat > "$install_bin/$BINARY" <<LAUNCHER
+# POSIX launcher (Linux/macOS only — Windows got its own launchers above).
+if [ "$os" != "windows" ]; then
+  cat > "$install_bin/$BINARY" <<LAUNCHER
 #!/bin/sh
 # dmtools launcher — points the QuickJS runtime at the library installed
 # beside this script (JSR_QUICKJS_LIB is the runtime's first lookup
@@ -182,7 +240,8 @@ DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 export JSR_QUICKJS_LIB="\$DIR/native/quickjs/libquickjs_bridge.so"
 exec "\$DIR/dmtools.bin" "\$@"
 LAUNCHER
-chmod +x "$install_bin/$BINARY"
+  chmod +x "$install_bin/$BINARY"
+fi
 
 # macOS quarantine / signature hardening (as in the flutter_agent_harness
 # installer): downloaded executables are tagged by Gatekeeper and killed on

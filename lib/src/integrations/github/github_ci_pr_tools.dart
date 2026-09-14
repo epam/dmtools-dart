@@ -9,7 +9,6 @@ List<ToolDefinition> _ciStatusTools() => [
       ..._updateCheckRunTool(),
       ..._createCommitStatusTool(),
       ..._getWorkflowRunTool(),
-      ..._repositoryDispatchTool(),
     ];
 
 /// `github_create_check_run` — one rich CI check per PR.
@@ -461,8 +460,7 @@ Map<String, Future<dynamic> Function(Map<String, dynamic>)> _prActivityHandlers(
 
 /// Executor routes for the release-asset/branch-commit tools.
 Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-    _releaseAssetHandlers(GithubClient client) =>
-        {
+    _releaseAssetHandlers(GithubClient client) => {
           'github_list_release_assets': (a) => client.listReleaseAssets(
                 a['workspace'] as String,
                 a['repository'] as String,

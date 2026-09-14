@@ -83,7 +83,14 @@ jobs:
         if: steps.release.outputs.exists == 'true'
         env:
           DMTOOLS_GITHUB_TOKEN: ${{ github.token }}
-        run: sh install.sh
+        # xtrace round: previous legs installed a 154-byte sh launcher INTO
+        # dmtools.exe although the script copies the 8.7MB exe there first
+        # (merge-ref inspected) — trace + dir listings to see what actually
+        # runs and lands on disk.
+        run: |
+          sh -x install.sh
+          echo "== bin/ =="
+          ls -l "$HOME/.dmtools/bin"
 
       - name: Run install.sh (pinned version)
         if: >

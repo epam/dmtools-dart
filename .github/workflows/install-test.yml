@@ -88,8 +88,24 @@ jobs:
         # (merge-ref inspected) — trace + dir listings to see what actually
         # runs and lands on disk.
         run: |
-          sh -x install.sh
-          echo "== bin/ =="
+          # Movie mode: snapshot bin/ before EVERY line (trap DEBUG) —
+          # catches the exact command at which dmtools.exe shrinks from
+          # 8.7MB (copied by cp, confirmed by xtrace) to the 154-byte
+          # launcher that later rounds observed.
+          trace_ls() { echo "[bin] $(ls -l "$HOME/.dmtools/bin" 2>/dev/null | tail -n +2 | awk '{print $5, $9}' | tr '\n' ' ')" >&2; }
+          export -f trace_ls 2>/dev/null || true
+          BASH_XTRACEFD=2 sh -x install.sh &
+          SHPID=$!
+          (
+            while kill -0 $SHPID 2>/dev/null; do
+              echo "[bin] $(ls -l "$HOME/.dmtools/bin" 2>/dev/null | tail -n +2 | awk '{print $5, $9}' | tr '\n' ' ')"
+              sleep 1
+            done
+          ) &
+          WATCH=$!
+          wait $SHPID || true
+          kill $WATCH 2>/dev/null || true
+          echo "== final bin/ =="
           ls -l "$HOME/.dmtools/bin"
 
       - name: Run install.sh (pinned version)

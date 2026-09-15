@@ -58,6 +58,8 @@ void _testHandlerSurface() {
       'gitlab_add_inline_mr_comment',
       'gitlab_merge_mr',
       'gitlab_rebase_mr',
+      'gitlab_approve_mr',
+      'gitlab_unapprove_mr',
       'gitlab_add_mr_label',
       'gitlab_remove_mr_label',
       'gitlab_get_mr_discussions',

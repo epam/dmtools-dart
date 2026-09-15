@@ -37,6 +37,15 @@ typedef ContractReplay = Future<Object?> Function(ContractFixture fixture);
 
 /// One recorded Java tool invocation, loaded from a contract fixture file.
 class ContractFixture {
+  /// The upstream request payload the Java tool sent (decoded JSON). When
+  /// absent the replay skips the request-body assertion (GETs carry none).
+  final Object? javaRequestBody;
+
+  /// The HTTP status the mock transport serves (default 200). Non-2xx
+  /// values replay upstream rejections — e.g. GitHub's 422 for a
+  /// REQUEST_CHANGES review submitted without the API-required body.
+  final int mockStatus;
+
   /// Creates a fixture from its constituent parts.
   ContractFixture({
     required this.toolName,
@@ -44,6 +53,8 @@ class ContractFixture {
     required this.expectedResponse,
     required this.javaApiEndpoint,
     required this.javaHttpMethod,
+    this.javaRequestBody,
+    this.mockStatus = 200,
     this.mockResponseBody,
   });
 
@@ -56,6 +67,8 @@ class ContractFixture {
       expectedResponse: _required(json, 'expected_response'),
       javaApiEndpoint: endpoint,
       javaHttpMethod: _required(json, 'java_http_method') as String,
+      javaRequestBody: json['java_request_body'],
+      mockStatus: (json['mock_status'] as int?) ?? 200,
       mockResponseBody: json['mock_response_body'] as String?,
     );
   }

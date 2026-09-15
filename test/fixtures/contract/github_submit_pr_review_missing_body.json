@@ -1,0 +1,19 @@
+{
+  "tool_name": "github_submit_pr_review",
+  "request_args": {
+    "workspace": "IstiN",
+    "repository": "dmtools",
+    "pullRequestId": "74",
+    "event": "REQUEST_CHANGES"
+  },
+  "java_api_endpoint": "/repos/IstiN/dmtools/pulls/74/reviews",
+  "java_http_method": "POST",
+  "java_request_body": {
+    "event": "REQUEST_CHANGES"
+  },
+  "mock_status": 422,
+  "mock_response_body": "{\"message\":\"Review body is required when requesting changes.\",\"documentation_url\":\"https://docs.github.com/rest/pulls/reviews#create-a-review\"}",
+  "expected_response": {
+    "caught": "Tool execution failed: PR review submission failed (422): {\"message\":\"Review body is required when requesting changes.\",\"documentation_url\":\"https://docs.github.com/rest/pulls/reviews#create-a-review\"}"
+  }
+}

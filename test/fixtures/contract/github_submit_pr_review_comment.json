@@ -1,0 +1,26 @@
+{
+  "tool_name": "github_submit_pr_review",
+  "request_args": {
+    "workspace": "IstiN",
+    "repository": "dmtools",
+    "pullRequestId": "74",
+    "event": "COMMENT",
+    "body": "Review notes: suggestions only, nothing blocking."
+  },
+  "java_api_endpoint": "/repos/IstiN/dmtools/pulls/74/reviews",
+  "java_http_method": "POST",
+  "java_request_body": {
+    "event": "COMMENT",
+    "body": "Review notes: suggestions only, nothing blocking."
+  },
+  "mock_response_body": "{\"id\":1234569,\"node_id\":\"PRR_kwDO1236\",\"user\":{\"login\":\"dmtools-machine\"},\"state\":\"COMMENTED\",\"body\":\"Review notes: suggestions only, nothing blocking.\",\"submitted_at\":\"2026-09-15T10:10:00Z\",\"pull_request_url\":\"https://api.github.com/repos/IstiN/dmtools/pulls/74\"}",
+  "expected_response": {
+    "id": 1234569,
+    "node_id": "PRR_kwDO1236",
+    "user": {"login": "dmtools-machine"},
+    "state": "COMMENTED",
+    "body": "Review notes: suggestions only, nothing blocking.",
+    "submitted_at": "2026-09-15T10:10:00Z",
+    "pull_request_url": "https://api.github.com/repos/IstiN/dmtools/pulls/74"
+  }
+}

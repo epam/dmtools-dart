@@ -220,7 +220,7 @@ class TrackerGitHubRouter {
         'jira_remove_label' =>
           _removeLabel(c, number, syncAsStr(args['label'])),
         'jira_move_to_status' =>
-          _moveToStatus(c, number, syncAsStr(args['status'])),
+          _moveToStatus(c, number, syncAsStr(args['statusName'])),
         _ => syncErr('Unsupported tracker tool: $toolName'),
       };
 

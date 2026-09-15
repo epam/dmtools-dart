@@ -44,7 +44,6 @@ void main() {
   _testList();
   _testInteractive();
   _testDirectTool();
-  _testAliasRouting();
   _testDirectToolNamedArgs();
   _testDirectToolNamedArgsPrecedence();
   _testDirectToolJavaArgs();
@@ -379,19 +378,15 @@ void _testDirectTool() {
 /// DEFAULT_SOURCE_CODE, resolved through the standard PropertyReader
 /// chain (overrides → config.properties → dmtools.env → OS env) — a
 /// value in `dmtools.env` is visible to alias resolution and wins over
-/// the OS-env tier.
+/// the OS-env tier (the file-tier cases live in
+/// [_testAliasRoutingFileTier]).
 void _testAliasRouting() {
   group('direct tool invocation (alias routing)', () {
     setUp(PropertyReader.testEnvironment.clear);
 
     test('resolves a tracker_* alias to the jira carrier by default', () async {
-      expect(
-        await _dispatcher.dispatch(
-          ['tracker_get_ticket', '{"key": "DMC-479"}'],
-        ),
-        1,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '{"key": "DMC-479"}']);
       expect(result['error'], contains('Jira not configured'),
           reason: 'first candidate (jira) when DEFAULT_TRACKER is unset');
     });
@@ -399,28 +394,27 @@ void _testAliasRouting() {
     test('DEFAULT_TRACKER from the OS-env tier routes to the ado carrier',
         () async {
       PropertyReader.testEnvironment['DEFAULT_TRACKER'] = 'ado';
-      expect(
-        await _dispatcher.dispatch(
-          ['tracker_get_ticket', '{"key": "4242"}'],
-        ),
-        1,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '{"key": "4242"}']);
       expect(result['error'], contains('ADO not configured'),
           reason: 'DEFAULT_TRACKER=ado picks the ado carrier');
     });
+  });
+}
 
-    test('DEFAULT_TRACKER from dmtools.env routes to the github carrier',
+/// The dmtools.env file tier of alias-default resolution (gh-122): the
+/// dispatcher must see DEFAULT_TRACKER / DEFAULT_SOURCE_CODE from the
+/// file, and the file must win over the OS-env tier.
+void _testAliasRoutingFileTier() {
+  group('direct tool invocation (alias routing, dmtools.env tier)', () {
+    setUp(PropertyReader.testEnvironment.clear);
+
+    test('DEFAULT_TRACKER in dmtools.env routes to the github carrier',
         () async {
       File('${_tmp.path}/dmtools.env')
           .writeAsStringSync('DEFAULT_TRACKER=github\n');
-      expect(
-        await _dispatcher.dispatch(
-          ['tracker_get_ticket', '{"key": "epam/dmtools-dart#38"}'],
-        ),
-        1,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final result = await _dispatchTool(
+          ['tracker_get_ticket', '{"key": "epam/dmtools-dart#38"}']);
       expect(result['error'], contains('GitHub not configured'),
           reason:
               'dmtools.env DEFAULT_TRACKER=github picks the github carrier');
@@ -430,33 +424,30 @@ void _testAliasRouting() {
       PropertyReader.testEnvironment['DEFAULT_TRACKER'] = 'ado';
       File('${_tmp.path}/dmtools.env')
           .writeAsStringSync('DEFAULT_TRACKER=github\n');
-      expect(
-        await _dispatcher.dispatch(
-          ['tracker_get_ticket', '{"key": "4242"}'],
-        ),
-        1,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '{"key": "4242"}']);
       expect(result['error'], contains('GitHub not configured'),
           reason: 'the dmtools.env file tier precedes the OS env');
     });
 
-    test('DEFAULT_SOURCE_CODE from dmtools.env routes source_code_* aliases',
+    test('DEFAULT_SOURCE_CODE in dmtools.env routes source_code_* aliases',
         () async {
       File('${_tmp.path}/dmtools.env')
           .writeAsStringSync('DEFAULT_SOURCE_CODE=gitlab\n');
-      expect(
-        await _dispatcher.dispatch(
-          ['source_code_get_pr', '{"repository": "group/project"}'],
-        ),
-        1,
-      );
-      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final result = await _dispatchTool(
+          ['source_code_get_pr', '{"repository": "group/project"}']);
       expect(result['error'], contains('GitLab not configured'),
           reason:
               'dmtools.env DEFAULT_SOURCE_CODE=gitlab picks the gitlab carrier');
     });
   });
+}
+
+/// Dispatches [args] on the shared dispatcher and returns the decoded
+/// JSON object of the result line.
+Future<Map<String, dynamic>> _dispatchTool(List<String> args) async {
+  expect(await _dispatcher.dispatch(args), 1);
+  return jsonDecode(_lines.last) as Map<String, dynamic>;
 }
 
 /// Java `parseToolArguments` parity: positional args mapped onto the

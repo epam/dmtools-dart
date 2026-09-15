@@ -79,16 +79,27 @@ JS actions — is inherited from the parent.
   "parent": { "path": "../../../agents/story_development.json" },
   "params": {
     "envVariables": {
+      "DEFAULT_TRACKER": "github",
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "zai",
       "FA_PROVIDER_CONFIG":
         "{\"baseUrl\":\"https://api.z.ai/api/coding/paas/v4\",
           \"model\":\"glm-5.3-flash\",\"apiKeyEnvVar\":\"ZAI_CODE_KEY\"}"
     },
-    "inputJql": ""
+    "inputJql": "",
+    "cliPromptsByTracker": {
+      "github": [
+        "./machine-kit/teammate-install/instructions/github_comment_format.md"
+      ]
+    }
   }
 }
 ```
+
+`DEFAULT_TRACKER=github` + `cliPromptsByTracker.github` (gh-125) keep machine
+comments on GitHub issues in GitHub-flavored Markdown: the CliAgent resolves
+tracker prompts by the active tracker, and the format file bans the Jira wiki
+markup (`{code}`, `h3.`) that made gh-122's comment unreadable.
 
 The guard maps labels → runner (`case` in the decide step): `agent:rework` →
 rework runner, `agent:review` → review runner, assignee/bot or `agent:dev` →

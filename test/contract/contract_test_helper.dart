@@ -36,41 +36,20 @@ import 'package:test/test.dart';
 typedef ContractReplay = Future<Object?> Function(ContractFixture fixture);
 
 /// One recorded Java tool invocation, loaded from a contract fixture file.
+///
+/// Wraps the fixture's decoded JSON; every field is a getter over the
+/// recorded map (see `test/fixtures/contract/README.md` for the format).
 class ContractFixture {
-  /// The upstream request payload the Java tool sent (decoded JSON). When
-  /// absent the replay skips the request-body assertion (GETs carry none).
-  final Object? javaRequestBody;
-
-  /// The HTTP status the mock transport serves (default 200). Non-2xx
-  /// values replay upstream rejections — e.g. GitHub's 422 for a
-  /// REQUEST_CHANGES review submitted without the API-required body.
-  final int mockStatus;
-
-  /// Creates a fixture from its constituent parts.
-  ContractFixture({
-    required this.toolName,
-    required this.requestArgs,
-    required this.expectedResponse,
-    required this.javaApiEndpoint,
-    required this.javaHttpMethod,
-    this.javaRequestBody,
-    this.mockStatus = 200,
-    this.mockResponseBody,
-  });
+  ContractFixture._(this._json);
 
   /// Parses a fixture from its decoded JSON map.
   factory ContractFixture.fromJson(Map<String, dynamic> json) {
-    final endpoint = _required(json, 'java_api_endpoint') as String;
-    return ContractFixture(
-      toolName: _required(json, 'tool_name') as String,
-      requestArgs: _asArgs(_required(json, 'request_args')),
-      expectedResponse: _required(json, 'expected_response'),
-      javaApiEndpoint: endpoint,
-      javaHttpMethod: _required(json, 'java_http_method') as String,
-      javaRequestBody: json['java_request_body'],
-      mockStatus: (json['mock_status'] as int?) ?? 200,
-      mockResponseBody: json['mock_response_body'] as String?,
-    );
+    _required(json, 'tool_name');
+    _required(json, 'request_args');
+    _required(json, 'expected_response');
+    _required(json, 'java_api_endpoint');
+    _required(json, 'java_http_method');
+    return ContractFixture._(json);
   }
 
   /// Loads and parses the fixture at [path] (relative to CWD).
@@ -80,27 +59,37 @@ class ContractFixture {
     return ContractFixture.fromJson(raw);
   }
 
+  final Map<String, dynamic> _json;
+
   /// The MCP tool name, e.g. `jira_get_ticket`.
-  final String toolName;
+  String get toolName => _json['tool_name'] as String;
 
   /// Arguments the tool was invoked with (the `request_args` map).
-  final Map<String, dynamic> requestArgs;
+  Map<String, dynamic> get requestArgs => _asArgs(_json['request_args']!);
 
   /// The tool-level output the Dart port must reproduce.
-  final Object expectedResponse;
+  Object get expectedResponse => _json['expected_response']!;
 
   /// The upstream REST endpoint the Java tool called.
-  final String javaApiEndpoint;
+  String get javaApiEndpoint => _json['java_api_endpoint'] as String;
 
   /// The HTTP verb the Java tool used (`GET`, `POST`, …).
-  final String javaHttpMethod;
+  String get javaHttpMethod => _json['java_http_method'] as String;
 
-  /// Optional raw API body the mock transport serves. When absent the mock
-  /// serves a JSON encoding of [expectedResponse].
-  final String? mockResponseBody;
+  /// The upstream request payload the Java tool sent (decoded JSON). When
+  /// absent the replay skips the request-body assertion (GETs carry none).
+  Object? get javaRequestBody => _json['java_request_body'];
 
-  /// The body the mocked HTTP transport should return for this fixture.
-  String get mockBody => mockResponseBody ?? jsonEncode(expectedResponse);
+  /// The HTTP status the mock transport serves (default 200). Non-2xx
+  /// values replay upstream rejections — e.g. GitHub's 422 for a
+  /// REQUEST_CHANGES review submitted without the API-required body.
+  int get mockStatus => (_json['mock_status'] as int?) ?? 200;
+
+  /// The body the mocked HTTP transport should return for this fixture:
+  /// the recorded `mock_response_body`, or a JSON encoding of
+  /// [expectedResponse] when the fixture records none.
+  String get mockBody =>
+      (_json['mock_response_body'] as String?) ?? jsonEncode(expectedResponse);
 
   /// The fixture's file basename, for readable test names.
   String label(String path) => '${_basenameNoExt(path)} ($toolName)';

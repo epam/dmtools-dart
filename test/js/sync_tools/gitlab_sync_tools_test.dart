@@ -111,6 +111,7 @@ void _testMrTools() {
     testmrtools_p1();
     testmrtools_p2();
     testmrtools_p3();
+    testmrtools_p4();
   });
 }
 
@@ -240,6 +241,7 @@ void testmrtools_p3() {
     expect(body['body'], '{}');
   });
 
+void testmrtools_p4() {
   test('gitlab_approve_mr / unapprove POST an empty body (gh-129)', () {
     final args = {
       'workspace': 'g',

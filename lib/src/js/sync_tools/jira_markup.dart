@@ -63,6 +63,16 @@ String jiraMarkupToMarkdown(String body) {
       }
       continue;
     }
+    // Panel state first: the bare `{panel}` closing tag also matches the
+    // open pattern (its title group is optional).
+    if (inPanel) {
+      if (line.trim() == '{panel}') {
+        inPanel = false;
+      } else {
+        out.add('> ${_convertLine(line)}');
+      }
+      continue;
+    }
     final panel = _panelOpen.firstMatch(line);
     if (panel != null) {
       final title = panel.group(1)?.trim();
@@ -72,15 +82,13 @@ String jiraMarkupToMarkdown(String body) {
       inPanel = true;
       continue;
     }
-    if (inPanel) {
-      if (line.trim() == '{panel}') {
-        inPanel = false;
-      } else {
-        out.add('> ${_convertLine(line)}');
-      }
+    if (line.trim() == '{panel}') continue;
+    // A single-line `{code}…{code}` pair must win over the block-open
+    // branch — it starts with `{code` too.
+    if (_codePair.hasMatch(line)) {
+      out.add(_convertLine(line));
       continue;
     }
-    if (line.trim() == '{panel}') continue;
     final open = _codeOpen.firstMatch(line);
     if (open != null) {
       final explicit = open.group(1);
@@ -89,9 +97,8 @@ String jiraMarkupToMarkdown(String body) {
           ? explicit
           : _firstWord(rest);
       if (explicit == null || explicit.isEmpty) {
-        rest = rest.length > lang.length
-            ? rest.substring(lang.length).trim()
-            : '';
+        rest =
+            rest.length > lang.length ? rest.substring(lang.length).trim() : '';
       }
       out.add('```$lang');
       if (rest.isNotEmpty) {
@@ -115,7 +122,7 @@ String _convertLine(String line) {
   final h = _heading.firstMatch(s);
   var prefix = '';
   if (h != null) {
-    prefix = '${'#' * (h.group(1)!.length)} ';
+    prefix = '${'#' * int.parse(h.group(1)!)} ';
     s = s.substring(h.end);
   }
   if (_codePair.hasMatch(s)) return prefix + _convertPairs(s);
@@ -133,9 +140,8 @@ String _convertPairs(String s) {
     final content = m.group(2)!.trim();
     final wholeLine = s.substring(0, m.start).trim().isEmpty &&
         s.substring(m.end).trim().isEmpty;
-    buf.write(wholeLine
-        ? '```${m.group(1) ?? ''}\n$content\n```'
-        : '`$content`');
+    buf.write(
+        wholeLine ? '```${m.group(1) ?? ''}\n$content\n```' : '`$content`');
     last = m.end;
   }
   buf.write(_convertText(s.substring(last)));
@@ -143,9 +149,9 @@ String _convertPairs(String s) {
 }
 
 /// Link + bold conversion for one text segment (color already stripped).
-String _convertText(String s) =>
-    s.replaceAllMapped(_jiraLink, (m) => '[${m.group(1)}](${m.group(2)})')
-        .replaceAllMapped(_jiraBold, (m) => '**${m.group(1)}**');
+String _convertText(String s) => s
+    .replaceAllMapped(_jiraLink, (m) => '[${m.group(1)}](${m.group(2)})')
+    .replaceAllMapped(_jiraBold, (m) => '**${m.group(1)}**');
 
 /// The first whitespace-delimited token of [s], or `''`.
 String _firstWord(String s) => RegExp(r'^\S+').firstMatch(s)?.group(0) ?? '';

@@ -345,7 +345,8 @@ void _fixtureReadTools() {
     // the GitHub comment path must render it readable (gh-122 evidence).
     const jira = 'h3. Done\n\n{code}dart\nx();\n{code}\n'
         'See [PR #1|https://x.y/1]';
-    const expected = '### Done\n\n```dart\nx();\n```\nSee [PR #1](https://x.y/1)';
+    const expected =
+        '### Done\n\n```dart\nx();\n```\nSee [PR #1](https://x.y/1)';
     final created = jsonDecode(fx.tools.dispatch('jira_post_comment', {
       'key': 'gh-50',
       'comment': jira,

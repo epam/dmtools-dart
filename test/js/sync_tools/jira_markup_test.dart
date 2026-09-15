@@ -32,8 +32,7 @@ void main() {
       expect(jiraMarkupToMarkdown('{code}\nx=1;\n{code}'), '```\nx=1;\n```');
     });
 
-    test('single-line pair spanning the whole line becomes a fenced block',
-        () {
+    test('single-line pair spanning the whole line becomes a fenced block', () {
       expect(
         jiraMarkupToMarkdown('{code:json} {"a": 1} {code}'),
         '```json\n{"a": 1}\n```',
@@ -97,7 +96,8 @@ void main() {
     });
 
     test('existing Markdown links stay untouched', () {
-      expect(jiraMarkupToMarkdown('See [PR #124](https://x.y)'), //
+      expect(
+          jiraMarkupToMarkdown('See [PR #124](https://x.y)'), //
           'See [PR #124](https://x.y)');
     });
   });

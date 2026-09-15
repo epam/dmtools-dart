@@ -37,6 +37,7 @@ void main() {
   roundCapConfigTests();
   threadSummaryTests();
   wiringTests();
+  formalReviewWiringTests();
   verdictLabelWiringTests();
   escalationThreadSummaryWiringTests();
 }
@@ -650,6 +651,30 @@ void verdictLabelWiringTests() {
   });
 }
 
+/// gh-129: the review runner must opt in to the formal GitHub review
+/// (real APPROVE / REQUEST_CHANGES reviews, not just the pr_approved
+/// label) while the parent's own customParams survive the deepMerge.
+void formalReviewWiringTests() {
+  group('machine wiring: formal review', () {
+    test(
+        'review runner turns on formalGithubReview '
+        '(real approvals, not just labels)', () {
+      final json = jsonDecode(
+        const RunCommandProcessor().process([
+          'run',
+          'machine-kit/teammate-install/runners/fa-review-kimi.json'
+        ]),
+      ) as Map;
+      final customParams = json['params']['customParams'] as Map;
+      expect(customParams['formalGithubReview'], true);
+      // deepMerge keeps the parent's own customParams alongside the flag.
+      expect(customParams['removeLabel'], 'sm_story_review_triggered');
+      expect(customParams['checkOpenPR'], true);
+      expect(customParams['allowApproveWithSuggestions'], true);
+    });
+  });
+}
+
 /// Contract tests: the runners + workflow must stay wired to the script and
 /// the verdict-rules instruction file.
 void wiringTests() {
@@ -675,23 +700,6 @@ void wiringTests() {
         (params['customParams'] as Map)['allowApproveWithSuggestions'],
         true,
       );
-    });
-
-    test(
-        'review runner turns on the formal GitHub review '
-        '(gh-129: real approvals, not just labels)', () {
-      final json = jsonDecode(
-        const RunCommandProcessor().process([
-          'run',
-          'machine-kit/teammate-install/runners/fa-review-kimi.json'
-        ]),
-      ) as Map;
-      final customParams = json['params']['customParams'] as Map;
-      expect(customParams['formalGithubReview'], true);
-      // deepMerge keeps the parent's own customParams alongside the flag.
-      expect(customParams['removeLabel'], 'sm_story_review_triggered');
-      expect(customParams['checkOpenPR'], true);
-      expect(customParams['allowApproveWithSuggestions'], true);
     });
 
     test('verdict-rules instruction file exists', () {

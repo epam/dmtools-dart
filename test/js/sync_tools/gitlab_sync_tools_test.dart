@@ -240,6 +240,7 @@ void testmrtools_p3() {
     expect(body['path'], '/api/v4/projects/g%2Fr/merge_requests/42/rebase');
     expect(body['body'], '{}');
   });
+}
 
 void testmrtools_p4() {
   test('gitlab_approve_mr / unapprove POST an empty body (gh-129)', () {

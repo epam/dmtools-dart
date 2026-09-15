@@ -105,6 +105,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// Default tracker type. Key: `DEFAULT_TRACKER`.
   String? getDefaultTracker() => getValue('DEFAULT_TRACKER');
 
+  /// Default source-code system type. Key: `DEFAULT_SOURCE_CODE`.
+  String? getDefaultSourceCode() => getValue('DEFAULT_SOURCE_CODE');
+
   // --- Jira ---
 
   /// Base64-encoded Jira credentials from email+token, or pre-built token.

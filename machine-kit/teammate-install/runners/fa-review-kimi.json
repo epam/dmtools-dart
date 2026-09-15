@@ -12,7 +12,8 @@
     },
     "inputJql": "",
     "customParams": {
-      "allowApproveWithSuggestions": true
+      "allowApproveWithSuggestions": true,
+      "formalGithubReview": true
     },
     "cliPrompts": [
       "machine-kit/teammate-install/instructions/review-verdict-rules.md"

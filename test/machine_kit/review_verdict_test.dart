@@ -677,6 +677,23 @@ void wiringTests() {
       );
     });
 
+    test(
+        'review runner turns on the formal GitHub review '
+        '(gh-129: real approvals, not just labels)', () {
+      final json = jsonDecode(
+        const RunCommandProcessor().process([
+          'run',
+          'machine-kit/teammate-install/runners/fa-review-kimi.json'
+        ]),
+      ) as Map;
+      final customParams = json['params']['customParams'] as Map;
+      expect(customParams['formalGithubReview'], true);
+      // deepMerge keeps the parent's own customParams alongside the flag.
+      expect(customParams['removeLabel'], 'sm_story_review_triggered');
+      expect(customParams['checkOpenPR'], true);
+      expect(customParams['allowApproveWithSuggestions'], true);
+    });
+
     test('verdict-rules instruction file exists', () {
       expect(
         File('machine-kit/teammate-install/instructions/review-verdict-rules.md')

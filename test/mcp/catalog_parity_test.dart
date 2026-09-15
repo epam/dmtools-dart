@@ -9,6 +9,21 @@
 /// 2. a **documented naming-convention equivalent** (see below), or
 /// 3. an entry in the **frozen gap snapshot** (`java_mcp_tool_gaps.txt`).
 ///
+/// Tool **parameter names** get the same treatment (gh-123: a param renamed on
+/// one side only — Java `statusName` vs Dart `status` — was invisible to a
+/// name-only comparison):
+///
+/// - `java_mcp_tool_params.txt` — exact-name matches whose parameter names
+///   match Java; parity is enforced per line.
+/// - `java_mcp_param_drift.txt` — exact-name matches whose parameter names
+///   still diverge (the param-side counterpart of the gap snapshot); each
+///   listed tool must still diverge.
+/// - Every exact-name match from the names fixture must appear in exactly one
+///   of the two files, so newly ported tools cannot skip classification.
+///
+/// Regenerate both files from a fresh Java checkout with
+/// `python3 scripts/extract_java_tool_params.py <tools-raw.json>`.
+///
 /// The documented naming conventions the Dart port deliberately diverges on:
 ///
 /// - **AI**: Dart exposes both the unified `ai_chat` family and the

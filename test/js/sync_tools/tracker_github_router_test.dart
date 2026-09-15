@@ -339,6 +339,23 @@ void _fixtureReadTools() {
     expect(request['path'], '/repos/o/r/issues/50/comments');
     expect(jsonDecode(request['body'] as String), {'body': 'hello world'});
   });
+
+  test('jira_post_comment converts Jira wiki markup to Markdown (gh-125)', () {
+    // The agents' JS post-action templates hard-code Jira wiki markup;
+    // the GitHub comment path must render it readable (gh-122 evidence).
+    const jira = 'h3. Done\n\n{code}dart\nx();\n{code}\n'
+        'See [PR #1|https://x.y/1]';
+    const expected = '### Done\n\n```dart\nx();\n```\nSee [PR #1](https://x.y/1)';
+    final created = jsonDecode(fx.tools.dispatch('jira_post_comment', {
+      'key': 'gh-50',
+      'comment': jira,
+    })) as Map<String, dynamic>;
+    expect(created['body'], expected);
+    final request =
+        jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
+    expect(request['path'], '/repos/o/r/issues/50/comments');
+    expect(jsonDecode(request['body'] as String), {'body': expected});
+  });
 }
 
 /// Label add/remove mappings, including the absent-label tolerance.

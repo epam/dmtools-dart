@@ -176,6 +176,20 @@ void resolveCliPromptsTests() {
         ['b', 'a'],
       );
     });
+
+    test('selects the github tracker prompts (gh-125)', () {
+      expect(
+        CliCommandBuilder.resolveCliPrompts(
+          ['base'],
+          {
+            'github': ['github-rule-1', 'github-rule-2'],
+            'ado': ['ado-rule'],
+          },
+          'github',
+        ),
+        ['base', 'github-rule-1', 'github-rule-2'],
+      );
+    });
   });
 }
 

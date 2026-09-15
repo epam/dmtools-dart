@@ -406,8 +406,7 @@ void lifecycleTrackerPromptsTests() {
     }
 
     test('DEFAULT_TRACKER=github merges the github prompts', () async {
-      final prompt =
-          await runPrompt({'DEFAULT_TRACKER': 'github'});
+      final prompt = await runPrompt({'DEFAULT_TRACKER': 'github'});
       expect(prompt, contains('base-rules'));
       expect(prompt, contains('github-markdown-rules'));
       expect(prompt, isNot(contains('jira-wiki-rules')));

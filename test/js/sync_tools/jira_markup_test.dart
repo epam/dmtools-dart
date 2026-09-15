@@ -13,6 +13,17 @@ import 'package:dmtools/src/js/sync_tools/jira_markup.dart';
 import 'package:test/test.dart';
 
 void main() {
+  codeBlockTests();
+  headingTests();
+  linkTests();
+  boldTests();
+  panelTests();
+  colorTests();
+  passthroughTests();
+  gh122EvidenceTests();
+}
+
+void codeBlockTests() {
   group('jiraMarkupToMarkdown: code blocks', () {
     test('{code}lang … {code} (the gh-122 evidence form)', () {
       expect(
@@ -69,7 +80,9 @@ void main() {
       );
     });
   });
+}
 
+void headingTests() {
   group('jiraMarkupToMarkdown: headings', () {
     for (var level = 1; level <= 6; level++) {
       test('h$level. converts to ${'#' * level}', () {
@@ -86,7 +99,9 @@ void main() {
       expect(jiraMarkupToMarkdown('h7. nope'), 'h7. nope');
     });
   });
+}
 
+void linkTests() {
   group('jiraMarkupToMarkdown: links', () {
     test('[text|url] converts to [text](url)', () {
       expect(
@@ -101,7 +116,9 @@ void main() {
           'See [PR #124](https://x.y)');
     });
   });
+}
 
+void boldTests() {
   group('jiraMarkupToMarkdown: bold', () {
     test('*text* converts to **text**', () {
       expect(jiraMarkupToMarkdown('*Development Completed*'),
@@ -121,7 +138,9 @@ void main() {
       expect(jiraMarkupToMarkdown('2 * 3 * 4'), '2 * 3 * 4');
     });
   });
+}
 
+void panelTests() {
   group('jiraMarkupToMarkdown: panel', () {
     test('{panel:title=X} … {panel} becomes a blockquote', () {
       expect(
@@ -134,13 +153,17 @@ void main() {
       expect(jiraMarkupToMarkdown('{panel}\nnote\n{panel}'), '>\n> note');
     });
   });
+}
 
+void colorTests() {
   group('jiraMarkupToMarkdown: color', () {
     test('{color:…} … {color} tags are stripped, text kept', () {
       expect(jiraMarkupToMarkdown('{color:red}hot{color}'), 'hot');
     });
   });
+}
 
+void passthroughTests() {
   group('jiraMarkupToMarkdown: passthrough', () {
     test('already-Markdown comments are unchanged', () {
       const md = '## Fix\n\n- one\n- two\n\n```dart\nfinal r = P();\n```\n\n'
@@ -152,12 +175,15 @@ void main() {
       expect(jiraMarkupToMarkdown('Just a sentence.'), 'Just a sentence.');
     });
   });
+}
 
+void gh122EvidenceTests() {
   group('jiraMarkupToMarkdown: gh-122 evidence end-to-end', () {
     test('the reported unreadable comment becomes readable Markdown', () {
       const evidence = 'h3. *Development Completed*\n\n'
           '*Branch:* {code}ai/gh-125{code}\n'
-          '*Pull Request:* [PR #127|https://github.com/epam/dmtools-dart/pull/127]\n\n'
+          '*Pull Request:* '
+          '[PR #127|https://github.com/epam/dmtools-dart/pull/127]\n\n'
           '{code}dart\nfinal reader = PropertyReader();\n{code}\n'
           'h3. Fix\n';
       expect(

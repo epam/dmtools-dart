@@ -34,6 +34,7 @@ void main() {
       'TrackerGitHubRouter config errors (repo shapes)', _configErrorRepoTests);
   if (hasPython3()) {
     group('TrackerGitHubRouter read tools (fixture)', _fixtureReadTools);
+    group('TrackerGitHubRouter post-comment (fixture)', _fixturePostComment);
     group('TrackerGitHubRouter label tools (fixture)', _fixtureLabelTools);
     group('TrackerGitHubRouter status tools (fixture)', _fixtureStatusTools);
     group('TrackerGitHubRouter search tools (fixture)', _fixtureSearchTools);
@@ -326,6 +327,14 @@ void _fixtureReadTools() {
     expect(fx.server.requests,
         contains('GET /repos/o/r/issues/50/comments?per_page=100'));
   });
+}
+
+/// `jira_post_comment` round-trips: the posted body is converted from
+/// Jira wiki markup to Markdown (gh-125), plain bodies pass through.
+void _fixturePostComment() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
 
   test('jira_post_comment posts the body and maps the created comment', () {
     final created = jsonDecode(fx.tools.dispatch('jira_post_comment', {

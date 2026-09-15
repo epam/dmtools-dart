@@ -49,70 +49,92 @@ final _colorTag = RegExp(r'\{color(?::[^}]*)?\}');
 
 /// Converts Jira wiki markup in a comment body to GitHub-flavored
 /// Markdown (see the library doc for the construct table).
-String jiraMarkupToMarkdown(String body) {
-  final out = <String>[];
-  var inCode = false;
-  var inPanel = false;
-  for (final line in body.split('\n')) {
-    if (inCode) {
-      if (line.trim() == '{code}') {
-        out.add('```');
-        inCode = false;
-      } else {
-        out.add(line);
-      }
-      continue;
+String jiraMarkupToMarkdown(String body) => _Converter().convert(body);
+
+/// Line-scanning state machine for [jiraMarkupToMarkdown] — split per
+/// concern so each step stays small: code state, panel state, then plain
+/// line conversion.
+class _Converter {
+  final _out = <String>[];
+  bool _inCode = false;
+  bool _inPanel = false;
+
+  String convert(String body) {
+    for (final line in body.split('\n')) {
+      _line(line);
     }
-    // Panel state first: the bare `{panel}` closing tag also matches the
-    // open pattern (its title group is optional).
-    if (inPanel) {
-      if (line.trim() == '{panel}') {
-        inPanel = false;
-      } else {
-        out.add('> ${_convertLine(line)}');
-      }
-      continue;
-    }
-    final panel = _panelOpen.firstMatch(line);
-    if (panel != null) {
-      final title = panel.group(1)?.trim();
-      final rest = _convertText(line.substring(panel.end).trim());
-      out.add('> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
-          .trimRight());
-      inPanel = true;
-      continue;
-    }
-    if (line.trim() == '{panel}') continue;
+    if (_inCode) _out.add('```');
+    return _out.join('\n');
+  }
+
+  void _line(String line) {
+    if (_inCode) return _insideCode(line);
+    if (_inPanel) return _insidePanel(line);
+    if (_openPanel(line)) return;
+    if (line.trim() == '{panel}') return;
     // A single-line `{code}…{code}` pair must win over the block-open
     // branch — it starts with `{code` too.
-    if (_codePair.hasMatch(line)) {
-      out.add(_convertLine(line));
-      continue;
-    }
-    final open = _codeOpen.firstMatch(line);
-    if (open != null) {
-      final explicit = open.group(1);
-      var rest = line.substring(open.end).trim();
-      final lang = (explicit != null && explicit.isNotEmpty)
-          ? explicit
-          : _firstWord(rest);
-      if (explicit == null || explicit.isEmpty) {
-        rest =
-            rest.length > lang.length ? rest.substring(lang.length).trim() : '';
-      }
-      out.add('```$lang');
-      if (rest.isNotEmpty) {
-        out.add(rest);
-        out.add('```');
-      } else {
-        inCode = true;
-      }
-      continue;
-    }
-    out.add(_convertLine(line));
+    if (_codePair.hasMatch(line)) return _out.add(_convertLine(line));
+    if (_openFence(line)) return;
+    _out.add(_convertLine(line));
   }
-  if (inCode) out.add('```');
-  return out.join('\n');
+
+  /// Inside a fenced block: only the closing `{code}` ends it; every
+  /// other line passes through verbatim (no inner conversion).
+  void _insideCode(String line) {
+    if (line.trim() == '{code}') {
+      _out.add('```');
+      _inCode = false;
+    } else {
+      _out.add(line);
+    }
+  }
+
+  /// Inside a panel: body lines become blockquotes; `{panel}` closes it.
+  void _insidePanel(String line) {
+    if (line.trim() == '{panel}') {
+      _inPanel = false;
+    } else {
+      _out.add('> ${_convertLine(line)}');
+    }
+  }
+
+  /// A `{panel[:title=…]}` opening line → blockquote with a bold title.
+  bool _openPanel(String line) {
+    final panel = _panelOpen.firstMatch(line);
+    if (panel == null) return false;
+    final title = panel.group(1)?.trim();
+    final rest = _convertText(line.substring(panel.end).trim());
+    _out.add('> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
+        .trimRight());
+    _inPanel = true;
+    return true;
+  }
+
+  /// A block-opening `{code}` / `{code:lang}` / `{code}lang` line →
+  /// fence. Content after the language tag on the same line becomes a
+  /// complete single-line block; otherwise the block stays open.
+  bool _openFence(String line) {
+    final open = _codeOpen.firstMatch(line);
+    if (open == null) return false;
+    final explicit = open.group(1);
+    var rest = line.substring(open.end).trim();
+    final lang =
+        (explicit != null && explicit.isNotEmpty) ? explicit : _firstWord(rest);
+    if (explicit == null || explicit.isEmpty) {
+      rest = rest.length > lang.length ? rest.substring(lang.length) : '';
+      rest = rest.trim();
+    }
+    _out.add('```$lang');
+    if (rest.isNotEmpty) {
+      _out
+        ..add(rest)
+        ..add('```');
+    } else {
+      _inCode = true;
+    }
+    return true;
+  }
 }
 
 /// Converts one line outside code/panel contexts: heading prefix first,

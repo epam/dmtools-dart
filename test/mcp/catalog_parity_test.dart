@@ -48,13 +48,14 @@ import 'package:test/test.dart';
 
 void main() {
   final javaNames = _readFixture('java_mcp_tool_names.txt');
-  final dartNames =
-      createDefaultToolRegistry().allTools.map((t) => t.name).toSet();
+  final dartTools = createDefaultToolRegistry().allTools;
+  final dartNames = dartTools.map((t) => t.name).toSet();
   final frozenGaps = _readFixture('java_mcp_tool_gaps.txt');
 
   fixtureSanityTests(javaNames, dartNames);
   paritySnapshotTests(javaNames, dartNames, frozenGaps);
   equivalentMappingTests(javaNames, dartNames);
+  parameterParityTests(dartTools);
 }
 
 /// Asserts the fixture files are well-formed and in sync.
@@ -122,6 +123,100 @@ void equivalentMappingTests(List<String> javaNames, Set<String> dartNames) {
     });
   });
 }
+
+/// Parses a `tool:param1,param2,...` fixture line (trailing colon = no params).
+MapEntry<String, List<String>> _parseParamLine(String line) {
+  final sep = line.indexOf(':');
+  if (sep < 0) throw FormatException('bad param fixture line: "$line"');
+  final name = line.substring(0, sep);
+  final rest = line.substring(sep + 1);
+  return MapEntry(
+    name,
+    rest.isEmpty ? const <String>[] : rest.split(','),
+  );
+}
+
+/// Parameter-name parity for exact-name matches (gh-123 drift guard).
+///
+/// `java_mcp_tool_params.txt` enforces parity; `java_mcp_param_drift.txt`
+/// freezes the tools that still diverge (they must keep diverging until fixed
+/// and moved to the params fixture by a re-extraction).
+void parameterParityTests(List<ToolDefinition> dartTools) {
+  final dartToolsByName = {for (final t in dartTools) t.name: t};
+  final parity = _readParamFixture('java_mcp_tool_params.txt');
+  final drift = _readParamFixture('java_mcp_param_drift.txt');
+  final dartNames = dartToolsByName.keys.toSet();
+
+  group('parameter-name parity', () {
+    test('fixture params match the Dart registry', () {
+      for (final entry in parity.entries) {
+        final tool = dartToolsByName[entry.key];
+        expect(tool, isNotNull, reason: '${entry.key} missing from Dart');
+        expect(
+          tool!.params.map((p) => p.name).toList()..sort(),
+          entry.value.toList()..sort(),
+          reason: '${entry.key} parameter names diverge from Java; re-run '
+              'scripts/extract_java_tool_params.py after fixing',
+        );
+      }
+    });
+
+    test('every frozen drift still diverges (snapshot is fresh)', () {
+      final fixed = <String>[];
+      for (final entry in drift.entries) {
+        final tool = dartToolsByName[entry.key];
+        if (tool == null) continue;
+        final dartParams = tool.params.map((p) => p.name).toList()..sort();
+        if (_listEquals(dartParams, entry.value.toList()..sort())) {
+          fixed.add(entry.key);
+        }
+      }
+      expect(
+        fixed,
+        isEmpty,
+        reason: 'Parameter names now match Java — move these tools from '
+            'java_mcp_param_drift.txt to java_mcp_tool_params.txt via '
+            'scripts/extract_java_tool_params.py: $fixed',
+      );
+    });
+
+    test('every exact-name match is classified (parity or frozen drift)', () {
+      final classified = {...parity.keys, ...drift.keys};
+      final unclassified = dartNames
+          .where((n) => _javaNameFixture.contains(n) && !classified.contains(n))
+          .toSet();
+      expect(
+        unclassified,
+        isEmpty,
+        reason: 'Newly ported tools must be classified by '
+            'scripts/extract_java_tool_params.py: $unclassified',
+      );
+    });
+
+    test('parity and drift fixtures do not overlap', () {
+      expect(
+        parity.keys.toSet().intersection(drift.keys.toSet()),
+        isEmpty,
+      );
+    });
+  });
+}
+
+/// The Java tool names fixture, used to detect unclassified exact matches.
+final _javaNameFixture = _readFixture('java_mcp_tool_names.txt').toSet();
+
+/// Reads a `tool:param1,param2,...` fixture into an ordered map.
+Map<String, List<String>> _readParamFixture(String name) {
+  final map = <String, List<String>>{};
+  for (final line in _readFixture(name)) {
+    final entry = _parseParamLine(line);
+    map[entry.key] = entry.value;
+  }
+  return map;
+}
+
+bool _listEquals(List<String> a, List<String> b) =>
+    a.length == b.length && a.indexed.every((e) => b[e.$1] == e.$2);
 
 /// Reads a newline-delimited fixture under `test/fixtures`, sorted, no blanks.
 List<String> _readFixture(String name) {

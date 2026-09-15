@@ -10,7 +10,8 @@ void main() {
     for (final t in createDefaultToolRegistry().allTools)
       t.name: {
         'params': t.params.map((p) => p.name).toList(),
-        'required': t.params.where((p) => p.required).map((p) => p.name).toList(),
+        'required':
+            t.params.where((p) => p.required).map((p) => p.name).toList(),
       },
   }));
 }

@@ -150,6 +150,8 @@ jira_get_ticket:key,fields
 jira_get_transitions:key
 jira_get_user_profile:userId
 jira_link_issues:sourceKey,anotherKey,relationship
+jira_move_to_status:key,statusName
+jira_move_to_status_with_resolution:key,statusName,resolution
 jira_post_comment:key,comment
 jira_post_comment_if_not_exists:key,comment
 jira_remove_label:key,label

@@ -10,8 +10,8 @@ List<ToolDefinition> _transitionTools() => [
         params: [
           _keyParam,
           ToolParam(
-            name: 'status',
-            description: 'The target status or transition name',
+            name: 'statusName',
+            description: 'The target status name',
             required: true,
           ),
           ToolParam(
@@ -32,7 +32,7 @@ extension _JiraTransitionToolExecutor on JiraToolExecutor {
             'jira_move_to_status_with_resolution': (a) =>
                 _client.moveToStatusWithResolution(
                   a['key'] as String,
-                  a['status'] as String,
+                  a['statusName'] as String,
                   a['resolution'] as String,
                 ),
           };

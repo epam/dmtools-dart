@@ -29,8 +29,6 @@ jira_get_comments:key,ticket
 jira_get_project_board_config:projectKey
 jira_get_project_issue_type_scheme:projectKey
 jira_get_project_workflow_scheme:projectKey
-jira_move_to_status:key,statusName
-jira_move_to_status_with_resolution:key,statusName,resolution
 jira_remove_fix_version:key,fixVersion
 jira_setup_project_workflow:projectKey,statusDefinitions
 jira_sync_project_workflow:sourceProjectKey,targetProjectKey

@@ -19,7 +19,9 @@ Each fixture is one JSON file, named `<tool_name>[_scenario].json`:
   "java_api_endpoint": "/rest/api/latest/issue/PROJ-1",
   "java_http_method": "GET",
   "expected_response": { "key": "PROJ-1", "fields": { "...": "..." } },
-  "mock_response_body": "{\"raw\":\"api body\"}"
+  "mock_status": 200,
+  "mock_response_body": "{\"raw\":\"api body\"}",
+  "java_request_body": { "the": "upstream payload" }
 }
 ```
 
@@ -30,7 +32,9 @@ Each fixture is one JSON file, named `<tool_name>[_scenario].json`:
 | `java_api_endpoint` | yes | The upstream REST path the Java tool called. |
 | `java_http_method` | yes | The HTTP verb (`GET`, `POST`, …). |
 | `expected_response` | yes | The tool-level output the Dart port must reproduce. |
+| `mock_status` | no | The HTTP status the mock transport serves (default 200). Non-2xx values replay upstream rejections (e.g. GitHub's 422 for a REQUEST_CHANGES review without a body). |
 | `mock_response_body` | no | The raw API body the mock transport serves. When omitted, the mock serves a JSON encoding of `expected_response` (sufficient for tools that return the raw body verbatim). |
+| `java_request_body` | no | The upstream request payload the Java tool sent; the JS-bridge replay (`pr_review_contract_test.dart`) asserts the Dart port sends the identical payload. Omit it for GETs. |
 
 ## How the comparison works
 

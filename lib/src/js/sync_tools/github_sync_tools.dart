@@ -619,17 +619,29 @@ String _prUrl(GhSyncConfig c, Map<String, dynamic> a) =>
 
 /// `github_submit_pr_review` — POST `repos/{w}/{r}/pulls/{id}/reviews`
 /// (Java #495). The summary `body` is only sent when non-blank.
+///
+/// A non-2xx response becomes an error envelope (Java parity:
+/// `AbstractRestClient.post` throws `IOException`, which the bridge
+/// rethrows into the script) — a rejected review, e.g. a REQUEST_CHANGES
+/// without the API-required body, must surface as a JS failure, not as a
+/// submitted review.
 String _submitPrReview(GhSyncConfig c, Map<String, dynamic> a) {
   final payload = <String, dynamic>{'event': syncAsStr(a['event'])};
   final body = a['body'];
   if (body != null && syncAsStr(body).trim().isNotEmpty) {
     payload['body'] = body;
   }
-  return syncBodyOrError(SyncHttpClient.post(
+  final resp = SyncHttpClient.post(
     '${_prUrl(c, a)}/reviews',
     headers: c.headers,
     body: jsonEncode(payload),
-  ));
+  );
+  if (!resp.isOk) {
+    return syncErr(
+      'PR review submission failed (${resp.statusCode}): ${resp.body}',
+    );
+  }
+  return resp.body;
 }
 
 /// `github_list_pr_reviews` — GET `repos/{w}/{r}/pulls/{id}/reviews`

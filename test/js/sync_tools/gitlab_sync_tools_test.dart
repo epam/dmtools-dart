@@ -58,6 +58,8 @@ void _testHandlerSurface() {
       'gitlab_add_inline_mr_comment',
       'gitlab_merge_mr',
       'gitlab_rebase_mr',
+      'gitlab_approve_mr',
+      'gitlab_unapprove_mr',
       'gitlab_add_mr_label',
       'gitlab_remove_mr_label',
       'gitlab_get_mr_discussions',
@@ -109,6 +111,7 @@ void _testMrTools() {
     testmrtools_p1();
     testmrtools_p2();
     testmrtools_p3();
+    testmrtools_p4();
   });
 }
 
@@ -236,6 +239,28 @@ void testmrtools_p3() {
     expect(body['method'], 'PUT');
     expect(body['path'], '/api/v4/projects/g%2Fr/merge_requests/42/rebase');
     expect(body['body'], '{}');
+  });
+}
+
+void testmrtools_p4() {
+  test('gitlab_approve_mr / unapprove POST an empty body (gh-129)', () {
+    final args = {
+      'workspace': 'g',
+      'repository': 'r',
+      'pullRequestId': '42',
+    };
+    final approved = echo('gitlab_approve_mr', args);
+    expect(approved['method'], 'POST');
+    expect(
+        approved['path'], '/api/v4/projects/g%2Fr/merge_requests/42/approve');
+    expect(approved['body'], '{}');
+    final unapproved = echo('gitlab_unapprove_mr', args);
+    expect(unapproved['method'], 'POST');
+    expect(
+      unapproved['path'],
+      '/api/v4/projects/g%2Fr/merge_requests/42/unapprove',
+    );
+    expect(unapproved['body'], '{}');
   });
 
   test('gitlab_add_mr_label / remove use add_labels / remove_labels', () {

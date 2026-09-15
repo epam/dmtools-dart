@@ -1,0 +1,22 @@
+{
+  "tool_name": "gitlab_approve_mr",
+  "request_args": {
+    "workspace": "mygroup",
+    "repository": "myrepo",
+    "pullRequestId": "42"
+  },
+  "java_api_endpoint": "/api/v4/projects/mygroup%2Fmyrepo/merge_requests/42/approve",
+  "java_http_method": "POST",
+  "java_request_body": {},
+  "mock_response_body": "{\"id\":42,\"iid\":42,\"project_id\":7,\"state\":\"opened\",\"title\":\"Fix review cycle\",\"approved\":true,\"approvals_required\":1,\"approvals_left\":0}",
+  "expected_response": {
+    "id": 42,
+    "iid": 42,
+    "project_id": 7,
+    "state": "opened",
+    "title": "Fix review cycle",
+    "approved": true,
+    "approvals_required": 1,
+    "approvals_left": 0
+  }
+}

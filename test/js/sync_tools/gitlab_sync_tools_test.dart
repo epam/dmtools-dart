@@ -240,6 +240,26 @@ void testmrtools_p3() {
     expect(body['body'], '{}');
   });
 
+  test('gitlab_approve_mr / unapprove POST an empty body (gh-129)', () {
+    final args = {
+      'workspace': 'g',
+      'repository': 'r',
+      'pullRequestId': '42',
+    };
+    final approved = echo('gitlab_approve_mr', args);
+    expect(approved['method'], 'POST');
+    expect(
+        approved['path'], '/api/v4/projects/g%2Fr/merge_requests/42/approve');
+    expect(approved['body'], '{}');
+    final unapproved = echo('gitlab_unapprove_mr', args);
+    expect(unapproved['method'], 'POST');
+    expect(
+      unapproved['path'],
+      '/api/v4/projects/g%2Fr/merge_requests/42/unapprove',
+    );
+    expect(unapproved['body'], '{}');
+  });
+
   test('gitlab_add_mr_label / remove use add_labels / remove_labels', () {
     final args = {
       'workspace': 'g',

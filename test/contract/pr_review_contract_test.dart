@@ -89,8 +89,7 @@ Future<Object?> _replayThroughJsBridge(ContractFixture f) async {
   // how scm.js providers invoke the review tools — wrapped in the
   // try/catch shape applyFormalGithubReview uses so an upstream rejection
   // surfaces as a caught JS error, never as a silent pass-through.
-  final script = File('${dir.path}/contract_replay.js')
-    ..writeAsStringSync('''
+  final script = File('${dir.path}/contract_replay.js')..writeAsStringSync('''
 var out;
 try {
   out = ${f.toolName}(${jsonEncode(f.requestArgs)});
@@ -117,32 +116,30 @@ function action(params) { return out; }
 
 /// Manages the canned-response fixture subprocess lifecycle.
 class _PrReviewFixtureServer {
-  _PrReviewFixtureServer._(this._process, this._control, this._log);
+  _PrReviewFixtureServer._(this._process, this._control);
 
   /// Starts the server on an ephemeral port; awaits the port line.
   static Future<_PrReviewFixtureServer> start() async {
     final dir = Directory.systemTemp.createTempSync('dmtools_pr_server_');
     final control = File('${dir.path}/control.json');
-    final log = File('${dir.path}/r.log');
+    final logPath = '${dir.path}/r.log';
     final process = await Process.start('python3', [
       '${Directory.current.path}/test/contract/pr_review_fixture_server.py',
       '0',
       control.path,
-      log.path,
+      logPath,
     ]);
-    final port =
-        int.parse(await process.stdout
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())
-            .first);
-    return _PrReviewFixtureServer._(process, control, log)
+    final port = int.parse(await process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .first);
+    return _PrReviewFixtureServer._(process, control)
       ..port = port
-      .._lastFile = File('${log.path}.last.json');
+      .._lastFile = File('$logPath.last.json');
   }
 
   final Process _process;
   final File _control;
-  final File _log;
   File? _lastFile;
 
   /// The bound port (valid after [start]).

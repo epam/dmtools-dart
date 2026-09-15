@@ -186,6 +186,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tracker-specific CLI prompts engage on the GitHub machine (gh-125):
+  `CliAgent` now passes the active tracker (`DEFAULT_TRACKER` via
+  `PropertyReader`, Java `configuration.getDefaultTracker()` parity) into
+  `CliCommandBuilder.buildCommands`, so a `cliPromptsByTracker` entry for
+  the serving tracker is actually selected — previously the lookup always
+  fell back to `ado` and tracker-specific prompt files were dead config.
+  The dev + rework machine-kit runners (`fa-bug-dev`, `fa-story-dev`,
+  `fa-rework-zai`) pin `DEFAULT_TRACKER=github` and add
+  `cliPromptsByTracker.github → machine-kit/teammate-install/instructions/
+  github_comment_format.md`, so machine comments on GitHub issues render as
+  GitHub-flavored Markdown (fenced code blocks, `##` headings, `[text](url)`
+  links, GFM tables) instead of the Jira wiki markup observed on gh-122
+  (`{code}` blocks, `h3.` headers). Parents in dmtools-agents stay
+  tracker-agnostic — the `github` entries are this deployment's override.
 - Live child-output streaming (gh-50): the process paths behind
   `cli_execute_command` and the CliAgent command phases — buffered and
   monitored — now mirror every child output line to dmtools' own stderr as

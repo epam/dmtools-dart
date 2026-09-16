@@ -230,10 +230,10 @@ String _convertPairs(String s) {
     final wholeLine = s.substring(0, m.start).trim().isEmpty &&
         s.substring(m.end).trim().isEmpty;
     if (wholeLine && lang.isEmpty) {
-      final hint = _pairLangRest.firstMatch(content);
-      if (hint != null && hint.group(2) != null) {
-        lang = hint.group(1)!;
-        content = hint.group(2)!.trim();
+      final derived = _derivePairHint(content);
+      if (derived != null) {
+        lang = derived.lang;
+        content = derived.content;
       }
     }
     buf.write(wholeLine ? '```$lang\n$content\n```' : '`$content`');
@@ -241,6 +241,16 @@ String _convertPairs(String s) {
   }
   buf.write(_convertText(s.substring(last)));
   return buf.toString();
+}
+
+/// First-token language hint for a bare-tag whole-line pair —
+/// `{code}dart main();{code}` must highlight like
+/// `{code}dart\nmain();\n{code}`; content without a language-ish first
+/// token (`2 + 2`) yields null and stays verbatim.
+({String lang, String content})? _derivePairHint(String content) {
+  final hint = _pairLangRest.firstMatch(content);
+  if (hint == null || hint.group(2) == null) return null;
+  return (lang: hint.group(1)!, content: hint.group(2)!.trim());
 }
 
 /// Link + bold + monospace conversion for one text segment (color

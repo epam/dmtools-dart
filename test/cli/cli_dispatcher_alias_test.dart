@@ -43,6 +43,7 @@ void main() {
   _testPropertyChainRouting();
   _testFileTierRouting();
   _testAliasHelp();
+  _testAliasList();
 }
 
 /// Dispatches [args] on the shared dispatcher, asserts exit code [code],
@@ -174,7 +175,14 @@ void _testAliasHelp() {
           await _dispatchTool(['jira_get_ticket', '--help'], code: 0);
       expect(_toolNames(result), contains('jira_get_ticket'));
     });
+  });
+}
 
+/// gh-136: `dmtools list <filter>` shares the help filter path, so an
+/// alias filter resolves to its carrier while unknown text keeps the raw
+/// substring semantics.
+void _testAliasList() {
+  group('alias list resolution', () {
     test('dmtools list <alias> resolves the filter to the carrier', () async {
       final result =
           await _dispatchTool(['list', 'tracker_get_ticket'], code: 0);

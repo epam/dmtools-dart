@@ -82,6 +82,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # dmtools reads SOURCE_GITHUB_TOKEN (env-parity with Java); without
+          # it the GitHub integration counts as unconfigured and the JS
+          # runtime does not expose github_* globals at all (tick #3:
+          # "'github_search_issues' is not defined").
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           # Loop repo comes from the rule engine config; the override below
           # pins it to THIS repository explicitly.
         run: |

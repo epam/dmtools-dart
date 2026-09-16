@@ -41,8 +41,8 @@ void _testMoveToStatus204() {
     });
 
     test('jira_move_to_status returns the JS empty string on 204', () {
-      final result = dispatcher
-          .execute('jira_move_to_status', {'key': 'PROJ-1', 'status': 'Done'})!;
+      final result = dispatcher.execute(
+          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'})!;
       expect(result, '""');
     });
   });

@@ -356,7 +356,7 @@ void _testJiraWriteTools() {
     test('jira_move_to_status returns error when no transitions found', () {
       final result = dispatcher.execute('jira_move_to_status', {
         'key': 'PROJ-1',
-        'status': 'In Progress',
+        'statusName': 'In Progress',
       });
       expect(
         jsonDecode(result!),

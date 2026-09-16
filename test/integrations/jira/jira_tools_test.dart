@@ -132,12 +132,28 @@ void toolCatalogParamTests() {
     expect(tool.params.last.type, 'array');
   });
 
-  test('comment/label/status tools each take two required params', () {
+  test('comment/label tools take two required params', () {
     const expected = {
       'jira_post_comment': ['key', 'comment'],
       'jira_add_label': ['key', 'label'],
       'jira_remove_label': ['key', 'label'],
-      'jira_move_to_status': ['key', 'status'],
+    };
+    for (final entry in expected.entries) {
+      final tool = toolNamed(entry.key);
+      expect(tool.params.map((p) => p.name).toList(), entry.value,
+          reason: entry.key);
+      expect(tool.params.every((p) => p.required), isTrue, reason: entry.key);
+    }
+  });
+
+  test('status tools take key + statusName (Java parity) params', () {
+    const expected = {
+      'jira_move_to_status': ['key', 'statusName'],
+      'jira_move_to_status_with_resolution': [
+        'key',
+        'statusName',
+        'resolution'
+      ],
     };
     for (final entry in expected.entries) {
       final tool = toolNamed(entry.key);
@@ -194,9 +210,9 @@ void executorDispatchTests() {
       expect(spy.calls, ['removeLabel:PROJ-1:b']);
     });
 
-    test('routes jira_move_to_status with key and status', () async {
-      await executor
-          .execute('jira_move_to_status', {'key': 'PROJ-1', 'status': 'Done'});
+    test('routes jira_move_to_status with key and statusName', () async {
+      await executor.execute(
+          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'});
       expect(spy.calls, ['moveToStatus:PROJ-1:Done']);
     });
 

@@ -22,6 +22,7 @@ import 'dart:io';
 
 import '../config/env_file_parser.dart';
 import '../config/property_reader.dart';
+import '../config/property_reader_getters.dart';
 import '../js/job_runner.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
@@ -250,6 +251,7 @@ class CliAgent {
       params.cliPrompt,
       params.cliPromptsAsArray,
       params.cliPromptsByTracker,
+      trackerType: propertyReader.getDefaultTracker(),
       workingDirectory: workDir,
     );
     _ensureOutputFolder(workDir);

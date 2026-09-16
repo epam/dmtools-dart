@@ -50,6 +50,7 @@ import 'dart:convert';
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../sync_http_client.dart';
+import 'jira_markup.dart';
 import 'sync_request_helpers.dart';
 
 /// Tracker-shaped `jira_*` ticket tools eligible for GitHub routing.
@@ -245,10 +246,14 @@ class TrackerGitHubRouter {
   }
 
   /// `jira_post_comment` — POST an issue comment; returns the created
-  /// comment in the Jira comment shape.
+  /// comment in the Jira comment shape. The body is converted from Jira
+  /// wiki markup to Markdown first (gh-125): the agents' post-action
+  /// templates hard-code `{code}`/`h3.` syntax that renders as raw noise
+  /// on GitHub. The Jira path never sees this code — bodies pass through
+  /// unchanged there (Java parity).
   String _postComment(_GhRouteConfig c, String number, String body) {
-    final resp =
-        _postJson(c, '${_issueUrl(c, number)}/comments', {'body': body});
+    final resp = _postJson(c, '${_issueUrl(c, number)}/comments',
+        {'body': jiraMarkupToMarkdown(body)});
     if (!resp.isOk) return _respError(resp);
     final created = _tryDecode(resp.body);
     if (created is! Map<String, dynamic>) {

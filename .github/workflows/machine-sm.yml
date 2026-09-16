@@ -1,0 +1,84 @@
+# Machine SM — deterministic watchdog for the GitHub-issues machine loop.
+#
+# The loop (dev → PR → CI → rework → review → merge → close) is event-driven
+# on `labeled` events, but every label the machine itself adds (agent:rework
+# after red CI, pr_approved after an APPROVE verdict) is added with
+# GITHUB_TOKEN — which does NOT fire `labeled` events (issue #116). Those
+# labels are dead letters: the loop stalls until a human re-arms it.
+#
+# This workflow is the safety net: a short cron tick runs the machineSmAgent
+# (pure JS, no LLM — dmtools JSRunner over the agents submodule) which
+# reconciles actual state (labels, linked PR, check rollup, merge state,
+# active runs) with where the loop should be, and performs the next step —
+# dispatching legs directly via ai-teammate.yml's workflow_dispatch input
+# (GITHUB_TOKEN CAN dispatch; only label events are mute), updating
+# branches, merging approved PRs, closing issues whose PRs merged.
+#
+# Concurrency contract: the agent idles while any AI Teammate run is
+# queued/in_progress (short ticks, no long sleeps), so parallel machine runs
+# finish before new legs start. maxConcurrentRuns (machine_sm.json /
+# .dmtools/config.js machineSm.maxConcurrentRuns) relaxes that when needed.
+#
+# Manual dispatch: dryRun=true prints the plan without acting — safe probe.
+name: 'Machine SM'
+
+run-name: >-
+  🧹 SM ${{
+    github.event_name == 'workflow_dispatch' && 'manual tick' ||
+    format('tick {0}', github.event.schedule || '') }}${{
+  github.event.inputs.dryRun == 'true' && ' (dry)' || '' }}
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # short ticks — the agent idles when busy
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Log the plan, perform no action'
+        required: false
+        type: boolean
+        default: false
+
+# Never two SM instances; never cancel an in-flight reconcile.
+concurrency:
+  group: machine-sm
+  cancel-in-progress: false
+
+permissions:
+  contents: read          # submodule checkout + .dmtools/config.js
+  issues: write           # labels + close-issue safety net
+  pull-requests: write    # update-branch + merge
+  actions: write          # workflow_dispatch on ai-teammate.yml
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (with agents submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install dmtools CLI (pinned release)
+        run: sh agents/setup/install.sh
+        env:
+          DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
+
+      - name: Reconcile the machine loop
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          override='{}'
+          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then
+            override='{"params":{"jobParams":{"dryRun":true}}}'
+          fi
+          # Until the dmtools-agents submodule carries machine_sm.json
+          # (PR IstiN/dmtools-agents#422 + bump), tick benignly.
+          if [ ! -f agents/machine_sm.json ]; then
+            echo "::notice::agents/machine_sm.json not in the submodule yet — SM idle"
+            exit 0
+          fi
+          dmtools run agents/machine_sm.json $override

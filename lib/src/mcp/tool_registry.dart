@@ -74,14 +74,8 @@ class ToolRegistry {
     Set<String>? integrations,
   }) {
     if (_tools.containsKey(name)) return name;
-    var candidates = toolsByAlias(name);
+    final candidates = _aliasCandidates(name, integrations);
     if (candidates.isEmpty) return null;
-    if (integrations != null) {
-      final visible = candidates
-          .where((t) => integrations.contains(t.integration))
-          .toList();
-      if (visible.isNotEmpty) candidates = visible;
-    }
     if (candidates.length == 1) return candidates.first.name;
     final wanted = _defaultIntegrationFor(
       name,
@@ -94,6 +88,19 @@ class ToolRegistry {
       }
     }
     return candidates.first.name;
+  }
+
+  /// The carriers of [alias], narrowed to [integrations] when any of them
+  /// is visible there — an alias with no visible carrier keeps the
+  /// unrestricted candidate list, leaving the visibility decision to the
+  /// caller's filter.
+  List<ToolDefinition> _aliasCandidates(
+      String alias, Set<String>? integrations) {
+    final candidates = toolsByAlias(alias);
+    if (integrations == null) return candidates;
+    final visible =
+        candidates.where((t) => integrations.contains(t.integration)).toList();
+    return visible.isNotEmpty ? visible : candidates;
   }
 
   /// The integration name configured for [alias]'s prefix, if any.

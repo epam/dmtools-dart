@@ -6,18 +6,16 @@
 # GITHUB_TOKEN — which does NOT fire `labeled` events (issue #116). Those
 # labels are dead letters: the loop stalls until a human re-arms it.
 #
-# This workflow is the safety net: a short cron tick runs the machineSmAgent
-# (pure JS, no LLM — dmtools JSRunner over the agents submodule) which
-# reconciles actual state (labels, linked PR, check rollup, merge state,
-# active runs) with where the loop should be, and performs the next step —
-# dispatching legs directly via ai-teammate.yml's workflow_dispatch input
-# (GITHUB_TOKEN CAN dispatch; only label events are mute), updating
-# branches, merging approved PRs, closing issues whose PRs merged.
+# This workflow is the safety net: a */10 cron tick runs the SM rule engine
+# (dmtools JSRunner over smAgent — pure JS, no LLM) which reads the loop
+# state (issue labels + linked-PR facts) and triggers the next step: rework
+# on red CI, review on green, merge/cleanup for approved PRs — one merge per
+# tick — via ai-teammate.yml's workflow_dispatch input (GITHUB_TOKEN CAN
+# dispatch; only label events are mute).
 #
-# Concurrency contract: the agent idles while any AI Teammate run is
-# queued/in_progress (short ticks, no long sleeps), so parallel machine runs
-# finish before new legs start. maxConcurrentRuns (machine_sm.json /
-# .dmtools/config.js machineSm.maxConcurrentRuns) relaxes that when needed.
+# Rules live in the dmtools-agents repo (agents/sm_github.json default pack);
+# SM_AGENTS_REF pins the engine/rules checkout — a feature branch until the
+# agents PR merges, then main.
 #
 # Manual dispatch: dryRun=true prints the plan without acting — safe probe.
 name: 'Machine SM'
@@ -30,7 +28,7 @@ run-name: >-
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # short ticks — the agent idles when busy
+    - cron: '*/10 * * * *'   # short ticks — the engine idles when busy
   workflow_dispatch:
     inputs:
       dryRun:
@@ -45,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read          # submodule checkout + .dmtools/config.js
+  contents: read          # checkout
   issues: write           # labels + close-issue safety net
   pull-requests: write    # update-branch + merge
   actions: write          # workflow_dispatch on ai-teammate.yml
@@ -55,14 +53,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout (with agents submodule)
+      - name: Checkout target repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           persist-credentials: false
 
+      # The SM engine + rule pack live in dmtools-agents (smAgent + sm_github.json).
+      # SM_AGENTS_REF: feature branch hash until the agents PR merges, then main.
+      - name: Checkout dmtools-agents (SM engine + rules)
+        uses: actions/checkout@v4
+        with:
+          repository: IstiN/dmtools-agents
+          ref: ${{ env.SM_AGENTS_REF }}
+          path: dmtools-agents
+
       - name: Install dmtools CLI (pinned release)
-        run: sh agents/setup/install.sh
+        run: sh dmtools-agents/setup/install.sh
         env:
           DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
 
@@ -70,15 +76,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # Loop repo comes from the rule engine config; the override below
+          # pins it to THIS repository explicitly.
         run: |
-          override='{}'
+          override='{"params":{"jobParams":{"repo":"${{ github.repository }}"}}}'
           if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then
-            override='{"params":{"jobParams":{"dryRun":true}}}'
+            override='{"params":{"jobParams":{"repo":"${{ github.repository }}","dryRun":true}}}'
           fi
-          # Until the dmtools-agents submodule carries machine_sm.json
-          # (PR IstiN/dmtools-agents#422 + bump), tick benignly.
-          if [ ! -f agents/machine_sm.json ]; then
-            echo "::notice::agents/machine_sm.json not in the submodule yet — SM idle"
-            exit 0
-          fi
-          dmtools run agents/machine_sm.json $override
+          cd dmtools-agents && dmtools run sm_github.json "$override"
+
+# Pinning notes:
+#   SM_AGENTS_REF = sm-github-source branch (dmtools-agents PR #423) —
+#   flip to 'main' once that PR merges and the rule pack lands upstream.
+env:
+  SM_AGENTS_REF: d555c63617f5392bb61f2de6b03a51461c18bdfd

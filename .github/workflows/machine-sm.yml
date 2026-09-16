@@ -68,9 +68,15 @@ jobs:
           path: dmtools-agents
 
       - name: Install dmtools CLI (pinned release)
-        run: bash dmtools-agents/setup/install.sh
+        # The repo's own install.sh (AOT binary + QuickJS .so, same as
+        # ai-teammate.yml). The agents setup/install.sh is a multi-tool
+        # installer requiring tool args — with none it prints usage and
+        # installs nothing (tick #2: 'dmtools: command not found').
+        run: |
+          bash install.sh "${DMTOOLS_VERSION}"
+          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
         env:
-          DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
+          DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.13' }}
 
       - name: Reconcile the machine loop
         env:

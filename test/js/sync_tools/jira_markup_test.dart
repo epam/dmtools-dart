@@ -103,8 +103,7 @@ void tagWhitespaceTests() {
     });
 
     test('bare tag with trailing whitespace converts to a plain fence', () {
-      expect(jiraMarkupToMarkdown('{code} \nx();\n{code}'),
-          '```\nx();\n```');
+      expect(jiraMarkupToMarkdown('{code} \nx();\n{code}'), '```\nx();\n```');
     });
 
     test('bare tag with a trailing tab does not crash', () {
@@ -139,8 +138,7 @@ void codePairLangTests() {
     });
 
     test('embedded bare-tag pairs stay verbatim inline spans', () {
-      expect(jiraMarkupToMarkdown('x {code}dart y{code} z'),
-          'x `dart y` z');
+      expect(jiraMarkupToMarkdown('x {code}dart y{code} z'), 'x `dart y` z');
     });
   });
 }
@@ -311,7 +309,8 @@ void panelTests() {
 void monospaceTests() {
   group('jiraMarkupToMarkdown: {{monospace}}', () {
     test('{{text}} becomes an inline code span', () {
-      expect(jiraMarkupToMarkdown('run {{ci build}} now'), 'run `ci build` now');
+      expect(
+          jiraMarkupToMarkdown('run {{ci build}} now'), 'run `ci build` now');
     });
 
     test('every {{...}} span in the body converts', () {
@@ -322,7 +321,8 @@ void monospaceTests() {
     });
 
     test('an unclosed {{ stays untouched', () {
-      expect(jiraMarkupToMarkdown('template {{var goes on'), 'template {{var goes on');
+      expect(jiraMarkupToMarkdown('template {{var goes on'),
+          'template {{var goes on');
     });
 
     test('mono content is not link/bold converted', () {

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Alias help/list resolution under `DMTOOLS_INTEGRATIONS` (gh-136):
+  `dmtools <alias> --help` and `dmtools list <alias>` now narrow alias
+  candidates to carriers visible under the configured integrations before
+  `DEFAULT_TRACKER` / `DEFAULT_SOURCE_CODE` routing, so the filtered tools
+  list shows a usable backend schema instead of `{"tools": []}` when the
+  default carrier sits outside the filter (`DMTOOLS_INTEGRATIONS=ado` +
+  unset default now resolves `tracker_get_ticket` to `ado_get_work_item`).
+  An unresolvable name on the help path (`dmtools some_typo_tool --help`)
+  answers with the invocation path's unknown-tool error and exit code 1
+  instead of a silent empty list; free-text `dmtools list <filter>` keeps
+  its exit-0 search semantics.
+
 ### Added
 
 - GitHub Issues backend for tracker-shaped `jira_*` tool calls (gh-62):

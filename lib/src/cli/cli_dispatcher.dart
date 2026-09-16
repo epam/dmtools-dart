@@ -21,6 +21,7 @@ import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_param.dart';
+import '../mcp/tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'run_command_processor.dart';
@@ -183,11 +184,45 @@ class CliDispatcher {
     final integrations = _resolveIntegrations();
     var response = registry.generateToolsListResponse(integrations);
     if (rest.isNotEmpty) {
-      response = registry.filterToolsList(response, rest.first);
+      // gh-136: help/list resolution mirrors invocation resolution — an
+      // alias filter (tracker_get_ticket) resolves to its carrier so
+      // `dmtools <alias> --help` shows the backend tool's schema instead
+      // of an empty list. Candidates narrow to DMTOOLS_INTEGRATIONS so the
+      // fallback picks a carrier the filtered list actually shows.
+      // Unknown text (partial names, free text) stays a raw substring
+      // filter.
+      final resolved = _resolveToolName(rest.first,
+          registry: registry, integrations: integrations);
+      response = registry.filterToolsList(response, resolved ?? rest.first);
     }
     _writer(const JsonEncoder.withIndent('  ').convert(response));
     return 0;
   }
+
+  /// Resolves a tool name with the CLI's configured alias defaults — the
+  /// single resolution shared by the invocation and help/list paths, so
+  /// the Java `McpCliHandler.resolveToolAlias` contract (a canonical name
+  /// passes through; an alias resolves to its carrier via DEFAULT_TRACKER
+  /// / DEFAULT_SOURCE_CODE) cannot diverge between the two. Both defaults
+  /// resolve through the standard property chain (overrides →
+  /// config.properties → dmtools.env → OS env) so a `dmtools.env` value
+  /// routes the alias too — not just the process environment.
+  ///
+  /// [integrations] (help/list only — invocation runs on the unfiltered
+  /// registry) narrows alias candidates to carriers visible under
+  /// `DMTOOLS_INTEGRATIONS` before routing, so the fallback picks a
+  /// carrier the filtered tools list shows rather than an empty one.
+  String? _resolveToolName(
+    String name, {
+    ToolRegistry? registry,
+    Set<String>? integrations,
+  }) =>
+      (registry ?? createDefaultToolRegistry()).resolveToolAlias(
+        name,
+        defaultTracker: _reader.getDefaultTracker(),
+        defaultSourceCode: _reader.getDefaultSourceCode(),
+        integrations: integrations,
+      );
 
   /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration
   /// names.
@@ -221,21 +256,19 @@ class CliDispatcher {
   /// tool is unknown or the result is an error.
   Future<int> _toolDispatch(String toolName, List<String> rest) async {
     final cleaned = _extractFormatFlags(rest);
+    final registry = createDefaultToolRegistry();
     if (cleaned.any(_isHelpFlag)) {
+      // gh-136 review: an unresolvable name on the help path answers like
+      // the invocation path instead of printing an empty tools list;
+      // `dmtools list <free-text>` keeps its exit-0 search semantics.
+      if (!registry.hasTool(toolName)) {
+        _writer('Error: unknown tool: $toolName');
+        _writer('Run "dmtools list" for available tools');
+        return 1;
+      }
       return _listTools([toolName]);
     }
-    final registry = createDefaultToolRegistry();
-    // Java `McpCliHandler.resolveToolAlias`: a canonical name passes
-    // through; an alias resolves to its carrier, choosing between
-    // multiple carriers via DEFAULT_TRACKER / DEFAULT_SOURCE_CODE. Both
-    // defaults resolve through the standard property chain (overrides →
-    // config.properties → dmtools.env → OS env) so a `dmtools.env` value
-    // routes the alias too — not just the process environment.
-    final resolvedTool = registry.resolveToolAlias(
-      toolName,
-      defaultTracker: _reader.getDefaultTracker(),
-      defaultSourceCode: _reader.getDefaultSourceCode(),
-    );
+    final resolvedTool = _resolveToolName(toolName, registry: registry);
     if (resolvedTool == null) {
       _writer('Error: unknown tool: $toolName');
       _writer('Run "dmtools list" for available tools');

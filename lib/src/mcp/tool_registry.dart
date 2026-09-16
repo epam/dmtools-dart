@@ -60,14 +60,28 @@ class ToolRegistry {
   /// and lowercased like Java's env reads; other aliases ignore both).
   /// Anything unresolved falls back to the first candidate. Returns `null`
   /// when [name] is unknown.
+  ///
+  /// When [integrations] is given, alias candidates narrow to carriers
+  /// from those integrations before routing — the first-candidate fallback
+  /// then picks a carrier visible under `DMTOOLS_INTEGRATIONS` rather than
+  /// one the tools list would filter out (gh-136). A canonical name still
+  /// resolves to itself, and an alias with no visible carrier falls back
+  /// to the unrestricted candidate list.
   String? resolveToolAlias(
     String name, {
     String? defaultTracker,
     String? defaultSourceCode,
+    Set<String>? integrations,
   }) {
     if (_tools.containsKey(name)) return name;
-    final candidates = toolsByAlias(name);
+    var candidates = toolsByAlias(name);
     if (candidates.isEmpty) return null;
+    if (integrations != null) {
+      final visible = candidates
+          .where((t) => integrations.contains(t.integration))
+          .toList();
+      if (visible.isNotEmpty) candidates = visible;
+    }
     if (candidates.length == 1) return candidates.first.name;
     final wanted = _defaultIntegrationFor(
       name,

@@ -198,5 +198,88 @@ void _testAliasList() {
       expect(names, contains('jira_search_by_jql'));
       expect(names.every((name) => name.startsWith('jira_search')), isTrue);
     });
+
+    test('DEFAULT_TRACKER routes dmtools list <alias> to the carrier',
+        () async {
+      _writeEnv('DEFAULT_TRACKER=ado\n');
+      final result =
+          await _dispatchTool(['list', 'tracker_get_ticket'], code: 0);
+      expect(_toolNames(result), contains('ado_get_work_item'),
+          reason: 'the list path honors DEFAULT_TRACKER like invocation');
+    });
+  });
+}
+
+/// gh-136 review (IMPORTANT): `DMTOOLS_INTEGRATIONS` narrows the tools
+/// list, so alias resolution must pick a carrier visible in that filtered
+/// response — otherwise `dmtools <alias> --help` prints `{"tools": []}`
+/// whenever the default carrier sits outside the filter.
+void _testAliasIntegrations() {
+  group('alias help under DMTOOLS_INTEGRATIONS', () {
+    test('resolution falls back to a carrier inside the filter', () async {
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'ado'});
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      final names = _toolNames(result);
+      expect(names, isNotEmpty);
+      expect(names, contains('ado_get_work_item'),
+          reason: 'jira/github are filtered out — the ado carrier shows');
+    });
+
+    test('DEFAULT_TRACKER outside the filter falls back to a visible carrier',
+        () async {
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira'});
+      _writeEnv('DEFAULT_TRACKER=github\n');
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      expect(_toolNames(result), contains('jira_get_ticket'),
+          reason: 'the github carrier is filtered out — first visible wins');
+    });
+
+    test('every listed tool respects the integration filter', () async {
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'ado'});
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      expect(
+        _toolNames(result).every((name) => name.startsWith('ado_')),
+        isTrue,
+      );
+    });
+  });
+}
+
+/// gh-136 review suggestions: the help path mirrors the invocation path's
+/// unknown-tool error, and the remaining DEFAULT_* / tier contracts are
+/// pinned at the dispatcher level.
+void _testAliasHelpEdges() {
+  group('alias help edge cases', () {
+    test('unknown tool + --help mirrors the invocation unknown-tool error',
+        () async {
+      expect(await _dispatcher.dispatch(['some_typo_tool', '--help']), 1);
+      expect(_lines, contains('Error: unknown tool: some_typo_tool'));
+      expect(_lines, contains('Run "dmtools list" for available tools'));
+    });
+
+    test('free-text list keeps exit 0 even with an empty result', () async {
+      expect(await _dispatcher.dispatch(['list', 'zenhub_nope']), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['tools'], isEmpty);
+    });
+
+    test('OS-env tier DEFAULT_TRACKER routes the help path', () async {
+      PropertyReader.testEnvironment['DEFAULT_TRACKER'] = 'github';
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      expect(_toolNames(result), contains('github_get_issue'));
+    });
+
+    test('an invalid DEFAULT_TRACKER falls back to the first candidate',
+        () async {
+      _writeEnv('DEFAULT_TRACKER=bitrise\n');
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      expect(_toolNames(result), contains('jira_get_ticket'),
+          reason: 'bitrise is not a tracker carrier — first candidate wins');
+    });
   });
 }

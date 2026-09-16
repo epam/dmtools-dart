@@ -403,8 +403,7 @@ void registryAliasIntegrationsTests() {
         ..register(adoTool(aliases: ['tracker_get_ticket']));
       expect(
         registry.resolveToolAlias('tracker_get_ticket',
-            defaultTracker: 'github',
-            integrations: const {'jira', 'github'}),
+            defaultTracker: 'github', integrations: const {'jira', 'github'}),
         'github_create_issue',
       );
     });

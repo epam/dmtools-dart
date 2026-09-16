@@ -50,7 +50,7 @@ void transitionsExecutorDispatchTests() {
           routeByPath({'/issue/PROJ-1/transitions': _transitionsBody}, o));
       await executor(f).execute('jira_move_to_status_with_resolution', {
         'key': 'PROJ-1',
-        'status': 'Done',
+        'statusName': 'Done',
         'resolution': 'Fixed',
       });
       expect(f.adapter.calls.last.method, 'POST');

@@ -197,7 +197,7 @@ class JiraToolExecutor {
             ),
         'jira_move_to_status': (a) => _client.moveToStatus(
               a['key'] as String,
-              a['status'] as String,
+              a['statusName'] as String,
             ),
         'jira_get_comments': (a) => _client.getComments(a['key'] as String),
         'jira_update_field': (a) => _client.updateField(

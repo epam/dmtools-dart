@@ -16,6 +16,7 @@ import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../agents/teammate_job.dart';
 import '../config/property_reader.dart';
+import '../config/property_reader_getters.dart';
 import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
@@ -29,25 +30,25 @@ import 'job_registry.dart';
 class CliDispatcher {
   /// Creates a dispatcher.
   ///
-  /// [writer] receives every output line (defaults to `print`),
-  /// [propertyReader] backs the `doctor` command, [isTty] decides the
-  /// no-argument behaviour (interactive stub on a terminal, help otherwise),
-  /// and [env] backs alias-resolution env reads (defaults to the process
-  /// environment, like Java's `System.getenv` in `McpCliHandler`).
+  /// [writer] receives every output line (defaults to `print`) and
+  /// [propertyReader] backs the `doctor` command and the alias-resolution
+  /// default reads (`DEFAULT_TRACKER` / `DEFAULT_SOURCE_CODE` resolve
+  /// through the standard property chain — overrides, config.properties,
+  /// `dmtools.env`, then the process environment — like the tracker-hub
+  /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
+  /// no-argument behaviour (interactive stub on a terminal, help
+  /// otherwise).
   CliDispatcher({
     void Function(String line)? writer,
     PropertyReader? propertyReader,
     bool Function()? isTty,
-    Map<String, String>? env,
   })  : _writer = writer ?? print,
         _reader = propertyReader ?? PropertyReader(),
-        _isTty = isTty ?? _stdoutIsTty,
-        _env = env ?? Platform.environment;
+        _isTty = isTty ?? _stdoutIsTty;
 
   final void Function(String line) _writer;
   final PropertyReader _reader;
   final bool Function() _isTty;
-  final Map<String, String> _env;
 
   static bool _stdoutIsTty() => stdout.hasTerminal;
 
@@ -226,11 +227,14 @@ class CliDispatcher {
     final registry = createDefaultToolRegistry();
     // Java `McpCliHandler.resolveToolAlias`: a canonical name passes
     // through; an alias resolves to its carrier, choosing between
-    // multiple carriers via DEFAULT_TRACKER / DEFAULT_SOURCE_CODE.
+    // multiple carriers via DEFAULT_TRACKER / DEFAULT_SOURCE_CODE. Both
+    // defaults resolve through the standard property chain (overrides →
+    // config.properties → dmtools.env → OS env) so a `dmtools.env` value
+    // routes the alias too — not just the process environment.
     final resolvedTool = registry.resolveToolAlias(
       toolName,
-      defaultTracker: _env['DEFAULT_TRACKER'],
-      defaultSourceCode: _env['DEFAULT_SOURCE_CODE'],
+      defaultTracker: _reader.getDefaultTracker(),
+      defaultSourceCode: _reader.getDefaultSourceCode(),
     );
     if (resolvedTool == null) {
       _writer('Error: unknown tool: $toolName');

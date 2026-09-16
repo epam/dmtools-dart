@@ -81,6 +81,8 @@ final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
   'gitlab_add_inline_mr_comment': _addInlineMrComment,
   'gitlab_merge_mr': _mergeMr,
   'gitlab_rebase_mr': _rebaseMr,
+  'gitlab_approve_mr': _approveMr,
+  'gitlab_unapprove_mr': _unapproveMr,
   'gitlab_add_mr_label': _addMrLabel,
   'gitlab_remove_mr_label': _removeMrLabel,
   'gitlab_get_mr_discussions': _getMrDiscussions,
@@ -287,6 +289,16 @@ String _mergeMr(_GitlabConfig config, Map<String, dynamic> args) {
 /// `gitlab_rebase_mr` — PUT `…/rebase` with an empty body.
 String _rebaseMr(_GitlabConfig config, Map<String, dynamic> args) =>
     _putBody(config, '${_mrPath(config, args)}/rebase', '{}');
+
+/// `gitlab_approve_mr` — POST `…/approve` with an empty body (Java
+/// `GitLab.approveMergeRequest`: `postRequest.setBody("{}")`).
+String _approveMr(_GitlabConfig config, Map<String, dynamic> args) =>
+    syncPostJson(config.headers, '${_mrPath(config, args)}/approve', '{}');
+
+/// `gitlab_unapprove_mr` — POST `…/unapprove` with an empty body
+/// (Dart-extra tool beyond Java; mirrors the async `GitlabHttpClient`).
+String _unapproveMr(_GitlabConfig config, Map<String, dynamic> args) =>
+    syncPostJson(config.headers, '${_mrPath(config, args)}/unapprove', '{}');
 
 /// `gitlab_add_mr_label` — PUT `…/merge_requests/{iid}` `add_labels`.
 String _addMrLabel(_GitlabConfig config, Map<String, dynamic> args) =>

@@ -79,6 +79,37 @@ void codeBlockTests() {
         '```dart\na();\n```\ntext\n```bash\nls\n```',
       );
     });
+
+    test('lang-first block closes at its closing tag, not mid-block', () {
+      // `{code}lang content` with the closing `{code}` on a later line is
+      // ONE block — an early fence close would strand the following lines
+      // outside it.
+      expect(
+        jiraMarkupToMarkdown('{code}json {"a": 1}\nmore\n{code}'),
+        '```json\n{"a": 1}\nmore\n```',
+      );
+    });
+
+    test('explicit-lang tag with same-line content joins the block', () {
+      expect(
+        jiraMarkupToMarkdown('{code:json} {"a": 1}\n{code}'),
+        '```json\n{"a": 1}\n```',
+      );
+    });
+
+    test('unclosed lang-first block gets a defensive fence', () {
+      expect(
+        jiraMarkupToMarkdown('{code}dart final x = 1;'),
+        '```dart\nfinal x = 1;\n```',
+      );
+    });
+
+    test('{code:} empty explicit hint means no language', () {
+      expect(
+        jiraMarkupToMarkdown('{code:}\nx = 1;\n{code}'),
+        '```\nx = 1;\n```',
+      );
+    });
   });
 }
 

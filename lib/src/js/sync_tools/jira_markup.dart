@@ -24,11 +24,16 @@
 /// already-Markdown text is returned unchanged.
 library;
 
-/// Opening `{code}` tag with an optional `:lang` suffix.
-final _codeOpen = RegExp(r'^\{code(?::([\w#+.-]+))?\}');
+/// Opening `{code}` tag with an optional `:lang` suffix (an empty `:`
+/// value is a valid "no language" hint).
+final _codeOpen = RegExp(r'^\{code(?::([\w#+.-]*))?\}');
 
 /// Single-line `{code}…{code}` / `{code:lang}…{code}` pair.
 final _codePair = RegExp(r'\{code(?::([\w#+.-]+))?\}([^\n]*?)\{code\}');
+
+/// `lang rest…` after a bare `{code}` opening tag — the first token is
+/// the language hint, the remainder the block's first content line.
+final _langRest = RegExp(r'^(\S+)(?:\s+([^\n]*))?$');
 
 /// Jira heading prefix (`h1.`–`h6.`).
 final _heading = RegExp(r'^\s*h([1-6])\.\s*');
@@ -112,29 +117,37 @@ class _Converter {
   }
 
   /// A block-opening `{code}` / `{code:lang}` / `{code}lang` line →
-  /// fence. Content after the language tag on the same line becomes a
-  /// complete single-line block; otherwise the block stays open.
+  /// fence. Content after the tag becomes the block's first line; the
+  /// block stays open until its closing `{code}` (or the defensive EOF
+  /// fence) — an early close would strand the following lines.
   bool _openFence(String line) {
     final open = _codeOpen.firstMatch(line);
     if (open == null) return false;
-    final explicit = open.group(1);
-    var rest = line.substring(open.end).trim();
-    final lang =
-        (explicit != null && explicit.isNotEmpty) ? explicit : _firstWord(rest);
-    if (explicit == null || explicit.isEmpty) {
-      rest = rest.length > lang.length ? rest.substring(lang.length) : '';
-      rest = rest.trim();
-    }
-    _out.add('```$lang');
-    if (rest.isNotEmpty) {
-      _out
-        ..add(rest)
-        ..add('```');
-    } else {
-      _inCode = true;
-    }
+    final part = _langAndBody(
+      explicit: open.group(1),
+      afterTag: line.substring(open.end),
+    );
+    _out.add('```' + part.lang);
+    if (part.body.isNotEmpty) _out.add(part.body);
+    _inCode = true;
     return true;
   }
+}
+
+/// The language hint and first body line after a `{code}` opening tag.
+///
+/// - `{code:lang}` → the explicit hint (possibly empty — `{code:}` means
+///   "no language"), everything after the tag is body.
+/// - `{code}lang` / `{code}lang body` → the first token is the hint
+///   (the gh-122 template form), the remainder is body.
+({String lang, String body}) _langAndBody({
+  required String? explicit,
+  required String afterTag,
+}) {
+  if (explicit != null) return (lang: explicit, body: afterTag.trim());
+  if (afterTag.isEmpty) return (lang: '', body: '');
+  final m = _langRest.firstMatch(afterTag)!;
+  return (lang: m.group(1)!, body: m.group(2)?.trim() ?? '');
 }
 
 /// Converts one line outside code/panel contexts: heading prefix first,
@@ -174,6 +187,3 @@ String _convertPairs(String s) {
 String _convertText(String s) => s
     .replaceAllMapped(_jiraLink, (m) => '[${m.group(1)}](${m.group(2)})')
     .replaceAllMapped(_jiraBold, (m) => '**${m.group(1)}**');
-
-/// The first whitespace-delimited token of [s], or `''`.
-String _firstWord(String s) => RegExp(r'^\S+').firstMatch(s)?.group(0) ?? '';

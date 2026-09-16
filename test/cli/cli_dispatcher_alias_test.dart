@@ -44,6 +44,8 @@ void main() {
   _testFileTierRouting();
   _testAliasHelp();
   _testAliasList();
+  _testAliasIntegrations();
+  _testAliasHelpEdges();
 }
 
 /// Dispatches [args] on the shared dispatcher, asserts exit code [code],

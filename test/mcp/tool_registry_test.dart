@@ -56,6 +56,7 @@ void main() {
   registryEdgeCaseTests();
   registryAliasResolutionTests();
   registryAliasDefaultRoutingTests();
+  registryAliasIntegrationsTests();
 }
 
 /// [ToolParam.toJson] serializes type and description.
@@ -359,6 +360,73 @@ void registryAliasDefaultRoutingTests() {
         registry.resolveToolAlias('shared_op', defaultTracker: 'ado'),
         'jira_get_ticket',
         reason: 'only tracker_*/source_code_* read the default-integration env',
+      );
+    });
+  });
+}
+
+/// [ToolRegistry.resolveToolAlias] `integrations` narrowing (gh-136
+/// review): alias candidates narrow to carriers visible under
+/// `DMTOOLS_INTEGRATIONS` before DEFAULT_* routing and the
+/// first-candidate fallback, so help/list resolution picks a carrier the
+/// filtered tools list actually shows. Canonical names never narrow.
+void registryAliasIntegrationsTests() {
+  group('alias resolution (integrations narrowing)', () {
+    test('the fallback picks a carrier inside the integration filter', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            integrations: const {'ado'}),
+        'ado_get_work_item',
+        reason: 'jira is filtered out — the first VISIBLE candidate wins',
+      );
+    });
+
+    test('DEFAULT_* routing applies among the visible candidates only', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            defaultTracker: 'github', integrations: const {'jira'}),
+        'jira_get_ticket',
+        reason: 'the DEFAULT carrier is filtered out — first visible wins',
+      );
+    });
+
+    test('a DEFAULT carrier inside the filter still routes', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            defaultTracker: 'github',
+            integrations: const {'jira', 'github'}),
+        'github_create_issue',
+      );
+    });
+
+    test('no visible carrier falls back to the unrestricted candidates', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            integrations: const {'figma'}),
+        'jira_get_ticket',
+        reason: 'an invisible carrier is the caller’s (filter’s) decision',
+      );
+    });
+
+    test('a canonical name resolves to itself even when filtered out', () {
+      final registry = populatedRegistry(jiraAliases: ['tracker_get_ticket']);
+      expect(
+        registry.resolveToolAlias('jira_get_ticket',
+            integrations: const {'github'}),
+        'jira_get_ticket',
       );
     });
   });

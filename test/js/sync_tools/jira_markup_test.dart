@@ -15,11 +15,15 @@ import 'package:test/test.dart';
 void main() {
   codeBlockTests();
   codeBlockBoundaryTests();
+  tagWhitespaceTests();
+  codePairLangTests();
+  mdFenceTests();
   headingTests();
   linkTests();
   boldTests();
   panelTests();
   colorTests();
+  monospaceTests();
   passthroughTests();
   gh122EvidenceTests();
 }
@@ -86,6 +90,93 @@ void codeBlockTests() {
 /// Tag-shape boundaries: where the block starts/ends when content shares
 /// the opening line, when the closing tag is missing, and degenerate
 /// language hints.
+/// `{code}` tags followed by whitespace — the PR-review BLOCKING crash
+/// (null-assert in `_langAndBody`): every shape here must convert without
+/// throwing and keep the language hint when one is present.
+void tagWhitespaceTests() {
+  group('jiraMarkupToMarkdown: {code} tags followed by whitespace', () {
+    test('space before the language still yields the language hint', () {
+      expect(
+        jiraMarkupToMarkdown('{code} dart\nx();\n{code}'),
+        '```dart\nx();\n```',
+      );
+    });
+
+    test('bare tag with trailing whitespace converts to a plain fence', () {
+      expect(jiraMarkupToMarkdown('{code} \nx();\n{code}'),
+          '```\nx();\n```');
+    });
+
+    test('bare tag with a trailing tab does not crash', () {
+      expect(jiraMarkupToMarkdown('{code}\t'), '```\n```');
+    });
+
+    test('leading-space body follows the first-token hint semantics', () {
+      // Per the review's prescribed fix: the remainder is trimmed left,
+      // so the first token becomes the hint and the rest the body.
+      expect(
+        jiraMarkupToMarkdown('{code}  indented first line'),
+        '```indented\nfirst line\n```',
+      );
+    });
+  });
+}
+
+/// Single-line `{code}…{code}` pairs with the bare-tag spelling: the
+/// first content token is the language hint (same semantics as the
+/// multi-line block path) so `{code}dart main();{code}` highlights.
+void codePairLangTests() {
+  group('jiraMarkupToMarkdown: single-line pair language hint', () {
+    test('bare-tag pair derives the hint from the first content token', () {
+      expect(jiraMarkupToMarkdown('{code}dart main();{code}'),
+          '```dart\nmain();\n```');
+    });
+
+    test('content without a letter-leading token gets no hint', () {
+      // `2` is arithmetic, not a language — the hint heuristic requires a
+      // letter-leading token.
+      expect(jiraMarkupToMarkdown('{code}2 + 2{code}'), '```\n2 + 2\n```');
+    });
+
+    test('embedded bare-tag pairs stay verbatim inline spans', () {
+      expect(jiraMarkupToMarkdown('x {code}dart y{code} z'),
+          'x `dart y` z');
+    });
+  });
+}
+
+/// Existing Markdown ``` fences: lines inside a fenced block pass through
+/// verbatim (the PR-review IMPORTANT finding — fenced `h3.` / links /
+/// italics were being rewritten), while Jira constructs outside still
+/// convert.
+void mdFenceTests() {
+  group('jiraMarkupToMarkdown: Markdown fence passthrough', () {
+    test('Jira-ish tokens inside a ``` fence stay untouched', () {
+      const body = '## Fix\n'
+          '```text\n'
+          'h3. not a heading\n'
+          '[link|url]\n'
+          '*x*\n'
+          '```\n';
+      expect(jiraMarkupToMarkdown(body), body);
+    });
+
+    test('Jira constructs outside the fence still convert', () {
+      expect(
+        jiraMarkupToMarkdown('h3. Real\n```text\nh3. fake\n```'),
+        '### Real\n```text\nh3. fake\n```',
+      );
+    });
+
+    test('an unclosed Markdown fence leaves the rest of the body alone', () {
+      expect(
+        jiraMarkupToMarkdown('```text\nh3. inside\nh2. also inside'),
+        '```text\nh3. inside\nh2. also inside',
+      );
+    });
+  });
+}
+
 void codeBlockBoundaryTests() {
   group('jiraMarkupToMarkdown: code block boundaries', () {
     test('lang-first block closes at its closing tag, not mid-block', () {
@@ -159,9 +250,18 @@ void linkTests() {
 
 void boldTests() {
   group('jiraMarkupToMarkdown: bold', () {
-    test('*text* converts to **text**', () {
-      expect(jiraMarkupToMarkdown('*Development Completed*'),
-          '**Development Completed**');
+    test('*text* converts when the body carries a Jira marker', () {
+      // Bold conversion only applies to Jira-sourced bodies — gated on a
+      // marker (`h3.` here); see the italic-passthrough pin below.
+      expect(jiraMarkupToMarkdown('h3. *Development Completed*'),
+          '### **Development Completed**');
+    });
+
+    test('Markdown italics are preserved (no Jira marker, no conversion)', () {
+      // `*text*` is valid GFM emphasis — a marker-free body passes through
+      // byte-for-byte (PR-review suggestion: pin the italic guarantee).
+      expect(jiraMarkupToMarkdown('normal *italic* stays'),
+          'normal *italic* stays');
     });
 
     test('existing **bold** is not doubled', () {
@@ -190,6 +290,43 @@ void panelTests() {
 
     test('a title-less panel becomes a plain blockquote', () {
       expect(jiraMarkupToMarkdown('{panel}\nnote\n{panel}'), '>\n> note');
+    });
+
+    test('an indented opener behaves like an unindented one', () {
+      expect(
+        jiraMarkupToMarkdown('  {panel:title=Scope}\nbody line\n  {panel}'),
+        '> **Scope**\n> body line',
+      );
+    });
+
+    test('an indented bare {panel} opens a title-less panel', () {
+      expect(
+        jiraMarkupToMarkdown('  {panel}\nnote\n{panel}'),
+        '>\n> note',
+      );
+    });
+  });
+}
+
+void monospaceTests() {
+  group('jiraMarkupToMarkdown: {{monospace}}', () {
+    test('{{text}} becomes an inline code span', () {
+      expect(jiraMarkupToMarkdown('run {{ci build}} now'), 'run `ci build` now');
+    });
+
+    test('every {{...}} span in the body converts', () {
+      expect(
+        jiraMarkupToMarkdown('{{a}} and {{b}}'),
+        '`a` and `b`',
+      );
+    });
+
+    test('an unclosed {{ stays untouched', () {
+      expect(jiraMarkupToMarkdown('template {{var goes on'), 'template {{var goes on');
+    });
+
+    test('mono content is not link/bold converted', () {
+      expect(jiraMarkupToMarkdown('{{a*b}}'), '`a*b`');
     });
   });
 }

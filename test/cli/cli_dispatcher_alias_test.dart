@@ -42,6 +42,7 @@ void main() {
 
   _testPropertyChainRouting();
   _testFileTierRouting();
+  _testAliasHelp();
 }
 
 /// Dispatches [args] on the shared dispatcher, asserts exit code [code],
@@ -109,6 +110,83 @@ void _testFileTierRouting() {
       expect(result['error'], contains('GitLab not configured'),
           reason:
               'dmtools.env DEFAULT_SOURCE_CODE=gitlab picks the gitlab carrier');
+    });
+  });
+}
+
+/// The tool names in a tools-list response (`dmtools list` / `--help` shape).
+List<String> _toolNames(Map<String, dynamic> response) =>
+    (response['tools'] as List)
+        .cast<Map<String, dynamic>>()
+        .map((t) => t['name'] as String)
+        .toList();
+
+/// gh-136: the `--help` path (`dmtools <tool> --help`) and the
+/// `dmtools list <filter>` path resolve an alias filter through
+/// `resolveToolAlias` before the substring filter — Java `McpCliHandler`
+/// help resolution mirrors invocation resolution, so an aliased tool shows
+/// the resolved backend tool's schema instead of an empty tools list.
+void _testAliasHelp() {
+  group('alias help/list resolution', () {
+    test('tracker_get_ticket --help shows the first-candidate (jira) schema',
+        () async {
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      final names = _toolNames(result);
+      expect(names, isNotEmpty);
+      expect(names, contains('jira_get_ticket'),
+          reason: 'DEFAULT_TRACKER unset → first candidate (jira)');
+    });
+
+    test('DEFAULT_TRACKER=github routes tracker_get_ticket --help to github',
+        () async {
+      _writeEnv('DEFAULT_TRACKER=github\n');
+      final result =
+          await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
+      expect(_toolNames(result), contains('github_get_issue'),
+          reason: 'DEFAULT_TRACKER=github picks the github carrier');
+    });
+
+    test('tracker_post_comment --help follows DEFAULT_TRACKER=ado', () async {
+      _writeEnv('DEFAULT_TRACKER=ado\n');
+      final result =
+          await _dispatchTool(['tracker_post_comment', '--help'], code: 0);
+      expect(_toolNames(result), contains('ado_add_work_item_comment'),
+          reason: 'DEFAULT_TRACKER=ado picks the ado carrier');
+    });
+
+    test('tracker_search --help shows the first candidate (jira)', () async {
+      final result = await _dispatchTool(['tracker_search', '--help'], code: 0);
+      expect(_toolNames(result), contains('jira_search_by_jql'));
+    });
+
+    test('source_code_get_pr --help follows DEFAULT_SOURCE_CODE=gitlab',
+        () async {
+      _writeEnv('DEFAULT_SOURCE_CODE=gitlab\n');
+      final result =
+          await _dispatchTool(['source_code_get_pr', '--help'], code: 0);
+      expect(_toolNames(result), contains('gitlab_get_mr'),
+          reason: 'DEFAULT_SOURCE_CODE=gitlab picks the gitlab carrier');
+    });
+
+    test('canonical tool --help is unchanged', () async {
+      final result =
+          await _dispatchTool(['jira_get_ticket', '--help'], code: 0);
+      expect(_toolNames(result), contains('jira_get_ticket'));
+    });
+
+    test('dmtools list <alias> resolves the filter to the carrier', () async {
+      final result =
+          await _dispatchTool(['list', 'tracker_get_ticket'], code: 0);
+      expect(_toolNames(result), contains('jira_get_ticket'));
+    });
+
+    test('dmtools list keeps substring semantics for unknown filters',
+        () async {
+      final result = await _dispatchTool(['list', 'jira_search'], code: 0);
+      final names = _toolNames(result);
+      expect(names, contains('jira_search_by_jql'));
+      expect(names.every((name) => name.startsWith('jira_search')), isTrue);
     });
   });
 }

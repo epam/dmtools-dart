@@ -21,6 +21,7 @@ import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_param.dart';
+import '../mcp/tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'run_command_processor.dart';
@@ -183,10 +184,27 @@ class CliDispatcher {
     final integrations = _resolveIntegrations();
     var response = registry.generateToolsListResponse(integrations);
     if (rest.isNotEmpty) {
-      response = registry.filterToolsList(response, rest.first);
+      response = registry.filterToolsList(
+          response, _resolveFilter(registry, rest.first));
     }
     _writer(const JsonEncoder.withIndent('  ').convert(response));
     return 0;
+  }
+
+  /// Resolves a list/help [filter] through alias resolution before the
+  /// substring filter: Java `McpCliHandler` help resolution mirrors
+  /// invocation resolution, so an alias like `tracker_get_ticket` resolves
+  /// to its carrier (via DEFAULT_TRACKER / DEFAULT_SOURCE_CODE) and
+  /// `dmtools tracker_get_ticket --help` shows the backend tool's schema
+  /// instead of an empty list. Anything unresolved (partial names, free
+  /// text) stays a raw substring filter.
+  String _resolveFilter(ToolRegistry registry, String filter) {
+    final resolved = registry.resolveToolAlias(
+      filter,
+      defaultTracker: _reader.getDefaultTracker(),
+      defaultSourceCode: _reader.getDefaultSourceCode(),
+    );
+    return resolved ?? filter;
   }
 
   /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration

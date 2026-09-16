@@ -14,6 +14,7 @@ import 'package:test/test.dart';
 
 void main() {
   codeBlockTests();
+  codeBlockBoundaryTests();
   headingTests();
   linkTests();
   boldTests();
@@ -79,7 +80,14 @@ void codeBlockTests() {
         '```dart\na();\n```\ntext\n```bash\nls\n```',
       );
     });
+  });
+}
 
+/// Tag-shape boundaries: where the block starts/ends when content shares
+/// the opening line, when the closing tag is missing, and degenerate
+/// language hints.
+void codeBlockBoundaryTests() {
+  group('jiraMarkupToMarkdown: code block boundaries', () {
     test('lang-first block closes at its closing tag, not mid-block', () {
       // `{code}lang content` with the closing `{code}` on a later line is
       // ONE block — an early fence close would strand the following lines

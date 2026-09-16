@@ -68,7 +68,7 @@ jobs:
           path: dmtools-agents
 
       - name: Install dmtools CLI (pinned release)
-        run: sh dmtools-agents/setup/install.sh
+        run: bash dmtools-agents/setup/install.sh
         env:
           DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}
 

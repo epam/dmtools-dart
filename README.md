@@ -108,10 +108,11 @@ Repo automation (dm.ai parity): the
 [agents/](agents) submodule pins [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents)
 and feeds the L4 suite; [auto-update-prs.yml](.github/workflows/auto-update-prs.yml)
 re-bases mergeable PRs after every push to main;
-[merge-trigger.yml](.github/workflows/merge-trigger.yml) launches the agents
-merge loop when CI passes (fused off via the `MERGE_TRIGGER_ENABLED` variable
-until the Teammate job is ported); [ai-teammate.yml](.github/workflows/ai-teammate.yml)
-is a reusable (`workflow_call`) runner for dmtools-agents configs.
+[merge-trigger.yml](.github/workflows/merge-trigger.yml)
+squash-merges `pr_approved` issues once CI is green (gated by the
+`MERGE_TRIGGER_ENABLED` repo variable);
+[ai-teammate.yml](.github/workflows/ai-teammate.yml)
+runs the AI Teammate legs on issue events and on machine-sm.yml dispatches.
 
 ## Configuration
 
@@ -128,13 +129,56 @@ The full per-integration variable matrix (auth secrets plus sandbox-target
 `DMTOOLS_IT_*` variables) lives in
 [test/integration/README.md](test/integration/README.md).
 
-## Machine
+## Tracker routing
 
-This repo runs its own dark-factory loop: GitHub issues drive AI teammates
-(bug/story development, PR review, PR rework), and PRs merge automatically
-once reviewed and green — see [machine-kit/teammate-install/](machine-kit/teammate-install/).
+Ticket tools live behind a tracker-agnostic surface: the core ticket tools of
+every integration (Jira, ADO Boards, GitHub Issues) carry unified `tracker_*`
+aliases (`tracker_get_ticket`, `tracker_search`, `tracker_post_comment`, … —
+`tracker_move_to_status` is jira/github only), and
+`DEFAULT_TRACKER` (jira | ado | github) picks the carrier an alias resolves to —
+one variable re-routes agent scripts, job configs, and CLI calls onto any
+tracker. GitHub Issues is a full backend with no Jira config at all: `gh-<n>`
+ticket keys route through the JS bridge to the tracker repo
+(`DMTOOLS_TRACKER_REPO`, else `GITHUB_REPOSITORY`, else
+`SOURCE_GITHUB_REPOSITORY`). The SCM side mirrors it:
+`source_code_*` aliases (`DEFAULT_SOURCE_CODE`) and the `scm.provider` config in
+agent scripts. The abstraction contract is specified in
+[GOAL.md](GOAL.md) ("Core abstractions").
 
-- [fa-story-dev.json](machine-kit/teammate-install/runners/fa-story-dev.json) — story development teammate (ZAI)
-- [fa-bug-dev.json](machine-kit/teammate-install/runners/fa-bug-dev.json) — bug development teammate (ZAI)
-- [fa-review-kimi.json](machine-kit/teammate-install/runners/fa-review-kimi.json) — PR review teammate (Kimi; may approve with suggestions)
-- [fa-rework-zai.json](machine-kit/teammate-install/runners/fa-rework-zai.json) — PR rework teammate (addresses review comments)
+```bash
+DEFAULT_TRACKER=github dmtools tracker_get_ticket --data '{"key": "epam/dmtools-dart#38"}'
+```
+
+Alias calls dispatch the resolved carrier tool with its real credentials —
+this one needs `SOURCE_GITHUB_TOKEN` (public repos included).
+
+## Machine loop (AI teammates)
+
+GitHub issues drive the loop end to end: label an issue and AI teammates
+develop it, review the PR, rework findings, and merge — zero human steps.
+Full map: [docs/ai_factory.md](docs/ai_factory.md); replicate on another repo:
+[docs/factory_setup.md](docs/factory_setup.md).
+
+| Label | Leg |
+|---|---|
+| `agent:dev` | dev run — agent reads the issue, pushes a branch, opens an `ai/gh-<n>` PR "Closes #<n>" (`bug` label / `[BUG]` title routes to the bug teammate) |
+| `agent:review` | review run — formal APPROVE / REQUEST_CHANGES verdict on the linked PR |
+| `agent:rework` | rework run — fixes blocking review threads, pushes to the same branch |
+| `needs-human` | escalation after `MAX_AUTO_REWORK_ROUNDS` (default 2) rework rounds without an APPROVE |
+
+APPROVE + green CI → `pr_approved` →
+[merge-trigger.yml](.github/workflows/merge-trigger.yml) squash-merges and
+closes the issue. Labels the machine adds with `GITHUB_TOKEN` do not fire
+`labeled` events, so the
+[machine-sm.yml](.github/workflows/machine-sm.yml) cron (every 10 minutes) is
+the safety net: the SM rule engine reads the loop state and re-fires the
+stalled leg — rework on red CI, review on green, merge for approved PRs.
+`agent:skip` on an issue is the hard opt-out. Probe the reconciler without
+acting:
+
+```bash
+gh workflow run machine-sm.yml -f dryRun=true
+```
+
+Runner configs (provider/model pinning per leg) live in
+[machine-kit/teammate-install/runners/](machine-kit/teammate-install/runners/).

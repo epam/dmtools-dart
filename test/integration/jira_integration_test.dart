@@ -150,7 +150,8 @@ void _registerWriteTests(
     // sandbox workflow has none, there is nothing to assert, so return early.
     if (target == null) return;
     final result = _decode(
-      bridge().execute('jira_move_to_status', {'key': key, 'status': target}),
+      bridge()
+          .execute('jira_move_to_status', {'key': key, 'statusName': target}),
     );
     expect(result.containsKey('error'), isFalse,
         reason: 'move_to_status dispatcher error: ${result['error']}');

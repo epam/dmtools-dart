@@ -34,6 +34,7 @@ void main() {
       'TrackerGitHubRouter config errors (repo shapes)', _configErrorRepoTests);
   if (hasPython3()) {
     group('TrackerGitHubRouter read tools (fixture)', _fixtureReadTools);
+    group('TrackerGitHubRouter post-comment (fixture)', _fixturePostComment);
     group('TrackerGitHubRouter label tools (fixture)', _fixtureLabelTools);
     group('TrackerGitHubRouter status tools (fixture)', _fixtureStatusTools);
     group('TrackerGitHubRouter search tools (fixture)', _fixtureSearchTools);
@@ -217,7 +218,7 @@ void _configErrorTests() {
     final error = _errOf(
       const TrackerGitHubRouter().maybeRoute('jira_move_to_status', {
         'key': 'gh-50',
-        'status': 'In Review',
+        'statusName': 'In Review',
       })!,
     );
     expect(error, contains('tracker repo'));
@@ -326,6 +327,14 @@ void _fixtureReadTools() {
     expect(fx.server.requests,
         contains('GET /repos/o/r/issues/50/comments?per_page=100'));
   });
+}
+
+/// `jira_post_comment` round-trips: the posted body is converted from
+/// Jira wiki markup to Markdown (gh-125), plain bodies pass through.
+void _fixturePostComment() {
+  final fx = _Fixture();
+  setUp(fx.start);
+  tearDown(fx.stop);
 
   test('jira_post_comment posts the body and maps the created comment', () {
     final created = jsonDecode(fx.tools.dispatch('jira_post_comment', {
@@ -338,6 +347,24 @@ void _fixtureReadTools() {
     expect(request['method'], 'POST');
     expect(request['path'], '/repos/o/r/issues/50/comments');
     expect(jsonDecode(request['body'] as String), {'body': 'hello world'});
+  });
+
+  test('jira_post_comment converts Jira wiki markup to Markdown (gh-125)', () {
+    // The agents' JS post-action templates hard-code Jira wiki markup;
+    // the GitHub comment path must render it readable (gh-122 evidence).
+    const jira = 'h3. Done\n\n{code}dart\nx();\n{code}\n'
+        'See [PR #1|https://x.y/1]';
+    const expected =
+        '### Done\n\n```dart\nx();\n```\nSee [PR #1](https://x.y/1)';
+    final created = jsonDecode(fx.tools.dispatch('jira_post_comment', {
+      'key': 'gh-50',
+      'comment': jira,
+    })) as Map<String, dynamic>;
+    expect(created['body'], expected);
+    final request =
+        jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
+    expect(request['path'], '/repos/o/r/issues/50/comments');
+    expect(jsonDecode(request['body'] as String), {'body': expected});
   });
 }
 
@@ -395,7 +422,7 @@ void _fixtureStatusTools() {
   test('jira_move_to_status swaps the status label and closes on Done', () {
     final result = jsonDecode(fx.tools.dispatch('jira_move_to_status', {
       'key': 'gh-50',
-      'status': 'Done',
+      'statusName': 'Done',
     }));
     expect(result, '');
     expect(fx.server.requests, [
@@ -412,19 +439,26 @@ void _fixtureStatusTools() {
   test('jira_move_to_status with a neutral name is label-only', () {
     jsonDecode(fx.tools.dispatch('jira_move_to_status', {
       'key': 'gh-50',
-      'status': 'Selected for Development',
+      'statusName': 'Selected for Development',
     }));
     expect(fx.server.requests, [
       'GET /repos/o/r/issues/50',
       'DELETE /repos/o/r/issues/50/labels/status%3AIn%20Progress',
       'POST /repos/o/r/issues/50/labels',
     ]);
+    // The label POST is the last request — its body carries the new
+    // `status:<name>` label (gh-123: an empty `status:` label was posted
+    // when the args key mismatched the tool schema).
+    final post = jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
+    expect(jsonDecode(post['body'] as String), {
+      'labels': ['status:Selected for Development'],
+    });
   });
 
   test('jira_move_to_status reopens a closed issue on an Open-ish name', () {
     jsonDecode(fx.tools.dispatch('jira_move_to_status', {
       'key': 'gh-61',
-      'status': 'Ready For Development',
+      'statusName': 'Ready For Development',
     }));
     expect(fx.server.requests, [
       'GET /repos/o/r/issues/61',
@@ -690,7 +724,7 @@ void _fixtureEntryPoints() {
     final dispatcher = SyncToolDispatcher(PropertyReader());
     final result = dispatcher.execute('jira_move_to_status', {
       'key': 'gh-50',
-      'status': 'In Review',
+      'statusName': 'In Review',
     });
     expect(jsonDecode(result!), '');
     expect(fx.server.requests, contains('POST /repos/o/r/issues/50/labels'));

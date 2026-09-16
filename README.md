@@ -108,10 +108,11 @@ Repo automation (dm.ai parity): the
 [agents/](agents) submodule pins [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents)
 and feeds the L4 suite; [auto-update-prs.yml](.github/workflows/auto-update-prs.yml)
 re-bases mergeable PRs after every push to main;
-[merge-trigger.yml](.github/workflows/merge-trigger.yml) launches the agents
-merge loop when CI passes (fused off via the `MERGE_TRIGGER_ENABLED` variable
-until the Teammate job is ported); [ai-teammate.yml](.github/workflows/ai-teammate.yml)
-is a reusable (`workflow_call`) runner for dmtools-agents configs.
+[merge-trigger.yml](.github/workflows/merge-trigger.yml)
+squash-merges `pr_approved` issues once CI is green (gated by the
+`MERGE_TRIGGER_ENABLED` repo variable);
+[ai-teammate.yml](.github/workflows/ai-teammate.yml)
+runs the AI Teammate legs on issue events and on machine-sm.yml dispatches.
 
 ## Configuration
 
@@ -132,13 +133,14 @@ The full per-integration variable matrix (auth secrets plus sandbox-target
 
 Ticket tools live behind a tracker-agnostic surface: the core ticket tools of
 every integration (Jira, ADO Boards, GitHub Issues) carry unified `tracker_*`
-aliases (`tracker_get_ticket`, `tracker_search`, `tracker_post_comment`,
-`tracker_move_to_status`, …), and
+aliases (`tracker_get_ticket`, `tracker_search`, `tracker_post_comment`, … —
+`tracker_move_to_status` is jira/github only), and
 `DEFAULT_TRACKER` (jira | ado | github) picks the carrier an alias resolves to —
 one variable re-routes agent scripts, job configs, and CLI calls onto any
 tracker. GitHub Issues is a full backend with no Jira config at all: `gh-<n>`
 ticket keys route through the JS bridge to the tracker repo
-(`DMTOOLS_TRACKER_REPO`, else `GITHUB_REPOSITORY`). The SCM side mirrors it:
+(`DMTOOLS_TRACKER_REPO`, else `GITHUB_REPOSITORY`, else
+`SOURCE_GITHUB_REPOSITORY`). The SCM side mirrors it:
 `source_code_*` aliases (`DEFAULT_SOURCE_CODE`) and the `scm.provider` config in
 agent scripts. The abstraction contract is specified in
 [GOAL.md](GOAL.md) ("Core abstractions").
@@ -146,6 +148,9 @@ agent scripts. The abstraction contract is specified in
 ```bash
 DEFAULT_TRACKER=github dmtools tracker_get_ticket --data '{"key": "epam/dmtools-dart#38"}'
 ```
+
+Alias calls dispatch the resolved carrier tool with its real credentials —
+this one needs `SOURCE_GITHUB_TOKEN` (public repos included).
 
 ## Machine loop (AI teammates)
 

@@ -90,8 +90,8 @@ List<ToolDefinition> _statusTools() => [
         params: [
           _keyParam,
           ToolParam(
-            name: 'status',
-            description: 'The target status or transition name',
+            name: 'statusName',
+            description: 'The target status name',
             required: true,
           ),
         ],

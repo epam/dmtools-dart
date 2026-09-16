@@ -322,7 +322,7 @@ class JiraSyncTools {
   /// `jira_move_to_status` — finds the transition, then POSTs it.
   String _moveToStatus(Map<String, dynamic> args) => _run((config) {
         final key = _asStr(args['key']);
-        final status = _asStr(args['status']);
+        final status = _asStr(args['statusName']);
         final transitions = _fetchTransitions(config, key);
         final id = matchTransitionId(transitions, status);
         if (id == null) return _err('No transition found for status: $status');

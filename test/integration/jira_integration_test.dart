@@ -127,10 +127,31 @@ void _registerWriteTests(
   test('labels: jira_add_label / jira_remove_label round-trip', () {
     final key = ticketKey();
     final label = 'it-$runId-label';
-    bridge().execute('jira_add_label', {'key': key, 'label': label});
-    expect(_labelsOf(_ticket(bridge(), key)), contains(label));
-    bridge().execute('jira_remove_label', {'key': key, 'label': label});
-    expect(_labelsOf(_ticket(bridge(), key)), isNot(contains(label)));
+    // Unchecked envelopes here hid the real transient reason behind a
+    // misleading empty-read — the exact CI flake this hardening answers.
+    _expectNoError(
+      _decode(
+        bridge().execute('jira_add_label', {'key': key, 'label': label}),
+      ),
+      context: 'add_label',
+    );
+    expect(
+      _labelEventually(bridge(), key, label, expected: true),
+      isTrue,
+      reason: 'label $label not visible on $key within the '
+          'read-after-write window',
+    );
+    _expectNoError(
+      _decode(
+        bridge().execute('jira_remove_label', {'key': key, 'label': label}),
+      ),
+      context: 'remove_label',
+    );
+    expect(
+      _labelEventually(bridge(), key, label, expected: false),
+      isTrue,
+      reason: 'label $label still on $key after removal + window',
+    );
   });
 
   test('comment: jira_post_comment adds a comment', () {
@@ -215,6 +236,31 @@ Map<String, dynamic> _ticket(ToolBridge bridge, String key) =>
 List<String> _labelsOf(Map<String, dynamic> ticket) {
   final fields = ticket['fields'] as Map<String, dynamic>? ?? {};
   return List<String>.from(fields['labels'] as List? ?? const []);
+}
+
+/// Polls the ticket until [label] reaches the [expected] presence, or
+/// `false` when the read-after-write window (10s) elapses first.
+///
+/// Jira is read-eventually-consistent: an accepted update can still be
+/// absent from an immediate GET — the index lag in the same transient
+/// class that flaked `jira_move_to_status`. A bounded window keeps the
+/// assertion strict without failing on convergence lag; a genuinely lost
+/// update still fails, only with the window exhausted.
+bool _labelEventually(
+  ToolBridge bridge,
+  String key,
+  String label, {
+  required bool expected,
+  Duration window = const Duration(seconds: 10),
+}) {
+  final deadline = DateTime.now().add(window);
+  while (true) {
+    if (_labelsOf(_ticket(bridge, key)).contains(label) == expected) {
+      return true;
+    }
+    if (DateTime.now().isAfter(deadline)) return false;
+    sleep(const Duration(milliseconds: 500));
+  }
 }
 
 /// Extracts the current status name from a get-ticket result.

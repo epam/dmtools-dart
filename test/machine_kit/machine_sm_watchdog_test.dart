@@ -21,8 +21,7 @@ const _readmePath = 'README.md';
 const _smStubPath = '.github/workflows/machine-sm.yml';
 const _teammateStubPath = '.github/workflows/ai-teammate.yml';
 const _smFactoryPath = 'agents/.github/workflows/factory/sm.yml';
-const _teammateFactoryPath =
-    'agents/.github/workflows/factory/teammate.yml';
+const _teammateFactoryPath = 'agents/.github/workflows/factory/teammate.yml';
 
 String _read(String path) {
   final file = File(path);
@@ -187,8 +186,7 @@ void _teammateStubContract() {
     test('calls the factory teammate pack with the issue number', () {
       expect(
         yaml,
-        contains(
-            'uses: IstiN/dmtools-agents/.github/workflows/factory/'
+        contains('uses: IstiN/dmtools-agents/.github/workflows/factory/'
             'teammate.yml@'),
       );
       expect(

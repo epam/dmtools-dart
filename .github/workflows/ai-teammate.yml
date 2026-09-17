@@ -53,7 +53,7 @@ jobs:
     # then flip to main (or a tag).
     uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@feature/factory-reusable
     with:
-      issue: ${{ github.event.issue.number || github.event.inputs.issue }}
+      issue: ${{ github.event.issue.number || github.event.inputs.issue || 0 }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}
     secrets:

@@ -2,8 +2,10 @@
 #
 # The whole reconcile tick (engine checkout, dmtools install, rule run)
 # lives in IstiN/dmtools-agents/.github/workflows/factory-sm.yml. This
-# file carries only the triggers (cron + manual dry dispatch), the
-# single-instance concurrency group, and the call.
+# file carries only the triggers (cron + manual dry dispatch) and the
+# call. NO caller-side concurrency: the factory owns the `machine-sm`
+# group — a caller declaring the same group deadlocks the called workflow
+# (it waits forever on a group its own caller holds).
 
 name: 'Machine SM'
 
@@ -24,9 +26,6 @@ on:
         type: boolean
         default: true
 
-concurrency:
-  group: machine-sm
-  cancel-in-progress: false
 
 jobs:
   sm:
@@ -42,7 +41,11 @@ jobs:
       factory_ref: 8a3a3859a743d35874635ebfc11aa15274f4cc2d
       # Manual ticks default to dry; cron ticks run live.
       dryRun: ${{ github.event.inputs.dryRun || false }}
-    # `secrets: inherit` is the callee's documented contract — it declares
-    # no named `secrets:` inputs, and GitHub rejects explicit mapping for
-    # undeclared secrets. Narrowing is an upstream dmtools-agents change.
-    secrets: inherit
+    # Explicit mapping — the factory DECLARES SOURCE_GITHUB_TOKEN as a
+    # required named secret (plus optional ZAI_CODE_KEY / KIMI_REVIEW_KEY),
+    # and `secrets: inherit` does not satisfy required-secret validation at
+    # call time (live bisect: inherit => startup failure, explicit => green).
+    secrets:
+      SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+      ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+      KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}

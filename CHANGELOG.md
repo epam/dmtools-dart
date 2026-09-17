@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Retired the legacy `machine-kit` layer (gh-146): the machine loop runs on
+  the factory pack (reusable `agents/.github/workflows/factory/teammate.yml`
+  + `sm.yml` behind the thin `.github/workflows/ai-teammate.yml` and
+  `machine-sm.yml` stubs). Deleted `machine-kit/teammate-install/`
+  (runners/scripts/instructions — superseded by `.dmtools/runners/` +
+  `.dmtools/config.js` and the pack's `setup/` scripts),
+  `machine-kit/templates/` (superseded by the factory reusable workflows),
+  and the pre-factory `machine-kit/setup.sh` installer + `machine-kit/README.md`
+  (nothing invokes them; the only mention left is the historical provenance
+  comment in `merge-trigger.yml`). `machine-kit/scripts/
+  install-source-git-credentials.sh` stays — `release-cli.yml` still calls
+  it. Docs (README, ai_factory, factory_setup) and the machine contract
+  tests repointed to the factory equivalents; runner-wiring contract tests
+  moved to `test/machine_kit/runner_wiring_test.dart`.
+
 ### Fixed
 
 - Alias help/list resolution under `DMTOOLS_INTEGRATIONS` (gh-136):

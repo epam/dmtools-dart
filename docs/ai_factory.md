@@ -44,30 +44,35 @@ dev, review, rework and any pipeline-added label all re-enter the same gate).
 
 | Workflow | Role |
 |---|---|
-| `ai-teammate.yml` | The factory trigger. `on: issues [assigned, labeled]`; one `teammate` job per run. |
+| `ai-teammate.yml` | Thin trigger stub over the factory pack (reusable `teammate.yml` in the agents submodule): carries only the `issues` triggers, the per-issue concurrency group and the dispatch inputs — every job lives in `agents/.github/workflows/factory/teammate.yml` (guard → run → verdict → persist). |
 | `merge-trigger.yml` | Squash-merges the PR linked to a `pr_approved` issue once required checks are green. Fired by `check_suite completed` and `issues labeled pr_approved`. |
 | `quality.yml` | The gates every PR must pass: format → analyze → tests+coverage → crap4dart check/analyze → agents suite. These are the "CI green" the merge trigger waits for. |
 | `release-cli.yml` | Dispatch-only release: version bump + tag → AOT builds (linux x64/arm64, macos x64/arm64, windows x64) → GitHub release with checksums. Idempotent: re-dispatching an existing version is a clean no-op. |
 | `auto-update-prs.yml` | Keeps open PR branches fresh against main. |
 
-Key `ai-teammate.yml` env (top of the file):
+Key env (top of the factory `teammate.yml`; the stub carries only the
+concurrency group and the dispatch inputs):
 
 ```yaml
 AGENT_HANDLE: ai-teammate                     # bot account issues are assigned to
-FA_VERSION:      ${{ vars.FA_VERSION      || 'latest' }}   # fa pin (uncached when latest)
-DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.5' }}   # dmtools release tag
-MAX_AUTO_REWORK_ROUNDS: 2
-concurrency: group ai-teammate-issue-<n>, cancel-in-progress: false
+FA_VERSION:      ${{ vars.FA_VERSION_MACHINE || vars.FA_VERSION || 'latest' }}
+DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.14' }}  # dmtools release tag
+MAX_AUTO_REWORK_ROUNDS: ${{ vars.MAX_AUTO_REWORK_ROUNDS || 2 }}
+concurrency: group ai-teammate-issue-<n>, cancel-in-progress: false  # on the stub
 permissions: contents/pr/issues/actions: write
 ```
 
 ## 3. The runner layer (model routing)
 
 A **runner** is a thin child config that pins a provider on top of an agent
-config from the `agents/` submodule. Everything else — instructions, lifecycle,
-JS actions — is inherited from the parent.
+config from the dmtools-agents pack. Everything else — instructions, lifecycle,
+JS actions — is inherited from the parent. The configs live in-repo under
+`.dmtools/runners/` (the factory guard resolves the leg → runner mapping from
+`.dmtools/config.js` `sm.runners`); their `parent` and prompt paths resolve at
+run time against the pack checkout, which the factory workflow clones to
+`factory-agents/`.
 
-| Runner file (machine-kit/teammate-install/runners/) | Parent (agents/) | Provider | Model | Used for |
+| Runner file (.dmtools/runners/) | Parent (pack) | Provider | Model | Used for |
 |---|---|---|---|---|
 | `fa-story-dev.json` | `story_development.json` | zai | glm-5.3-flash | story dev (default path) |
 | `fa-bug-dev.json` | `bug_development.json` | zai | glm-5.3-flash | `[BUG]` tickets |
@@ -76,7 +81,7 @@ JS actions — is inherited from the parent.
 
 ```json
 {
-  "parent": { "path": "../../../agents/story_development.json" },
+  "parent": { "path": "../../factory-agents/story_development.json" },
   "params": {
     "envVariables": {
       "DEFAULT_TRACKER": "github",
@@ -89,7 +94,7 @@ JS actions — is inherited from the parent.
     "inputJql": "",
     "cliPromptsByTracker": {
       "github": [
-        "./machine-kit/teammate-install/instructions/github_comment_format.md"
+        "./factory-agents/instructions/common/github_comment_format.md"
       ]
     }
   }
@@ -224,12 +229,16 @@ task → let the review pass run → done (detailed steps in
 ## 10. Where everything lives
 
 ```
-.github/workflows/ai-teammate.yml   the factory (guard → run → verdict → persist)
+.github/workflows/ai-teammate.yml   thin stub: triggers, concurrency, dispatch
+agents/.github/workflows/factory/teammate.yml
+                                    the machine itself (guard → run → verdict →
+                                    persist) — pinned via the agents submodule
 .github/workflows/merge-trigger.yml        pr_approved + green CI → squash-merge
-machine-kit/teammate-install/runners/*.json provider pinning (this page §3)
-machine-kit/teammate-install/install.sh     dmtools bundle installer (linux/macos/windows)
+.dmtools/runners/*.json                     provider pinning per leg (this page §3)
+.dmtools/config.js                          sm.runners: leg → runner wiring
+install.sh (repo root)                      dmtools bundle installer (linux/macos/windows)
 agents/ (submodule → IstiN/dmtools-agents)  instructions, job configs, run-agent.sh,
-                                             providers/fa.sh, setup/fa-session.sh
+                                             setup/ scripts, factory reusable workflows
 .dmtools/fa-sessions/ (gitignored)          session tree; transport = fa-sess/gh-<n> branches
 .fah/memory/                                fa project memory, committed to the repo
 docs/factory_setup.md                       replicate this on another repository

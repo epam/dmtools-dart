@@ -37,9 +37,10 @@ Everything below is the concrete wiring, in the order you would set it up.
 
 | Piece | What it is | Where it lives here |
 |---|---|---|
-| **Trigger workflow** | Turns issue events into agent runs | `.github/workflows/ai-teammate.yml` |
+| **Trigger workflow** | Thin stub: issue events → reusable factory call | `.github/workflows/ai-teammate.yml` |
+| **Factory pack** | The machine itself (guard, legs, verdict, sessions) | `agents/.github/workflows/factory/` (pinned submodule) |
 | **Merge trigger** | Squash-merges `pr_approved` PRs once CI is green | `.github/workflows/merge-trigger.yml` |
-| **machine-kit** | Installer, runner configs, templates | `machine-kit/` (in-repo) |
+| **Runner wiring** | Per-leg runner configs + the leg → runner mapping | `.dmtools/runners/` + `.dmtools/config.js` (in-repo) |
 | **agents submodule** | Agent instructions, job configs, `run-agent.sh` (provider layer) | `agents/` → [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents) |
 | **dmtools CLI** | Job orchestrator: runs the Teammate/CliAgent lifecycle, JS actions, tool bridge | pinned release bundle ([releases](https://github.com/epam/dmtools-dart/releases)) |
 | **fa CLI** | The agent harness itself: sessions, tool calls, `--log-file` transcript | [flutter_agent_harness](https://github.com/IstiN/flutter_agent_harness) releases |
@@ -100,11 +101,15 @@ inside the fa subprocess scope.
 
 ## 5. Copy the machine into your repo
 
-1. **`machine-kit/`** — copy the whole directory. You will adapt only
-   `teammate-install/runners/*.json` (model choice) and `dmtools.env`.
+1. **`.dmtools/` wiring** — copy `runners/*.json` (adapt each provider blob:
+   `FA_PROVIDER_TYPE` + `FA_PROVIDER_CONFIG`, i.e. the model choice) and
+   `config.js` (the `sm.runners` leg → runner mapping the factory guard
+   reads).
 2. **`agents/` submodule** — add
    `git submodule add https://github.com/IstiN/dmtools-agents.git agents`.
    It carries:
+   - `.github/workflows/factory/` — the reusable machine loop itself
+     (`teammate.yml`, `sm.yml`) that the stubs call;
    - `instructions/` — the reviewer/dev prompt material (mermaid flows,
      severity classification, checklists);
    - `<role>.json` job configs (`story_development.json`, `pr_review.json`,
@@ -114,32 +119,41 @@ inside the fa subprocess scope.
 
 ## 6. The workflows
 
-Copy `.github/workflows/ai-teammate.yml` and `merge-trigger.yml`.
-Things you will likely touch:
+Copy the thin stubs `.github/workflows/ai-teammate.yml` and
+`machine-sm.yml` verbatim (they only declare the triggers, the per-issue
+concurrency group and the reusable call into the factory pack), plus
+`merge-trigger.yml` (adapt the gate-workflow-name placeholder). What you
+adapt is repo-level wiring, not workflow logic:
 
-- `AGENT_HANDLE: ai-teammate` — your bot's login.
-- `MAX_AUTO_REWORK_ROUNDS: 2` — the rework cap before `needs-human`.
-- The runner `case` mapping in the decide step:
+- `vars.MAX_AUTO_REWORK_ROUNDS` — the rework cap before `needs-human`
+  (factory default 2).
+- `.dmtools/config.js` — the leg → runner mapping the factory guard reads:
 
-```yaml
-case "$runner" in
-  *fa-bug-dev*)      config="agents/bug_development.json"; kind="dev" ;;
-  *fa-story-dev*)    config="agents/story_development.json"; kind="dev" ;;
-  *fa-review-kimi*)  config="agents/pr_review.json"; kind="review" ;;
-  *fa-rework-zai*)   config="agents/pr_rework.json"; kind="dev" ;;
-  *)                 config="$runner"; kind="dev" ;;
-esac
+```js
+module.exports = {
+  sm: {
+    runners: {
+      bug: '.dmtools/runners/fa-bug-dev.json',
+      story: '.dmtools/runners/fa-story-dev.json',
+      review: '.dmtools/runners/fa-review-kimi.json',
+      rework: '.dmtools/runners/fa-rework-zai.json'
+    }
+  }
+};
 ```
 
 Each runner is a thin child that only overrides the provider env (everything
-else is inherited from the parent agent config):
+else is inherited from the parent agent config in the pack — the
+`factory-agents/` paths resolve against the pack checkout the factory
+workflow clones beside your repo):
 
 ```json
-// machine-kit/teammate-install/runners/fa-story-dev.json
+// .dmtools/runners/fa-story-dev.json
 {
-  "parent": { "path": "../../../agents/story_development.json" },
+  "parent": { "path": "../../factory-agents/story_development.json" },
   "params": {
     "envVariables": {
+      "DEFAULT_TRACKER": "github",
       "AI_AGENT_PROVIDER": "fa",
       "FA_PROVIDER_TYPE": "zai",
       "FA_PROVIDER_CONFIG":
@@ -290,6 +304,7 @@ Ground truth for why the odd-looking parts look odd:
 
 ---
 
-*Wiring reference in this repo: `.github/workflows/ai-teammate.yml`
-(the machine), `machine-kit/README.md` (installer), `agents/AGENTS.md`
+*Wiring reference in this repo: `.github/workflows/ai-teammate.yml` (stub)
+and `agents/.github/workflows/factory/teammate.yml` (the machine),
+`.dmtools/config.js` (leg wiring), `agents/AGENTS.md`
 (agent-side conventions), `AGENTS.md` §8 (session reuse operating manual).*

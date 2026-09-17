@@ -9,8 +9,8 @@
 ///   .github/workflows/machine-sm.yml       — stub: cron, dry dispatch, call
 ///   .github/workflows/ai-teammate.yml      — stub: triggers, per-issue
 ///                                             concurrency, dispatch inputs
-///   agents/.github/workflows/factory/sm.yml       — tick engine contract
-///   agents/.github/workflows/factory/teammate.yml — leg runner contract
+///   agents/.github/workflows/factory-sm.yml       — tick engine contract
+///   agents/.github/workflows/factory-teammate.yml — leg runner contract
 ///
 /// so the documentation and the machine can never drift apart silently.
 import 'dart:io';
@@ -20,9 +20,8 @@ import 'package:test/test.dart';
 const _readmePath = 'README.md';
 const _smStubPath = '.github/workflows/machine-sm.yml';
 const _teammateStubPath = '.github/workflows/ai-teammate.yml';
-const _smFactoryPath = 'agents/.github/workflows/factory/sm.yml';
-const _teammateFactoryPath =
-    'agents/.github/workflows/factory/teammate.yml';
+const _smFactoryPath = 'agents/.github/workflows/factory-sm.yml';
+const _teammateFactoryPath = 'agents/.github/workflows/factory-teammate.yml';
 
 String _read(String path) {
   final file = File(path);
@@ -115,7 +114,7 @@ void _smStubContract() {
       expect(
         yaml,
         contains(
-            'uses: IstiN/dmtools-agents/.github/workflows/factory/sm.yml@'),
+            'uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@'),
         reason: 'the tick engine lives in the factory pack; the stub must '
             'call it (pinned ref)',
       );
@@ -187,8 +186,7 @@ void _teammateStubContract() {
     test('calls the factory teammate pack with the issue number', () {
       expect(
         yaml,
-        contains(
-            'uses: IstiN/dmtools-agents/.github/workflows/factory/'
+        contains('uses: IstiN/dmtools-agents/.github/workflows/factory/'
             'teammate.yml@'),
       );
       expect(

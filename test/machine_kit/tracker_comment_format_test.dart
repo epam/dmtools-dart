@@ -9,15 +9,21 @@
 /// exist and prescribe GitHub-native constructs (fenced code blocks, `#`
 /// headings, `[text](url)` links, GFM tables) while banning Jira prefixes,
 /// and the dev + rework runners must select it via
-/// `params.cliPromptsByTracker.github` (resolved through the parent chain,
-/// the same resolution `dmtools run` performs) with `DEFAULT_TRACKER=github`
-/// pinned so the CliAgent's tracker lookup resolves the `github` key.
+/// `params.cliPromptsByTracker.github` with `DEFAULT_TRACKER=github` pinned
+/// so the CliAgent's tracker lookup resolves the `github` key.
+///
+/// The runners live in `.dmtools/runners/` (selected per leg by the factory
+/// guard via `.dmtools/config.js` sm.runners). Their `parent` and prompt
+/// paths resolve at run time against the factory checkout
+/// (`factory-agents/` — dmtools-agents cloned beside the target repo),
+/// which does not exist in this repository: runner-level wiring is pinned
+/// on the raw JSON here, the parent side on the same content in the pinned
+/// `agents/` submodule.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -27,31 +33,31 @@ void main() {
   defaultTrackerWiringTests();
 }
 
-/// The markdown format instruction shipped machine-kit side (upstream
-/// dmtools-agents gains its shared copy later).
-const _formatFile =
-    './machine-kit/teammate-install/instructions/github_comment_format.md';
+/// The format instruction exactly as the runners reference it
+/// (cwd-relative at run time: `factory-agents/` is the dmtools-agents
+/// checkout the factory workflow clones).
+const _runnerFormatPath =
+    './factory-agents/instructions/common/github_comment_format.md';
+
+/// In-repo location of the same instruction (agents/ submodule, pinned).
+const _formatFile = 'agents/instructions/common/github_comment_format.md';
 
 /// Runners whose comments land on GitHub issues (dev + rework; the review
 /// runner posts structured PR-review output and stays upstream-scoped).
 const _githubRunners = [
-  'machine-kit/teammate-install/runners/fa-bug-dev.json',
-  'machine-kit/teammate-install/runners/fa-story-dev.json',
-  'machine-kit/teammate-install/runners/fa-rework-zai.json',
+  '.dmtools/runners/fa-bug-dev.json',
+  '.dmtools/runners/fa-story-dev.json',
+  '.dmtools/runners/fa-rework-zai.json',
 ];
 
-/// Resolves a runner config through its parent chain — identical to what
-/// `dmtools run` executes.
-Map<String, dynamic> _resolveRunner(String runner) {
-  final json = jsonDecode(
-    const RunCommandProcessor().process(['run', runner]),
-  ) as Map;
-  return json.cast<String, dynamic>();
-}
+/// Decodes a runner config as committed (no parent resolution — see the
+/// library doc comment).
+Map<String, dynamic> _runner(String path) =>
+    jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
 
 void formatFileTests() {
   test('github_comment_format.md exists and prescribes Markdown', () {
-    final file = File(_formatFile.substring(2));
+    final file = File(_formatFile);
     expect(file.existsSync(), isTrue, reason: '$_formatFile is missing');
     final content = file.readAsStringSync();
     // Prescribes the GitHub-native constructs the comments must use.
@@ -69,7 +75,7 @@ void formatFileTests() {
 void devRunnerWiringTests() {
   for (final runner in _githubRunners) {
     test('$runner selects the github tracker prompts', () {
-      final params = _resolveRunner(runner)['params'] as Map;
+      final params = _runner(runner)['params'] as Map;
       final byTracker = params['cliPromptsByTracker'];
       expect(byTracker, isA<Map>(),
           reason: 'cliPromptsByTracker missing — the Jira-markup bug '
@@ -77,11 +83,11 @@ void devRunnerWiringTests() {
       final github = (byTracker['github'] as List?)?.cast<String>();
       expect(github, isNotNull,
           reason: 'no "github" key — the format rules never engage');
-      expect(github, contains(_formatFile));
+      expect(github, contains(_runnerFormatPath));
     });
   }
 
-  test('parents stay untouched (the wiring is machine-kit local)', () {
+  test('parents stay untouched (the wiring is deployment local)', () {
     for (final parent in const [
       'agents/bug_development.json',
       'agents/story_development.json',
@@ -97,11 +103,17 @@ void devRunnerWiringTests() {
 }
 
 void reworkRunnerWiringTests() {
-  test('rework runner parent chain still resolves (sanity)', () {
-    final json = _resolveRunner(
-        'machine-kit/teammate-install/runners/fa-rework-zai.json');
+  test('rework runner pins its parent in the factory pack (sanity)', () {
+    final runner = _runner('.dmtools/runners/fa-rework-zai.json');
     expect(
-      (json['params']['envVariables'] as Map)['AI_AGENT_PROVIDER'],
+      (runner['parent'] as Map)['path'],
+      '../../factory-agents/pr_rework.json',
+      reason: 'the rework runner extends the pack pr_rework config — the '
+          'parent chain resolves in the factory checkout at run time',
+    );
+    final params = runner['params'] as Map;
+    expect(
+      (params['envVariables'] as Map)['AI_AGENT_PROVIDER'],
       'fa',
     );
   });
@@ -110,7 +122,7 @@ void reworkRunnerWiringTests() {
 void defaultTrackerWiringTests() {
   for (final runner in _githubRunners) {
     test('$runner pins DEFAULT_TRACKER=github (the active tracker)', () {
-      final params = _resolveRunner(runner)['params'] as Map;
+      final params = _runner(runner)['params'] as Map;
       final env = params['envVariables'] as Map;
       expect(env['DEFAULT_TRACKER'], 'github',
           reason: 'CliCommandBuilder resolves tracker prompts via '

@@ -12,15 +12,15 @@
 ///    rounds (tracked via `rework-round-<n>` issue labels) the machine
 ///    escalates to `needs-human` instead of labeling `agent:rework` again.
 ///
-/// The logic lives in `machine-kit/teammate-install/scripts/review-verdict.sh`
-/// so the workflow step stays a thin wrapper (and this decision surface is
-/// testable without `gh`/network).
+/// The logic lives in the factory pack's `agents/setup/review-verdict.sh`
+/// (pinned submodule; the factory workflow calls it as
+/// `factory-agents/setup/review-verdict.sh`) so the workflow step stays a
+/// thin wrapper (and this decision surface is testable without
+/// `gh`/network).
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -36,8 +36,6 @@ void main() {
   roundCapBookkeepingTests();
   roundCapConfigTests();
   threadSummaryTests();
-  wiringTests();
-  formalReviewWiringTests();
   verdictLabelWiringTests();
   escalationThreadSummaryWiringTests();
 }
@@ -578,7 +576,8 @@ void escalationThreadSummaryWiringTests() {
     });
 
     test('a failed thread fetch is surfaced as a warning, not swallowed', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
+          .readAsStringSync();
       expect(yml, contains('reviewThreads fetch failed'),
           reason: 'the error JSON of a failed gh api graphql call parses to '
               'zero threads — without an annotation the empty summary looks '
@@ -590,7 +589,8 @@ void escalationThreadSummaryWiringTests() {
 /// Extracts the escalation path's `-f query='…'` GraphQL string from the
 /// workflow (there is exactly one).
 String _workflowGraphqlQuery() {
-  final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+  final yml =
+      File('agents/.github/workflows/factory-teammate.yml').readAsStringSync();
   final match = RegExp(r"-f query='([^']+)'").firstMatch(yml);
   expect(match, isNotNull,
       reason: 'no -f query=… GraphQL string in factory/teammate.yml');
@@ -617,7 +617,8 @@ void verdictLabelWiringTests() {
     });
 
     test('dynamic verdict labels are created before they are added', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
+          .readAsStringSync();
       // gh issue edit --add-label hard-fails on an unknown label ("not
       // found") — and the step runs under bash -e, so a missing label
       // definition would abort the verdict transition mid-way (the loop
@@ -637,7 +638,8 @@ void verdictLabelWiringTests() {
     test(
         'agent:rework is labeled before the round counter '
         '(supersession-safe order)', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
+          .readAsStringSync();
       final rework = yml.indexOf('--add-label "agent:rework"');
       final round = yml.indexOf('--add-label "rework-round-');
       expect(rework, greaterThanOrEqualTo(0));
@@ -647,83 +649,6 @@ void verdictLabelWiringTests() {
               'concurrency group keeps one pending run, so the queue label '
               'must be added first — a superseded pending run then still '
               'resolves to agent:rework even if the round-label add fails');
-    });
-  });
-}
-
-/// gh-129: the review runner must opt in to the formal GitHub review
-/// (real APPROVE / REQUEST_CHANGES reviews, not just the pr_approved
-/// label) while the parent's own customParams survive the deepMerge.
-void formalReviewWiringTests() {
-  group('machine wiring: formal review', () {
-    test(
-        'review runner turns on formalGithubReview '
-        '(real approvals, not just labels)', () {
-      final json = jsonDecode(
-        const RunCommandProcessor().process([
-          'run',
-          'machine-kit/teammate-install/runners/fa-review-kimi.json'
-        ]),
-      ) as Map;
-      final customParams = json['params']['customParams'] as Map;
-      expect(customParams['formalGithubReview'], true);
-      // deepMerge keeps the parent's own customParams alongside the flag.
-      expect(customParams['removeLabel'], 'sm_story_review_triggered');
-      expect(customParams['checkOpenPR'], true);
-      expect(customParams['allowApproveWithSuggestions'], true);
-    });
-  });
-}
-
-/// Contract tests: the runners + workflow must stay wired to the script and
-/// the verdict-rules instruction file.
-void wiringTests() {
-  group('machine wiring', () {
-    test('review runner extends parent prompts with the verdict rules', () {
-      final json = jsonDecode(
-        const RunCommandProcessor().process([
-          'run',
-          'machine-kit/teammate-install/runners/fa-review-kimi.json'
-        ]),
-      ) as Map;
-      final params = json['params'] as Map;
-      final prompts = (params['cliPrompts'] as List).cast<String>();
-      expect(
-        prompts,
-        contains(
-            'machine-kit/teammate-install/instructions/review-verdict-rules.md'),
-      );
-      // Parent prompts survive the merge.
-      expect(prompts,
-          contains('./agents/instructions/pr_review/general_guidelines.md'));
-      expect(
-        (params['customParams'] as Map)['allowApproveWithSuggestions'],
-        true,
-      );
-    });
-
-    test('verdict-rules instruction file exists', () {
-      expect(
-        File('machine-kit/teammate-install/instructions/review-verdict-rules.md')
-            .existsSync(),
-        isTrue,
-      );
-    });
-
-    test('rework runner still resolves against its parent', () {
-      final json = jsonDecode(
-        const RunCommandProcessor().process(
-            ['run', 'machine-kit/teammate-install/runners/fa-rework-zai.json']),
-      ) as Map;
-      expect(
-          (json['params']['envVariables'] as Map)['AI_AGENT_PROVIDER'], 'fa');
-    });
-
-    test('workflow invokes the script and defines the cap', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
-      expect(yml, contains('review-verdict.sh'));
-      expect(yml, contains('MAX_AUTO_REWORK_ROUNDS'));
-      expect(yml, contains('needs-human'));
     });
   });
 }

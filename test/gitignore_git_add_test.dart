@@ -16,11 +16,15 @@ import 'package:test/test.dart';
 ///
 /// The contract under test:
 /// 1. the agents' exact staging commands exit 0;
-/// 2. nothing under `.dmtools/` is ever staged (no #57-kind regression);
+/// 2. nothing outside the trackable `.dmtools` boundary is staged (no
+///    #57-kind regression); since gh-146 the boundary is exactly
+///    `.dmtools/config.js` and `.dmtools/runners/*.json` — session/trace
+///    artifacts, nested runner subdirs and unlisted paths stay ignored;
 /// 3. ordinary working-tree changes still get staged.
 void main() {
   agentsStagingTests();
   blanketAddTests();
+  dmtoolsBoundaryTests();
 }
 
 /// The agents' exact staging commands (dev, rework, timer auto-save) must
@@ -48,7 +52,7 @@ void agentsStagingTests() {
       final staged = sandbox.stagedPaths();
       expect(staged, contains('notes.md'));
       expect(
-        staged.where((p) => p.startsWith('.dmtools/')),
+        staged.where(_isDmtoolsArtifact),
         isEmpty,
         reason: 'session/trace artifacts leaked into the commit (#57)',
       );
@@ -61,7 +65,7 @@ void agentsStagingTests() {
       final add = _runAgentsAdd(sandbox, '-A');
       expect(add.exitCode, 0, reason: add.stderr);
       expect(
-        sandbox.stagedPaths().where((p) => p.startsWith('.dmtools/')),
+        sandbox.stagedPaths().where(_isDmtoolsArtifact),
         isEmpty,
       );
     });
@@ -82,12 +86,66 @@ void blanketAddTests() {
         final add = sandbox.runGit(['add', '.']);
         expect(add.exitCode, 0, reason: add.stderr);
         expect(
-          sandbox.stagedPaths().where((p) => p.startsWith('.dmtools/')),
+          sandbox.stagedPaths().where(_isDmtoolsArtifact),
           isEmpty,
         );
       });
     }
   });
+}
+
+/// gh-146: the `.dmtools` boundary moved — `config.js` (the machine loop's
+/// dispatch wiring) and `runners/*.json` (the per-leg runner configs) are
+/// now trackable, everything else under `.dmtools/` stays ignored. Both
+/// staging flows must stage exactly the boundary, so a future `.gitignore`
+/// edit that loosens it (say `!.dmtools/**` slipping in during a rule
+/// reorder) fails here instead of leaking session/trace artifacts.
+void dmtoolsBoundaryTests() {
+  final flows = <String, ProcessResult Function(_Sandbox)>{
+    'agents pathspec add': (s) => _runAgentsAdd(s, '.'),
+    'plain blanket add': (s) => s.runGit(['add', '.']),
+  };
+  group('.dmtools trackable boundary (gh-146)', () {
+    flows.forEach((flow, run) {
+      test('$flow stages exactly config.js and runners/*.json', () {
+        final sandbox = _sandbox(withCopilotSessions: true);
+        addTearDown(() => sandbox.dir.deleteSync(recursive: true));
+
+        final add = run(sandbox);
+        expect(add.exitCode, 0, reason: add.stderr);
+
+        final staged = sandbox.stagedPaths();
+        expect(staged, contains('.dmtools/config.js'));
+        expect(staged, contains('.dmtools/runners/runner.json'));
+        expect(
+          staged,
+          isNot(contains('.dmtools/runners/sub/deep.json')),
+          reason: 'nested runner subdirs stay ignored',
+        );
+        expect(
+          staged,
+          isNot(contains('.dmtools/other.js')),
+          reason: 'unlisted .dmtools paths stay ignored',
+        );
+        expect(
+          staged.where(_isDmtoolsArtifact),
+          isEmpty,
+          reason: 'session/trace artifacts leaked into the commit',
+        );
+      });
+    });
+  });
+}
+
+/// Anything under `.dmtools/` outside the trackable boundary: session and
+/// trace artifacts, nested runner subdirs, unlisted files.
+bool _isDmtoolsArtifact(String path) {
+  if (path == '.dmtools/config.js') return false;
+  if (path.startsWith('.dmtools/runners/')) {
+    final rest = path.substring('.dmtools/runners/'.length);
+    return rest.contains('/') || !rest.endsWith('.json');
+  }
+  return path.startsWith('.dmtools/');
 }
 
 /// The negation pathspecs used by developTicketAndCreatePR.js,
@@ -130,6 +188,16 @@ _Sandbox _sandbox({required bool withCopilotSessions}) {
   Directory('${dmtools.path}/fa-sessions').createSync();
   File('${dmtools.path}/fa-sessions/s.txt').writeAsStringSync('x');
   File('${dmtools.path}/fa-trace.log').writeAsStringSync('trace');
+
+  // gh-146 boundary: the machine wiring is trackable (config.js + the
+  // per-leg runners), while nested runner dirs and unlisted paths stay
+  // ignored — both sides of the boundary in one sandbox.
+  File('${dmtools.path}/config.js').writeAsStringSync('// wiring\n');
+  Directory('${dmtools.path}/runners').createSync();
+  File('${dmtools.path}/runners/runner.json').writeAsStringSync('{}\n');
+  Directory('${dmtools.path}/runners/sub').createSync();
+  File('${dmtools.path}/runners/sub/deep.json').writeAsStringSync('{}\n');
+  File('${dmtools.path}/other.js').writeAsStringSync('// unlisted\n');
 
   // fa-session.sh writes these on every runner session.
   File('${dir.path}/.git/info/exclude').writeAsStringSync(

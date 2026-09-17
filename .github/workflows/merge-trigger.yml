@@ -1,8 +1,9 @@
-# Merge Trigger — GitHub-issues tracker variant (machine-kit).
+# Merge Trigger — GitHub-issues tracker variant (machine-kit heritage;
+# this file is frozen — the factory pack owns merge triggering now).
 #
-# Placeholder tokens (rendered by machine-kit/setup.sh):
-#   Quality — the workflow whose green run arms the trigger
-#                            (e.g. "Quality" in dmtools-dart, "CI" elsewhere)
+# Historical note: this file was once template-rendered by the deleted
+# machine-kit/setup.sh; all placeholder tokens are filled in below
+# ("Quality" names the workflow whose green run arms the trigger).
 #
 # The tracker is THIS repo's GitHub issues (no Jira, no external services):
 #

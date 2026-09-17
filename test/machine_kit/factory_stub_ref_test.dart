@@ -83,7 +83,8 @@ void main() {
 /// inherit => startup failure, explicit => green; run 35275493724).
 void _secretsExplicitlyMapped() {
   test('secrets are explicitly mapped (inherit fails required check)', () {
-    for (final stub in _stubs.keys) {
+    for (final entry in _stubs.entries) {
+      final stub = entry.key;
       final yml = File(stub).readAsStringSync();
       final activeInherit =
           yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
@@ -92,12 +93,23 @@ void _secretsExplicitlyMapped() {
               "the factory's REQUIRED named secret — live bisect showed "
               'startup failure (run 35275493724; mentioning it in a '
               'comment is fine)');
-      expect(yml, contains('SOURCE_GITHUB_TOKEN:'),
-          reason: '$stub must pass the required secret explicitly');
-      expect(yml, contains('ZAI_CODE_KEY:'),
-          reason: '$stub must forward the optional provider secrets');
-      expect(yml, contains('KIMI_REVIEW_KEY:'),
-          reason: '$stub must forward the optional provider secrets');
+      // The mapped set must EQUAL the callee's declared set: mapping an
+      // UNDECLARED secret is rejected at call time (probe H2), and a
+      // missing REQUIRED one fails validation (probes A/B).
+      final declared = _declaredSecrets(entry.value);
+      for (final name in declared) {
+        expect(yml, contains('$name:'),
+            reason: '$stub must map `$name` (declared by the factory)');
+      }
+      final secretsBlock = yml.split('secrets:').last.split('jobs:').first;
+      final mapped = RegExp(r'^\s{6}([A-Z_]+):', multiLine: true)
+          .allMatches(secretsBlock)
+          .map((m) => m.group(1)!)
+          .toSet();
+      expect(mapped, declared,
+          reason: '$stub maps {${mapped.join(', ')}} but the factory '
+              'declares {${declared.join(', ')}} — mapping undeclared '
+              'secrets (or missing declared ones) is a startup failure');
     }
   });
 }
@@ -110,6 +122,16 @@ String _submodulePin() {
   expect(parts, hasLength(greaterThanOrEqualTo(3)));
   expect(parts[1], 'commit', reason: 'agents must stay a submodule');
   return parts[2];
+}
+
+/// The `secrets:` names the called factory workflow declares.
+Set<String> _declaredSecrets(String factoryPath) {
+  final yml = File('agents/$factoryPath').readAsStringSync();
+  final block = yml.split('    secrets:').last.split('\n\n').first;
+  return RegExp(r'^\s{6}([A-Z_]+):', multiLine: true)
+      .allMatches(block)
+      .map((m) => m.group(1)!)
+      .toSet();
 }
 
 /// Extracts the called path and ref from a stub's `uses:` line.

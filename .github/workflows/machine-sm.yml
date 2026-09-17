@@ -46,6 +46,7 @@ jobs:
     # and `secrets: inherit` does not satisfy required-secret validation at
     # call time (live bisect: inherit => startup failure, explicit => green).
     secrets:
+      # EXACTLY the set factory-sm.yml declares (SOURCE only) — mapping a
+      # secret the callee does not declare is rejected at call time
+      # (probe H2: +ZAI/KIMI => startup failure; probe I: exact set => green).
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-      ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
-      KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}

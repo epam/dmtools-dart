@@ -103,7 +103,7 @@ void wiringTests() {
     });
 
     test('workflow invokes the script and defines the cap', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml')
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
           .readAsStringSync();
       expect(yml, contains('review-verdict.sh'));
       expect(yml, contains('MAX_AUTO_REWORK_ROUNDS'));

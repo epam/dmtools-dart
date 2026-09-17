@@ -576,7 +576,7 @@ void escalationThreadSummaryWiringTests() {
     });
 
     test('a failed thread fetch is surfaced as a warning, not swallowed', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml')
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
           .readAsStringSync();
       expect(yml, contains('reviewThreads fetch failed'),
           reason: 'the error JSON of a failed gh api graphql call parses to '
@@ -590,7 +590,7 @@ void escalationThreadSummaryWiringTests() {
 /// workflow (there is exactly one).
 String _workflowGraphqlQuery() {
   final yml =
-      File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+      File('agents/.github/workflows/factory-teammate.yml').readAsStringSync();
   final match = RegExp(r"-f query='([^']+)'").firstMatch(yml);
   expect(match, isNotNull,
       reason: 'no -f query=… GraphQL string in factory/teammate.yml');
@@ -617,7 +617,7 @@ void verdictLabelWiringTests() {
     });
 
     test('dynamic verdict labels are created before they are added', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml')
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
           .readAsStringSync();
       // gh issue edit --add-label hard-fails on an unknown label ("not
       // found") — and the step runs under bash -e, so a missing label
@@ -638,7 +638,7 @@ void verdictLabelWiringTests() {
     test(
         'agent:rework is labeled before the round counter '
         '(supersession-safe order)', () {
-      final yml = File('agents/.github/workflows/factory/teammate.yml')
+      final yml = File('agents/.github/workflows/factory-teammate.yml')
           .readAsStringSync();
       final rework = yml.indexOf('--add-label "agent:rework"');
       final round = yml.indexOf('--add-label "rework-round-');

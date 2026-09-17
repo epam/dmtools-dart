@@ -186,8 +186,8 @@ void _teammateStubContract() {
     test('calls the factory teammate pack with the issue number', () {
       expect(
         yaml,
-        contains('uses: IstiN/dmtools-agents/.github/workflows/factory/'
-            'teammate.yml@'),
+        contains(
+            'uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@'),
       );
       expect(
         yaml,

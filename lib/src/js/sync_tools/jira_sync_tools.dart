@@ -319,11 +319,18 @@ class JiraSyncTools {
         return _putLabels(config, key, labels);
       });
 
-  /// `jira_move_to_status` — finds the transition, then POSTs it.
+  /// `jira_move_to_status` — finds the transition, then POSTs it. Fetch
+  /// failures surface as their own error — a transient here used to
+  /// masquerade as "No transition found" (nightly 2026-09-17).
   String _moveToStatus(Map<String, dynamic> args) => _run((config) {
         final key = _asStr(args['key']);
         final status = _asStr(args['statusName']);
-        final transitions = _fetchTransitions(config, key);
+        final result =
+            _getJsonOrError('${config.baseUrl}/issue/$key/transitions', config);
+        if (result is String) return _err(result);
+        final list =
+            (result as Map<String, dynamic>)['transitions'] as List? ?? [];
+        final transitions = list.cast<Map<String, dynamic>>();
         final id = matchTransitionId(transitions, status);
         if (id == null) return _err('No transition found for status: $status');
         return _postBody(
@@ -638,18 +645,6 @@ class JiraSyncTools {
     return _putBody(config, '${config.baseUrl}/issue/$key', body);
   }
 
-  /// Fetches the transitions list for [key]; empty list on failure.
-  List<Map<String, dynamic>> _fetchTransitions(
-    _JiraSyncConfig config,
-    String key,
-  ) {
-    final decoded =
-        _getJson(config, '${config.baseUrl}/issue/$key/transitions');
-    if (decoded == null) return [];
-    final list = decoded['transitions'] as List? ?? [];
-    return list.cast<Map<String, dynamic>>();
-  }
-
   /// Resolves the Jira connection config, or `null` when incomplete.
   _JiraSyncConfig? _config() {
     final reader = PropertyReader();
@@ -732,15 +727,25 @@ String _errorOf(String errorEnvelope) =>
 
 /// GETs a JSON object, returning `null` on failure or non-object body.
 Map<String, dynamic>? _getJson(_JiraSyncConfig config, String url) {
+  final result = _getJsonOrError(url, config);
+  return result is Map<String, dynamic> ? result : null;
+}
+
+/// GET for callers that must distinguish transport failure from an empty
+/// result: the decoded map, or an error [String] (status / malformed body).
+Object _getJsonOrError(String url, _JiraSyncConfig config) {
   final resp = SyncHttpClient.get(url, headers: config.headers);
-  if (!resp.isOk) return null;
+  if (!resp.isOk) {
+    final decoded = _tryDecode(resp.body);
+    final detail = decoded is Map ? _asStr(decoded['error']) : '';
+    return 'fetch failed: HTTP ${resp.statusCode}'
+        '${detail.isEmpty ? '' : ': $detail'}';
+  }
   try {
     final decoded = jsonDecode(resp.body);
     if (decoded is Map<String, dynamic>) return decoded;
-  } catch (_) {
-    // fall through
-  }
-  return null;
+  } catch (_) {/* fall through to the malformed-body error */}
+  return 'fetch failed: malformed JSON response';
 }
 
 /// POSTs [body] to [url] and returns the result string.

@@ -1,61 +1,37 @@
-# AI Teammate — thin stub over the dmtools-agents factory (reusable pack).
-#
-# ALL logic lives in IstiN/dmtools-agents/.github/workflows/factory/
-# teammate.yml (guard, legs, verdict, sessions, memory). This file carries
-# only what cannot live in a reusable workflow: the repository event
-# triggers, the per-issue concurrency group, and the call itself.
-#
-#   issue assigned/labeled → factory guard → dev/review/rework leg
-#   workflow_dispatch (SM / manual) → leg pinned by input
-#
-# Secrets (inherit): SOURCE_GITHUB_TOKEN, ZAI_CODE_KEY, KIMI_REVIEW_KEY.
-# Vars: FA_VERSION_MACHINE || FA_VERSION || latest, DMTOOLS_VERSION,
-# MAX_AUTO_REWORK_ROUNDS.
-
-name: 'AI Teammate'
-
-run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' &&
-      format('▶ {0} (SM) · gh-{1}', github.event.inputs.leg, github.event.inputs.issue) ||
-      github.event.label.name == 'agent:rework' && '🔧 rework' ||
-      github.event.label.name == 'agent:review' && '🔍 review' ||
-      contains(github.event.issue.labels.*.name, 'agent:rework') && '🔧 rework' ||
-      contains(github.event.issue.labels.*.name, 'agent:review') && '🔍 review' ||
-      '⚒️ dev' }}
-  · gh-${{ github.event.issue.number || github.event.inputs.issue }}: ${{ github.event.issue.title }}
-
-on:
+name: AI Teammate
+'on':
   issues:
     types: [assigned, labeled]
   workflow_dispatch:
     inputs:
       issue:
-        description: 'Issue number to run the agent on'
+        description: Issue number to run the agent on
         required: true
         type: number
       leg:
-        description: 'Which leg to run'
+        description: Which leg to run
         required: true
         type: choice
-        options: [dev, review, rework]
+        options:
+        - dev
+        - review
+        - rework
       reason:
-        description: 'Why this dispatch (audit trail, shown in logs)'
+        description: Why this dispatch (audit trail, shown in logs)
         required: false
         type: string
-
 concurrency:
-  group: ai-teammate-issue-${{ github.event.issue.number || github.event.inputs.issue }}
+  group: ai-teammate-issue-${{ github.event.issue.number || inputs.issue }}
   cancel-in-progress: false
 
 jobs:
   factory:
-    # Pinned to the factory pack branch until dmtools-agents#424 merges,
-    # then flip to main (or a tag).
     uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@feature/factory-reusable
     with:
-      issue: ${{ github.event.issue.number || github.event.inputs.issue || 0 }}
-      leg: ${{ github.event.inputs.leg || '' }}
-      reason: ${{ github.event.inputs.reason || 'stub' }}
+      issue: ${{ github.event.issue.number || inputs.issue || '0' }}
+      factory_ref: feature/factory-reusable
+      leg: ${{ inputs.leg || '' }}
+      reason: ${{ inputs.reason || 'stub' }}
     secrets:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}

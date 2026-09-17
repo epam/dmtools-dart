@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the legacy `_fetchTransitions` swallowed failures into an empty list —
   a sandbox transient flaked the integration job on main). The legacy
   message stays reserved for the genuine empty-transitions case; error
-  paths pinned by `test/js/sync_tool_dispatch_test.dart`.
+  paths pinned by `test/js/jira_move_error_semantics_test.dart`.
 
 - Alias help/list resolution under `DMTOOLS_INTEGRATIONS` (gh-136):
   `dmtools <alias> --help` and `dmtools list <alias>` now narrow alias

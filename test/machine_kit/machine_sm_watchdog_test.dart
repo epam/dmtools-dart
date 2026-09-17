@@ -132,12 +132,17 @@ void _smStubContract() {
             'call it (pinned ref)',
       );
       expect(
-        yaml.contains(r'dryRun: ${{ github.event.inputs.dryRun || false }}'),
+        yaml.contains(r"dryRun: ${{ github.event.inputs.dryRun || 'false' }}"),
         isTrue,
         reason: 'manual ticks default to dry; cron ticks run live — the '
-            'input must fall through exactly that way',
+            'input must fall through exactly that way (STRING: boolean '
+            'reusable inputs reject expressions)',
       );
-      expect(yaml, contains('secrets: inherit'));
+      expect(
+        yaml.split('\n').any((l) => l.trim() == 'secrets: inherit'),
+        isFalse,
+        reason: 'explicit secret mapping — inherit fails the required check',
+      );
     });
   });
 }

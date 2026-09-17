@@ -32,7 +32,7 @@ jobs:
   sm:
     # Pinned to the factory pack branch until dmtools-agents#424 merges,
     # then flip to main (or a tag).
-    uses: IstiN/dmtools-agents/.github/workflows/factory/sm.yml@feature/factory-reusable
+    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@feature/factory-reusable
     with:
       # Manual ticks default to dry; cron ticks run live.
       dryRun: ${{ github.event.inputs.dryRun || false }}

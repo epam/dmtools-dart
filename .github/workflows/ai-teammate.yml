@@ -51,7 +51,7 @@ jobs:
   factory:
     # Pinned to the factory pack branch until dmtools-agents#424 merges,
     # then flip to main (or a tag).
-    uses: IstiN/dmtools-agents/.github/workflows/factory/teammate.yml@feature/factory-reusable
+    uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@feature/factory-reusable
     with:
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}

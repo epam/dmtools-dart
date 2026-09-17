@@ -59,6 +59,9 @@ jobs:
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
     uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@8a3a3859a743d35874635ebfc11aa15274f4cc2d
     with:
+      # The literal uses-ref: the factory requires it (it cannot derive its
+      # own ref — github.workflow_ref in a called workflow is the CALLER's).
+      factory_ref: 8a3a3859a743d35874635ebfc11aa15274f4cc2d
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

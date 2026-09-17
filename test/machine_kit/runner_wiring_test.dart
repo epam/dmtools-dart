@@ -140,8 +140,7 @@ void resolutionTests() {
 
     tearDownAll(() => tmp.deleteSync(recursive: true));
 
-    test('all four runners resolve their parent chain and keep the fa pin',
-        () {
+    test('all four runners resolve their parent chain and keep the fa pin', () {
       for (final runner in _runners) {
         final params = _resolvedRunner(tmp, runner)['params'] as Map;
         final env = params['envVariables'] as Map;
@@ -164,8 +163,7 @@ void resolutionTests() {
               'deepMerge alongside the runner overrides');
     });
 
-    test('merge directive appends the verdict rules to the parent prompts',
-        () {
+    test('merge directive appends the verdict rules to the parent prompts', () {
       final params =
           _resolvedRunner(tmp, 'fa-review-kimi.json')['params'] as Map;
       final parentPrompts = (_runnerJson('agents/pr_review.json')['params']

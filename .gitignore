@@ -33,6 +33,10 @@ native/quickjs/*.dylib
 # `git add .` must not stage .dmtools/**) still holds. Regression tests:
 # test/gitignore_git_add_test.dart
 .dmtools/**
+!.dmtools/config.js
+!.dmtools/runners/
+.dmtools/runners/**/
+!.dmtools/runners/*.json
 !.dmtools/copilot-sessions/
 .dmtools/copilot-sessions/**
 .dmtools-logs/

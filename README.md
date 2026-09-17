@@ -181,4 +181,5 @@ gh workflow run machine-sm.yml -f dryRun=true
 ```
 
 Runner configs (provider/model pinning per leg) live in
-[machine-kit/teammate-install/runners/](machine-kit/teammate-install/runners/).
+[.dmtools/runners/](.dmtools/runners/), selected per leg by the factory guard
+via [.dmtools/config.js](.dmtools/config.js).

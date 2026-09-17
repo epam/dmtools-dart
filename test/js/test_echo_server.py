@@ -63,6 +63,36 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(encoded)
             return
+        # Jira move-to-status error-path fixtures (gh-146 review thread 3:
+        # transport failures must surface their real reason, never the
+        # legacy "No transition found" mask). dt-movefail GET → 500 with
+        # an error body (failed transitions fetch); dt-movebadjson GET →
+        # 200 with a malformed body; dt-movepostfail POST → 500 (failed
+        # transition apply — its GET still echoes a transitions list).
+        if "dt-movefail" in self.path and self.command == "GET":
+            encoded = b'{"error": "boom"}'
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if "dt-movebadjson" in self.path and self.command == "GET":
+            encoded = b"not-json{"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if "dt-movepostfail" in self.path and self.command == "POST":
+            encoded = b'{"error": "nope"}'
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         # Java-parity fixtures for 2xx-with-empty-body responses: a
         # transitions POST (dt-move) and a ticket DELETE (dt-del) answer
         # 204 No Content. The sync layer must hand JS the empty string /

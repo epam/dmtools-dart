@@ -1,7 +1,5 @@
 {
-  "parent": {
-    "path": "../../../agents/story_development.json"
-  },
+  "parent": { "path": "../../factory-agents/bug_development.json" },
   "params": {
     "envVariables": {
       "DEFAULT_TRACKER": "github",
@@ -11,15 +9,7 @@
     },
     "inputJql": "",
     "cliPromptsByTracker": {
-      "github": [
-        "./machine-kit/teammate-install/instructions/github_comment_format.md"
-      ]
-    },
-    "customParams": {
-      "targetRepository": {
-        "workingDir": ".",
-        "baseBranch": "main"
-      }
+      "github": ["./factory-agents/instructions/common/github_comment_format.md"]
     }
   }
 }

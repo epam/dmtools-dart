@@ -2,7 +2,7 @@
 // in the AI Teammate machine must never leak the workflows-capable PAT to
 // non-github hosts (PR #68 review, BLOCKING thread) and must keep its
 // at-push-time evidence honest. These tests pin the invariants of
-//   agents/.github/workflows/factory/teammate.yml (the factory workflow)
+//   agents/.github/workflows/factory-teammate.yml (the factory workflow)
 //   agents/setup/install-source-git-credentials.sh (the shared installer)
 // so a future edit cannot silently reintroduce the generic-helper leak or
 // weaken the purge evidence.
@@ -11,10 +11,10 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 // The credential machinery lives in the FACTORY (agents submodule,
-// .github/workflows/factory/teammate.yml + setup/ scripts); the local
+// .github/workflows/factory-teammate.yml + setup/ scripts); the local
 // ai-teammate.yml is a thin reusable-workflow stub over it. The pinned
 // submodule makes the factory files part of this repo's merge tree.
-const _workflowPath = 'agents/.github/workflows/factory/teammate.yml';
+const _workflowPath = 'agents/.github/workflows/factory-teammate.yml';
 const _scriptPath = 'agents/setup/install-source-git-credentials.sh';
 
 /// All YAML files that carry the credential machinery.
@@ -573,24 +573,41 @@ void _showOriginRedactionActuallyWorks(String path) {
         reason: "the dump must pipe through `sed -E '…'` — line: $dumpLine");
     final sedProgram = sedMatch!.group(1)!;
     final poisoned = 'file:.git/config\tAUTHORIZATION: basic QUJDREVGRw==';
-    final result = await Process.run('bash', [
-      '-c',
-      'printf "%s\\n" "\$DUMP_LINE" | sed -E "\$SED_PROGRAM"',
-    ], environment: {
-      'DUMP_LINE': poisoned,
-      'SED_PROGRAM': sedProgram,
-    });
-    final out = '${result.stdout}';
-    expect(out, contains('file:.git/config'),
-        reason: 'the origin must stay visible (ticket Task 1 evidence)');
-    expect(out, contains('<redacted>'),
-        reason: 'the value must be replaced with the redaction marker');
-    expect(
-      out.contains('QUJDREVGRw'),
-      isFalse,
-      reason: 'the sed program shipped in the dump line leaked the '
-          'poisoned extraheader value: program `$sedProgram` produced $out',
-    );
+    // Behavioral on GNU sed (CI/linux — the workflow's only runtime);
+    // structural on BSD sed (macOS dev hosts): BSD parses a bare `t;` as a
+    // label and cannot match \\t in brackets, so the program is asserted by
+    // shape there instead of executing a sed that cannot run it.
+    final gnuSed = await Process.run('sed', ['--version']);
+    final isGnu = gnuSed.exitCode == 0;
+    if (isGnu) {
+      final result = await Process.run('bash', [
+        '-c',
+        'printf "%s\\n" "\$DUMP_LINE" | sed -E "\$SED_PROGRAM"',
+      ], environment: {
+        'DUMP_LINE': poisoned,
+        'SED_PROGRAM': sedProgram,
+      });
+      final out = '${result.stdout}';
+      expect(out, contains('file:.git/config'),
+          reason: 'the origin must stay visible (ticket Task 1 evidence)');
+      expect(out, contains('<redacted>'),
+          reason: 'the value must be replaced with the redaction marker');
+      expect(
+        out.contains('QUJDREVGRw'),
+        isFalse,
+        reason: 'the sed program shipped in the dump line leaked the '
+            'poisoned extraheader value: program `$sedProgram` produced $out',
+      );
+    } else {
+      expect(
+        RegExp(r's/\^\(\[\^\\t\]\*\\t\)\.\*/\\1<redacted>/')
+            .hasMatch(sedProgram),
+        isTrue,
+        reason: 'the program must redact everything after the first TAB '
+            '(origin stays visible) — got `$sedProgram`',
+      );
+      expect(sedProgram.contains('QUJDREVGRw'), isFalse);
+    }
   });
 }
 

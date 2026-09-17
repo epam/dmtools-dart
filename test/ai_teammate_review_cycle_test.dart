@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 /// Pins the review-cycle wiring of the FACTORY teammate workflow
-/// (agents/.github/workflows/factory/teammate.yml — pinned submodule, so it
+/// (agents/.github/workflows/factory-teammate.yml — pinned submodule, so it
 /// is part of this repo's merge tree; the in-repo .github/workflows/
 /// ai-teammate.yml is only a thin stub over it, pinned by
 /// machine_sm_watchdog_test.dart) to the gh-71 verdict machinery: the
@@ -18,7 +18,7 @@ import 'package:test/test.dart';
 /// agent:rework loop.
 void main() {
   final workflow =
-      File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
+      File('agents/.github/workflows/factory-teammate.yml').readAsStringSync();
 
   _reviewCycleGroup(workflow);
   _verdictDelegationGroup(workflow);

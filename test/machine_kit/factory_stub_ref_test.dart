@@ -26,8 +26,8 @@ import 'package:test/test.dart';
 
 /// The two stub→factory calls: workflow file and the called factory path.
 const _stubs = {
-  '.github/workflows/ai-teammate.yml': '.github/workflows/factory/teammate.yml',
-  '.github/workflows/machine-sm.yml': '.github/workflows/factory/sm.yml',
+  '.github/workflows/ai-teammate.yml': '.github/workflows/factory-teammate.yml',
+  '.github/workflows/machine-sm.yml': '.github/workflows/factory-sm.yml',
 };
 
 /// SHA-pin extraction from a `uses:` line.

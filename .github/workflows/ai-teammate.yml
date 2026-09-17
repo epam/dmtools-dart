@@ -56,4 +56,7 @@ jobs:
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}
-    secrets: inherit
+    secrets:
+      SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+      ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+      KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}

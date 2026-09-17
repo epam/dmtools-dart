@@ -21,6 +21,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/src/cli/run_command_processor.dart';
 import 'package:test/test.dart';
 
 Map<String, dynamic> _runnerJson(String path) =>
@@ -38,6 +39,7 @@ const _verdictRulesFile =
 void main() {
   formalReviewWiringTests();
   wiringTests();
+  resolutionTests();
 }
 
 /// gh-129: the review runner must opt in to the formal GitHub review
@@ -109,3 +111,95 @@ void wiringTests() {
     });
   });
 }
+
+/// gh-146 review thread 4 — the raw pins above cannot execute the
+/// parent-chain deepMerge `dmtools run` performs: a typo in a `merge`
+/// directive or a parent-shape change passes raw-pin tests and breaks the
+/// leg at run time. This group reconstructs the factory layout locally —
+/// the runner under `<tmp>/.dmtools/runners/`, its pinned parent copied
+/// from the `agents/` submodule into `<tmp>/factory-agents/` (exactly the
+/// `../../factory-agents/…` layout the runners reference) — and runs
+/// [RunCommandProcessor] against the copied runner. Parent paths resolve
+/// relative to the loaded file's directory, so no chdir is needed.
+void resolutionTests() {
+  group('machine wiring: runner resolution through RunCommandProcessor', () {
+    late Directory tmp;
+
+    setUpAll(() {
+      tmp = Directory.systemTemp.createTempSync('fa_runner_resolution');
+      Directory('${tmp.path}/factory-agents').createSync(recursive: true);
+      Directory('${tmp.path}/.dmtools/runners').createSync(recursive: true);
+      for (final name in _packAgents) {
+        File('agents/$name').copySync('${tmp.path}/factory-agents/$name');
+      }
+      for (final runner in _runners) {
+        File('.dmtools/runners/$runner')
+            .copySync('${tmp.path}/.dmtools/runners/$runner');
+      }
+    });
+
+    tearDownAll(() => tmp.deleteSync(recursive: true));
+
+    test('all four runners resolve their parent chain and keep the fa pin',
+        () {
+      for (final runner in _runners) {
+        final params = _resolvedRunner(tmp, runner)['params'] as Map;
+        final env = params['envVariables'] as Map;
+        expect(env['AI_AGENT_PROVIDER'], 'fa',
+            reason: '$runner must keep the fa provider pin after the '
+                'parent-chain deepMerge');
+      }
+    });
+
+    test(
+        'review runner deep-merges gh-129 custom params '
+        'alongside the parent\'s own', () {
+      final params =
+          _resolvedRunner(tmp, 'fa-review-kimi.json')['params'] as Map;
+      final custom = params['customParams'] as Map;
+      expect(custom['formalGithubReview'], isTrue);
+      expect(custom['allowApproveWithSuggestions'], isTrue);
+      expect(custom['checkOpenPR'], isTrue,
+          reason: "the parent's own customParams must survive the "
+              'deepMerge alongside the runner overrides');
+    });
+
+    test('merge directive appends the verdict rules to the parent prompts',
+        () {
+      final params =
+          _resolvedRunner(tmp, 'fa-review-kimi.json')['params'] as Map;
+      final parentPrompts = (_runnerJson('agents/pr_review.json')['params']
+          as Map)['cliPrompts'] as List;
+      final prompts = params['cliPrompts'] as List;
+      expect(prompts, hasLength(parentPrompts.length + 1),
+          reason: 'a missing/typoed "merge": ["params.cliPrompts"] would '
+              'replace the parent prompts instead of appending');
+      expect(prompts.take(parentPrompts.length), parentPrompts);
+      expect(
+        prompts.last,
+        './factory-agents/instructions/pr_review/review_verdict_rules.md',
+      );
+    });
+  });
+}
+
+/// The factory layout the runners reference: parents at repo-root
+/// `factory-agents/`, runners under `.dmtools/runners/`.
+const _packAgents = [
+  'bug_development.json',
+  'story_development.json',
+  'pr_review.json',
+  'pr_rework.json',
+];
+const _runners = [
+  'fa-bug-dev.json',
+  'fa-story-dev.json',
+  'fa-review-kimi.json',
+  'fa-rework-zai.json',
+];
+
+Map<String, dynamic> _resolvedRunner(Directory tmp, String runner) =>
+    jsonDecode(
+      const RunCommandProcessor()
+          .process(['run', '${tmp.path}/.dmtools/runners/$runner']),
+    ) as Map<String, dynamic>;

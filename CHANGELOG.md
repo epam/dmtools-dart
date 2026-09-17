@@ -23,8 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it. Docs (README, ai_factory, factory_setup) and the machine contract
   tests repointed to the factory equivalents; runner-wiring contract tests
   moved to `test/machine_kit/runner_wiring_test.dart`.
+- The factory stubs pin `dmtools-agents` to the immutable SHA the `agents`
+  submodule pins instead of the `feature/factory-reusable` branch
+  (gh-146): the branch head renamed the reusable workflows away from
+  `factory/<name>.yml`, so a branch ref would fail every machine trigger
+  at run start while the gates stayed green against the submodule copy.
+  Locked in lockstep by `test/machine_kit/factory_stub_ref_test.dart`.
 
 ### Fixed
+
+- `jira_move_to_status` surfaces transport failures with their real reason
+  (commit 38fee63, gh-146 review): a failed or malformed transitions fetch
+  now reports `fetch failed: HTTP …` / `fetch failed: malformed JSON
+  response` instead of masquerading as `No transition found for status: …`
+  (the legacy `_fetchTransitions` swallowed failures into an empty list —
+  a sandbox transient flaked the integration job on main). The legacy
+  message stays reserved for the genuine empty-transitions case; error
+  paths pinned by `test/js/sync_tool_dispatch_test.dart`.
 
 - Alias help/list resolution under `DMTOOLS_INTEGRATIONS` (gh-136):
   `dmtools <alias> --help` and `dmtools list <alias>` now narrow alias

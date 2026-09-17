@@ -8,8 +8,9 @@
 #   issue assigned/labeled → factory guard → dev/review/rework leg
 #   workflow_dispatch (SM / manual) → leg pinned by input
 #
-# Secrets (inherit): SOURCE_GITHUB_TOKEN, ZAI_CODE_KEY, KIMI_REVIEW_KEY.
+# Secrets (explicit mapping): SOURCE_GITHUB_TOKEN (required by the factory),
 # Vars: FA_VERSION_MACHINE || FA_VERSION || latest, DMTOOLS_VERSION,
+# ZAI_CODE_KEY, KIMI_REVIEW_KEY (optional provider keys).
 # MAX_AUTO_REWORK_ROUNDS.
 
 name: 'AI Teammate'
@@ -65,9 +66,11 @@ jobs:
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}
-    # The factory declares no `secrets:` inputs, and GitHub only accepts
-    # explicit mapping for secrets the callee declares — so `inherit` is
-    # the callee's documented contract (SOURCE_GITHUB_TOKEN, ZAI_CODE_KEY,
-    # KIMI_REVIEW_KEY). Narrowing to an explicit list is an upstream
-    # dmtools-agents change first.
-    secrets: inherit
+    # Explicit mapping — the factory DECLARES SOURCE_GITHUB_TOKEN as a
+    # required named secret (plus optional ZAI_CODE_KEY / KIMI_REVIEW_KEY),
+    # and `secrets: inherit` does not satisfy required-secret validation at
+    # call time (live bisect: inherit => startup failure, explicit => green).
+    secrets:
+      SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+      ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+      KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}

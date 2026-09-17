@@ -57,16 +57,22 @@ void main() {
       }
     });
 
-    test('secrets stay on the callee-documented inherit contract', () {
+    test('secrets are explicitly mapped (inherit fails required check)', () {
       for (final stub in _stubs.keys) {
         final yml = File(stub).readAsStringSync();
-        expect(yml, contains('secrets: inherit'),
-            reason: '$stub must keep the factory\'s documented '
-                'secrets contract');
-        expect(yml, isNot(contains('SOURCE_GITHUB_TOKEN:')),
-            reason: 'GitHub rejects explicit mapping for secrets the '
-                'callee does not declare — a half-mapping must not '
-                'sneak in');
+        final activeInherit =
+            yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
+        expect(activeInherit, isFalse,
+            reason: '$stub: an ACTIVE `secrets: inherit` does not satisfy '
+                "the factory's REQUIRED named secret — live bisect showed "
+                'startup failure (run 35275493724; mentioning it in a '
+                'comment is fine)');
+        expect(yml, contains('SOURCE_GITHUB_TOKEN:'),
+            reason: '$stub must pass the required secret explicitly');
+        expect(yml, contains('ZAI_CODE_KEY:'),
+            reason: '$stub must forward the optional provider secrets');
+        expect(yml, contains('KIMI_REVIEW_KEY:'),
+            reason: '$stub must forward the optional provider secrets');
       }
     });
 

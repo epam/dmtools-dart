@@ -49,11 +49,22 @@ concurrency:
 
 jobs:
   factory:
-    # Pinned to the factory pack branch until dmtools-agents#424 merges,
-    # then flip to main (or a tag).
-    uses: IstiN/dmtools-agents/.github/workflows/factory/teammate.yml@feature/factory-reusable
+    # Pinned to the immutable SHA the `agents` submodule pins — a branch
+    # ref executes the branch head at run start, and the head has since
+    # renamed the reusable workflows away from factory/<name>.yml. This
+    # commit has the called paths and the self-pin that checks out
+    # factory-agents/ at the same SHA. Flip in lockstep with the
+    # submodule when dmtools-agents#424 merges (bump the submodule,
+    # then repoint this ref at the new SHA).
+    # Guarded by test/machine_kit/factory_stub_ref_test.dart.
+    uses: IstiN/dmtools-agents/.github/workflows/factory/teammate.yml@8f9de46dcefcdc0d0ddb9dae5b1bf84a2180e8e4
     with:
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}
+    # The factory declares no `secrets:` inputs, and GitHub only accepts
+    # explicit mapping for secrets the callee declares — so `inherit` is
+    # the callee's documented contract (SOURCE_GITHUB_TOKEN, ZAI_CODE_KEY,
+    # KIMI_REVIEW_KEY). Narrowing to an explicit list is an upstream
+    # dmtools-agents change first.
     secrets: inherit

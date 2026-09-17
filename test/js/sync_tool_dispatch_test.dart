@@ -363,6 +363,44 @@ void _testJiraWriteTools() {
         {'error': 'No transition found for status: In Progress'},
       );
     });
+
+    // gh-146 review thread 3 regression guards: the legacy code swallowed
+    // transitions-fetch failures into an empty list, so a sandbox transient
+    // (a 5xx or a truncated body on the GET) surfaced as the misleading
+    // "No transition found for status: …" — which is what flaked the
+    // integration job on main before 38fee63. Transport failures must
+    // carry their real reason; the legacy text stays reserved for the
+    // genuine empty-transitions case above.
+    test('jira_move_to_status surfaces a failed transitions fetch', () {
+      final result = dispatcher.execute('jira_move_to_status', {
+        'key': 'dt-movefail-1',
+        'statusName': 'In Progress',
+      });
+      final error = jsonDecode(result!)['error'] as String;
+      expect(error, contains('HTTP 500'));
+      expect(error, contains('boom'));
+      expect(error, isNot(contains('No transition found')));
+    });
+
+    test('jira_move_to_status surfaces a malformed transitions body', () {
+      final result = dispatcher.execute('jira_move_to_status', {
+        'key': 'dt-movebadjson-1',
+        'statusName': 'In Progress',
+      });
+      final error = jsonDecode(result!)['error'] as String;
+      expect(error, contains('malformed JSON'));
+      expect(error, isNot(contains('No transition found')));
+    });
+
+    test('jira_move_to_status surfaces a failed transition POST', () {
+      final result = dispatcher.execute('jira_move_to_status', {
+        'key': 'dt-movepostfail-1',
+        'statusName': 'Done',
+      });
+      final error = jsonDecode(result!)['error'] as String;
+      expect(error, contains('HTTP 500'));
+      expect(error, contains('nope'));
+    });
   });
 }
 

@@ -57,25 +57,7 @@ void main() {
       }
     });
 
-    test('secrets are explicitly mapped (inherit fails required check)', () {
-      for (final stub in _stubs.keys) {
-        final yml = File(stub).readAsStringSync();
-        final activeInherit =
-            yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
-        expect(activeInherit, isFalse,
-            reason: '$stub: an ACTIVE `secrets: inherit` does not satisfy '
-                "the factory's REQUIRED named secret — live bisect showed "
-                'startup failure (run 35275493724; mentioning it in a '
-                'comment is fine)');
-        expect(yml, contains('SOURCE_GITHUB_TOKEN:'),
-            reason: '$stub must pass the required secret explicitly');
-        expect(yml, contains('ZAI_CODE_KEY:'),
-            reason: '$stub must forward the optional provider secrets');
-        expect(yml, contains('KIMI_REVIEW_KEY:'),
-            reason: '$stub must forward the optional provider secrets');
-      }
-    });
-
+    _secretsExplicitlyMapped();
     test('every stub passes factory_ref matching its uses pin', () {
       for (final entry in _stubs.entries) {
         final stub = File(entry.key).readAsStringSync();
@@ -93,6 +75,30 @@ void main() {
                 'engine and factory must execute the same commit');
       }
     });
+  });
+}
+
+/// The factory declares SOURCE_GITHUB_TOKEN as a REQUIRED named secret —
+/// `secrets: inherit` does not satisfy it at call validation (live bisect:
+/// inherit => startup failure, explicit => green; run 35275493724).
+void _secretsExplicitlyMapped() {
+  test('secrets are explicitly mapped (inherit fails required check)', () {
+    for (final stub in _stubs.keys) {
+      final yml = File(stub).readAsStringSync();
+      final activeInherit =
+          yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
+      expect(activeInherit, isFalse,
+          reason: '$stub: an ACTIVE `secrets: inherit` does not satisfy '
+              "the factory's REQUIRED named secret — live bisect showed "
+              'startup failure (run 35275493724; mentioning it in a '
+              'comment is fine)');
+      expect(yml, contains('SOURCE_GITHUB_TOKEN:'),
+          reason: '$stub must pass the required secret explicitly');
+      expect(yml, contains('ZAI_CODE_KEY:'),
+          reason: '$stub must forward the optional provider secrets');
+      expect(yml, contains('KIMI_REVIEW_KEY:'),
+          reason: '$stub must forward the optional provider secrets');
+    }
   });
 }
 

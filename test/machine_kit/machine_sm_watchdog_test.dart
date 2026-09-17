@@ -23,6 +23,29 @@ const _teammateStubPath = '.github/workflows/ai-teammate.yml';
 const _smFactoryPath = 'agents/.github/workflows/factory-sm.yml';
 const _teammateFactoryPath = 'agents/.github/workflows/factory-teammate.yml';
 
+/// Single-instance contract: the FACTORY owns the `machine-sm` group —
+/// a caller declaring the same group deadlocks the called workflow.
+void _singleInstanceContract() {
+  final yaml = _read(_smStubPath);
+  test('never runs two reconcilers concurrently (factory owns the group)', () {
+    // The single-instance group lives in the FACTORY (factory-sm.yml):
+    // a caller declaring the same group deadlocks the called workflow —
+    // the caller holds the group while the callee waits for it forever.
+    // The stub must NOT declare its own concurrency group.
+    final activeConcurrency =
+        yaml.split('\n').any((l) => l.startsWith('concurrency:'));
+    expect(activeConcurrency, isFalse,
+        reason: 'caller-side concurrency on the same group as the '
+            'factory deadlocks the called workflow (pending, 0 jobs)');
+    final factory = _read(_smFactoryPath);
+    expect(factory, contains('group: machine-sm'),
+        reason: 'the factory must own the single-instance group');
+    expect(factory, contains('cancel-in-progress: false'),
+        reason: 'an in-flight reconcile must finish; a second tick must '
+            'queue, not interrupt it');
+  });
+}
+
 String _read(String path) {
   final file = File(path);
   if (!file.existsSync()) {
@@ -99,17 +122,7 @@ void _smStubContract() {
       );
     });
 
-    test('never runs two reconcilers concurrently', () {
-      final concurrencyBlock = yaml.split('concurrency:').last;
-      expect(concurrencyBlock, contains('group: machine-sm'));
-      expect(
-        concurrencyBlock.contains('cancel-in-progress: false'),
-        isTrue,
-        reason: 'an in-flight reconcile must finish; a second tick must '
-            'queue, not interrupt it',
-      );
-    });
-
+    _singleInstanceContract();
     test('calls the factory with the dryRun passthrough', () {
       expect(
         yaml,

@@ -353,16 +353,8 @@ void _testJiraWriteTools() {
       expect(reqBody['body'], 'Hello world');
     });
 
-    test('jira_move_to_status returns error when no transitions found', () {
-      final result = dispatcher.execute('jira_move_to_status', {
-        'key': 'PROJ-1',
-        'statusName': 'In Progress',
-      });
-      expect(
-        jsonDecode(result!),
-        {'error': 'No transition found for status: In Progress'},
-      );
-    });
+    // move_to_status error semantics (empty case + transport-failure
+    // unmasking) live in jira_move_error_semantics_test.dart.
   });
 }
 

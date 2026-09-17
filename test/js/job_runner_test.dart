@@ -426,7 +426,7 @@ void _testCliExecuteDispatch() {
       // Java CommandLineUtils.runCommand builds the child environment from
       // ProcessBuilder.environment() (a copy of the parent process env) and
       // merges the extras on top — vars the host exported (e.g. the
-      // machine-kit FA_LOG_FILE) must reach the command.
+      // machine loop's FA_LOG_FILE) must reach the command.
       final marker = Platform.environment['HOME'];
       final result = await _runCliToolScript('''
         var res = executeToolViaJava('cli_execute_command',

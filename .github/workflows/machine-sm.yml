@@ -1,23 +1,10 @@
-# Machine SM — deterministic watchdog for the GitHub-issues machine loop.
+# Machine SM — thin stub over the dmtools-agents factory (reusable pack).
 #
-# The loop (dev → PR → CI → rework → review → merge → close) is event-driven
-# on `labeled` events, but every label the machine itself adds (agent:rework
-# after red CI, pr_approved after an APPROVE verdict) is added with
-# GITHUB_TOKEN — which does NOT fire `labeled` events (issue #116). Those
-# labels are dead letters: the loop stalls until a human re-arms it.
-#
-# This workflow is the safety net: a */10 cron tick runs the SM rule engine
-# (dmtools JSRunner over smAgent — pure JS, no LLM) which reads the loop
-# state (issue labels + linked-PR facts) and triggers the next step: rework
-# on red CI, review on green, merge/cleanup for approved PRs — one merge per
-# tick — via ai-teammate.yml's workflow_dispatch input (GITHUB_TOKEN CAN
-# dispatch; only label events are mute).
-#
-# Rules live in the dmtools-agents repo (agents/sm_github.json default pack);
-# SM_AGENTS_REF pins the engine/rules checkout — a feature branch until the
-# agents PR merges, then main.
-#
-# Manual dispatch: dryRun=true prints the plan without acting — safe probe.
+# The whole reconcile tick (engine checkout, dmtools install, rule run)
+# lives in IstiN/dmtools-agents/.github/workflows/factory/sm.yml. This
+# file carries only the triggers (cron + manual dry dispatch), the
+# single-instance concurrency group, and the call.
+
 name: 'Machine SM'
 
 run-name: >-
@@ -35,69 +22,24 @@ on:
         description: 'Log the plan, perform no action'
         required: false
         type: boolean
-        default: false
+        default: true
 
-# Never two SM instances; never cancel an in-flight reconcile.
 concurrency:
   group: machine-sm
   cancel-in-progress: false
 
-permissions:
-  contents: read          # checkout
-  issues: write           # labels + close-issue safety net
-  pull-requests: write    # update-branch + merge
-  actions: write          # workflow_dispatch on ai-teammate.yml
-
 jobs:
-  reconcile:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout target repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      # The SM engine + rule pack live in dmtools-agents (smAgent + sm_github.json).
-      # SM_AGENTS_REF: feature branch hash until the agents PR merges, then main.
-      - name: Checkout dmtools-agents (SM engine + rules)
-        uses: actions/checkout@v4
-        with:
-          repository: IstiN/dmtools-agents
-          ref: ${{ env.SM_AGENTS_REF }}
-          path: dmtools-agents
-
-      - name: Install dmtools CLI (pinned release)
-        # The repo's own install.sh (AOT binary + QuickJS .so, same as
-        # ai-teammate.yml). The agents setup/install.sh is a multi-tool
-        # installer requiring tool args — with none it prints usage and
-        # installs nothing (tick #2: 'dmtools: command not found').
-        run: |
-          bash install.sh "${DMTOOLS_VERSION}"
-          echo "$HOME/.dmtools/bin" >> "$GITHUB_PATH"
-        env:
-          DMTOOLS_VERSION: ${{ vars.DMTOOLS_VERSION || 'v0.1.13' }}
-
-      - name: Reconcile the machine loop
-        env:
-          GH_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          # dmtools reads SOURCE_GITHUB_TOKEN (env-parity with Java); without
-          # it the GitHub integration counts as unconfigured and the JS
-          # runtime does not expose github_* globals at all (tick #3:
-          # "'github_search_issues' is not defined").
-          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
-          # Loop repo comes from the rule engine config; the override below
-          # pins it to THIS repository explicitly.
-        run: |
-          override='{"params":{"jobParams":{"repo":"${{ github.repository }}"}}}'
-          if [ "${{ github.event.inputs.dryRun }}" = "true" ]; then
-            override='{"params":{"jobParams":{"repo":"${{ github.repository }}","dryRun":true}}}'
-          fi
-          cd dmtools-agents && dmtools run sm_github.json "$override"
-
-# Pinning notes:
-#   SM_AGENTS_REF = sm-github-source branch (dmtools-agents PR #423) —
-#   flip to 'main' once that PR merges and the rule pack lands upstream.
-env:
-  SM_AGENTS_REF: d555c63617f5392bb61f2de6b03a51461c18bdfd
+  sm:
+    # Pinned to the immutable SHA the `agents` submodule pins — the branch
+    # head renamed the reusable workflows away from factory/<name>.yml, so
+    # a branch ref would fail every */10 cron tick. Flip in lockstep with
+    # the submodule when dmtools-agents#424 merges.
+    # Guarded by test/machine_kit/factory_stub_ref_test.dart.
+    uses: IstiN/dmtools-agents/.github/workflows/factory/sm.yml@8f9de46dcefcdc0d0ddb9dae5b1bf84a2180e8e4
+    with:
+      # Manual ticks default to dry; cron ticks run live.
+      dryRun: ${{ github.event.inputs.dryRun || false }}
+    # `secrets: inherit` is the callee's documented contract — it declares
+    # no named `secrets:` inputs, and GitHub rejects explicit mapping for
+    # undeclared secrets. Narrowing is an upstream dmtools-agents change.
+    secrets: inherit

@@ -81,7 +81,7 @@ class CliAgent {
   ///
   /// Either the tracker-fetched [ticketData] (Teammate job) or, when absent,
   /// `input/<contextId>/ticket.json` loaded by convention (direct
-  /// `dmtools run` launches, e.g. the machine-kit review/rework runners).
+  /// `dmtools run` launches, e.g. the machine's review/rework runners).
   /// Set once at the start of the lifecycle.
   Map<String, dynamic>? _resolvedTicketData;
 

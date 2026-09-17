@@ -1,23 +1,26 @@
 // gh-63 regression tests: the SOURCE_GITHUB_TOKEN push-credential machinery
-// in the AI Teammate workflows must never leak the workflows-capable PAT to
+// in the AI Teammate machine must never leak the workflows-capable PAT to
 // non-github hosts (PR #68 review, BLOCKING thread) and must keep its
 // at-push-time evidence honest. These tests pin the invariants of
-//   .github/workflows/ai-teammate.yml
-//   machine-kit/templates/ai-teammate.yml
-//   machine-kit/scripts/install-source-git-credentials.sh
+//   agents/.github/workflows/factory/teammate.yml (the factory workflow)
+//   agents/setup/install-source-git-credentials.sh (the shared installer)
 // so a future edit cannot silently reintroduce the generic-helper leak or
 // weaken the purge evidence.
 import 'dart:io';
 
 import 'package:test/test.dart';
 
-const _workflowPath = '.github/workflows/ai-teammate.yml';
-const _templatePath = 'machine-kit/templates/ai-teammate.yml';
-const _scriptPath = 'machine-kit/scripts/install-source-git-credentials.sh';
+// The credential machinery lives in the FACTORY (agents submodule,
+// .github/workflows/factory/teammate.yml + setup/ scripts); the local
+// ai-teammate.yml is a thin reusable-workflow stub over it. The pinned
+// submodule makes the factory files part of this repo's merge tree.
+const _workflowPath = 'agents/.github/workflows/factory/teammate.yml';
+const _scriptPath = 'agents/setup/install-source-git-credentials.sh';
 
-/// All YAML files that carry the credential machinery (workflow + template —
-/// they must not drift apart, PR #68 review thread 6).
-final List<String> _credentialYamlFiles = [_workflowPath, _templatePath];
+/// All YAML files that carry the credential machinery.
+// Live credential surface = the FACTORY file (agents submodule, pinned).
+// The legacy machine-kit template layer was retired (gh-146).
+final List<String> _credentialYamlFiles = [_workflowPath];
 
 String _read(String path) {
   final file = File(path);
@@ -436,7 +439,7 @@ void _persistStepReassertsPurge() {
         final source = _read(path);
         // The memory-persist step hosts the LAST installer call in the file.
         final installerCall = source.lastIndexOf(
-            'bash machine-kit/scripts/install-source-git-credentials.sh');
+            'bash factory-agents/setup/install-source-git-credentials.sh');
         final reassert = source.indexOf('reappeared after the agent session');
         expect(installerCall, greaterThan(-1),
             reason: '$path must invoke the shared installer');

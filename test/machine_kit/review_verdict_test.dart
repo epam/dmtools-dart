@@ -578,7 +578,7 @@ void escalationThreadSummaryWiringTests() {
     });
 
     test('a failed thread fetch is surfaced as a warning, not swallowed', () {
-      final yml = File('.github/workflows/ai-teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
       expect(yml, contains('reviewThreads fetch failed'),
           reason: 'the error JSON of a failed gh api graphql call parses to '
               'zero threads — without an annotation the empty summary looks '
@@ -590,10 +590,10 @@ void escalationThreadSummaryWiringTests() {
 /// Extracts the escalation path's `-f query='…'` GraphQL string from the
 /// workflow (there is exactly one).
 String _workflowGraphqlQuery() {
-  final yml = File('.github/workflows/ai-teammate.yml').readAsStringSync();
+  final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
   final match = RegExp(r"-f query='([^']+)'").firstMatch(yml);
   expect(match, isNotNull,
-      reason: 'no -f query=… GraphQL string in ai-teammate.yml');
+      reason: 'no -f query=… GraphQL string in factory/teammate.yml');
   return match!.group(1)!;
 }
 
@@ -617,7 +617,7 @@ void verdictLabelWiringTests() {
     });
 
     test('dynamic verdict labels are created before they are added', () {
-      final yml = File('.github/workflows/ai-teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
       // gh issue edit --add-label hard-fails on an unknown label ("not
       // found") — and the step runs under bash -e, so a missing label
       // definition would abort the verdict transition mid-way (the loop
@@ -637,7 +637,7 @@ void verdictLabelWiringTests() {
     test(
         'agent:rework is labeled before the round counter '
         '(supersession-safe order)', () {
-      final yml = File('.github/workflows/ai-teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
       final rework = yml.indexOf('--add-label "agent:rework"');
       final round = yml.indexOf('--add-label "rework-round-');
       expect(rework, greaterThanOrEqualTo(0));
@@ -720,7 +720,7 @@ void wiringTests() {
     });
 
     test('workflow invokes the script and defines the cap', () {
-      final yml = File('.github/workflows/ai-teammate.yml').readAsStringSync();
+      final yml = File('agents/.github/workflows/factory/teammate.yml').readAsStringSync();
       expect(yml, contains('review-verdict.sh'));
       expect(yml, contains('MAX_AUTO_REWORK_ROUNDS'));
       expect(yml, contains('needs-human'));
@@ -728,7 +728,8 @@ void wiringTests() {
   });
 }
 
-final _script = File('machine-kit/teammate-install/scripts/review-verdict.sh');
+// The verdict script lives in the factory pack (agents submodule).
+final _script = File('agents/setup/review-verdict.sh');
 
 /// Runs `review-verdict.sh decide` with fixture files in a sandbox dir and
 /// returns the emitted `key=value` assignments as a map.

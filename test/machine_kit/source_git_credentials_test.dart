@@ -11,13 +11,19 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-const _workflowPath = '.github/workflows/ai-teammate.yml';
+// The credential machinery lives in the FACTORY (agents submodule,
+// .github/workflows/factory/teammate.yml + setup/ scripts); the local
+// ai-teammate.yml is a thin reusable-workflow stub over it. The pinned
+// submodule makes the factory files part of this repo's merge tree.
+const _workflowPath = 'agents/.github/workflows/factory/teammate.yml';
 const _templatePath = 'machine-kit/templates/ai-teammate.yml';
-const _scriptPath = 'machine-kit/scripts/install-source-git-credentials.sh';
+const _scriptPath = 'agents/setup/install-source-git-credentials.sh';
 
 /// All YAML files that carry the credential machinery (workflow + template —
 /// they must not drift apart, PR #68 review thread 6).
-final List<String> _credentialYamlFiles = [_workflowPath, _templatePath];
+// Live credential surface = the FACTORY file (agents submodule, pinned).
+// The machine-kit template is legacy and no longer part of the loop.
+final List<String> _credentialYamlFiles = [_workflowPath];
 
 String _read(String path) {
   final file = File(path);
@@ -436,7 +442,7 @@ void _persistStepReassertsPurge() {
         final source = _read(path);
         // The memory-persist step hosts the LAST installer call in the file.
         final installerCall = source.lastIndexOf(
-            'bash machine-kit/scripts/install-source-git-credentials.sh');
+            'bash factory-agents/setup/install-source-git-credentials.sh');
         final reassert = source.indexOf('reappeared after the agent session');
         expect(installerCall, greaterThan(-1),
             reason: '$path must invoke the shared installer');

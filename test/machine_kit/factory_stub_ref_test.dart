@@ -69,6 +69,24 @@ void main() {
                 'sneak in');
       }
     });
+
+    test('every stub passes factory_ref matching its uses pin', () {
+      for (final entry in _stubs.entries) {
+        final stub = File(entry.key).readAsStringSync();
+        final uses = RegExp(r'uses: [^@]+@([0-9a-f]{40})').firstMatch(stub);
+        expect(uses, isNotNull,
+            reason: '${entry.key} must pin the factory by immutable SHA');
+        final refLine =
+            RegExp(r'factory_ref:\s*([0-9a-f]{40})').firstMatch(stub);
+        expect(refLine, isNotNull,
+            reason: '${entry.key} must pass factory_ref (the factory declares '
+                'it required — omitting it is a startup_failure with zero '
+                'jobs)');
+        expect(refLine!.group(1), uses!.group(1),
+            reason: '${entry.key}: factory_ref must equal the uses pin — '
+                'engine and factory must execute the same commit');
+      }
+    });
   });
 }
 

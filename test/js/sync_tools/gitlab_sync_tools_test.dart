@@ -48,6 +48,8 @@ void _testHandlerSurface() {
     final names = [
       'gitlab_get_mr',
       'gitlab_list_mrs',
+      'gitlab_get_mr_pipelines',
+      'gitlab_list_issues',
       'gitlab_create_mr_note',
       'gitlab_add_mr_comment',
       'gitlab_get_mr_comments',

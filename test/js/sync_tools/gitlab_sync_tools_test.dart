@@ -48,6 +48,8 @@ void _testHandlerSurface() {
     final names = [
       'gitlab_get_mr',
       'gitlab_list_mrs',
+      'gitlab_get_mr_pipelines',
+      'gitlab_list_issues',
       'gitlab_create_mr_note',
       'gitlab_add_mr_comment',
       'gitlab_get_mr_comments',
@@ -133,6 +135,41 @@ void testmrtools_p1() {
   test('gitlab_get_mr accepts the legacy project/iid args', () {
     final body = echo('gitlab_get_mr', {'project': 'g/r', 'iid': 7});
     expect(body['path'], '/api/v4/projects/g%2Fr/merge_requests/7');
+  });
+
+  test('gitlab_get_mr_pipelines GETs the MR pipelines path (Java #574)', () {
+    final body = echo('gitlab_get_mr_pipelines', {
+      'workspace': 'mygroup',
+      'repository': 'myrepo',
+      'pullRequestId': '42',
+    });
+    expect(body['method'], 'GET');
+    expect(
+      body['path'],
+      '/api/v4/projects/mygroup%2Fmyrepo/merge_requests/42/pipelines',
+    );
+  });
+
+  test('gitlab_list_issues lists opened issues by default (Java #574)', () {
+    final body = echo('gitlab_list_issues', {
+      'workspace': 'mygroup',
+      'repository': 'myrepo',
+    });
+    expect(body['method'], 'GET');
+    expect(
+      body['path'],
+      '/api/v4/projects/mygroup%2Fmyrepo/issues?state=opened&per_page=20',
+    );
+  });
+
+  test('gitlab_list_issues honors state and perPage args', () {
+    final body = echo('gitlab_list_issues', {
+      'workspace': 'g',
+      'repository': 'r',
+      'state': 'all',
+      'perPage': '50',
+    });
+    expect(body['path'], '/api/v4/projects/g%2Fr/issues?state=all&per_page=50');
   });
 
   test('gitlab_list_mrs lists opened MRs oldest-first', () {

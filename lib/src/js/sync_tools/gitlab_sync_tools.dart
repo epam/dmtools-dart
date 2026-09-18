@@ -71,6 +71,8 @@ final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
     _wrapHandlers({
   'gitlab_get_mr': _getMr,
   'gitlab_list_mrs': _listMrs,
+  'gitlab_get_mr_pipelines': _getMrPipelines,
+  'gitlab_list_issues': _listIssues,
   'gitlab_create_mr_note': _addMrComment,
   'gitlab_add_mr_comment': _addMrComment,
   'gitlab_get_mr_comments': _getMrComments,
@@ -146,6 +148,26 @@ String _listMrs(_GitlabConfig config, Map<String, dynamic> args) {
       syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
   if (!filter.closedAndMergedOnly) return body;
   return _closedAndMergedMrsOnly(body);
+}
+
+/// `gitlab_get_mr_pipelines` — GET
+/// `projects/{id}/merge_requests/{iid}/pipelines` (Java #574, Dart MCP
+/// `getMrPipelines`): the CI pipelines for the MR head SHA.
+String _getMrPipelines(_GitlabConfig config, Map<String, dynamic> args) {
+  final url = '${_mrPath(config, args)}/pipelines';
+  return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+}
+
+/// `gitlab_list_issues` — GET `projects/{id}/issues?state=…&per_page=…`
+/// (Java #574, Dart MCP `listIssues`): one page, defaulting to
+/// `state=opened`, `per_page=20` like the MCP client.
+String _listIssues(_GitlabConfig config, Map<String, dynamic> args) {
+  var state = syncAsStr(args['state']);
+  if (state.isEmpty || state.toLowerCase() == 'open') state = 'opened';
+  final perPage = _parsePositiveInt(syncAsStr(args['perPage']), 20);
+  final url = '${_projectsPath(config, args)}/issues'
+      '?state=${Uri.encodeQueryComponent(state)}&per_page=$perPage';
+  return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 }
 
 /// Normalizes the `state` argument: empty/`open` → `opened`; `closed` →

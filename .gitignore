@@ -43,5 +43,11 @@ native/quickjs/*.dylib
 input/
 outputs/
 
+# Local machine-loop runs materialize the dmtools-agents factory checkout
+# here — factory-sm.yml clones it into factory-agents/ in CI, and the SM
+# engine does the same on a local tick (./scripts/machine_tick.sh). Run
+# artifact, never repo content.
+/factory-agents/
+
 # CodeGraph generated index - regenerated per-run, must never be committed
 .codegraph/

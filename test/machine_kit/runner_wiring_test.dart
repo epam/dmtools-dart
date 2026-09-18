@@ -40,6 +40,7 @@ void main() {
   formalReviewWiringTests();
   wiringTests();
   resolutionTests();
+  faProviderPreconfigTests();
 }
 
 /// gh-129: the review runner must opt in to the formal GitHub review
@@ -201,3 +202,85 @@ Map<String, dynamic> _resolvedRunner(Directory tmp, String runner) =>
       const RunCommandProcessor()
           .process(['run', '${tmp.path}/.dmtools/runners/$runner']),
     ) as Map<String, dynamic>;
+
+/// gh-152: `agents/scripts/providers/fa.sh` refuses to boot the fa CLI
+/// without the `FA_PROVIDER_TYPE` + `FA_PROVIDER_CONFIG` env preconfig —
+/// the wrapper validates it BEFORE anything else, and `FA_PROVIDERS_QUEUE`
+/// is a pass-through it never reads. The review runner shipped with only
+/// the queue, so EVERY review leg died at boot
+/// ("FA_PROVIDER_TYPE environment variable is required for fa provider" —
+/// runs 35287528424 / 35290678499), `outputs/pr_review.json` was never
+/// written, and the SM ping-ponged review ↔ rework forever. These pins
+/// make the boot contract unmissable for every runner config.js selects.
+void faProviderPreconfigTests() {
+  group('machine wiring: fa provider boot preconfig (fa.sh contract)', () {
+    for (final runner in _runners) {
+      _faBootPreconfigRunnerTests(runner);
+    }
+    _reviewQueueHeadPreconfigTests();
+  });
+}
+
+/// Per-runner boot pins: fa.sh validates FA_PROVIDER_TYPE and
+/// FA_PROVIDER_CONFIG before anything else — a runner missing either dies
+/// at boot (before fa starts) and the SM loops the ticket forever.
+void _faBootPreconfigRunnerTests(String runner) {
+  final env =
+      (_runnerJson('.dmtools/runners/$runner')['params'])['envVariables']
+          as Map;
+
+  test('$runner declares FA_PROVIDER_TYPE (fa.sh refuses to boot without it)',
+      () {
+    expect(env['AI_AGENT_PROVIDER'], 'fa',
+        reason: 'precondition: $runner uses the fa provider');
+    expect(
+      env['FA_PROVIDER_TYPE'],
+      allOf(isA<String>(), isNotEmpty),
+      reason: 'agents/scripts/providers/fa.sh fails with "FA_PROVIDER_TYPE '
+          'environment variable is required for fa provider" — the leg '
+          'dies before fa starts, mandatory outputs are never written, '
+          'and the SM loops the ticket (gh-152 review runs 35287528424 / '
+          '35290678499)',
+    );
+  });
+
+  test(
+      '$runner declares a parseable FA_PROVIDER_CONFIG with '
+      'baseUrl/model/apiKeyEnvVar', () {
+    expect(
+      env['FA_PROVIDER_CONFIG'],
+      allOf(isA<String>(), isNotEmpty),
+      reason: 'agents/scripts/providers/fa.sh fails with "FA_PROVIDER_CONFIG '
+          'is required for fa provider" — same boot-loop effect as a '
+          'missing FA_PROVIDER_TYPE (gh-152 review runs 35287528424 / '
+          '35290678499)',
+    );
+    final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
+    for (final key in ['baseUrl', 'model', 'apiKeyEnvVar']) {
+      expect(config[key], allOf(isA<String>(), isNotEmpty),
+          reason: 'the fa.sh boot contract makes "$key" mandatory in '
+              'FA_PROVIDER_CONFIG (fa never guesses catalog defaults)');
+    }
+  });
+}
+
+/// The review runner must pin its DESIGNED primary (the queue head — kimi
+/// via its openai-completions API) so the wrapper guard passes, while the
+/// queue stays wired for fa builds that consume the failover.
+void _reviewQueueHeadPreconfigTests() {
+  test(
+      'review runner pins its designed primary (queue head: kimi) and keeps '
+      'the failover queue', () {
+    final env = (_runnerJson('.dmtools/runners/fa-review-kimi.json')['params'])[
+        'envVariables'] as Map;
+    expect(env['FA_PROVIDER_TYPE'], 'openai-completions',
+        reason: 'the queue head is kimi via its openai-completions API');
+    final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
+    expect(config['baseUrl'], 'https://api.kimi.com/coding/v1');
+    expect(config['model'], 'k3');
+    expect(config['apiKeyEnvVar'], 'KIMI_REVIEW_KEY',
+        reason: 'the factory maps KIMI_REVIEW_KEY into the job env '
+            '(factory-teammate.yml)');
+    expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue);
+  });
+}

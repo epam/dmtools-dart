@@ -180,6 +180,9 @@ acting:
 gh workflow run machine-sm.yml -f dryRun=true
 ```
 
+The same tick locally — the pre-flight dry run before enabling the rules on a
+repo (`--live` to act): `./scripts/machine_tick.sh`.
+
 Runner configs (provider/model pinning per leg) live in
 [.dmtools/runners/](.dmtools/runners/), selected per leg by the factory guard
 via [.dmtools/config.js](.dmtools/config.js).

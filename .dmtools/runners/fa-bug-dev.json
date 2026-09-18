@@ -1,5 +1,7 @@
 {
-  "parent": { "path": "../../factory-agents/bug_development.json" },
+  "parent": {
+    "path": "../../factory-agents/bug_development.json"
+  },
   "params": {
     "envVariables": {
       "DEFAULT_TRACKER": "github",
@@ -9,7 +11,15 @@
     },
     "inputJql": "",
     "cliPromptsByTracker": {
-      "github": ["./factory-agents/instructions/common/github_comment_format.md"]
+      "github": [
+        "./factory-agents/instructions/common/github_comment_format.md"
+      ]
+    },
+    "customParams": {
+      "targetRepository": {
+        "workingDir": ".",
+        "baseBranch": "main"
+      }
     }
   }
 }

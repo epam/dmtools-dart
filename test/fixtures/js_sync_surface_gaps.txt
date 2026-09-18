@@ -155,6 +155,7 @@ gitlab_get_group_members
 gitlab_get_issue
 gitlab_get_mr_approvals
 gitlab_get_mr_notes
+gitlab_get_mr_pipelines
 gitlab_get_pipeline
 gitlab_get_pipelines
 gitlab_get_project_details
@@ -162,6 +163,7 @@ gitlab_get_project_hooks
 gitlab_get_project_members
 gitlab_get_project_variables
 gitlab_get_tags
+gitlab_list_issues
 gitlab_test
 gitlab_trigger_mr_discussion_resolve
 jenkins_cancel_build

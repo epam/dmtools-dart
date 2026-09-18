@@ -186,3 +186,29 @@ repo (`--live` to act): `./scripts/machine_tick.sh`.
 Runner configs (provider/model pinning per leg) live in
 [.dmtools/runners/](.dmtools/runners/), selected per leg by the factory guard
 via [.dmtools/config.js](.dmtools/config.js).
+
+### Runner boot contract
+
+The fa provider wrapper
+([agents/scripts/providers/fa.sh](agents/scripts/providers/fa.sh)) refuses to
+boot unless the runner declares its provider up front — `FA_PROVIDERS_QUEUE`
+alone is NOT a boot source (the wrapper never reads it as one):
+
+- `AI_AGENT_PROVIDER=fa` — selects the fa provider wrapper.
+- `FA_PROVIDER_TYPE` — catalog provider kind (`anthropic`,
+  `openai-completions`, `zai`, `kimi`, …).
+- `FA_PROVIDER_CONFIG` — JSON with mandatory `baseUrl`, `model`,
+  `apiKeyEnvVar` keys (fa never guesses catalog defaults):
+
+  ```json
+  {
+    "FA_PROVIDER_TYPE": "zai",
+    "FA_PROVIDER_CONFIG":
+      "{\"baseUrl\":\"https://api.z.ai/api/coding/paas/v4\",\"model\":\"glm-5.3-flash\",\"apiKeyEnvVar\":\"ZAI_CODE_KEY\"}"
+  }
+  ```
+
+A runner missing either fa variable dies before fa starts: the leg writes no
+mandatory outputs and the SM ping-pongs review ↔ rework forever. The contract
+is enforced by the `faProviderPreconfigTests` pins in
+[test/machine_kit/runner_wiring_test.dart](test/machine_kit/runner_wiring_test.dart).

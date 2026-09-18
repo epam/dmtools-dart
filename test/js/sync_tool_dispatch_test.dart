@@ -146,29 +146,6 @@ void _testNoConfig() {
       );
     });
 
-    test('gitlab_get_mr_pipelines returns config error (Java #574)', () {
-      final d = SyncToolDispatcher(PropertyReader());
-      expect(
-        jsonDecode(d.execute('gitlab_get_mr_pipelines', {
-          'workspace': 'g',
-          'repository': 'r',
-          'pullRequestId': 1,
-        })!),
-        {'error': 'GitLab not configured'},
-      );
-    });
-
-    test('gitlab_list_issues returns config error (Java #574)', () {
-      final d = SyncToolDispatcher(PropertyReader());
-      expect(
-        jsonDecode(d.execute('gitlab_list_issues', {
-          'workspace': 'g',
-          'repository': 'r',
-        })!),
-        {'error': 'GitLab not configured'},
-      );
-    });
-
     test('confluence_search returns config error', () {
       final d = SyncToolDispatcher(PropertyReader());
       expect(

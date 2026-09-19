@@ -134,7 +134,6 @@ github_get_repo
 github_get_tree
 github_get_workflow_runs
 github_get_workflows
-github_list_branches
 github_list_commits
 github_list_releases
 github_remove_collaborator

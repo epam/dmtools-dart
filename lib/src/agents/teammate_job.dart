@@ -90,6 +90,7 @@ class TeammateJob {
       if (prepared == null) {
         return const {'success': true, 'results': []};
       }
+      _consumePreparedInput();
       return _runSingle(prepared);
     }
     final github = looksLikeGithubQuery(inputJql);
@@ -162,6 +163,29 @@ class TeammateJob {
       'key': _contextId(),
       'fields': {'summary': summary, 'description': description},
     };
+  }
+
+  /// Deletes the consumed bootstrap `input/ticket.md`.
+  ///
+  /// The ticket now lives in memory and the canonical `input/<contextId>/`
+  /// context is built from it by [CliAgent]; the root copy must not
+  /// survive the consumption — left in the tree it (a) duplicates the
+  /// ticket body next to the canonical context and (b) leaks an
+  /// uncommitted runtime file into the agent's git flow: the branch-setup
+  /// stash pops it onto the tracked version with conflict markers that
+  /// the agent's final `git add -A` then commits (seen on fa gh-671:
+  /// `input/ticket.md` and `input/gh-671/ticket.md` both carried
+  /// `<<<<<<< Updated upstream` blocks). Best-effort — a locked file
+  /// must not fail the job.
+  void _consumePreparedInput() {
+    final base = workingDirectory ?? Directory.current.path;
+    final file = File('$base/input/ticket.md');
+    if (!file.existsSync()) return;
+    try {
+      file.deleteSync();
+    } catch (_) {
+      // Best-effort: never fail the job over cleanup.
+    }
   }
 
   /// The config's `metadata.contextId`, falling back to CliAgent's own

@@ -132,6 +132,33 @@ void inputPassthroughTest() {
       await tmp.delete(recursive: true);
     }
   });
+
+  test('prepared input/ticket.md is consumed — deleted after pass-through',
+      () async {
+    final tmp = await _createTempDir();
+    try {
+      Directory('${tmp.path}/input').createSync(recursive: true);
+      File('${tmp.path}/input/ticket.md').writeAsStringSync(
+          'Consume the bootstrap\nbody that only matters in memory');
+      final job = TeammateJob(
+        params: {
+          'metadata': {'contextId': 'bug_development'},
+          'cliCommands': ['echo ticket-done'],
+        },
+        workingDirectory: tmp.path,
+      );
+      final result = await job.run();
+      expect(result['success'], isTrue);
+      // The bootstrap must not survive: it duplicates the ticket body next
+      // to the canonical input/<contextId>/ context and leaks an uncommitted
+      // runtime file into the agent's git flow (gh-671: the branch-setup
+      // stash popped it with `<<<<<<< Updated upstream` markers that the
+      // agent's git add -A then committed).
+      expect(File('${tmp.path}/input/ticket.md').existsSync(), isFalse);
+    } finally {
+      await tmp.delete(recursive: true);
+    }
+  });
 }
 
 // ======================================================================

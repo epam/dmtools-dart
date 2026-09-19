@@ -195,10 +195,12 @@ class ToolBridge {
     });
   }
 
-  /// No-op returning success: runtime env overrides are handled by the
-  /// Phase 1 property layer. Argument count is validated for Java
   /// `SetEnvVariableProxy` parity — `set_env_variable(propertyName,
-  /// envVarName)` requires exactly two positional arguments.
+  /// envVarName)` merges the value into the PropertyReader override map.
+  /// The override reaches subsequent `cli_execute_command` children (env
+  /// injection applies [PropertyReader.getOverrides] last) and
+  /// `PropertyReader.getValue` — matching Java, where the proxy mutates
+  /// the JVM-wide property map the CLI executor reads.
   ///
   /// The C bridge marshals a single JS argument as-is and none as an
   /// unparseable object literal, so anything but a 2+ element array fails
@@ -206,6 +208,11 @@ class ToolBridge {
   String _setEnvVariable(String argsJson) {
     final parsed = _decodeArgs(argsJson);
     if (parsed is List && parsed.length >= 2) {
+      final name = parsed[0]?.toString();
+      final value = parsed[1]?.toString();
+      if (name != null && name.isNotEmpty && value != null) {
+        PropertyReader.setOverride(name, value);
+      }
       return _successJson;
     }
     return _jsError(

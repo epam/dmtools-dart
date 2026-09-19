@@ -657,7 +657,12 @@ void fixtureactionstools_p2() {
       'ref': 'develop',
       'inputs': {'user_request': 'rework PROJ-1'},
     });
-    expect(result, "Workflow 'rework.yml' triggered successfully on o/r");
+    // The success message must arrive JSON-encoded: the QuickJS FFI
+    // bridge parses every host result with JS_ParseJSON — raw text throws
+    // "host callback returned invalid JSON" (live: #687 SM dispatch).
+    expect(result, '"Workflow \'rework.yml\' triggered successfully on o/r"');
+    expect(jsonDecode(result),
+        "Workflow 'rework.yml' triggered successfully on o/r");
   });
 
   test(
@@ -668,9 +673,12 @@ void fixtureactionstools_p2() {
       'repository': 'r',
       'runId': '55',
     });
-    expect(result, contains('--- job1.txt ---\n\nstep one log'));
-    expect(result, contains('--- job2.txt ---\n\nstep two log'));
-    expect(result, isNot(contains('skip.bin')));
+    // Log text is JSON-encoded for the FFI bridge — assert on the decoded
+    // payload (the exact string JS sees after the bridge unwraps it).
+    final decoded = jsonDecode(result) as String;
+    expect(decoded, contains('--- job1.txt ---\n\nstep one log'));
+    expect(decoded, contains('--- job2.txt ---\n\nstep two log'));
+    expect(decoded, isNot(contains('skip.bin')));
   });
 }
 

@@ -79,6 +79,18 @@ class PropertyReader {
     _overrides = null;
   }
 
+  /// Merges a single runtime override — `set_env_variable` parity.
+  ///
+  /// Java `SetEnvVariableProxy` mutates the JVM-wide property map the CLI
+  /// executor consults when building the child environment; the Dart
+  /// equivalent is a merge into the root override map — the JS bridge's
+  /// `cli_execute_command` applies [getOverrides] on top of the child env,
+  /// so a script's `set_env_variable('GH_TOKEN', ...)` reaches subsequent
+  /// commands (and `PropertyReader.getValue` sees it, like Java).
+  static void setOverride(String key, String value) {
+    _overrides = {...?_overrides, key: value};
+  }
+
   /// Runs [body] with [overrides] active for the current async context.
   ///
   /// The overrides live in a [Zone] value, so two concurrently running jobs

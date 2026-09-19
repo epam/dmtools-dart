@@ -1,5 +1,16 @@
 import 'tool_definition.dart';
 
+/// GitHub key formats (`gh-123`, `owner/repo#123`) — unambiguously GitHub
+/// keys, never valid anywhere else (dm.ai #577 `ToolAliasResolver`).
+final RegExp _gitHubKeyHint =
+    RegExp(r'^(?:gh-\d+|[\w.-]+/[\w.-]+#\d+)$', caseSensitive: false);
+
+/// Classic Jira key: `PROJ-123`.
+final RegExp _jiraKeyHint = RegExp(r'^[A-Z][A-Z0-9]+-\d+$');
+
+/// Bare numeric id — ADO work item.
+final RegExp _adoKeyHint = RegExp(r'^\d+$');
+
 /// Registry of all MCP tools, keyed by tool name.
 ///
 /// Mirrors the Java generated `MCPToolRegistry`: tools are registered at
@@ -52,7 +63,12 @@ class ToolRegistry {
   /// Resolves [name] following the Java `McpCliHandler.resolveToolAlias`
   /// contract.
   ///
-  /// A registered canonical name resolves to itself. An alias with exactly
+  /// A registered canonical name resolves to itself. When [keyHint] carries
+  /// a ticket/issue key, an explicit GitHub key format (`gh-123`,
+  /// `owner/repo#123`) routes to the GitHub carrier before anything else —
+  /// it is not a valid key anywhere else — and after the default-integration
+  /// check a classic Jira key (`PROJ-123`) routes to Jira, a bare integer
+  /// to ADO (dm.ai #577 `ToolAliasResolver` parity). An alias with exactly
   /// one carrier resolves to that carrier. An alias carried by several
   /// integrations picks the carrier matching the configured default
   /// integration: [defaultTracker] for `tracker_*` aliases and
@@ -69,6 +85,7 @@ class ToolRegistry {
   /// to the unrestricted candidate list.
   String? resolveToolAlias(
     String name, {
+    String? keyHint,
     String? defaultTracker,
     String? defaultSourceCode,
     Set<String>? integrations,
@@ -76,18 +93,65 @@ class ToolRegistry {
     if (_tools.containsKey(name)) return name;
     final candidates = _aliasCandidates(name, integrations);
     if (candidates.isEmpty) return null;
+    // 1. An explicit GitHub key format (`gh-123`, `owner/repo#123`)
+    //    always routes to GitHub — it is not a valid key anywhere else.
+    final githubHint = _githubHintCarrier(candidates, keyHint);
+    if (githubHint != null) return githubHint.name;
+    // 2. A single registered candidate needs no disambiguation.
     if (candidates.length == 1) return candidates.first.name;
+    // 3. DEFAULT_TRACKER / DEFAULT_SOURCE_CODE from the property chain.
     final wanted = _defaultIntegrationFor(
       name,
       defaultTracker: defaultTracker,
       defaultSourceCode: defaultSourceCode,
     );
     if (wanted != null) {
-      for (final candidate in candidates) {
-        if (candidate.integration == wanted) return candidate.name;
-      }
+      final byDefault = _firstByIntegration(candidates, wanted);
+      if (byDefault != null) return byDefault.name;
     }
+    // 4. Key-format detection: classic Jira key, then bare ADO integer id.
+    final byKeyFormat = _keyFormatCarrier(candidates, keyHint);
+    if (byKeyFormat != null) return byKeyFormat.name;
+    // 5. Fallback: first candidate.
     return candidates.first.name;
+  }
+
+  /// The GitHub carrier for an explicit GitHub key format — `gh-123` or
+  /// `owner/repo#123` (case-insensitive, surrounding whitespace trimmed) —
+  /// or `null` when [hint] gives no such signal or no GitHub carrier
+  /// exists.
+  ToolDefinition? _githubHintCarrier(
+      List<ToolDefinition> candidates, String? keyHint) {
+    final hint = keyHint?.trim();
+    if (hint == null || hint.isEmpty || !_gitHubKeyHint.hasMatch(hint)) {
+      return null;
+    }
+    return _firstByIntegration(candidates, 'github');
+  }
+
+  /// The carrier picked by key-format detection — a classic Jira key
+  /// (`PROJ-123`) routes to Jira, a bare integer to ADO — or `null` when
+  /// the hint gives no vendor signal or the carrier is absent.
+  ToolDefinition? _keyFormatCarrier(
+      List<ToolDefinition> candidates, String? keyHint) {
+    final hint = keyHint?.trim();
+    if (hint == null || hint.isEmpty) return null;
+    if (_jiraKeyHint.hasMatch(hint)) {
+      return _firstByIntegration(candidates, 'jira');
+    }
+    if (_adoKeyHint.hasMatch(hint)) {
+      return _firstByIntegration(candidates, 'ado');
+    }
+    return null;
+  }
+
+  /// The first candidate from [integration], or `null` when none exists.
+  ToolDefinition? _firstByIntegration(
+      List<ToolDefinition> candidates, String integration) {
+    for (final candidate in candidates) {
+      if (candidate.integration == integration) return candidate;
+    }
+    return null;
   }
 
   /// The carriers of [alias], narrowed to [integrations] when any of them

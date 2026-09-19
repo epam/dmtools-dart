@@ -25,6 +25,11 @@ class GhIssueRef {
 /// Composite issue-key pattern: `owner/repo#123`.
 final RegExp _ghCompositeKey = RegExp(r'^[\w.-]+/[\w.-]+#(\d+)$');
 
+/// `gh-123` issue-key pattern — the dmtools-agents ecosystem convention
+/// (dm.ai #577 `resolveIssueRef` parity): resolves to the issue number on
+/// the configured default workspace/repository.
+final RegExp _ghIssueKey = RegExp(r'^gh-(\d+)$', caseSensitive: false);
+
 /// Bare issue-number pattern: `123`.
 final RegExp _ghBareNumber = RegExp(r'^\d+$');
 
@@ -45,12 +50,14 @@ GhIssueRef resolveGhIssueRef(
       resolvedNumber = int.parse(composite.group(1)!);
       resolvedOwner = k.substring(0, k.indexOf('/'));
       resolvedRepo = k.substring(k.indexOf('/') + 1, k.indexOf('#'));
+    } else if (_ghIssueKey.hasMatch(k)) {
+      resolvedNumber = int.parse(_ghIssueKey.firstMatch(k)!.group(1)!);
     } else if (_ghBareNumber.hasMatch(k)) {
       resolvedNumber = int.parse(k);
     } else {
       throw ArgumentError(
-        "Cannot parse GitHub issue key: '$key'. Expected 'owner/repo#123' "
-        'or a bare issue number.',
+        "Cannot parse GitHub issue key: '$key'. Expected 'owner/repo#123', "
+        "'gh-123', or a bare issue number.",
       );
     }
   }

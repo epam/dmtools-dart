@@ -194,6 +194,14 @@ void compositeKeyReadTests() {
     expect(f.adapter.calls.single.path, endsWith('/repos/epm/dm.ai/issues/9'));
   });
 
+  test('github_get_issue accepts a gh-N key with defaults (dm.ai #577)',
+      () async {
+    final f = mockGithub((o) => routeByPath({'/issues/12': _issueBody}, o));
+    PropertyReader.setOverrides(_defaults);
+    await f.client.getIssue(null, null, null, key: 'gh-12');
+    expect(f.adapter.calls.single.path, endsWith('/repos/epm/dm.ai/issues/12'));
+  });
+
   test('a composite key overrides explicit parts (Java behavior)', () async {
     final f = mockGithub((o) => routeByPath({'/issues/3': _issueBody}, o));
     PropertyReader.setOverrides(_defaults);
@@ -334,7 +342,10 @@ void trackerCatalogRegistrationTests(ToolRegistry registry) {
     expect(tool('github_search_issues').aliases, ['tracker_search']);
     expect(tool('github_move_issue_to_status').aliases,
         ['tracker_move_to_status']);
-    expect(tool('github_assign_issue').aliases, ['tracker_assign_ticket']);
+    expect(tool('github_assign_issue').aliases,
+        ['tracker_assign_ticket', 'tracker_assign']);
+    expect(tool('github_add_labels').aliases, ['tracker_add_label']);
+    expect(tool('github_remove_label').aliases, ['tracker_remove_label']);
     expect(tool('github_get_issue').aliases,
         ['source_code_get_issue', 'tracker_get_ticket']);
     expect(tool('github_create_issue').aliases, ['tracker_create_ticket']);

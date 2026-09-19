@@ -187,6 +187,30 @@ List<ToolDefinition> _commentTools() => [
           ToolParam(name: 'text', description: 'The comment text'),
         ],
       ),
+      ToolDefinition(
+        name: 'ado_add_work_item_label',
+        aliases: ['tracker_add_label'],
+        description:
+            'Add a single label (tag) to a work item, keeping existing tags',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          _idParam('The work item ID'),
+          ToolParam(name: 'label', description: 'The label to add'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'ado_remove_work_item_label',
+        aliases: ['tracker_remove_label'],
+        description: 'Remove a single label (tag) from a work item, '
+            'keeping other tags',
+        integration: 'ado',
+        category: 'work_item_management',
+        params: [
+          _idParam('The work item ID'),
+          ToolParam(name: 'label', description: 'The label to remove'),
+        ],
+      ),
     ];
 
 /// Team tools: `ado_get_teams`, `ado_get_team_members`.

@@ -191,7 +191,7 @@ List<ToolDefinition> _issueAssignmentTools() => [
       ),
       ToolDefinition(
         name: 'github_assign_issue',
-        aliases: ['tracker_assign_ticket'],
+        aliases: ['tracker_assign_ticket', 'tracker_assign'],
         description: 'Assign a GitHub issue to a user',
         integration: 'github',
         category: 'issues',
@@ -211,6 +211,7 @@ List<ToolDefinition> _issueAssignmentTools() => [
 List<ToolDefinition> _issueLabelTools() => [
       ToolDefinition(
         name: 'github_add_labels',
+        aliases: ['tracker_add_label'],
         description: 'Add labels to a GitHub issue',
         integration: 'github',
         category: 'issues',
@@ -226,6 +227,7 @@ List<ToolDefinition> _issueLabelTools() => [
       ),
       ToolDefinition(
         name: 'github_remove_label',
+        aliases: ['tracker_remove_label'],
         description: 'Remove a label from a GitHub issue',
         integration: 'github',
         category: 'issues',

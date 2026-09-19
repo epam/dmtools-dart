@@ -494,8 +494,12 @@ String _triggerWorkflow(GhSyncConfig c, Map<String, dynamic> a) {
       "(${resp.statusCode}): ${resp.body}",
     );
   }
-  return "Workflow '$workflowId' triggered successfully on "
-      '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}';
+  // The FFI host callback marshals through JSON, so the plain-string
+  // success message (Java parity) is returned JSON-encoded and surfaces
+  // to JS as an unquoted string — raw text here breaks the QuickJS bridge
+  // with "host callback returned invalid JSON" (live: #687 SM dispatch).
+  return jsonEncode("Workflow '$workflowId' triggered successfully on "
+      '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}');
 }
 
 /// `github_get_workflow_run_logs` — download + extract the run's log ZIP.

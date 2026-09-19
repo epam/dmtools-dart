@@ -167,9 +167,14 @@ void _testHostFunctions() {
       }
     });
 
-    test('set_env_variable is a no-op returning success', () {
+    test('set_env_variable merges a runtime override and cli children see it',
+        () {
       final dir = Directory.systemTemp.createTempSync('dmtools_env');
       try {
+        // The override must land in PropertyReader (getValue sees it) and
+        // in the child-process env of a subsequent cli_execute_command —
+        // the GH_TOKEN silent-swap contract the SM relies on (#687).
+        PropertyReader.clearOverrides();
         final script = _writeScript(
             dir, 'test.js', _action("set_env_variable('X', 'PATH').success"));
         final result = const JsJobRunner().runScript(
@@ -177,7 +182,9 @@ void _testHostFunctions() {
           jobParams: {},
         );
         expect(jsonDecode(result!), isTrue);
+        expect(PropertyReader.getOverrides()['X'], 'PATH');
       } finally {
+        PropertyReader.clearOverrides();
         dir.deleteSync(recursive: true);
       }
     });

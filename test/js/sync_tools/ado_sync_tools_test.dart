@@ -30,6 +30,8 @@ void main() {
   _testNoConfig();
   if (hasPython3()) {
     _testWorkItemTools();
+    _testWorkItemLabelTools();
+    _testWorkItemLabelEdgeTools();
     _testPrReadTools();
     _testPrWriteTools();
     _testPipelineTools();
@@ -508,3 +510,84 @@ Map<String, String> adoOverrides(int port) => {
       'ADO_PROJECT': 'proj',
       'ADO_PAT_TOKEN': 'pat-token',
     };
+
+/// Work-item single-label tools (dm.ai #577): add/remove keep the other
+/// tags; the PATCH reaching the echo server asserts the tag set.
+void _testWorkItemLabelTools() {
+  group('AdoSyncTools work item label tools', () {
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides(adoOverrides(server.port));
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('ado_add_work_item_label PATCHes the merged tag set', () {
+      final body =
+          echo('ado_add_work_item_label', {'id': 9, 'label': 'urgent'});
+      expect(body['method'], 'PATCH');
+      expect(
+        body['path'],
+        '/org/proj/_apis/wit/workitems/9?api-version=7.0',
+      );
+      expect(
+        body['headers']['Content-Type'],
+        'application/json-patch+json',
+      );
+      final patch = jsonDecode(body['body'] as String) as List;
+      expect(patch, [
+        {
+          'op': 'add',
+          'path': '/fields/System.Tags',
+          'value': 'existing; ai_generated; urgent',
+        }
+      ]);
+    });
+
+    test('ado_remove_work_item_label PATCHes the remaining tag set', () {
+      final body = echo(
+          'ado_remove_work_item_label', {'id': 9, 'label': 'ai_generated'});
+      expect(body['method'], 'PATCH');
+      final patch = jsonDecode(body['body'] as String) as List;
+      expect(patch, [
+        {
+          'op': 'add',
+          'path': '/fields/System.Tags',
+          'value': 'existing',
+        }
+      ]);
+    });
+  });
+}
+
+/// Label-tool edge cases (dm.ai #577): the idempotent no-op and the
+/// missing-label guard — no PATCH is sent in either case.
+void _testWorkItemLabelEdgeTools() {
+  group('AdoSyncTools work item label edges', () {
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides(adoOverrides(server.port));
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('ado_add_work_item_label is a no-op when the label exists', () {
+      final result = tools.handlers['ado_add_work_item_label']!(
+          {'id': 9, 'label': 'AI_GENERATED'});
+      expect(jsonDecode(result), {'success': true});
+    });
+
+    test('ado_remove_work_item_label requires a label', () {
+      final result = tools.handlers['ado_remove_work_item_label']!({'id': 9});
+      expect(jsonDecode(result), containsPair('error', 'label is required'));
+    });
+  });
+}

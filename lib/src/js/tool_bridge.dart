@@ -21,6 +21,7 @@ import 'dart:io';
 
 import '../config/env_file_parser.dart';
 import '../config/property_reader.dart';
+import '../config/property_reader_getters.dart';
 import '../integrations/cli/allowed_base.dart';
 import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
@@ -227,15 +228,48 @@ class ToolBridge {
   /// HTTP tools (jira, github, …) dispatch via curl; file-system and CLI
   /// tools delegate back to [_dispatchNonHttp] for direct `dart:io` execution.
   String _execute(String toolName, Map<String, dynamic> args) {
-    // Canonical names only: the Java JS surface exposes and resolves
-    // canonical schemas (MCPSchemaGenerator); tracker_*/source_code_*
-    // alias resolution is a CLI concern (McpCliHandler.resolveToolAlias).
-    final tool = _registry.getTool(toolName);
-    if (tool == null || tool.name != toolName) {
+    // Java JobJavaScriptBridge.executeToolFromJS parity (dm.ai #577):
+    // vendor-agnostic aliases (tracker_*, source_code_*) resolve on every
+    // call — explicit GitHub key formats first, then DEFAULT_TRACKER /
+    // DEFAULT_SOURCE_CODE via the property chain, then key-format
+    // detection — so agent scripts written against the tracker_* family
+    // run unchanged on any configured backend. Canonical names resolve to
+    // themselves and dispatch exactly as before.
+    final resolved = _registry.resolveToolAlias(
+      toolName,
+      keyHint: _extractKeyHint(args),
+      defaultTracker: _propertyReader.getDefaultTracker(),
+      defaultSourceCode: _propertyReader.getDefaultSourceCode(),
+    );
+    final tool = resolved == null ? null : _registry.getTool(resolved);
+    if (tool == null) {
       return _err('Unknown tool: $toolName');
     }
     return dispatcher.execute(tool.name, tool.applyParamAliases(args)) ??
         _err('Tool not available: $toolName');
+  }
+
+  /// Property source for per-call alias routing (`DEFAULT_TRACKER` /
+  /// `DEFAULT_SOURCE_CODE`) — a shared instance so cached `dmtools.env`
+  /// reads persist across tool calls.
+  late final PropertyReader _propertyReader = PropertyReader();
+
+  /// Extracts a ticket/issue key hint from tool call args — Java
+  /// `JobJavaScriptBridge.extractKeyHint` parity (dm.ai #577): the first
+  /// present of `key`, `ticketKey`, `ticket`, `issueKey`, `id`, used for
+  /// vendor detection when routing `tracker_*` aliases.
+  String? _extractKeyHint(Map<String, dynamic> args) {
+    for (final field in const [
+      'key',
+      'ticketKey',
+      'ticket',
+      'issueKey',
+      'id'
+    ]) {
+      final value = args[field];
+      if (value != null) return value.toString();
+    }
+    return null;
   }
 
   /// Delegates non-HTTP tools (file-system, CLI) to their sync executors.

@@ -57,6 +57,7 @@ List<ToolDefinition> _labelTools() => [
       _jiraTool(
         name: 'jira_add_label',
         description: 'Add a label to a Jira ticket',
+        aliases: ['tracker_add_label'],
         params: [
           _keyParam,
           ToolParam(
@@ -69,6 +70,7 @@ List<ToolDefinition> _labelTools() => [
       _jiraTool(
         name: 'jira_remove_label',
         description: 'Remove a label from a Jira ticket',
+        aliases: ['tracker_remove_label'],
         params: [
           _keyParam,
           ToolParam(
@@ -125,7 +127,7 @@ List<ToolDefinition> _assignTools() => [
       _jiraTool(
         name: 'jira_assign_ticket_to',
         description: 'Assigns a Jira ticket to user',
-        aliases: ['tracker_assign_ticket'],
+        aliases: ['tracker_assign_ticket', 'tracker_assign'],
         params: [
           _keyParam,
           ToolParam(

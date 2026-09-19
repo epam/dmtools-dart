@@ -317,22 +317,33 @@ void _issueRefTestsP1() {
     _call('github_get_issue', {'key': '9'});
     expect(_lastRequest['path'], '/repos/o/r/issues/9');
   });
+
+  test('issue tools resolve a gh-N key through the defaults', () {
+    _call('github_get_issue', {'key': 'gh-9'});
+    expect(_lastRequest['path'], '/repos/o/r/issues/9');
+  });
+
+  test('an unparseable key surfaces the parse error', () {
+    final raw = _call('github_get_issue', {'key': 'PROJ-1'});
+    expect(jsonDecode(raw), {
+      'error': "Cannot parse GitHub issue key: 'PROJ-1'. Expected "
+          "'owner/repo#123', 'gh-123', or a bare issue number.",
+    });
+  });
 }
 
 /// Issue-ref resolution: key errors and composite routing.
 void _issueRefTestsP2() {
-  test('a gh- prefixed key is rejected by the sync family', () {
-    // Java resolveIssueRef in the SYNC surface accepts composite and
-    // bare-number keys; the gh- spelling is the async client's dialect.
-    final raw = _call('github_get_issue', {
+  test('a gh- prefixed key resolves to the issue number (dm.ai #577)', () {
+    // Java resolveIssueRef gained the gh-N spelling (dm.ai #577): the
+    // tracker_* router sends such keys to github_* tools. The number
+    // fills the reference; explicit owner/repo parts still win.
+    _call('github_get_issue', {
       'owner': 'o',
       'repo': 'r',
       'key': 'gh-12',
     });
-    expect(jsonDecode(raw), {
-      'error': "Cannot parse GitHub issue key: 'gh-12'. Expected "
-          "'owner/repo#123' or a bare issue number.",
-    });
+    expect(_lastRequest['path'], '/repos/o/r/issues/12');
   });
 
   test('a non-numeric number argument falls back to the ref error', () {

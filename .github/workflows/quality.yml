@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,7 +97,7 @@ jobs:
   agents-suite:
     # Runs in parallel with the quality job — both are required merge checks
     # and the suite hard-gates on its own, so serializing only adds wall time.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:

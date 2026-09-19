@@ -144,6 +144,17 @@ void fixtureprtools_p1() {
     expect(sent['headers']['Accept'], 'application/vnd.github+json');
   });
 
+  test('github_list_branches hits the branches endpoint', () {
+    tools.handlers['github_list_branches']!({
+      'workspace': 'o',
+      'repository': 'r',
+    });
+    expect(
+      fx.requests.single,
+      'GET /repos/o/r/branches?per_page=100&page=1',
+    );
+  });
+
   test('github_list_prs normalizes state synonyms', () {
     tools.handlers['github_list_prs']!({
       'workspace': 'o',

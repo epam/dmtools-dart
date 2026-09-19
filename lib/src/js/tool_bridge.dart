@@ -110,16 +110,37 @@ class ToolBridge {
   String _dispatchToolCall(String argsJson) {
     final parsed = _decodeArgs(argsJson);
     if (parsed is String) {
-      return _toolCallResult(() => _execute(parsed, const {}));
+      return _timed(
+        parsed,
+        () => _toolCallResult(() => _execute(parsed, const {})),
+      );
     }
     if (parsed is List && parsed.length >= 2 && parsed[0] is String) {
-      return _toolCallResult(
-        () => _execute(parsed[0] as String, _castArgs(parsed[1])),
+      final toolName = parsed[0] as String;
+      return _timed(
+        toolName,
+        () => _toolCallResult(
+          () => _execute(toolName, _castArgs(parsed[1])),
+        ),
       );
     }
     return _jsError(
       'executeToolViaJava requires at least 1 argument: toolName',
     );
+  }
+
+  /// Runs one dispatched tool call, printing the elapsed wall time after
+  /// it returns. The generated JS wrappers log `Calling tool <name>`
+  /// before the call; this closes the pair so slow calls (tracker
+  /// hydration, CLI, HTTP) are visible in the plain trace.
+  String _timed(String toolName, String Function() run) {
+    final sw = Stopwatch()..start();
+    try {
+      return run();
+    } finally {
+      stdout.writeln('Tool $toolName finished in '
+          '${sw.elapsedMilliseconds}ms');
+    }
   }
 
   /// Runs one tool call for the `executeToolViaJava` host function and
@@ -164,12 +185,14 @@ class ToolBridge {
     if (parsed is Map) path = parsed['path'] as String?;
     stdout.writeln('Calling tool file_read with args: '
         '${jsonEncode(parsed is Map ? parsed : const {})}');
-    if (path == null) return 'null';
-    try {
-      return jsonEncode(File(_resolve(path)).readAsStringSync());
-    } catch (_) {
-      return 'null';
-    }
+    return _timed('file_read', () {
+      if (path == null) return 'null';
+      try {
+        return jsonEncode(File(_resolve(path)).readAsStringSync());
+      } catch (_) {
+        return 'null';
+      }
+    });
   }
 
   /// No-op returning success: runtime env overrides are handled by the

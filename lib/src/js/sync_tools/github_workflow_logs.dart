@@ -33,7 +33,9 @@ String fetchWorkflowRunLogs({
   }
   final zip = _downloadBytes(zipUrl);
   if (zip == null) return _err('Failed downloading workflow run logs');
-  return _extractZipTextEntries(zip);
+  // Plain-string result: JSON-encode for the FFI bridge (JS sees an
+  // unquoted string) — raw text fails JS_ParseJSON in quickjs_bridge.c.
+  return jsonEncode(_extractZipTextEntries(zip));
 }
 
 /// Follows one redirect hop for [url], returning the `Location` target.

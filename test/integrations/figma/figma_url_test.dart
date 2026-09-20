@@ -8,7 +8,8 @@ void main() {
   group('figmaParseFileId', () {
     test('extracts the key from a design URL', () {
       expect(
-        figmaParseFileId('https://www.figma.com/file/abc123/Design?node-id=1%3A2'),
+        figmaParseFileId(
+            'https://www.figma.com/file/abc123/Design?node-id=1%3A2'),
         'abc123',
       );
     });
@@ -38,7 +39,8 @@ void main() {
 
     test('finds the parameter among several', () {
       expect(
-        figmaExtractQueryParam('https://x.test/a?fuid=9&node-id=3-4', 'node-id'),
+        figmaExtractQueryParam(
+            'https://x.test/a?fuid=9&node-id=3-4', 'node-id'),
         '3-4',
       );
     });

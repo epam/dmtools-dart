@@ -31,7 +31,7 @@ List<ToolDefinition> figmaTools() => [
       ..._contentAccessTools(),
       ..._structureAnalysisTools(),
       ..._legacyRestTools(),
-];
+    ];
 
 /// OAuth2 tools: `figma_oauth2_get_auth_url` / `figma_oauth2_exchange_code`.
 List<ToolDefinition> _authTools() => [
@@ -673,15 +673,18 @@ class FigmaToolExecutor {
     'figma_oauth2_exchange_code': _oauth2ExchangeCode,
     'figma_test': (_) => _client.testConnection(),
     'figma_me': (_) => _client.meJson(),
-    'figma_get_screen_source': (a) => _client.getImageOfSource(a['url'] as String),
+    'figma_get_screen_source': (a) =>
+        _client.getImageOfSource(a['url'] as String),
     'figma_download_node_image': (a) => _client.downloadNodeImage(
           a['href'] as String,
           a['nodeId'] as String,
           format: a['format'] as String?,
           scale: (a['scale'] as num?)?.toInt(),
         ),
-    'figma_download_image_of_file': (a) => _client.convertUrlToFile(a['href'] as String),
-    'figma_get_file_structure': (a) => _client.getFileStructure(a['href'] as String),
+    'figma_download_image_of_file': (a) =>
+        _client.convertUrlToFile(a['href'] as String),
+    'figma_get_file_structure': (a) =>
+        _client.getFileStructure(a['href'] as String),
     'figma_get_icons': (a) => _client.getIcons(a['href'] as String),
     'figma_get_image_fills': (a) => _client.getImageFills(a['href'] as String),
     'figma_render_nodes': (a) => _client.renderNodes(
@@ -704,7 +707,8 @@ class FigmaToolExecutor {
     'figma_get_layers': (a) => _client.getLayers(a['href'] as String),
     'figma_get_layers_batch': (a) =>
         _client.getLayersBatch(a['href'] as String, a['nodeIds'] as String),
-    'figma_get_node_children': (a) => _client.getNodeChildren(a['href'] as String),
+    'figma_get_node_children': (a) =>
+        _client.getNodeChildren(a['href'] as String),
     'figma_list_team_projects': (a) =>
         _client.listTeamProjects(a['teamIdOrUrl'] as String),
     'figma_list_project_files': (a) =>
@@ -747,4 +751,3 @@ class FigmaToolExecutor {
         ),
   };
 }
-

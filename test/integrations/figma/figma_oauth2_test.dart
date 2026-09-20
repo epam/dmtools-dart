@@ -65,7 +65,8 @@ void main() {
   group('figmaRefreshTokenBody', () {
     test('form-encodes the refresh_token grant', () {
       expect(
-        figmaRefreshTokenBody(clientId: 'i', clientSecret: 's', refreshToken: 'r'),
+        figmaRefreshTokenBody(
+            clientId: 'i', clientSecret: 's', refreshToken: 'r'),
         'client_id=i&client_secret=s&refresh_token=r&grant_type=refresh_token',
       );
     });
@@ -139,7 +140,8 @@ void main() {
         ),
         throwsA(
           predicate<StateError>(
-            (e) => e.message.contains(
+            (e) =>
+                e.message.contains(
                   'Figma OAuth2 token request failed [400]',
                 ) &&
                 e.message.contains('invalid_grant'),
@@ -165,7 +167,8 @@ class _EchoAdapter implements HttpClientAdapter {
     String? body;
     if (requestStream != null) {
       final chunks = await requestStream.toList();
-      body = chunks.isEmpty ? null : utf8.decode(chunks.expand((c) => c).toList());
+      body =
+          chunks.isEmpty ? null : utf8.decode(chunks.expand((c) => c).toList());
     }
     return ResponseBody.fromString(
       _respond(options, body),

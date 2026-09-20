@@ -34,8 +34,7 @@ void main() {
 }
 
 /// Cache dir used by the download tests (wiped in tearDown).
-final _cacheDir =
-    '${Directory.systemTemp.path}/figma_java_client_test_cache';
+final _cacheDir = '${Directory.systemTemp.path}/figma_java_client_test_cache';
 
 /// Serves routes by path suffix with JSON bodies.
 MockFigmaFixture _routed(Map<String, String> routes) =>
@@ -246,8 +245,7 @@ void layersTests() {
     test('requests depth 1 and wraps children', () async {
       // Unencoded colon id: Java looks the node up by the raw query
       // value, so percent-encoded colon URLs would miss (parity).
-      const colonHref =
-          'https://www.figma.com/file/abc123/Design?node-id=1:2';
+      const colonHref = 'https://www.figma.com/file/abc123/Design?node-id=1:2';
       final f = _routed({'/files/abc123/nodes': nodesBody});
       final result = await f.client.getNodeChildren(colonHref);
       expect(result, isNotNull);
@@ -296,9 +294,13 @@ void textAndDetailsTests() {
     test('returns the first node document, capped at 10 ids', () async {
       final f = _routed({'/files/abc123/nodes': textBody});
       final manyIds = [for (var i = 0; i < 15; i++) '10:1'].join(', ');
-      final result =
-          await f.client.getNodeDetails(_hrefNoNode, manyIds);
-      expect(result, {'id': '10:1', 'type': 'TEXT', 'characters': 'Hi', 'style': {'fontFamily': 'Inter', 'fontSize': 14}});
+      final result = await f.client.getNodeDetails(_hrefNoNode, manyIds);
+      expect(result, {
+        'id': '10:1',
+        'type': 'TEXT',
+        'characters': 'Hi',
+        'style': {'fontFamily': 'Inter', 'fontSize': 14}
+      });
       final ids = f.adapter.calls.single.queryParameters['ids'] as String;
       expect(ids.split(','), hasLength(10));
       expect(ids.startsWith('10:1,10:1'), isTrue);
@@ -330,7 +332,9 @@ void imageTests() {
         '/files/abc123/images': '{"images":{"1:1":"https://cdn/x.png"}}',
       });
       final result = await f.client.getImageFills(_hrefNoNode);
-      expect(jsonDecode(result), {'images': {'1:1': 'https://cdn/x.png'}});
+      expect(jsonDecode(result), {
+        'images': {'1:1': 'https://cdn/x.png'}
+      });
     });
   });
 
@@ -338,7 +342,8 @@ void imageTests() {
     test('batches 100 ids per request and merges image maps', () async {
       String imagesBody(int from) => jsonEncode({
             'images': {
-              for (var i = from; i < from + 100; i++) '$i:1': 'https://cdn/$i.png',
+              for (var i = from; i < from + 100; i++)
+                '$i:1': 'https://cdn/$i.png',
             },
           });
       var batch = 0;
@@ -383,8 +388,7 @@ void imageTests() {
   });
 
   group('downloads', () {
-    test('downloadNodeImage fetches with defaults and caches by md5',
-        () async {
+    test('downloadNodeImage fetches with defaults and caches by md5', () async {
       var fetches = 0;
       final f = mockFigmaHttp((o) {
         fetches++;
@@ -412,8 +416,7 @@ void imageTests() {
       expect(await client.downloadNodeImage(_href, '9:9'), isNull);
     });
 
-    test('convertUrlToFile returns null when the source is not http',
-        () async {
+    test('convertUrlToFile returns null when the source is not http', () async {
       final f = mockFigmaHttp((o) => '{"images":{"1:2":null}}');
       final client = FigmaClient(f.http, cacheDir: _cacheDir);
       expect(await client.convertUrlToFile(_href), isNull);

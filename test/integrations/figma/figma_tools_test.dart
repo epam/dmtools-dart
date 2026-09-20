@@ -161,8 +161,7 @@ void catalogParamTests() {
       expect(toolNamed('figma_me').params, isEmpty);
     });
 
-    test('figma_download_node_image has optional format and numeric scale',
-        () {
+    test('figma_download_node_image has optional format and numeric scale', () {
       final tool = toolNamed('figma_download_node_image');
       expect(
         tool.params.map((p) => p.name),
@@ -193,8 +192,7 @@ void catalogParamTests() {
       expect(tool.params.every((p) => p.required), isTrue);
     });
 
-    test('figma_get_node_details and figma_get_text_content take nodeIds',
-        () {
+    test('figma_get_node_details and figma_get_text_content take nodeIds', () {
       for (final name in ['figma_get_node_details', 'figma_get_text_content']) {
         final tool = toolNamed(name);
         expect(tool.params.map((p) => p.name), ['href', 'nodeIds']);
@@ -276,7 +274,8 @@ void javaCatalogRoutingTests() {
       await f.executor.execute('figma_get_screen_source', {
         'url': 'https://www.figma.com/file/k/F?node-id=1-2',
       });
-      expect(f.spy.calls, ['getImageOfSource:https://www.figma.com/file/k/F?node-id=1-2']);
+      expect(f.spy.calls,
+          ['getImageOfSource:https://www.figma.com/file/k/F?node-id=1-2']);
     });
 
     test('routes figma_get_file_structure with href', () async {
@@ -455,8 +454,7 @@ void oauthExecutorTests() {
     test('exchange_code reports incomplete config', () async {
       final f = _executorFixture();
       final result = jsonDecode(
-        await f.executor
-            .execute('figma_oauth2_exchange_code', {'code': 'c'}),
+        await f.executor.execute('figma_oauth2_exchange_code', {'code': 'c'}),
       ) as Map<String, dynamic>;
       expect(
         result['error'],
@@ -740,13 +738,15 @@ class _SpyFigmaClient extends FigmaClient {
   }
 
   @override
-  Future<Map<String, dynamic>?> getNodeDetails(String href, String nodeIds) async {
+  Future<Map<String, dynamic>?> getNodeDetails(
+      String href, String nodeIds) async {
     calls.add('getNodeDetails:$href:$nodeIds');
     return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getTextContent(String href, String nodeIds) async {
+  Future<Map<String, dynamic>?> getTextContent(
+      String href, String nodeIds) async {
     calls.add('getTextContent:$href:$nodeIds');
     return null;
   }

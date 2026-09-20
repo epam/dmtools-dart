@@ -145,8 +145,7 @@ class FigmaClient {
     String? format,
   }) async {
     final fileId = figmaParseFileId(figmaCleanHref(href));
-    final effectiveFormat =
-        (format == null || format.isEmpty) ? 'png' : format;
+    final effectiveFormat = (format == null || format.isEmpty) ? 'png' : format;
     final ids = nodeIds.split(',');
     final combined = <String, dynamic>{};
     for (var i = 0; i < ids.length; i += 100) {

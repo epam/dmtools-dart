@@ -285,11 +285,13 @@ class FigmaSyncTools {
   String _getNodeDetails(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+        final fileId =
+            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final ids = _cappedTrimmedIds(syncAsStr(args['nodeIds']), 10);
         final response =
             _getJson(config, 'files/$fileId/nodes', {'ids': ids.join(',')});
-        final document = response == null ? null : figmaNodeDocument(response, ids.first);
+        final document =
+            response == null ? null : figmaNodeDocument(response, ids.first);
         return document == null ? 'null' : jsonEncode(document);
       } on Object {
         return 'null';
@@ -302,7 +304,8 @@ class FigmaSyncTools {
   String _getTextContent(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+        final fileId =
+            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final ids = _cappedTrimmedIds(syncAsStr(args['nodeIds']), 20);
         final response =
             _getJson(config, 'files/$fileId/nodes', {'ids': ids.join(',')});
@@ -320,7 +323,8 @@ class FigmaSyncTools {
   String _getStyles(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+        final fileId =
+            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final resp = SyncHttpClient.get(
           '${config.baseUrl}/files/$fileId/styles',
           headers: config.headers,
@@ -365,7 +369,8 @@ class FigmaSyncTools {
   String _getLayersBatch(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+        final fileId =
+            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final requested = syncAsStr(args['nodeIds']).split(',');
         final ids =
             requested.length > 10 ? requested.sublist(0, 10) : requested;
@@ -426,7 +431,8 @@ class FigmaSyncTools {
   /// `figma_list_project_files` — files array JSON.
   String _listProjectFiles(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final projectId = figmaExtractProjectId(syncAsStr(args['projectIdOrUrl']));
+      final projectId =
+          figmaExtractProjectId(syncAsStr(args['projectIdOrUrl']));
       final response = _getJson(config, 'projects/$projectId/files', const {});
       return jsonEncode(response?['files'] ?? const []);
     });
@@ -458,7 +464,8 @@ class FigmaSyncTools {
     if (clientSecret.isEmpty) {
       return syncErr('FIGMA_CLIENT_SECRET is not configured');
     }
-    var redirectUri = _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
+    var redirectUri =
+        _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
     if (redirectUri == null || redirectUri.isEmpty) {
       return syncErr(
         'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
@@ -490,7 +497,8 @@ class FigmaSyncTools {
         'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',
       );
     }
-    var redirectUri = _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
+    var redirectUri =
+        _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
     if (redirectUri == null || redirectUri.isEmpty) {
       return syncErr(
         'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
@@ -574,7 +582,8 @@ class FigmaSyncTools {
       if (format == 'png') {
         params['scale'] = '2';
       }
-      return _imagesMap(_getJson(config, 'images/$fileId', params))?[figmaColonNodeId(nodeId)]
+      return _imagesMap(_getJson(config, 'images/$fileId', params))?[
+              figmaColonNodeId(nodeId)]
           ?.toString();
     } on Object {
       return null;
@@ -656,5 +665,4 @@ typedef _Conf = ({String baseUrl, Map<String, String> headers});
 const _notConfigured = 'Figma not configured';
 
 /// Cache directory for downloaded images (async client parity).
-final _cacheDir =
-    '${Directory.systemTemp.path}/dmtools_figma_cache';
+final _cacheDir = '${Directory.systemTemp.path}/dmtools_figma_cache';

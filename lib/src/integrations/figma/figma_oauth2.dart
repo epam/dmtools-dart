@@ -67,7 +67,11 @@ String figmaRefreshTokenBody({
     '&grant_type=refresh_token';
 
 /// A parsed OAuth2 token response — Java `TokenResponse`.
-typedef FigmaTokenResponse = ({String accessToken, String refreshToken, int expiresIn});
+typedef FigmaTokenResponse = ({
+  String accessToken,
+  String refreshToken,
+  int expiresIn
+});
 
 /// Parses a token endpoint body with the Java `optString`/`optLong`
 /// defaults (empty strings, 3600s).
@@ -76,7 +80,8 @@ FigmaTokenResponse figmaParseTokenResponse(String body) {
   return (
     accessToken: json['access_token']?.toString() ?? '',
     refreshToken: json['refresh_token']?.toString() ?? '',
-    expiresIn: json['expires_in'] is num ? (json['expires_in'] as num).toInt() : 3600,
+    expiresIn:
+        json['expires_in'] is num ? (json['expires_in'] as num).toInt() : 3600,
   );
 }
 

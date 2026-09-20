@@ -52,7 +52,21 @@ const _iconNameHints = [
 ];
 
 /// Symbol characters the Java icon-name regex carries.
-const _iconSymbols = ['♣', '♠', '♥', '♦', '🏠', '📦', '💬', '👤', '⚙️', '🔒', '😊', '🤝', 'ℹ️'];
+const _iconSymbols = [
+  '♣',
+  '♠',
+  '♥',
+  '♦',
+  '🏠',
+  '📦',
+  '💬',
+  '👤',
+  '⚙️',
+  '🔒',
+  '😊',
+  '🤝',
+  'ℹ️'
+];
 
 /// Finds all exportable visual elements in a file or nodes response —
 /// Java `FigmaFileResponse.findAllComponents`.
@@ -68,7 +82,8 @@ List<Map<String, dynamic>> figmaFindAllComponents(
     for (final nodeData in nodes.values) {
       final document = _documentOf(nodeData);
       if (document != null) {
-        _findComponentsRecursively(document, document['id']?.toString(), components);
+        _findComponentsRecursively(
+            document, document['id']?.toString(), components);
       }
     }
   } else {
@@ -127,7 +142,8 @@ bool _isExportableVisualElement(Map<String, dynamic> node) {
     return false;
   }
   // Oversized FRAME/GROUP nodes are UI containers, not elements.
-  if (_widthOf(node) > 200 && _heightOf(node) > 200 &&
+  if (_widthOf(node) > 200 &&
+      _heightOf(node) > 200 &&
       (type == 'FRAME' || type == 'GROUP')) {
     return false;
   }
@@ -187,14 +203,24 @@ bool _isLikelyIcon(Map<String, dynamic> node, String type) {
   final width = _widthOf(node);
   final height = _heightOf(node);
   if ((type == 'COMPONENT' || type == 'INSTANCE') &&
-      width > 0 && height > 0 && width <= 48 && height <= 48) {
+      width > 0 &&
+      height > 0 &&
+      width <= 48 &&
+      height <= 48) {
     return true;
   }
-  if (type == 'VECTOR' && width > 0 && height > 0 && width <= 64 && height <= 64) {
+  if (type == 'VECTOR' &&
+      width > 0 &&
+      height > 0 &&
+      width <= 64 &&
+      height <= 64) {
     return true;
   }
   if ((type == 'RECTANGLE' || type == 'ELLIPSE') &&
-      width > 0 && height > 0 && width <= 50 && height <= 50) {
+      width > 0 &&
+      height > 0 &&
+      width <= 50 &&
+      height <= 50) {
     return true;
   }
   return false;
@@ -410,4 +436,5 @@ double _bboxDim(Map<String, dynamic> node, String key) {
 
 double _asDouble(dynamic value) => value is num ? value.toDouble() : 0.0;
 
-int _asInt(dynamic value, int fallback) => value is num ? value.toInt() : fallback;
+int _asInt(dynamic value, int fallback) =>
+    value is num ? value.toInt() : fallback;

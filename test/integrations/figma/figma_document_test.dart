@@ -18,13 +18,23 @@ void main() {
               'id': '1:1',
               'name': 'Frame',
               'type': 'FRAME',
-              'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 100, 'height': 50},
+              'absoluteBoundingBox': {
+                'x': 0,
+                'y': 0,
+                'width': 100,
+                'height': 50
+              },
               'children': [
                 {
                   'id': '2:2',
                   'name': 'close icon',
                   'type': 'VECTOR',
-                  'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 24, 'height': 24},
+                  'absoluteBoundingBox': {
+                    'x': 0,
+                    'y': 0,
+                    'width': 24,
+                    'height': 24
+                  },
                 },
               ],
             },
@@ -53,11 +63,38 @@ void main() {
           'id': '0:0',
           'type': 'DOCUMENT',
           'children': [
-            {'id': '1:1', 'name': 'slice', 'type': 'SLICE', 'absoluteBoundingBox': {'width': 10, 'height': 10}},
-            {'id': '1:2', 'name': 'empty', 'type': 'RECTANGLE', 'absoluteBoundingBox': {'width': 0, 'height': 10}},
-            {'id': '1:3', 'name': 'hidden', 'type': 'RECTANGLE', 'visible': false, 'absoluteBoundingBox': {'width': 10, 'height': 10}},
-            {'id': '1:4', 'name': 'faint', 'type': 'RECTANGLE', 'opacity': 0.005, 'absoluteBoundingBox': {'width': 10, 'height': 10}},
-            {'id': 'I1:1;2:2;3:3;4:4', 'name': 'too complex', 'type': 'VECTOR', 'absoluteBoundingBox': {'width': 10, 'height': 10}},
+            {
+              'id': '1:1',
+              'name': 'slice',
+              'type': 'SLICE',
+              'absoluteBoundingBox': {'width': 10, 'height': 10}
+            },
+            {
+              'id': '1:2',
+              'name': 'empty',
+              'type': 'RECTANGLE',
+              'absoluteBoundingBox': {'width': 0, 'height': 10}
+            },
+            {
+              'id': '1:3',
+              'name': 'hidden',
+              'type': 'RECTANGLE',
+              'visible': false,
+              'absoluteBoundingBox': {'width': 10, 'height': 10}
+            },
+            {
+              'id': '1:4',
+              'name': 'faint',
+              'type': 'RECTANGLE',
+              'opacity': 0.005,
+              'absoluteBoundingBox': {'width': 10, 'height': 10}
+            },
+            {
+              'id': 'I1:1;2:2;3:3;4:4',
+              'name': 'too complex',
+              'type': 'VECTOR',
+              'absoluteBoundingBox': {'width': 10, 'height': 10}
+            },
           ],
         },
       };
@@ -92,9 +129,24 @@ void main() {
           'id': '0:0',
           'type': 'DOCUMENT',
           'children': [
-            {'id': '1:1', 'name': 'screen', 'type': 'FRAME', 'absoluteBoundingBox': {'width': 400, 'height': 300}},
-            {'id': '1:2', 'name': 'group', 'type': 'GROUP', 'absoluteBoundingBox': {'width': 300, 'height': 300}},
-            {'id': '1:3', 'name': 'big vector', 'type': 'VECTOR', 'absoluteBoundingBox': {'width': 300, 'height': 300}},
+            {
+              'id': '1:1',
+              'name': 'screen',
+              'type': 'FRAME',
+              'absoluteBoundingBox': {'width': 400, 'height': 300}
+            },
+            {
+              'id': '1:2',
+              'name': 'group',
+              'type': 'GROUP',
+              'absoluteBoundingBox': {'width': 300, 'height': 300}
+            },
+            {
+              'id': '1:3',
+              'name': 'big vector',
+              'type': 'VECTOR',
+              'absoluteBoundingBox': {'width': 300, 'height': 300}
+            },
           ],
         },
       };
@@ -106,7 +158,8 @@ void main() {
     });
 
     test('categorizes by name patterns and type', () {
-      Map<String, Object?> node(String name, String type, double w, double h) => {
+      Map<String, Object?> node(String name, String type, double w, double h) =>
+          {
             'id': '9:9',
             'name': name,
             'type': type,
@@ -237,7 +290,9 @@ void main() {
               'textAlignHorizontal': 'CENTER',
             },
             'characterStyleOverrides': [0, 1],
-            'styleOverrideTable': {'1': {'fontSize': 12}},
+            'styleOverrideTable': {
+              '1': {'fontSize': 12}
+            },
           },
         },
         '10:2': {
@@ -266,7 +321,9 @@ void main() {
       expect(entry['letterSpacing'], 0.5);
       expect(entry['textAlign'], 'CENTER');
       expect(entry['characterStyleOverrides'], [0, 1]);
-      expect(entry['styleOverrideTable'], {'1': {'fontSize': 12}});
+      expect(entry['styleOverrideTable'], {
+        '1': {'fontSize': 12}
+      });
     });
 
     test('text without style carries only the text key', () {
@@ -287,9 +344,8 @@ void main() {
           },
         },
       };
-      final entry =
-          (figmaTextContent(response2, ['1:1'])['textNodes'] as Map)['1:1']
-              as Map;
+      final entry = (figmaTextContent(response2, ['1:1'])['textNodes']
+          as Map)['1:1'] as Map;
       expect(entry['text'], '');
       expect(entry['fontFamily'], '');
       expect(entry['fontSize'], 0.0);
@@ -318,12 +374,18 @@ void main() {
           },
         },
       };
-      expect(figmaNodeDocument(response, '1:1'), {'id': '1:1', 'type': 'FRAME'});
+      expect(
+          figmaNodeDocument(response, '1:1'), {'id': '1:1', 'type': 'FRAME'});
     });
 
     test('returns null when the node or document is missing', () {
-      expect(figmaNodeDocument(const {'nodes': <String, dynamic>{}}, '1:1'), isNull);
-      expect(figmaNodeDocument(const {'nodes': {'1:1': <String, dynamic>{}}}, '1:1'), isNull);
+      expect(figmaNodeDocument(const {'nodes': <String, dynamic>{}}, '1:1'),
+          isNull);
+      expect(
+          figmaNodeDocument(const {
+            'nodes': {'1:1': <String, dynamic>{}}
+          }, '1:1'),
+          isNull);
     });
   });
 }

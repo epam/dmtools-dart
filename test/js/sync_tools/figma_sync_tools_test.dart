@@ -152,6 +152,19 @@ void _testOauthUrlRouting() {
         },
       );
     });
+  });
+}
+
+void _testOauthDefaultState() {
+  group('FigmaSyncTools OAuth default state', () {
+    late FigmaSyncTools tools;
+
+    setUp(() {
+      PropertyReader.setOverrides({'FIGMA_TOKEN': ''});
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
 
     test('oauth2_get_auth_url defaults to a random 16-hex-char state', () {
       PropertyReader.setOverrides({

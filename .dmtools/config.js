@@ -3,6 +3,9 @@
 // runner here; runner paths are repo-relative. bug/story may share a
 // single 'dev' entry instead of two.
 module.exports = {
+  // #687: whose login is "the machine" — auto rework (prMachineAuthor)
+  // and pr_approved arming fire only on PRs authored by this login.
+  machineAuthor: 'ai-teammate',
   sm: {
     runners: {
       bug: '.dmtools/runners/fa-bug-dev.json',

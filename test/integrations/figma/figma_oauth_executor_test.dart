@@ -11,6 +11,7 @@ import 'figma_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   oauthGetAuthUrlTests();
+  oauthDefaultStateTests();
   oauthExchangeCodeTests();
 }
 
@@ -70,7 +71,11 @@ void oauthGetAuthUrlTests() {
       expect(result['state'], 'xyz');
       expect(result['instructions'], isNotNull);
     });
+  });
+}
 
+void oauthDefaultStateTests() {
+  group('FigmaToolExecutor OAuth default state', () {
     test('defaults to a random 16-hex-char state', () async {
       final f = executorFixture();
       PropertyReader.setOverrides({

@@ -18,6 +18,7 @@ void main() {
   _testRoutingAndConfig();
   _testOauthRouting();
   _testOauthUrlRouting();
+  _testOauthDefaultState();
   if (hasPython3()) {
     _testMeEchoTools();
     _testStructureEchoTools();
@@ -136,6 +137,23 @@ void _testOauthUrlRouting() {
     });
 
     tearDown(() => PropertyReader.clearOverrides());
+    test('oauth2_get_auth_url builds the URL from env config', () {
+      PropertyReader.setOverrides({
+        'FIGMA_CLIENT_ID': 'cid',
+        'FIGMA_CLIENT_SECRET': 'cs',
+        'FIGMA_REDIRECT_URI': 'http://cb/',
+      });
+      final result = jsonDecode(
+        tools.dispatch('figma_oauth2_get_auth_url', {'state': 'st'}),
+      ) as Map<String, dynamic>;
+      expect(
+        result['authorization_url'],
+        'https://www.figma.com/oauth?client_id=cid'
+        '&redirect_uri=http%3A%2F%2Fcb%2F'
+        '&scope=file_content%3Aread+file_metadata%3Aread'
+        '&state=st&response_type=code',
+      );
+    });
 
     test('oauth2_exchange_code reports a missing redirect URI', () {
       PropertyReader.setOverrides({
@@ -179,24 +197,6 @@ void _testOauthDefaultState() {
       expect(state, hasLength(16));
       expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(state), isTrue);
       expect(result['authorization_url'], contains('state=$state'));
-    });
-
-    test('oauth2_get_auth_url builds the URL from env config', () {
-      PropertyReader.setOverrides({
-        'FIGMA_CLIENT_ID': 'cid',
-        'FIGMA_CLIENT_SECRET': 'cs',
-        'FIGMA_REDIRECT_URI': 'http://cb/',
-      });
-      final result = jsonDecode(
-        tools.dispatch('figma_oauth2_get_auth_url', {'state': 'st'}),
-      ) as Map<String, dynamic>;
-      expect(
-        result['authorization_url'],
-        'https://www.figma.com/oauth?client_id=cid'
-        '&redirect_uri=http%3A%2F%2Fcb%2F'
-        '&scope=file_content%3Aread+file_metadata%3Aread'
-        '&state=st&response_type=code',
-      );
     });
   });
 }

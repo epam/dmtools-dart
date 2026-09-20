@@ -13,7 +13,8 @@ void main() {
   scopeTests();
   tokenBodyTests();
   parseResponseTests();
-  exchangeTests();
+  exchangeSuccessTests();
+  exchangeFailureTests();
 }
 
 void authorizationUrlTests() {
@@ -43,7 +44,6 @@ void authorizationUrlTests() {
       expect(url, contains('scope=files%3Aread'));
     });
   });
-
 }
 
 void scopeTests() {
@@ -57,7 +57,6 @@ void scopeTests() {
       expect(figmaNormalizeScope(' a:b '), 'a:b');
     });
   });
-
 }
 
 void tokenBodyTests() {
@@ -85,7 +84,6 @@ void tokenBodyTests() {
       );
     });
   });
-
 }
 
 void parseResponseTests() {
@@ -106,11 +104,10 @@ void parseResponseTests() {
       expect(parsed.expiresIn, 3600);
     });
   });
-
 }
 
-void exchangeTests() {
-  group('FigmaOAuth2Exchange', () {
+void exchangeSuccessTests() {
+  group('FigmaOAuth2Exchange success', () {
     test('posts the form body to the token endpoint and parses tokens',
         () async {
       final requests = <RequestOptions>[];
@@ -136,7 +133,11 @@ void exchangeTests() {
         isTrue,
       );
     });
+  });
+}
 
+void exchangeFailureTests() {
+  group('FigmaOAuth2Exchange failure', () {
     test('throws with the Java error text on a non-2xx response', () {
       final dio = Dio()
         ..httpClientAdapter = _EchoAdapter((options, body) {

@@ -10,8 +10,11 @@ void main() {
   catalogLegacyParamTests();
   catalogHrefParamTests();
   catalogJavaParamTests();
+  catalogJavaExportParamTests();
+  catalogOauthParamTests();
   executorRoutingTests();
   javaCatalogRoutingTests();
+  javaCatalogInspectRoutingTests();
   javaCatalogListingRoutingTests();
   javaCatalogDownloadRoutingTests();
   commentComponentStyleExportRoutingTests();
@@ -143,8 +146,8 @@ void catalogHrefParamTests() {
   });
 }
 
-void catalogJavaParamTests() {
-  group('Java catalog param shapes', () {
+void catalogOauthParamTests() {
+  group('Java catalog OAuth param shapes', () {
     test('figma_oauth2_get_auth_url params are all optional', () {
       final tool = toolNamed('figma_oauth2_get_auth_url');
       expect(
@@ -164,7 +167,11 @@ void catalogJavaParamTests() {
       expect(toolNamed('figma_test').params, isEmpty);
       expect(toolNamed('figma_me').params, isEmpty);
     });
+  });
+}
 
+void catalogJavaParamTests() {
+  group('Java catalog param shapes', () {
     test('figma_download_node_image has optional format and numeric scale', () {
       final tool = toolNamed('figma_download_node_image');
       expect(
@@ -174,7 +181,11 @@ void catalogJavaParamTests() {
       expect(tool.params.map((p) => p.required), [true, true, false, false]);
       expect(tool.params[3].type, 'number');
     });
+  });
+}
 
+void catalogJavaExportParamTests() {
+  group('Java catalog export param shapes', () {
     test('figma_render_nodes requires nodeIds with optional format', () {
       final tool = toolNamed('figma_render_nodes');
       expect(tool.params.map((p) => p.name), ['href', 'nodeIds', 'format']);
@@ -305,6 +316,15 @@ void javaCatalogRoutingTests() {
       });
       expect(f.spy.calls, ['renderNodes:h:1:2:svg']);
     });
+  });
+}
+
+/// Java-catalog node inspection tool routing.
+void javaCatalogInspectRoutingTests() {
+  late ExecutorFixture f;
+
+  group('FigmaToolExecutor.execute (Java inspect tools)', () {
+    setUp(() => f = executorFixture());
 
     test('routes figma_get_node_details with href, nodeIds', () async {
       await f.executor.execute('figma_get_node_details', {

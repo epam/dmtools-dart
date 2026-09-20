@@ -7,15 +7,19 @@ import 'package:dmtools/src/integrations/figma/figma_document.dart';
 import 'package:test/test.dart';
 
 void main() {
-  documentComponentsTests();
+  componentCollectionTests();
+  componentFilteringTests();
+  componentIdAndSizeTests();
+  componentCategorizationTests();
   nodeComponentsTests();
   layerSummaryTests();
   iconEnvelopeTests();
   textContentTests();
+  textContentStylelessTests();
   miscEnvelopeTests();
 }
 
-void documentComponentsTests() {
+void componentCollectionTests() {
   group('figmaFindAllComponents (document response)', () {
     test('collects exportable elements recursively with metadata', () {
       final response = {
@@ -65,7 +69,11 @@ void documentComponentsTests() {
       expect(vector['supportedFormats'], ['png', 'jpg', 'svg']);
       expect(vector['isVectorBased'], isTrue);
     });
+  });
+}
 
+void componentFilteringTests() {
+  group('figmaFindAllComponents filtering', () {
     test('skips non-exportable types and zero-size nodes', () {
       final response = {
         'document': {
@@ -110,7 +118,11 @@ void documentComponentsTests() {
       final icons = figmaFindAllComponents(response);
       expect(icons, isEmpty);
     });
+  });
+}
 
+void componentIdAndSizeTests() {
+  group('figmaFindAllComponents id and size filters', () {
     test('filters 4+ part semicolon IDs but keeps 2-part ones', () {
       Map<String, Object?> node(String id) => {
             'id': id,
@@ -165,7 +177,11 @@ void documentComponentsTests() {
       expect(icons.single['id'], '1:3');
       expect(icons.single['category'], 'illustration');
     });
+  });
+}
 
+void componentCategorizationTests() {
+  group('figmaFindAllComponents categorization', () {
     test('categorizes by name patterns and type', () {
       Map<String, Object?> node(String name, String type, double w, double h) =>
           {
@@ -196,7 +212,6 @@ void documentComponentsTests() {
       );
     });
   });
-
 }
 
 void nodeComponentsTests() {
@@ -228,7 +243,6 @@ void nodeComponentsTests() {
       expect(figmaFindAllComponents({'name': 'x'}), isEmpty);
     });
   });
-
 }
 
 void layerSummaryTests() {
@@ -275,7 +289,6 @@ void layerSummaryTests() {
       expect(figmaLayerSummaries(const {}), isEmpty);
     });
   });
-
 }
 
 void iconEnvelopeTests() {
@@ -290,47 +303,52 @@ void iconEnvelopeTests() {
       expect(result['icons'], icons);
     });
   });
-
 }
 
 void textContentTests() {
-  group('figmaTextContent', () {
-    final response = {
-      'nodes': {
-        '10:1': {
-          'document': {
-            'id': '10:1',
-            'type': 'TEXT',
-            'characters': 'Hello',
-            'style': {
-              'fontFamily': 'Inter',
-              'fontSize': 16.0,
-              'fontWeight': 700,
-              'lineHeightPx': 20.0,
-              'letterSpacing': 0.5,
-              'textAlignHorizontal': 'CENTER',
-            },
-            'characterStyleOverrides': [0, 1],
-            'styleOverrideTable': {
-              '1': {'fontSize': 12}
-            },
-          },
+  textContentExtractionTests();
+  textContentDefaultsTests();
+}
+
+/// Shared `/nodes` fixture for the text-content groups.
+final _textResponse = {
+  'nodes': {
+    '10:1': {
+      'document': {
+        'id': '10:1',
+        'type': 'TEXT',
+        'characters': 'Hello',
+        'style': {
+          'fontFamily': 'Inter',
+          'fontSize': 16.0,
+          'fontWeight': 700,
+          'lineHeightPx': 20.0,
+          'letterSpacing': 0.5,
+          'textAlignHorizontal': 'CENTER',
         },
-        '10:2': {
-          'document': {'id': '10:2', 'type': 'RECTANGLE'},
-        },
-        '10:3': {
-          'document': {
-            'id': '10:3',
-            'type': 'TEXT',
-            'characters': 'No style',
-          },
+        'characterStyleOverrides': [0, 1],
+        'styleOverrideTable': {
+          '1': {'fontSize': 12}
         },
       },
-    };
+    },
+    '10:2': {
+      'document': {'id': '10:2', 'type': 'RECTANGLE'},
+    },
+    '10:3': {
+      'document': {
+        'id': '10:3',
+        'type': 'TEXT',
+        'characters': 'No style',
+      },
+    },
+  },
+};
 
+void textContentExtractionTests() {
+  group('figmaTextContent extraction', () {
     test('extracts styled text entries keyed by requested id', () {
-      final result = figmaTextContent(response, ['10:1', '10:2', '10:3']);
+      final result = figmaTextContent(_textResponse, ['10:1', '10:2', '10:3']);
       final textNodes = result['textNodes'] as Map<String, dynamic>;
       expect(textNodes.keys, ['10:1', '10:3']);
       final entry = textNodes['10:1'] as Map<String, dynamic>;
@@ -346,13 +364,21 @@ void textContentTests() {
         '1': {'fontSize': 12}
       });
     });
+  });
+}
 
+void textContentStylelessTests() {
+  group('figmaTextContent styleless entries', () {
     test('text without style carries only the text key', () {
-      final result = figmaTextContent(response, ['10:3']);
+      final result = figmaTextContent(_textResponse, ['10:3']);
       final entry = (result['textNodes'] as Map)['10:3'] as Map;
       expect(entry, {'text': 'No style'});
     });
+  });
+}
 
+void textContentDefaultsTests() {
+  group('figmaTextContent defaults', () {
     test('defaults style fields like the Java opt* calls', () {
       final response2 = {
         'nodes': {
@@ -376,7 +402,6 @@ void textContentTests() {
       expect(entry['textAlign'], 'LEFT');
     });
   });
-
 }
 
 void miscEnvelopeTests() {

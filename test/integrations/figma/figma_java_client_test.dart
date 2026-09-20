@@ -32,7 +32,9 @@ void main() {
   textAndDetailsTests();
   stylesTests();
   imageTests();
+  renderNodesTests();
   downloadTests();
+  downloadFailureTests();
   listingsTests();
 }
 
@@ -221,7 +223,6 @@ void layersTests() {
       expect(await f.client.getLayers(_href), isNull);
     });
   });
-
 }
 
 void childrenAndBatchTests() {
@@ -253,7 +254,6 @@ void childrenAndBatchTests() {
       expect(result, isEmpty);
     });
   });
-
 }
 
 void nodeChildrenGroup() {
@@ -360,7 +360,9 @@ void imageTests() {
       });
     });
   });
+}
 
+void renderNodesTests() {
   group('FigmaClient.renderNodes', () {
     test('batches 100 ids per request and merges image maps', () async {
       String imagesBody(int from) => jsonEncode({
@@ -409,7 +411,6 @@ void imageTests() {
       expect(await f.client.getImageOfSource(_href), isNull);
     });
   });
-
 }
 
 void downloadTests() {
@@ -441,7 +442,11 @@ void downloadTests() {
       final client = FigmaClient(f.http, cacheDir: _cacheDir);
       expect(await client.downloadNodeImage(_href, '9:9'), isNull);
     });
+  });
+}
 
+void downloadFailureTests() {
+  group('download failures', () {
     test('convertUrlToFile returns null when the source is not http', () async {
       final f = mockFigmaHttp((o) => '{"images":{"1:2":null}}');
       final client = FigmaClient(f.http, cacheDir: _cacheDir);

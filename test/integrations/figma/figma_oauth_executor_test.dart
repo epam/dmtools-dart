@@ -78,8 +78,7 @@ void oauthExchangeCodeTests() {
     test('reports incomplete config', () async {
       final f = executorFixture();
       final result = jsonDecode(
-        await f.executor
-            .execute('figma_oauth2_exchange_code', {'code': 'c'}),
+        await f.executor.execute('figma_oauth2_exchange_code', {'code': 'c'}),
       ) as Map<String, dynamic>;
       expect(
         result['error'],

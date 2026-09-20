@@ -270,7 +270,8 @@ class FigmaSyncTools {
   String _getNodeDetails(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       return _guarded(() {
-        final ids = figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxDetailIds);
+        final ids = figmaCappedTrimmedIds(
+            syncAsStr(args['nodeIds']), figmaMaxDetailIds);
         final response = _nodesJson(config, _fileIdOf(args), ids);
         final document =
             response == null ? null : figmaNodeDocument(response, ids.first);
@@ -284,7 +285,8 @@ class FigmaSyncTools {
   String _getTextContent(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       return _guarded(() {
-        final ids = figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxTextIds);
+        final ids =
+            figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxTextIds);
         final response = _nodesJson(config, _fileIdOf(args), ids);
         return response == null
             ? figmaJsonNull
@@ -313,16 +315,17 @@ class FigmaSyncTools {
     return syncWithConfig(_config(), _notConfigured, (config) {
       final target = _urlNodeId(args);
       return _guarded(() {
-        final response =
-            _nodesJson(config, target.fileId, [target.nodeId]);
+        final response = _nodesJson(config, target.fileId, [target.nodeId]);
         final document =
             figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
-        final children =
-            document == null ? const <Map<String, dynamic>>[] : figmaLayerSummaries(document);
+        final children = document == null
+            ? const <Map<String, dynamic>>[]
+            : figmaLayerSummaries(document);
         if (children.isEmpty) {
           return figmaJsonNull;
         }
-        return jsonEncode({'parentNodeId': target.nodeId, 'children': children});
+        return jsonEncode(
+            {'parentNodeId': target.nodeId, 'children': children});
       });
     });
   }

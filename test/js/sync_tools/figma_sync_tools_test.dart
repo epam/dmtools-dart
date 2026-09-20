@@ -17,7 +17,9 @@ void main() {
   _testRoutingAndConfig();
   _testOauthRouting();
   if (hasPython3()) {
+    _testMeEchoTools();
     _testStructureEchoTools();
+    _testListingEchoTools();
     _testContentEchoTools();
   }
 }
@@ -78,7 +80,6 @@ void _testRoutingAndConfig() {
         {'error': 'Figma not configured'},
       );
     });
-
   });
 }
 
@@ -158,6 +159,45 @@ void _testStructureEchoTools() {
       expect(result['message'], 'Unexpected response format from Figma API');
     });
 
+    test('figma_get_layers returns JSON null without matching nodes', () {
+      expect(
+        tools.dispatch('figma_get_layers', {
+          'href': 'https://www.figma.com/file/abc123/Design?node-id=1-2',
+        }),
+        'null',
+      );
+    });
+
+    test('figma_get_node_children returns JSON null without a document', () {
+      expect(
+        tools.dispatch('figma_get_node_children', {
+          'href': 'https://www.figma.com/file/abc123/Design?node-id=1:2',
+        }),
+        'null',
+      );
+    });
+  });
+}
+
+void _testMeEchoTools() {
+  group('FigmaSyncTools me/icons over the echo server', () {
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      PropertyReader.setOverrides(_config(server.port));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
     test('figma_get_styles returns the empty token envelope', () {
       final result = jsonDecode(
         tools.dispatch('figma_get_styles', {
@@ -176,30 +216,63 @@ void _testStructureEchoTools() {
       expect(result['fileId'], 'abc123');
       expect(result['totalIcons'], 0);
     });
-
-    test('figma_get_layers returns JSON null without matching nodes', () {
-      expect(
-        tools.dispatch('figma_get_layers', {
-          'href': 'https://www.figma.com/file/abc123/Design?node-id=1-2',
-        }),
-        'null',
-      );
-    });
-
-    test('figma_get_node_children returns JSON null without a document', () {
-      expect(
-        tools.dispatch('figma_get_node_children', {
-          'href': 'https://www.figma.com/file/abc123/Design?node-id=1:2',
-        }),
-        'null',
-      );
-    });
-
   });
 }
 
 void _testContentEchoTools() {
   group('FigmaSyncTools content tools over the echo server', () {
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      PropertyReader.setOverrides(_config(server.port));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('figma_render_nodes merges batches', () {
+      // The echo body carries no images map.
+      final result = jsonDecode(
+        tools.dispatch('figma_render_nodes', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeIds': '1:1,2:2',
+        }),
+      );
+      expect(result, {});
+    });
+
+    test('figma_get_image_fills returns the raw body', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_get_image_fills', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+        }),
+      ) as Map<String, dynamic>;
+      expect(result['method'], 'GET');
+      expect(result['path'], '/v1/files/abc123/images');
+    });
+
+    test('figma_get_file_structure hits the node endpoint for node URLs', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_get_file_structure', {
+          'href': 'https://www.figma.com/file/abc123/Design?node-id=1-2',
+        }),
+      ) as Map<String, dynamic>;
+      expect(result['method'], 'GET');
+      expect(result['path'], '/v1/files/abc123/nodes?ids=1-2');
+    });
+  });
+}
+
+void _testListingEchoTools() {
+  group('FigmaSyncTools listing tools over the echo server', () {
     late EchoServer server;
     late FigmaSyncTools tools;
 
@@ -240,37 +313,6 @@ void _testContentEchoTools() {
         tools.dispatch('figma_get_file_comments', {'href': 'rawkey'}),
       );
       expect(result, []);
-    });
-
-    test('figma_render_nodes merges batches', () {
-      // The echo body carries no images map.
-      final result = jsonDecode(
-        tools.dispatch('figma_render_nodes', {
-          'href': 'https://www.figma.com/file/abc123/Design',
-          'nodeIds': '1:1,2:2',
-        }),
-      );
-      expect(result, {});
-    });
-
-    test('figma_get_image_fills returns the raw body', () {
-      final result = jsonDecode(
-        tools.dispatch('figma_get_image_fills', {
-          'href': 'https://www.figma.com/file/abc123/Design',
-        }),
-      ) as Map<String, dynamic>;
-      expect(result['method'], 'GET');
-      expect(result['path'], '/v1/files/abc123/images');
-    });
-
-    test('figma_get_file_structure hits the node endpoint for node URLs', () {
-      final result = jsonDecode(
-        tools.dispatch('figma_get_file_structure', {
-          'href': 'https://www.figma.com/file/abc123/Design?node-id=1-2',
-        }),
-      ) as Map<String, dynamic>;
-      expect(result['method'], 'GET');
-      expect(result['path'], '/v1/files/abc123/nodes?ids=1-2');
     });
   });
 }

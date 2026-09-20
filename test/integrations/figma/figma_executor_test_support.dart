@@ -104,13 +104,15 @@ class SpyFigmaClient extends FigmaClient {
   }
 
   @override
-  Future<Map<String, dynamic>?> getNodeDetails(String href, String nodeIds) async {
+  Future<Map<String, dynamic>?> getNodeDetails(
+      String href, String nodeIds) async {
     calls.add('getNodeDetails:$href:$nodeIds');
     return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getTextContent(String href, String nodeIds) async {
+  Future<Map<String, dynamic>?> getTextContent(
+      String href, String nodeIds) async {
     calls.add('getTextContent:$href:$nodeIds');
     return null;
   }

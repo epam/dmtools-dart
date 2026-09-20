@@ -32,7 +32,6 @@ void parseFileIdTests() {
       );
     });
   });
-
 }
 
 void queryParamTests() {
@@ -62,7 +61,6 @@ void queryParamTests() {
       );
     });
   });
-
 }
 
 void idCoercionTests() {
@@ -106,7 +104,6 @@ void idCoercionTests() {
       expect(() => figmaExtractProjectId('abc'), throwsStateError);
     });
   });
-
 }
 
 void nodeIdFormattingTests() {

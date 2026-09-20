@@ -40,10 +40,13 @@ FigmaRequest figmaStructureRequest(String cleanHref) {
   if (nodeId != null && nodeId.isNotEmpty) {
     return (path: 'files/$fileId/nodes', params: {'ids': nodeId});
   }
-  return (path: 'files/$fileId', params: const {
-    'geometry': 'paths',
-    'depth': '2',
-  });
+  return (
+    path: 'files/$fileId',
+    params: const {
+      'geometry': 'paths',
+      'depth': '2',
+    }
+  );
 }
 
 /// The URL's `node-id` value, or `null` when absent.

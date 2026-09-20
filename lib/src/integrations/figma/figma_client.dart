@@ -320,7 +320,8 @@ class FigmaClient {
     final target = figmaUrlNodeId(figmaCleanHref(href));
     try {
       final response = await _nodesRequest(target.fileId, [target.nodeId]);
-      final document = figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
+      final document =
+          figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
       if (document == null) {
         return null;
       }
@@ -371,11 +372,11 @@ class FigmaClient {
   /// propagate (Java rethrows).
   Future<Map<String, dynamic>?> getNodeChildren(String href) async {
     final target = figmaUrlNodeId(figmaCleanHref(href));
-    final response = await _getJson('files/${target.fileId}/nodes',
-        queryParams: {
-          'ids': target.nodeId,
-          'depth': '1',
-        });
+    final response =
+        await _getJson('files/${target.fileId}/nodes', queryParams: {
+      'ids': target.nodeId,
+      'depth': '1',
+    });
     final document = figmaNodeDocument(response, target.nodeId);
     if (document == null) {
       return null;
@@ -466,8 +467,7 @@ class FigmaClient {
       _getJson('libraries/$libraryKey/components');
 
   /// `figma_get_style` — GET `/files/{key}/styles` (Dart-only singular).
-  Future<Map<String, dynamic>> getStyle(String key) =>
-      _keyedGet(key, 'styles');
+  Future<Map<String, dynamic>> getStyle(String key) => _keyedGet(key, 'styles');
 
   /// `figma_export_image` — GET `/images/{key}` with optional format/scale.
   Future<Map<String, dynamic>> exportImage(

@@ -70,6 +70,25 @@ void oauthGetAuthUrlTests() {
       expect(result['state'], 'xyz');
       expect(result['instructions'], isNotNull);
     });
+
+    test('defaults to a random 16-hex-char state', () async {
+      final f = executorFixture();
+      PropertyReader.setOverrides({
+        'FIGMA_CLIENT_ID': 'cid',
+        'FIGMA_CLIENT_SECRET': 'cs',
+        'FIGMA_REDIRECT_URI': 'http://localhost:8080/callback',
+      });
+      final result = jsonDecode(
+        await f.executor.execute('figma_oauth2_get_auth_url', {}),
+      ) as Map<String, dynamic>;
+      final state = result['state'] as String;
+      expect(state, hasLength(16));
+      expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(state), isTrue);
+      expect(
+        result['authorization_url'],
+        contains('state=$state&response_type=code'),
+      );
+    });
   });
 }
 

@@ -13,6 +13,7 @@ void main() {
   scopeTests();
   tokenBodyTests();
   parseResponseTests();
+  randomStateTests();
   exchangeSuccessTests();
   exchangeFailureTests();
 }
@@ -102,6 +103,20 @@ void parseResponseTests() {
       expect(parsed.accessToken, '');
       expect(parsed.refreshToken, '');
       expect(parsed.expiresIn, 3600);
+    });
+  });
+}
+
+void randomStateTests() {
+  group('figmaRandomState', () {
+    test('returns 16 lowercase hex chars (Java long-hex parity)', () {
+      final state = figmaRandomState();
+      expect(state, hasLength(16));
+      expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(state), isTrue);
+    });
+
+    test('differs between calls', () {
+      expect(figmaRandomState(), isNot(figmaRandomState()));
     });
   });
 }

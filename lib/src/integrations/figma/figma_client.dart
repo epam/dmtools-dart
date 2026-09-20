@@ -197,8 +197,8 @@ class FigmaClient {
     if (file.existsSync()) {
       return file.path;
     }
-    final body = await _http.getAbsolute(url);
-    file.writeAsBytesSync(utf8.encode(body), flush: true);
+    final body = await _http.getAbsoluteBytes(url);
+    file.writeAsBytesSync(body, flush: true);
     return file.path;
   }
 
@@ -317,8 +317,10 @@ class FigmaClient {
   /// dashed `parentNodeId`); `null` when there are no children or on
   /// request failure (Java parity).
   Future<Map<String, dynamic>?> getLayers(String href) async {
-    final target = figmaUrlNodeId(figmaCleanHref(href));
     try {
+      // Parses inside the guard: an href without `node-id` must answer
+      // `null` like every other failure, not escape as a StateError.
+      final target = figmaUrlNodeId(figmaCleanHref(href));
       final response = await _nodesRequest(target.fileId, [target.nodeId]);
       final document =
           figmaNodeDocument(response, figmaColonNodeId(target.nodeId));

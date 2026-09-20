@@ -7,6 +7,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 
@@ -23,6 +24,17 @@ const figmaDefaultOAuthScope = 'file_content:read file_metadata:read';
 String figmaNormalizeScope(String? scope) {
   final trimmed = scope?.trim() ?? '';
   return trimmed.isEmpty ? figmaDefaultOAuthScope : trimmed;
+}
+
+/// Random hex state for OAuth CSRF protection — Java
+/// `Long.toHexString(doubleToLongBits(random))` parity: random bits
+/// (8 bytes → 16 hex chars), never a predictable timestamp.
+String figmaRandomState() {
+  final random = Random.secure();
+  return List.generate(
+    8,
+    (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
 }
 
 /// Builds the authorization URL — Java `buildAuthorizationUrl`.

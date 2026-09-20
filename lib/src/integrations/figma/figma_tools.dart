@@ -678,9 +678,10 @@ class FigmaToolExecutor {
     }
   }
 
-  /// Random hex state — Java `Long.toHexString(doubleToLongBits(random))`.
-  String _randomState() =>
-      DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+  /// Random hex state for OAuth CSRF protection — Java
+  /// `Long.toHexString(doubleToLongBits(random))` parity via
+  /// [figmaRandomState].
+  String _randomState() => figmaRandomState();
 
   /// JSON error envelope for the OAuth tools.
   String _oauthError(String message) => jsonEncode({'error': message});

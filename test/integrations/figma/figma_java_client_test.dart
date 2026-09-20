@@ -5,6 +5,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
@@ -447,6 +448,20 @@ void downloadTests() {
       final f = mockFigmaHttp((o) => '{"images":{}}');
       final client = FigmaClient(f.http, cacheDir: _cacheDir);
       expect(await client.downloadNodeImage(_href, '9:9'), isNull);
+    });
+
+    test('downloadImage writes non-UTF-8 bytes verbatim', () async {
+      // A real PNG header plus bytes invalid in UTF-8: any String
+      // decode/encode round trip replaces them with U+FFFD (EF BF BD).
+      final pngBytes = List<int>.unmodifiable([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+        0x00, 0xFF, 0xFE, 0xFD, 0x10,
+      ]);
+      final f = mockFigmaHttpBytes((o) => Uint8List.fromList(pngBytes));
+      final client = FigmaClient(f.http, cacheDir: _cacheDir);
+      final path = await client
+          .downloadImage('https://cdn.example.com/images/bin-v2.png');
+      expect(File(path).readAsBytesSync(), pngBytes);
     });
   });
 }

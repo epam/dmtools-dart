@@ -313,8 +313,10 @@ class FigmaSyncTools {
   /// dashed `parentNodeId`); JSON `null` without children (Java parity).
   String _getLayers(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final target = _urlNodeId(args);
       return _guarded(() {
+        // Parses inside the guard: an href without `node-id` must answer
+        // JSON null like every other failure, not escape as an error.
+        final target = _urlNodeId(args);
         final response = _nodesJson(config, target.fileId, [target.nodeId]);
         final document =
             figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
@@ -426,8 +428,7 @@ class FigmaSyncTools {
     if (redirectUri == null) {
       return _redirectUriError();
     }
-    final state = _optional(args['state']) ??
-        DateTime.now().microsecondsSinceEpoch.toRadixString(16);
+    final state = _optional(args['state']) ?? figmaRandomState();
     final authUrl = figmaBuildAuthorizationUrl(
       clientId: clientId,
       redirectUri: redirectUri,

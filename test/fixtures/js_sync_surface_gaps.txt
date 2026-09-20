@@ -1,14 +1,14 @@
-#
-#
-# (test/js_sync_surface_parity_test.dart); 289/420 names. Root cause:
 # JS sync-surface gaps — canonical MCP tools WITHOUT a SyncToolDispatcher
-# Provenance: first frozen 2026-09-18 by the surface-parity probe
+# handler (the JS wrapper exists, the call dies with 'Unsupported tool').
+#
 # Ratchet: this list may only SHRINK. A new tool landing in the MCP
 # catalog without a sync executor fails js_sync_surface_parity_test;
 # closing a gap requires removing its line here in the same PR.
-# handler (the JS wrapper exists, the call dies with 'Unsupported tool').
-# was grown agent-surface-first (Java exposes all @MCPTool to JS).
+#
+# Provenance: first frozen 2026-09-18 by the surface-parity probe
+# (test/js_sync_surface_parity_test.dart); 289/420 names. Root cause:
 # wrappers are generated for the whole registry while the sync bridge
+# was grown agent-surface-first (Java exposes all @MCPTool to JS).
 ado_add_pull_request_reviewer
 ado_add_work_item_comment
 ado_create_pull_request_status

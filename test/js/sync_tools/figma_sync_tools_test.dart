@@ -153,6 +153,21 @@ void _testOauthUrlRouting() {
       );
     });
 
+    test('oauth2_get_auth_url defaults to a random 16-hex-char state', () {
+      PropertyReader.setOverrides({
+        'FIGMA_CLIENT_ID': 'cid',
+        'FIGMA_CLIENT_SECRET': 'cs',
+        'FIGMA_REDIRECT_URI': 'http://cb/',
+      });
+      final result = jsonDecode(
+        tools.dispatch('figma_oauth2_get_auth_url', {}),
+      ) as Map<String, dynamic>;
+      final state = result['state'] as String;
+      expect(state, hasLength(16));
+      expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(state), isTrue);
+      expect(result['authorization_url'], contains('state=$state'));
+    });
+
     test('oauth2_get_auth_url builds the URL from env config', () {
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
@@ -204,6 +219,17 @@ void _testStructureEchoTools() {
       expect(
         tools.dispatch('figma_get_layers', {
           'href': 'https://www.figma.com/file/abc123/Design?node-id=1-2',
+        }),
+        'null',
+      );
+    });
+
+    test('figma_get_layers returns JSON null without a node-id', () {
+      // No node-id in the href: the URL parse fails inside the guard,
+      // so the tool answers JSON null instead of a bridge-level error.
+      expect(
+        tools.dispatch('figma_get_layers', {
+          'href': 'https://www.figma.com/file/abc123/Design',
         }),
         'null',
       );

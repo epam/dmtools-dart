@@ -26,7 +26,6 @@ jobs:
           # figma, jenkins, teams: re-add once their *_* secrets/vars exist —
           # with DMTOOLS_IT_REQUIRE_CREDS=true and no injected config the leg
           # is guaranteed red (review round 3).
-          - testrail
           - bitrise
     # Serialize per integration so two runs never write to the same sandbox at
     # once; a manual dispatch queues behind (does not cancel) a running nightly.

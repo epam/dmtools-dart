@@ -52,8 +52,7 @@ void formalReviewWiringTests() {
         'review runner turns on formalGithubReview '
         '(real approvals, not just labels)', () {
       final customParams =
-          (_runnerJson('.dmtools/runners/fa-review-kimi.json')['params'])
-              as Map;
+          (_runnerJson('.dmtools/runners/fa-review.json')['params']) as Map;
       final runnerCustomParams = customParams['customParams'] as Map;
       expect(runnerCustomParams['formalGithubReview'], true);
       expect(runnerCustomParams['allowApproveWithSuggestions'], true);
@@ -73,7 +72,7 @@ void formalReviewWiringTests() {
 void wiringTests() {
   group('machine wiring', () {
     test('review runner extends parent prompts with the verdict rules', () {
-      final runner = _runnerJson('.dmtools/runners/fa-review-kimi.json');
+      final runner = _runnerJson('.dmtools/runners/fa-review.json');
       final params = runner['params'] as Map;
       final prompts = (params['cliPrompts'] as List).cast<String>();
       expect(prompts, contains(_verdictRulesRunnerPath));
@@ -94,7 +93,7 @@ void wiringTests() {
     });
 
     test('rework runner still resolves against its parent', () {
-      final runner = _runnerJson('.dmtools/runners/fa-rework-zai.json');
+      final runner = _runnerJson('.dmtools/runners/fa-rework.json');
       expect((runner['parent'] as Map)['path'],
           '../../factory-agents/pr_rework.json');
       expect(
@@ -154,8 +153,7 @@ void resolutionTests() {
     test(
         'review runner deep-merges gh-129 custom params '
         'alongside the parent\'s own', () {
-      final params =
-          _resolvedRunner(tmp, 'fa-review-kimi.json')['params'] as Map;
+      final params = _resolvedRunner(tmp, 'fa-review.json')['params'] as Map;
       final custom = params['customParams'] as Map;
       expect(custom['formalGithubReview'], isTrue);
       expect(custom['allowApproveWithSuggestions'], isTrue);
@@ -165,8 +163,7 @@ void resolutionTests() {
     });
 
     test('merge directive appends the verdict rules to the parent prompts', () {
-      final params =
-          _resolvedRunner(tmp, 'fa-review-kimi.json')['params'] as Map;
+      final params = _resolvedRunner(tmp, 'fa-review.json')['params'] as Map;
       final parentPrompts = (_runnerJson('agents/pr_review.json')['params']
           as Map)['cliPrompts'] as List;
       final prompts = params['cliPrompts'] as List;
@@ -193,8 +190,8 @@ const _packAgents = [
 const _runners = [
   'fa-bug-dev.json',
   'fa-story-dev.json',
-  'fa-review-kimi.json',
-  'fa-rework-zai.json',
+  'fa-review.json',
+  'fa-rework.json',
 ];
 
 Map<String, dynamic> _resolvedRunner(Directory tmp, String runner) =>
@@ -218,6 +215,7 @@ void faProviderPreconfigTests() {
       _faBootPreconfigRunnerTests(runner);
     }
     _reviewQueueHeadPreconfigTests();
+    _devQueueFallbackPreconfigTests();
   });
 }
 
@@ -271,8 +269,8 @@ void _reviewQueueHeadPreconfigTests() {
   test(
       'review runner pins its designed primary (queue head: kimi) and keeps '
       'the failover queue', () {
-    final env = (_runnerJson('.dmtools/runners/fa-review-kimi.json')['params'])[
-        'envVariables'] as Map;
+    final env = (_runnerJson(
+        '.dmtools/runners/fa-review.json')['params'])['envVariables'] as Map;
     expect(env['FA_PROVIDER_TYPE'], 'openai-completions',
         reason: 'the queue head is kimi via its openai-completions API');
     final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
@@ -283,4 +281,30 @@ void _reviewQueueHeadPreconfigTests() {
             '(factory-teammate.yml)');
     expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue);
   });
+}
+
+void _devQueueFallbackPreconfigTests() {
+  // GLM weekly-limit 429s killed the dev leg with exit 1 (no fallback) —
+  // the dev legs must carry the same queue the review leg has:
+  // zai/glm-5.3-flash primary, kimi-for-coding as the cooldown fallback.
+  for (final runner in ['fa-bug-dev', 'fa-story-dev', 'fa-rework']) {
+    test(
+        '$runner declares the fallback queue (glm-5.3-flash → '
+        'kimi-for-coding)', () {
+      final env = (_runnerJson(
+          '.dmtools/runners/$runner.json')['params'])['envVariables'] as Map;
+      expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue,
+          reason: 'single-provider preconfig dies hard on provider 429s');
+      final queue =
+          jsonDecode(env['FA_PROVIDERS_QUEUE'] as String) as List<dynamic>;
+      expect(queue, hasLength(2));
+      final head = (queue[0] as Map)['provider_config'] as Map;
+      expect(head['model'], 'glm-5.3-flash');
+      expect(head['apiKeyEnv'], 'ZAI_CODE_KEY');
+      final fallback = (queue[1] as Map)['provider_config'] as Map;
+      expect(fallback['model'], 'kimi-for-coding');
+      expect(fallback['baseUrl'], 'https://api.kimi.com/coding/v1');
+      expect(fallback['apiKeyEnv'], 'KIMI_REVIEW_KEY');
+    });
+  }
 }

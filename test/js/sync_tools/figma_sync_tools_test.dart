@@ -467,7 +467,7 @@ void _testDownloadEchoTools() {
       0x0A,
       0x1A,
       0x0A,
-      ...'<REDACTED_TOKEN>'.codeUnits,
+      ...'figdl-fixture-bytes'.codeUnits,
     ];
     late EchoServer server;
     late FigmaSyncTools tools;

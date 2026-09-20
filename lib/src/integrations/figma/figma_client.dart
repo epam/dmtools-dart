@@ -44,37 +44,14 @@ class FigmaClient {
   Future<Map<String, dynamic>> me() async {
     try {
       final body = await _http.get('me');
-      if (body.isEmpty) {
-        return _meFailure('Empty response from Figma API');
-      }
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      if (!json.containsKey('id') && !json.containsKey('handle')) {
-        return _meFailure('Unexpected response format from Figma API');
-      }
-      final user = <String, dynamic>{
-        'id': json['id']?.toString() ?? 'unknown',
-        'handle': json['handle']?.toString() ?? 'unknown',
-      };
-      if (json['email'] != null) {
-        user['email'] = json['email'].toString();
-      }
-      return {
-        'success': true,
-        'message': 'Figma API connection successful',
-        'user': user,
-      };
+      return figmaMeResult(body: body);
     } on Object catch (failure) {
-      return {
-        'success': false,
-        'message': 'Figma API connection failed: $failure',
-        'error': failure.runtimeType.toString(),
-      };
+      return figmaMeResult(
+        error: '$failure',
+        errorClass: failure.runtimeType.toString(),
+      );
     }
   }
-
-  /// Failure map for [me] — [message] describes the failure mode.
-  Map<String, dynamic> _meFailure(String message) =>
-      {'success': false, 'message': message};
 
   /// `figma_test` — connectivity check; Java returns the `me()` map.
   Future<Map<String, dynamic>> testConnection() => me();

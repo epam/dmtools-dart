@@ -406,8 +406,8 @@ void oauthExecutorTests() {
     });
 
     test('get_auth_url reports a missing client secret', () async {
-      PropertyReader.setOverrides({'FIGMA_CLIENT_ID': 'cid'});
       final f = _executorFixture();
+      PropertyReader.setOverrides({'FIGMA_CLIENT_ID': 'cid'});
       final result = jsonDecode(
         await f.executor.execute('figma_oauth2_get_auth_url', {}),
       ) as Map<String, dynamic>;
@@ -415,11 +415,11 @@ void oauthExecutorTests() {
     });
 
     test('get_auth_url reports a missing redirect URI', () async {
+      final f = _executorFixture();
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
         'FIGMA_CLIENT_SECRET': 'cs',
       });
-      final f = _executorFixture();
       final result = jsonDecode(
         await f.executor.execute('figma_oauth2_get_auth_url', {}),
       ) as Map<String, dynamic>;
@@ -430,12 +430,12 @@ void oauthExecutorTests() {
     });
 
     test('get_auth_url builds the authorization URL from config', () async {
+      final f = _executorFixture();
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
         'FIGMA_CLIENT_SECRET': 'cs',
         'FIGMA_REDIRECT_URI': 'http://localhost:8080/callback',
       });
-      final f = _executorFixture();
       final result = jsonDecode(
         await f.executor.execute('figma_oauth2_get_auth_url', {
           'state': 'xyz',
@@ -465,12 +465,12 @@ void oauthExecutorTests() {
     });
 
     test('exchange_code returns tokens and instructions', () async {
+      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
         'FIGMA_CLIENT_SECRET': 'cs',
         'FIGMA_REDIRECT_URI': 'http://cb/',
       });
-      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
       final executor = FigmaToolExecutor(
         spy,
         PropertyReader(),
@@ -489,12 +489,12 @@ void oauthExecutorTests() {
     });
 
     test('exchange_code wraps failures in the Java error text', () async {
+      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
         'FIGMA_CLIENT_SECRET': 'cs',
         'FIGMA_REDIRECT_URI': 'http://cb/',
       });
-      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
       final executor = FigmaToolExecutor(
         spy,
         PropertyReader(),
@@ -673,9 +673,9 @@ class _SpyFigmaClient extends FigmaClient {
   }
 
   @override
-  Future<String?> getImageOfSource(String url) {
+  Future<String?> getImageOfSource(String url) async {
     calls.add('getImageOfSource:$url');
-    return super.getImageOfSource(url);
+    return null;
   }
 
   @override
@@ -684,33 +684,33 @@ class _SpyFigmaClient extends FigmaClient {
     String nodeId, {
     String? format,
     int? scale,
-  }) {
+  }) async {
     calls.add('downloadNodeImage:$href:$nodeId:$format:$scale');
-    return super.downloadNodeImage(href, nodeId, format: format, scale: scale);
+    return null;
   }
 
   @override
-  Future<String?> convertUrlToFile(String href) {
+  Future<String?> convertUrlToFile(String href) async {
     calls.add('convertUrlToFile:$href');
-    return super.convertUrlToFile(href);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getFileStructure(String href) {
+  Future<Map<String, dynamic>?> getFileStructure(String href) async {
     calls.add('getFileStructure:$href');
-    return super.getFileStructure(href);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getIcons(String href) {
+  Future<Map<String, dynamic>?> getIcons(String href) async {
     calls.add('getIcons:$href');
-    return super.getIcons(href);
+    return null;
   }
 
   @override
-  Future<String> getImageFills(String href) {
+  Future<String> getImageFills(String href) async {
     calls.add('getImageFills:$href');
-    return super.getImageFills(href);
+    return '';
   }
 
   @override
@@ -718,9 +718,9 @@ class _SpyFigmaClient extends FigmaClient {
     String href,
     String nodeIds, {
     String? format,
-  }) {
+  }) async {
     calls.add('renderNodes:$href:$nodeIds:$format');
-    return super.renderNodes(href, nodeIds, format: format);
+    return '';
   }
 
   @override
@@ -728,72 +728,72 @@ class _SpyFigmaClient extends FigmaClient {
     String href,
     String nodeId,
     String format,
-  ) {
+  ) async {
     calls.add('downloadIconFile:$href:$nodeId:$format');
-    return super.downloadIconFile(href, nodeId, format);
+    return null;
   }
 
   @override
-  Future<String?> getSvgContent(String href, String nodeId) {
+  Future<String?> getSvgContent(String href, String nodeId) async {
     calls.add('getSvgContent:$href:$nodeId');
-    return super.getSvgContent(href, nodeId);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getNodeDetails(String href, String nodeIds) {
+  Future<Map<String, dynamic>?> getNodeDetails(String href, String nodeIds) async {
     calls.add('getNodeDetails:$href:$nodeIds');
-    return super.getNodeDetails(href, nodeIds);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getTextContent(String href, String nodeIds) {
+  Future<Map<String, dynamic>?> getTextContent(String href, String nodeIds) async {
     calls.add('getTextContent:$href:$nodeIds');
-    return super.getTextContent(href, nodeIds);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getDesignStyles(String href) {
+  Future<Map<String, dynamic>?> getDesignStyles(String href) async {
     calls.add('getDesignStyles:$href');
-    return super.getDesignStyles(href);
+    return null;
   }
 
   @override
-  Future<Map<String, dynamic>?> getLayers(String href) {
+  Future<Map<String, dynamic>?> getLayers(String href) async {
     calls.add('getLayers:$href');
-    return super.getLayers(href);
+    return null;
   }
 
   @override
   Future<Map<String, Map<String, dynamic>>> getLayersBatch(
     String href,
     String nodeIds,
-  ) {
+  ) async {
     calls.add('getLayersBatch:$href:$nodeIds');
-    return super.getLayersBatch(href, nodeIds);
+    return {};
   }
 
   @override
-  Future<Map<String, dynamic>?> getNodeChildren(String href) {
+  Future<Map<String, dynamic>?> getNodeChildren(String href) async {
     calls.add('getNodeChildren:$href');
-    return super.getNodeChildren(href);
+    return null;
   }
 
   @override
-  Future<List<dynamic>> listTeamProjects(String teamIdOrUrl) {
+  Future<List<dynamic>> listTeamProjects(String teamIdOrUrl) async {
     calls.add('listTeamProjects:$teamIdOrUrl');
-    return super.listTeamProjects(teamIdOrUrl);
+    return const [];
   }
 
   @override
-  Future<List<dynamic>> listProjectFiles(String projectIdOrUrl) {
+  Future<List<dynamic>> listProjectFiles(String projectIdOrUrl) async {
     calls.add('listProjectFiles:$projectIdOrUrl');
-    return super.listProjectFiles(projectIdOrUrl);
+    return const [];
   }
 
   @override
-  Future<List<dynamic>> getFileComments(String href) {
+  Future<List<dynamic>> getFileComments(String href) async {
     calls.add('getFileComments:$href');
-    return super.getFileComments(href);
+    return const [];
   }
 
   @override

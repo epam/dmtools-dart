@@ -8,6 +8,8 @@
 /// [FigmaClient] and the sync JS-surface executors share one implementation.
 library;
 
+import 'dart:convert';
+
 /// Node types the Java `isExportableVisualElement` accepts.
 const _exportableTypes = {
   'VECTOR',
@@ -315,6 +317,64 @@ Map<String, dynamic> figmaStylesResult() => {
       'colorStyles': <dynamic>[],
       'textStyles': <dynamic>[],
     };
+
+/// Builds the `figma_test` / `figma_me` result — Java `me()` parity.
+///
+/// Exactly one of [body] (a successful HTTP response) or [error] (a thrown
+/// failure, with [errorClass] its type name) is given. A blank body is the
+/// "Empty response" failure; a non-JSON body or one without `id`/`handle`
+/// is the "Unexpected response format" failure.
+Map<String, dynamic> figmaMeResult({
+  String? body,
+  String? error,
+  String? errorClass,
+}) {
+  if (error != null) {
+    return {
+      'success': false,
+      'message': 'Figma API connection failed: $error',
+      'error': errorClass,
+    };
+  }
+  if (body == null || body.isEmpty) {
+    return {'success': false, 'message': 'Empty response from Figma API'};
+  }
+  Object? decoded;
+  var parseFailed = false;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    parseFailed = true;
+  }
+  // Java: new JSONObject(response) throws on non-JSON, so the catch branch
+  // (connection-failed shape) handles it.
+  if (parseFailed) {
+    return const {
+      'success': false,
+      'message': 'Figma API connection failed: FormatException',
+      'error': 'FormatException',
+    };
+  }
+  if (decoded is! Map<String, dynamic> ||
+      (!decoded.containsKey('id') && !decoded.containsKey('handle'))) {
+    return {
+      'success': false,
+      'message': 'Unexpected response format from Figma API',
+    };
+  }
+  final user = <String, dynamic>{
+    'id': decoded['id']?.toString() ?? 'unknown',
+    'handle': decoded['handle']?.toString() ?? 'unknown',
+  };
+  if (decoded['email'] != null) {
+    user['email'] = decoded['email'].toString();
+  }
+  return {
+    'success': true,
+    'message': 'Figma API connection successful',
+    'user': user,
+  };
+}
 
 /// The `document` object of one node entry in a `/nodes` response,
 /// or `null` when absent.

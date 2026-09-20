@@ -57,11 +57,10 @@ void main() {
             {'id': '1:2', 'name': 'empty', 'type': 'RECTANGLE', 'absoluteBoundingBox': {'width': 0, 'height': 10}},
             {'id': '1:3', 'name': 'hidden', 'type': 'RECTANGLE', 'visible': false, 'absoluteBoundingBox': {'width': 10, 'height': 10}},
             {'id': '1:4', 'name': 'faint', 'type': 'RECTANGLE', 'opacity': 0.005, 'absoluteBoundingBox': {'width': 10, 'height': 10}},
-            {'id': '1:5', 'name': 'too complex', 'type': 'VECTOR', 'id_conflict': 'x', 'absoluteBoundingBox': {'width': 10, 'height': 10}},
+            {'id': 'I1:1;2:2;3:3;4:4', 'name': 'too complex', 'type': 'VECTOR', 'absoluteBoundingBox': {'width': 10, 'height': 10}},
           ],
         },
       };
-      // Give the "too complex" node a 4-part semicolon ID via children path.
       final icons = figmaFindAllComponents(response);
       expect(icons, isEmpty);
     });
@@ -127,9 +126,11 @@ void main() {
         },
       };
       final icons = figmaFindAllComponents(response);
+      // Java checks isLikelyIcon first: every small shape here qualifies
+      // as an icon by size, even the one named "illustration".
       expect(
         icons.map((i) => i['category']).toList(),
-        ['icon', 'illustration', 'text', 'graphic', 'illustration'],
+        ['icon', 'icon', 'text', 'icon', 'icon'],
       );
     });
   });

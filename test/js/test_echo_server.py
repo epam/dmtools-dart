@@ -202,6 +202,15 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["value"] = [
                 {"id": 7, "fields": {"System.Title": "T"}}
             ]
+        elif (self.command == "GET"
+              and "/wit/workitems/9" in self.path):
+            # ADO label-tool fixture (dm.ai #577): a tagged work item for
+            # the add/remove-single-label handler tests — the merged or
+            # remaining tag set is asserted from the PATCH the handler
+            # sends back to the echo server.
+            payload.clear()
+            payload["id"] = 9
+            payload["fields"] = {"System.Tags": "existing; ai_generated"}
         # Jira deployment-detection fixture: /serverInfo answers by marker —
         # dt-server → "Server", dt-cloud → "Cloud", dt-missing → no field,
         # dt-error → 500 (both force the atlassian.net URL fallback).

@@ -58,6 +58,7 @@ List<ToolDefinition> githubTools() => [
 List<ToolDefinition> _systemTools() => [
       ToolDefinition(
         name: 'github_test',
+        aliases: ['tracker_get_my_profile'],
         description: 'Test GitHub connectivity by fetching the current user',
         integration: 'github',
         category: 'system',

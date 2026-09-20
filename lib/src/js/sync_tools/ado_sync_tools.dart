@@ -72,6 +72,8 @@ Map<String, String Function(Map<String, dynamic>)> _wrapHandlers(
 final Map<String, String Function(Map<String, dynamic> args)> _adoHandlers =
     _wrapHandlers({
   'ado_get_work_item': _getWorkItem,
+  'ado_add_work_item_label': _addWorkItemLabel,
+  'ado_remove_work_item_label': _removeWorkItemLabel,
   'ado_list_work_items': _listWorkItems,
   'ado_list_prs': _listPrs,
   'ado_get_pr': _getPr,
@@ -121,6 +123,69 @@ String _getWorkItem(_AdoConfig config, Map<String, dynamic> args) {
   final url = '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
       '?api-version=$_adoApiVersion';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+}
+
+/// `ado_add_work_item_label` — add a single label (tag) to a work item,
+/// keeping existing tags (dm.ai #577; Java `addWorkItemLabel` →
+/// `addLabelIfNotExists`).
+String _addWorkItemLabel(_AdoConfig config, Map<String, dynamic> args) =>
+    _updateWorkItemTags(config, args, add: true);
+
+/// `ado_remove_work_item_label` — remove a single label (tag) from a work
+/// item, keeping the other tags (dm.ai #577; Java `removeWorkItemLabel` →
+/// `deleteLabelInTicket`).
+String _removeWorkItemLabel(_AdoConfig config, Map<String, dynamic> args) =>
+    _updateWorkItemTags(config, args, add: false);
+
+/// Shared add/remove-single-tag implementation over the ADO `System.Tags`
+/// field (a semicolon-delimited string): read the label set, add [label]
+/// (a case-insensitive no-op when already present) or remove it, and PATCH
+/// the joined set back — mirroring Java's `performTicket` + label helpers.
+String _updateWorkItemTags(
+  _AdoConfig config,
+  Map<String, dynamic> args, {
+  required bool add,
+}) {
+  final label = syncAsStr(args['label']).trim();
+  if (label.isEmpty) return syncErr('label is required');
+  final url = '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
+      '?api-version=$_adoApiVersion';
+  final fetched =
+      syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  final item = syncTryDecode(fetched);
+  if (item is! Map) return fetched;
+  final fields = item['fields'];
+  final rawTags = fields is Map ? syncAsStr(fields['System.Tags']) : '';
+  final tags = rawTags
+      .split(';')
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
+  final present = tags.any((t) => t.toLowerCase() == label.toLowerCase());
+  if (add == present) {
+    // Add-with-existing / remove-with-absent: nothing to change.
+    return jsonEncode(<String, dynamic>{'success': true});
+  }
+  if (add) {
+    tags.add(label);
+  } else {
+    tags.removeWhere((t) => t.toLowerCase() == label.toLowerCase());
+  }
+  final patch = jsonEncode([
+    <String, String>{
+      'op': 'add',
+      'path': '/fields/System.Tags',
+      'value': tags.join('; '),
+    },
+  ]);
+  return syncBodyOrError(SyncHttpClient.patch(
+    url,
+    headers: {
+      ...config.headers,
+      'Content-Type': 'application/json-patch+json',
+    },
+    body: patch,
+  ));
 }
 
 /// `ado_list_work_items` — POST `wit/wiql`, then batch-fetch full items.

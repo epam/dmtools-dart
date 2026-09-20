@@ -42,6 +42,8 @@ void catalogOrderTests() {
         'ado_get_work_item_types',
         'ado_get_work_item_comments',
         'ado_add_work_item_comment',
+        'ado_add_work_item_label',
+        'ado_remove_work_item_label',
         'ado_get_teams',
         'ado_get_team_members',
         'ado_get_project_details',

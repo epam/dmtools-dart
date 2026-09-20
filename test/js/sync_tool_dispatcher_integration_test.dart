@@ -283,21 +283,22 @@ void _testAdoWiqlSurface() {
           reason: 'got a WIQL id/url stub instead of a full work item');
     });
 
-    test('ado_search_by_wiql is not a JS global — canonical only (Java parity)',
-        () {
-      // The JS entry point (executeToolViaJava) resolves canonical schema
-      // names only: Java's JS surface (JobJavaScriptBridge
-      // .exposeMCPToolsUsingGenerated) exposes one global per canonical
-      // tool. `ado_search_by_wiql` is a CLI-resolution alias
-      // (McpCliHandler.resolveToolAlias) of `ado_list_work_items` and is
-      // rejected on the bridge surface like any unknown name.
+    test('ado_search_by_wiql resolves on the bridge surface (dm.ai #577)', () {
+      // The JS entry point (executeToolViaJava) resolves aliases on every
+      // call — Java JobJavaScriptBridge.executeToolFromJS parity (dm.ai
+      // #577): `ado_search_by_wiql` is an alias of `ado_list_work_items`
+      // and dispatches through the resolver with the same two-step WIQL
+      // behavior as the canonical name.
       final bridge = ToolBridge(registry: createDefaultToolRegistry());
       final result = bridge.execute('ado_search_by_wiql', {
         'wiql': 'SELECT [System.Id] FROM WorkItems',
       });
-      expect(jsonDecode(result), {
-        'error': contains('Unknown tool: ado_search_by_wiql'),
-      });
+      expect(jsonDecode(result), [
+        {
+          'id': 7,
+          'fields': {'System.Title': 'T'},
+        },
+      ]);
     });
   });
 }

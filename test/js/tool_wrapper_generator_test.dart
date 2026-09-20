@@ -13,6 +13,7 @@ void main() {
   _testMultipleTools();
   _testSingleParamTool();
   _testAliasWrappers();
+  _testAliasShadowing();
   _testToolCallLogging();
 }
 
@@ -161,8 +162,8 @@ void _testSingleParamTool() {
 }
 
 void _testAliasWrappers() {
-  group('alias wrappers', () {
-    test('emits canonical globals only — aliases never become JS globals', () {
+  group('alias wrappers (dm.ai #577 parity)', () {
+    test('aliases become JS globals dispatching under the alias name', () {
       final registry = _registryWith(ToolDefinition(
         name: 'jira_create_ticket',
         description: 'Create ticket',
@@ -178,15 +179,16 @@ void _testAliasWrappers() {
       // Canonical wrapper dispatches under its own name.
       expect(code, contains('globalThis.jira_create_ticket ='));
       expect(code, contains("executeToolViaJava('jira_create_ticket', args)"));
-      // Java parity: the JS surface (JobJavaScriptBridge
-      // .exposeMCPToolsUsingGenerated) exposes exactly one global per
-      // canonical schema — aliases are CLI-resolution metadata
-      // (McpCliHandler.resolveToolAlias), never JS globals.
-      expect(code, isNot(contains('globalThis.jira_create_ticket_basic')));
-      expect(code, isNot(contains('globalThis.tracker_create_ticket')));
+      // Java JobJavaScriptBridge.exposeMCPToolsUsingGenerated parity
+      // (dm.ai #577): alias globals dispatch under the ALIAS name so the
+      // bridge re-routes every call — key-format detection stays dynamic.
+      expect(code, contains('globalThis.tracker_create_ticket ='));
+      expect(
+          code, contains("executeToolViaJava('tracker_create_ticket', args)"));
+      expect(code, contains('globalThis.jira_create_ticket_basic ='));
     });
 
-    test('generates one global per canonical tool', () {
+    test('a shared alias is exposed exactly once', () {
       final registry = ToolRegistry()
         ..register(ToolDefinition(
           name: 'jira_get_ticket',
@@ -195,15 +197,41 @@ void _testAliasWrappers() {
           aliases: const ['tracker_get_ticket'],
         ))
         ..register(ToolDefinition(
-          name: 'file_read',
-          description: 'Read file',
-          integration: 'file',
+          name: 'github_get_issue',
+          description: 'Get issue',
+          integration: 'github',
+          aliases: const ['tracker_get_ticket'],
         ));
       final code = const ToolWrapperGenerator().generate(registry);
-      expect(
-        RegExp(r'globalThis\.\w+ =', multiLine: true).allMatches(code).length,
-        2,
-      );
+      expect('globalThis.tracker_get_ticket ='.allMatches(code).length, 1);
+      expect(code, contains('globalThis.jira_get_ticket ='));
+      expect(code, contains('globalThis.github_get_issue ='));
+    });
+  });
+}
+
+/// Alias exposure never shadows a canonical global (dm.ai #577).
+void _testAliasShadowing() {
+  group('alias shadowing', () {
+    test('a canonical tool name is never shadowed by an alias', () {
+      final registry = ToolRegistry()
+        ..register(ToolDefinition(
+          name: 'tracker_helper',
+          description: 'Canonical tool with a colliding-looking name',
+          integration: 'file',
+        ))
+        ..register(ToolDefinition(
+          name: 'real_tool',
+          description: 'Tool whose alias equals a canonical name',
+          integration: 'jira',
+          aliases: const ['tracker_helper'],
+        ));
+      final code = const ToolWrapperGenerator().generate(registry);
+      // The canonical tracker_helper global dispatches under its own name
+      // exactly once — the alias 'tracker_helper' (carried by real_tool)
+      // must not overwrite or duplicate it.
+      expect('globalThis.tracker_helper ='.allMatches(code).length, 1);
+      expect(code, contains("executeToolViaJava('tracker_helper', args)"));
     });
   });
 }

@@ -57,6 +57,8 @@ void main() {
   registryAliasResolutionTests();
   registryAliasDefaultRoutingTests();
   registryAliasIntegrationsTests();
+  registryAliasKeyHintTests();
+  registryAliasFormatHintTests();
 }
 
 /// [ToolParam.toJson] serializes type and description.
@@ -425,6 +427,113 @@ void registryAliasIntegrationsTests() {
       expect(
         registry.resolveToolAlias('jira_get_ticket',
             integrations: const {'github'}),
+        'jira_get_ticket',
+      );
+    });
+  });
+}
+
+/// [ToolRegistry.resolveToolAlias] key-hint routing — Java
+/// `ToolAliasResolver` parity (dm.ai #577): explicit GitHub key formats
+/// route first, DEFAULT_TRACKER beats key-format detection, classic Jira
+/// keys and bare ADO integers disambiguate when no default is set.
+void registryAliasKeyHintTests() {
+  group('alias resolution (key hint)', () {
+    test('a gh-N key hint routes to the GitHub carrier', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket', keyHint: 'gh-42'),
+        'github_create_issue',
+      );
+    });
+
+    test('a composite owner/repo#N key hint routes to GitHub', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            keyHint: 'epam/dm.ai#577'),
+        'github_create_issue',
+      );
+    });
+
+    test('the GitHub key hint beats DEFAULT_TRACKER', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            keyHint: 'gh-42', defaultTracker: 'jira'),
+        'github_create_issue',
+      );
+    });
+
+    test('the GitHub key hint is trimmed and case-insensitive', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(githubTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket', keyHint: '  GH-42 '),
+        'github_create_issue',
+      );
+    });
+
+    test('a GitHub hint with no GitHub carrier falls through to the default',
+        () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            keyHint: 'gh-42', defaultTracker: 'ado'),
+        'ado_get_work_item',
+      );
+    });
+  });
+}
+
+/// Key-format and default-priority routing for key hints (dm.ai #577
+/// `ToolAliasResolver` parity).
+void registryAliasFormatHintTests() {
+  group('alias resolution (key format hint)', () {
+    test('a classic Jira key hint routes to Jira', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket', keyHint: 'PROJ-123'),
+        'jira_get_ticket',
+      );
+    });
+
+    test('a bare integer key hint routes to ADO', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket', keyHint: '12345'),
+        'ado_get_work_item',
+      );
+    });
+
+    test('DEFAULT_TRACKER beats key-format detection', () {
+      final registry = ToolRegistry()
+        ..register(jiraTool(aliases: ['tracker_get_ticket']))
+        ..register(adoTool(aliases: ['tracker_get_ticket']));
+      expect(
+        registry.resolveToolAlias('tracker_get_ticket',
+            keyHint: 'PROJ-123', defaultTracker: 'ADO'),
+        'ado_get_work_item',
+      );
+    });
+
+    test('a canonical name ignores the key hint', () {
+      final registry = populatedRegistry();
+      expect(
+        registry.resolveToolAlias('jira_get_ticket', keyHint: 'gh-42'),
         'jira_get_ticket',
       );
     });

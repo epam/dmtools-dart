@@ -214,15 +214,90 @@ class CliDispatcher {
   /// carrier the filtered tools list shows rather than an empty one.
   String? _resolveToolName(
     String name, {
+    String? keyHint,
     ToolRegistry? registry,
     Set<String>? integrations,
   }) =>
       (registry ?? createDefaultToolRegistry()).resolveToolAlias(
         name,
+        keyHint: keyHint,
         defaultTracker: _reader.getDefaultTracker(),
         defaultSourceCode: _reader.getDefaultSourceCode(),
         integrations: integrations,
       );
+
+  /// Extracts a ticket/issue key hint from raw CLI arguments — Java
+  /// `McpCliHandler.extractKeyHint` parity (dm.ai #577): the first
+  /// `key=`/`ticketKey=`/`ticket=`/`issueKey=` pair wins, then the
+  /// `--data`/`--stdin-data` JSON payload, then the first positional
+  /// argument.
+  String? _extractKeyHint(List<String> args) {
+    String? firstPositional;
+    for (var i = 0; i < args.length; i++) {
+      final payload = _dataFlagPayload(args, i);
+      if (payload != null) {
+        final hint = _keyFromJson(payload);
+        if (hint != null) return hint;
+        i++; // consume the payload argument
+        continue;
+      }
+      final currentArg = args[i];
+      final pair = _keyPairValue(currentArg);
+      if (pair != null) return pair;
+      if (_isPositionalArg(currentArg) && firstPositional == null) {
+        firstPositional = currentArg;
+      }
+    }
+    // The Dart CLI carries the tool's JSON payload as the positional
+    // argument (Java's equivalent arrives via --data), so a positional is
+    // first probed as a JSON payload before being used as a bare key.
+    if (firstPositional == null) return null;
+    return _keyFromJson(firstPositional) ?? firstPositional;
+  }
+
+  /// The payload after a `--data`/`--stdin-data` flag at position [i], or
+  /// `null` when there is no such flag with a following argument.
+  String? _dataFlagPayload(List<String> args, int i) {
+    final flag = args[i];
+    final isDataFlag = flag == '--data' || flag == '--stdin-data';
+    return isDataFlag && i + 1 < args.length ? args[i + 1] : null;
+  }
+
+  /// The value of a `key=`/`ticketKey=`/`ticket=`/`issueKey=` pair
+  /// argument, or `null` when [arg] is not such a pair.
+  String? _keyPairValue(String arg) =>
+      RegExp(r'^(?:key|ticketKey|ticket|issueKey)=(.*)$')
+          .firstMatch(arg)
+          ?.group(1);
+
+  /// Whether [arg] can serve as a positional argument (no `--` flag
+  /// prefix, no `=` pair form).
+  bool _isPositionalArg(String arg) =>
+      !arg.startsWith('--') && !arg.contains('=');
+
+  /// The key fields of a `--data` JSON payload, in the same field order as
+  /// the JS bridge's `extractKeyHint` (`key`, `ticketKey`, `ticket`,
+  /// `issueKey`, `id`).
+  String? _keyFromJson(String payload) {
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        for (final field in const [
+          'key',
+          'ticketKey',
+          'ticket',
+          'issueKey',
+          'id'
+        ]) {
+          final value = decoded[field];
+          if (value != null) return value.toString();
+        }
+      }
+    } on FormatException {
+      // Not a JSON payload — keep scanning the remaining arguments.
+    }
+    return null;
+  }
 
   /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration
   /// names.
@@ -268,7 +343,12 @@ class CliDispatcher {
       }
       return _listTools([toolName]);
     }
-    final resolvedTool = _resolveToolName(toolName, registry: registry);
+    // Java McpCliHandler parity (dm.ai #577): the alias resolves with a
+    // key hint extracted from the raw arguments, so `gh-123` /
+    // `owner/repo#123` keys route tracker_* aliases to GitHub regardless
+    // of DEFAULT_TRACKER.
+    final resolvedTool = _resolveToolName(toolName,
+        registry: registry, keyHint: _extractKeyHint(cleaned));
     if (resolvedTool == null) {
       _writer('Error: unknown tool: $toolName');
       _writer('Run "dmtools list" for available tools');

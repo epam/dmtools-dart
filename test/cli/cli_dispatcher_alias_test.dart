@@ -46,6 +46,7 @@ void main() {
   _testAliasList();
   _testAliasIntegrations();
   _testAliasHelpEdges();
+  _testAliasKeyHintRouting();
 }
 
 /// Dispatches [args] on the shared dispatcher, asserts exit code [code],
@@ -280,6 +281,37 @@ void _testAliasHelpEdges() {
           await _dispatchTool(['tracker_get_ticket', '--help'], code: 0);
       expect(_toolNames(result), contains('jira_get_ticket'),
           reason: 'bitrise is not a tracker carrier — first candidate wins');
+    });
+  });
+}
+
+/// tracker_* invocations route by the key hint extracted from the raw
+/// arguments (dm.ai #577 `McpCliHandler.extractKeyHint` parity): a gh-N /
+/// owner/repo#N payload routes to the GitHub carrier, a PROJ-123 payload
+/// to Jira — regardless of DEFAULT_TRACKER. The unconfigured-integration
+/// error envelope of the dispatched carrier proves the routing.
+void _testAliasKeyHintRouting() {
+  group('alias key-hint routing', () {
+    test('a gh-N payload key routes tracker_get_ticket to GitHub', () async {
+      final result = await _dispatchTool(
+        ['tracker_get_ticket', '{"key":"gh-42"}'],
+      );
+      expect(result, containsPair('error', 'GitHub not configured'));
+    });
+
+    test('a PROJ-123 payload key routes tracker_get_ticket to Jira', () async {
+      final result = await _dispatchTool(
+        ['tracker_get_ticket', '{"key":"PROJ-123"}'],
+      );
+      expect(result, containsPair('error', 'Jira not configured'));
+    });
+
+    test('the GitHub key hint beats DEFAULT_TRACKER', () async {
+      PropertyReader.setOverrides({'DEFAULT_TRACKER': 'jira'});
+      final result = await _dispatchTool(
+        ['tracker_get_ticket', '{"key":"epam/dm.ai#42"}'],
+      );
+      expect(result, containsPair('error', 'GitHub not configured'));
     });
   });
 }

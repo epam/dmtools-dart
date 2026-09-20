@@ -29,6 +29,12 @@ final RegExp _syncCompositeKey = RegExp(r'^[\w.-]+/[\w.-]+#(\d+)$');
 /// Bare issue-number pattern: `123`.
 final RegExp _syncBareNumber = RegExp(r'^\d+$');
 
+/// `gh-123` issue-key pattern — the dmtools-agents ecosystem convention.
+/// The `tracker_*` router sends such keys to `github_*` tools (dm.ai #577
+/// `resolveIssueRef` parity); `gh-123` resolves to issue 123 on the
+/// configured default workspace/repository.
+final RegExp _syncGhKey = RegExp(r'^gh-(\d+)$', caseSensitive: false);
+
 /// Resolves the issue reference from tool [args] (Java
 /// `GitHubIssues.resolveIssueRef` + `BasicGithub` defaults).
 ///
@@ -43,8 +49,8 @@ Object _resolveSyncIssueRef(Map<String, dynamic> args) {
     final fromKey = _applyIssueKey(key, owner, repo, number);
     if (fromKey == null) {
       return syncErr(
-        "Cannot parse GitHub issue key: '$key'. Expected 'owner/repo#123' "
-        'or a bare issue number.',
+        "Cannot parse GitHub issue key: '$key'. Expected 'owner/repo#123', "
+        "'gh-123', or a bare issue number.",
       );
     }
     owner = fromKey.owner;
@@ -83,6 +89,10 @@ _SyncIssueRefParts? _applyIssueKey(
       key.substring(key.indexOf('/') + 1, key.indexOf('#')),
       int.parse(composite.group(1)!),
     );
+  }
+  final gh = _syncGhKey.firstMatch(key);
+  if (gh != null) {
+    return _SyncIssueRefParts(owner, repo, int.parse(gh.group(1)!));
   }
   if (_syncBareNumber.hasMatch(key)) {
     return _SyncIssueRefParts(owner, repo, int.parse(key));

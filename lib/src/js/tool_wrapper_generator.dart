@@ -32,19 +32,32 @@ class ToolWrapperGenerator {
 
   /// Generates JS code for all tools in [registry].
   ///
-  /// Every tool gets a wrapper under its canonical name and under each alias
-  /// — the Java schema registry exposes aliases as dispatchable tools too, so
-  /// scripts may call either name (e.g. `jira_create_ticket_basic` or its
-  /// canonical name). Alias wrappers dispatch under the canonical tool name.
+  /// Every tool gets a wrapper under its canonical name, and each
+  /// vendor-agnostic alias (`tracker_*`, `source_code_*`) gets a wrapper
+  /// dispatching under the ALIAS name (dm.ai #577) — the bridge resolves
+  /// the backend on every call, so key-format routing stays dynamic. A
+  /// canonical tool name is never shadowed and a shared alias is exposed
+  /// exactly once.
   String generate(ToolRegistry registry) {
     final buffer = StringBuffer()
       ..writeln('// Auto-generated MCP tool wrappers');
+    final canonicalNames = registry.allTools.map((tool) => tool.name).toSet();
+    final exposedAliases = <String>{};
     for (final tool in registry.allTools) {
-      // Canonical names only: the Java JS surface
-      // (JobJavaScriptBridge.exposeMCPToolsUsingGenerated) exposes one
-      // global per canonical schema — aliases are CLI-resolution metadata
-      // (McpCliHandler.resolveToolAlias) and never become JS globals.
       buffer.writeln(_wrapperFor(tool.name, tool.params));
+      // Java JobJavaScriptBridge.exposeMCPToolsUsingGenerated parity
+      // (dm.ai #577): vendor-agnostic aliases (tracker_*, source_code_*)
+      // are exposed as first-class JS globals dispatching under the ALIAS
+      // name, so the bridge re-routes every call — per-call key-format
+      // detection (gh-123 → GitHub, PROJ-123 → Jira, bare integer → ADO)
+      // stays dynamic even when DEFAULT_TRACKER is unset. A canonical tool
+      // name is never shadowed and a shared alias is exposed once.
+      for (final alias in tool.aliases) {
+        if (canonicalNames.contains(alias) || !exposedAliases.add(alias)) {
+          continue;
+        }
+        buffer.writeln(_wrapperFor(alias, tool.params));
+      }
     }
     return buffer.toString();
   }

@@ -1,11 +1,11 @@
-/// Tests for the Java-parity Figma OAuth2 helpers (`figma_oauth2.dart`).
+/// Tests for the Java-parity Figma OAuth2 helpers (`figma_oauth.dart`).
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:dmtools/src/integrations/figma/figma_oauth2.dart';
+import 'package:dmtools/src/integrations/figma/figma_oauth.dart';
 import 'package:test/test.dart';
 
 void main() {

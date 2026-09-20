@@ -5,7 +5,7 @@
 /// `FigmaClient`. Transport is delegated to [FigmaHttpClient]; this layer
 /// shapes requests and parses JSON into typed results. URL handling ports
 /// `figma_url.dart`; result envelopes port `figma_document.dart`; OAuth2
-/// ports `figma_oauth2.dart`.
+/// ports `figma_oauth.dart`.
 library;
 
 import 'dart:convert';

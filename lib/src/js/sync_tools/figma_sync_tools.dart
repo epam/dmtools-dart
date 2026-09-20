@@ -5,7 +5,7 @@
 /// QuickJS callbacks), and returns a JSON result string. Tool names,
 /// parameters, and response shapes port the Java `FigmaClient`
 /// `@MCPTool` methods; the pure shaping lives in
-/// `figma_document.dart` / `figma_url.dart` / `figma_oauth2.dart`, shared
+/// `figma_document.dart` / `figma_url.dart` / `figma_oauth.dart`, shared
 /// with the async [FigmaClient].
 library;
 
@@ -18,7 +18,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/figma/figma_document.dart';
 import '../../integrations/figma/figma_http_client.dart';
-import '../../integrations/figma/figma_oauth2.dart';
+import '../../integrations/figma/figma_oauth.dart';
 import '../../integrations/figma/figma_url.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';

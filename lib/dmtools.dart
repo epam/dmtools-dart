@@ -50,7 +50,7 @@ export 'src/integrations/confluence/confluence_http_client.dart';
 export 'src/integrations/confluence/confluence_tools.dart';
 export 'src/integrations/figma/figma_client.dart';
 export 'src/integrations/figma/figma_http_client.dart';
-export 'src/integrations/figma/figma_oauth2.dart';
+export 'src/integrations/figma/figma_oauth.dart';
 export 'src/integrations/figma/figma_tools.dart';
 export 'src/integrations/gitlab/gitlab_client.dart';
 export 'src/integrations/gitlab/gitlab_http_client.dart';

@@ -19,7 +19,7 @@ import '../../config/property_reader_getters.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'figma_client.dart';
-import 'figma_oauth2.dart';
+import 'figma_oauth.dart';
 
 /// Returns all Figma MCP tool definitions.
 ///

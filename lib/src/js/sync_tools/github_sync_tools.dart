@@ -59,6 +59,7 @@ class GitHubSyncTools {
       {
         'github_get_pr': (args) => _run(_getPr, args),
         'github_list_prs': (args) => _run(_listPrs, args),
+        'github_list_branches': (args) => _run(_listBranches, args),
         'github_add_pr_comment': (args) => _run(_addPrComment, args),
         'github_add_pr_label': (args) => _run(_addPrLabel, args),
         'github_remove_pr_label': (args) => _run(_removePrLabel, args),
@@ -133,6 +134,17 @@ String _run(
 /// `github_get_pr` — GET `repos/{w}/{r}/pulls/{id}` (Java `pullRequest`).
 String _getPr(GhSyncConfig c, Map<String, dynamic> a) =>
     syncBodyOrError(SyncHttpClient.get(_prUrl(c, a), headers: c.headers));
+
+/// `github_list_branches` — first page of `repos/{w}/{r}/branches`
+/// (Java `listBranches` parity; REST shape `[{name, commit: {sha}}]`).
+/// The SM provider reads the default-branch HEAD from it to compute
+/// behind/CLEAN deterministically (REST `mergeable_state` lazily
+/// recomputes to `unknown` right after a base push).
+String _listBranches(GhSyncConfig c, Map<String, dynamic> a) =>
+    syncBodyOrError(SyncHttpClient.get(
+      '${c.baseUrl}/${_repoSeg(a)}/branches?per_page=100&page=1',
+      headers: c.headers,
+    ));
 
 /// `github_list_prs` — first page (up to 100) of `repos/{w}/{r}/pulls`.
 ///

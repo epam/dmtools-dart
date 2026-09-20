@@ -74,15 +74,30 @@ jobs:
           COV_FINAL=$(echo "scale=1; $COV_PCT * 100 / $COV_TOTAL" | bc 2>/dev/null || echo "0")
           CRAP="8.0"
 
+          # shields.io flakes (503/connection blips) must not red the whole
+          # pipeline — badges are cosmetic. Retry, then warn and move on
+          # (the commit step already tolerates missing files).
+          fetch_badge() {
+            local url="$1" out="$2" attempt
+            for attempt in 1 2 3; do
+              if wget -q -O "$out" "$url"; then return 0; fi
+              sleep 5
+            done
+            echo "::warning::badge fetch failed after 3 attempts: $url"
+          }
+
           # Tests badge
-          wget -q -O .badges/tests.svg \
-            "https://img.shields.io/badge/tests-${TEST_COUNT}%20passing-brightgreen"
+          fetch_badge \
+            "https://img.shields.io/badge/tests-${TEST_COUNT}%20passing-brightgreen" \
+            .badges/tests.svg
           # Coverage badge
-          wget -q -O .badges/coverage.svg \
-            "https://img.shields.io/badge/coverage-${COV_FINAL}%25-brightgreen"
+          fetch_badge \
+            "https://img.shields.io/badge/coverage-${COV_FINAL}%25-brightgreen" \
+            .badges/coverage.svg
           # crap4dart badge
-          wget -q -O .badges/crap4dart.svg \
-            "https://img.shields.io/badge/crap4dart-${CRAP}%20threshold-green"
+          fetch_badge \
+            "https://img.shields.io/badge/crap4dart-${CRAP}%20threshold-green" \
+            .badges/crap4dart.svg
       - name: Commit badges
         # Badges belong to main only — on PR branches this step would push a
         # stray bot commit to the feature branch mid-review.

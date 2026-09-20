@@ -46,4 +46,24 @@ class FigmaHttpClient extends BearerHttpClient {
     required super.basePath,
     required super.token,
   });
+
+  /// GETs an absolute URL (image CDNs, SVG exports) with no auth headers
+  /// and no base-path prefix — Java `downloadImage`'s direct OkHttp call.
+  Future<String> getAbsolute(String url) async {
+    final response = await dio.get<String>(url);
+    return response.data ?? '';
+  }
+
+  /// GETs an absolute URL returning the raw response bytes — binary
+  /// image downloads must bypass text decoding: dio's default
+  /// transformer decodes bodies as UTF-8 with `allowMalformed`, so a
+  /// String round trip replaces every non-UTF-8 byte sequence (starting
+  /// with the `0x89` PNG magic header) with U+FFFD and corrupts the file.
+  Future<List<int>> getAbsoluteBytes(String url) async {
+    final response = await dio.get<List<int>>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const [];
+  }
 }

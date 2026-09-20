@@ -91,10 +91,8 @@ figma_get_image
 figma_get_library_components
 figma_get_node
 figma_get_style
-figma_get_styles
 figma_get_variable_collections
 figma_post_comment
-figma_test
 file_append
 file_copy
 file_delete

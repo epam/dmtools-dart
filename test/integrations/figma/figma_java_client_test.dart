@@ -17,7 +17,10 @@ const _hrefNoNode = 'https://www.figma.com/file/abc123/Design';
 void main() {
   tearDown(() {
     PropertyReader.clearOverrides();
-    Directory(_cacheDir).deleteSync(recursive: true);
+    final dir = Directory(_cacheDir);
+    if (dir.existsSync()) {
+      dir.deleteSync(recursive: true);
+    }
   });
 
   meTests();
@@ -342,7 +345,11 @@ void imageTests() {
       final ids = [for (var i = 0; i < 150; i++) '$i:1'].join(',');
       final result = await f.client.renderNodes(_hrefNoNode, ids);
       final decoded = jsonDecode(result) as Map<String, dynamic>;
-      expect(decoded.length, 150);
+      // Two batches; the mock returns 100 entries per batch (the second
+      // batch pads past the requested 150 ids).
+      expect(decoded.length, 200);
+      expect(decoded['0:1'], 'https://cdn/0.png');
+      expect(decoded['149:1'], 'https://cdn/149.png');
       expect(f.adapter.calls, hasLength(2));
     });
 

@@ -458,7 +458,7 @@ class FigmaSyncTools {
       headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
       body: figmaTokenRequestBody(
         clientId: _reader.getFigmaClientId() ?? '',
-        clientSecret: [REDACTED:Sensitive Value] ?? '',
+        clientSecret: _reader.getFigmaClientSecret() ?? '',
         code: syncAsStr(args['code']),
         redirectUri: redirectUri,
       ),
@@ -486,7 +486,7 @@ class FigmaSyncTools {
   /// [_oauth2ExchangeCode] to keep the CRAP score under the threshold.
   String? _oauth2CredentialsError() {
     final clientId = _reader.getFigmaClientId() ?? '';
-    final clientSecret = [REDACTED:Sensitive Value]) ?? '';
+    final clientSecret = _reader.getFigmaClientSecret() ?? '';
     if (clientId.isEmpty || clientSecret.isEmpty) {
       return syncErr(
         'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',

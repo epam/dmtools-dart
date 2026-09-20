@@ -47,7 +47,7 @@ const _formatFile = 'agents/instructions/common/github_comment_format.md';
 const _githubRunners = [
   '.dmtools/runners/fa-bug-dev.json',
   '.dmtools/runners/fa-story-dev.json',
-  '.dmtools/runners/fa-rework-zai.json',
+  '.dmtools/runners/fa-rework.json',
 ];
 
 /// Decodes a runner config as committed (no parent resolution — see the
@@ -104,7 +104,7 @@ void devRunnerWiringTests() {
 
 void reworkRunnerWiringTests() {
   test('rework runner pins its parent in the factory pack (sanity)', () {
-    final runner = _runner('.dmtools/runners/fa-rework-zai.json');
+    final runner = _runner('.dmtools/runners/fa-rework.json');
     expect(
       (runner['parent'] as Map)['path'],
       '../../factory-agents/pr_rework.json',

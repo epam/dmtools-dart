@@ -158,7 +158,7 @@ class FigmaClient {
       final response = await _getJson('images/$fileId', queryParams: {
         'ids': nodeId,
       });
-      return _imageUrlFor(response, figmaColonNodeId(nodeId));
+      return figmaImagesOf(response)?[figmaColonNodeId(nodeId)]?.toString();
     } on Object {
       return null;
     }
@@ -181,7 +181,7 @@ class FigmaClient {
         scale ?? 2,
       ),
     );
-    final imageUrl = _imageUrlFor(response, nodeId);
+    final imageUrl = figmaImagesOf(response)?[nodeId]?.toString();
     if (imageUrl == null) {
       return null;
     }
@@ -243,7 +243,7 @@ class FigmaClient {
         'images/$fileId',
         queryParams: figmaIconRenderParams(nodeId, format),
       );
-      return _imageUrlFor(response, figmaColonNodeId(nodeId));
+      return figmaImagesOf(response)?[figmaColonNodeId(nodeId)]?.toString();
     } on Object {
       return null;
     }
@@ -317,10 +317,10 @@ class FigmaClient {
   /// dashed `parentNodeId`); `null` when there are no children or on
   /// request failure (Java parity).
   Future<Map<String, dynamic>?> getLayers(String href) async {
-    final target = _urlNodeId(href);
+    final target = figmaUrlNodeId(figmaCleanHref(href));
     try {
       final response = await _nodesRequest(target.fileId, [target.nodeId]);
-      final document = _nodeDocumentByColonId(response, target.nodeId);
+      final document = figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
       if (document == null) {
         return null;
       }
@@ -352,7 +352,8 @@ class FigmaClient {
       final results = <String, Map<String, dynamic>>{};
       for (final rawId in ids) {
         final colonId = figmaColonNodeId(rawId.trim());
-        final document = _nodeDocumentByColonId(response, rawId.trim());
+        final document =
+            figmaNodeDocument(response, figmaColonNodeId(rawId.trim()));
         if (document == null) {
           continue;
         }
@@ -369,15 +370,13 @@ class FigmaClient {
   /// (`depth=1`, raw node id as parent); `null` when absent. Errors
   /// propagate (Java rethrows).
   Future<Map<String, dynamic>?> getNodeChildren(String href) async {
-    final target = _urlNodeId(href);
+    final target = figmaUrlNodeId(figmaCleanHref(href));
     final response = await _getJson('files/${target.fileId}/nodes',
         queryParams: {
           'ids': target.nodeId,
           'depth': '1',
         });
-    final nodes = response['nodes'];
-    final nodeData = nodes is Map ? nodes[target.nodeId] : null;
-    final document = _documentOf(nodeData);
+    final document = figmaNodeDocument(response, target.nodeId);
     if (document == null) {
       return null;
     }
@@ -393,42 +392,6 @@ class FigmaClient {
     List<Map<String, dynamic>> children,
   ) =>
       {'parentNodeId': nodeId, 'children': children};
-
-  /// (fileId, node-id) pair extracted from a design URL.
-  ({String fileId, String nodeId}) _urlNodeId(String href) {
-    final clean = figmaCleanHref(href);
-    return (
-      fileId: figmaParseFileId(clean),
-      nodeId: figmaExtractQueryParam(clean, figmaNodeIdParam),
-    );
-  }
-
-  /// The `images` value of a render response, or `null` when absent.
-  String? _imageUrlFor(Map<String, dynamic> response, String key) {
-    final images = response['images'];
-    return images is Map ? images[key]?.toString() : null;
-  }
-
-  /// Looks up a node document by colon-normalized id (getLayers parity:
-  /// response keys are colon-separated).
-  Map<String, dynamic>? _nodeDocumentByColonId(
-    Map<String, dynamic> response,
-    String nodeId,
-  ) {
-    final nodes = response['nodes'];
-    if (nodes is! Map) {
-      return null;
-    }
-    return _documentOf(nodes[figmaColonNodeId(nodeId)]);
-  }
-
-  /// Reads `document` out of a node-data envelope.
-  Map<String, dynamic>? _documentOf(dynamic nodeData) {
-    if (nodeData is Map && nodeData['document'] is Map) {
-      return Map<String, dynamic>.from(nodeData['document'] as Map);
-    }
-    return null;
-  }
 
   /// `figma_list_team_projects` — projects array of the team (raw numeric
   /// id or `/team/<id>` URL).
@@ -459,8 +422,12 @@ class FigmaClient {
     return (response['comments'] as List?) ?? const [];
   }
 
+  /// GET `files/{key}` plus an optional [suffix].
+  Future<Map<String, dynamic>> _keyedGet(String key, [String suffix = '']) =>
+      _getJson('files/$key${suffix.isEmpty ? '' : '/$suffix'}');
+
   /// `figma_get_file` — GET `/files/{key}`.
-  Future<Map<String, dynamic>> getFile(String key) => _getJson('files/$key');
+  Future<Map<String, dynamic>> getFile(String key) => _keyedGet(key);
 
   /// `figma_get_file_nodes` — GET `/files/{key}/nodes?ids={nodeIds}`.
   Future<Map<String, dynamic>> getFileNodes(String key, String nodeIds) =>
@@ -476,7 +443,7 @@ class FigmaClient {
 
   /// `figma_get_comments` — GET `/files/{key}/comments`.
   Future<Map<String, dynamic>> getComments(String key) =>
-      _getJson('files/$key/comments');
+      _keyedGet(key, 'comments');
 
   /// `figma_post_comment` — POST `/files/{key}/comments` with `{message}`.
   Future<Map<String, dynamic>> postComment(String key, String message) =>
@@ -484,15 +451,15 @@ class FigmaClient {
 
   /// `figma_get_components` — GET `/files/{key}/components`.
   Future<Map<String, dynamic>> getComponents(String key) =>
-      _getJson('files/$key/components');
+      _keyedGet(key, 'components');
 
   /// `figma_get_component_sets` — GET `/files/{key}/component_sets`.
   Future<Map<String, dynamic>> getComponentSets(String key) =>
-      _getJson('files/$key/component_sets');
+      _keyedGet(key, 'component_sets');
 
   /// `figma_get_variable_collections` — GET `/files/{key}/variables/local`.
   Future<Map<String, dynamic>> getVariableCollections(String key) =>
-      _getJson('files/$key/variables/local');
+      _keyedGet(key, 'variables/local');
 
   /// `figma_get_library_components` — GET `/libraries/{libraryKey}/components`.
   Future<Map<String, dynamic>> getLibraryComponents(String libraryKey) =>
@@ -500,7 +467,7 @@ class FigmaClient {
 
   /// `figma_get_style` — GET `/files/{key}/styles` (Dart-only singular).
   Future<Map<String, dynamic>> getStyle(String key) =>
-      _getJson('files/$key/styles');
+      _keyedGet(key, 'styles');
 
   /// `figma_export_image` — GET `/images/{key}` with optional format/scale.
   Future<Map<String, dynamic>> exportImage(

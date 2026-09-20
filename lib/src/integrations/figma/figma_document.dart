@@ -80,7 +80,7 @@ List<Map<String, dynamic>> figmaFindAllComponents(
   final nodes = response['nodes'];
   if (nodes is Map) {
     for (final nodeData in nodes.values) {
-      final document = _documentOf(nodeData);
+      final document = figmaNodeDataDocument(nodeData);
       if (document != null) {
         _findComponentsRecursively(
             document, document['id']?.toString(), components);
@@ -160,9 +160,7 @@ bool _isOversizedContainer(Map<String, dynamic> node, String type) =>
 Map<String, dynamic> _iconFromNode(Map<String, dynamic> node, String? nodeId) {
   final type = node['type']?.toString() ?? 'unknown';
   return {
-    'id': node['id']?.toString() ?? nodeId,
-    'name': node['name']?.toString() ?? '',
-    'type': type,
+    ..._identityOf(node, idFallback: nodeId, typeFallback: 'unknown'),
     'width': _widthOf(node),
     'height': _heightOf(node),
     'supportedFormats': _supportedFormats(type),
@@ -266,11 +264,7 @@ List<Map<String, dynamic>> figmaLayerSummaries(Map<String, dynamic> document) {
 /// One layer entry: id/name/type, bounding-box dims when present, and
 /// `visible` defaulting to `true`.
 Map<String, dynamic> _layerInfo(Map<String, dynamic> child) {
-  final layer = <String, dynamic>{
-    'id': child['id']?.toString() ?? '',
-    'name': child['name']?.toString() ?? '',
-    'type': child['type']?.toString() ?? '',
-  };
+  final layer = _identityOf(child);
   final bbox = child['absoluteBoundingBox'];
   if (bbox is Map) {
     layer['width'] = _asDouble(bbox['width']);
@@ -302,7 +296,7 @@ Map<String, dynamic> figmaTextContent(
   final nodes = response['nodes'];
   for (final nodeId in nodeIds) {
     final nodeData = nodes is Map ? nodes[nodeId] : null;
-    final document = _documentOf(nodeData);
+    final document = figmaNodeDataDocument(nodeData);
     if (document == null || document['type'] != 'TEXT') {
       continue;
     }
@@ -402,26 +396,41 @@ Map<String, dynamic> figmaMeResult({
   };
 }
 
-/// The `document` object of one node entry in a `/nodes` response,
-/// or `null` when absent.
+/// The `document` object of one node entry in a `/nodes` response, or
+/// `null` when the node or its document is absent. Callers normalize
+/// dashed node ids with [figmaColonNodeId] when the API keys them by
+/// colon id.
 Map<String, dynamic>? figmaNodeDocument(
-  Map<String, dynamic> response,
+  Map<String, dynamic>? response,
   String nodeId,
 ) {
-  final nodes = response['nodes'];
+  final nodes = response?['nodes'];
   if (nodes is! Map) {
     return null;
   }
-  return _documentOf(nodes[nodeId]);
+  return figmaNodeDataDocument(nodes[nodeId]);
 }
 
 /// Reads `document` out of a node-data envelope.
-Map<String, dynamic>? _documentOf(dynamic nodeData) {
+Map<String, dynamic>? figmaNodeDataDocument(dynamic nodeData) {
   if (nodeData is Map && nodeData['document'] is Map) {
     return Map<String, dynamic>.from(nodeData['document'] as Map);
   }
   return null;
 }
+
+/// The `{id, name, type}` identity prefix shared by icon and layer
+/// entries.
+Map<String, dynamic> _identityOf(
+  Map<String, dynamic> node, {
+  Object? idFallback = '',
+  String typeFallback = '',
+}) =>
+    {
+      'id': node['id']?.toString() ?? idFallback,
+      'name': node['name']?.toString() ?? '',
+      'type': node['type']?.toString() ?? typeFallback,
+    };
 
 /// Width from `absoluteBoundingBox` (Java `getWidth`, default 0).
 double _widthOf(Map<String, dynamic> node) => _bboxDim(node, 'width');

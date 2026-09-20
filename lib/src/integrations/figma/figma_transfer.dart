@@ -81,6 +81,19 @@ List<List<String>> figmaBatches(List<String> ids,
   ];
 }
 
+/// The `images` map of a render (`/images`) response.
+Map<String, dynamic>? figmaImagesOf(Map<String, dynamic>? response) {
+  final images = response?['images'];
+  return images is Map<String, dynamic> ? images : null;
+}
+
+/// (fileId, node-id) pair of a cleaned design URL — the shared prefix of
+/// the layer/children tools.
+({String fileId, String nodeId}) figmaUrlNodeId(String cleanHref) => (
+      fileId: figmaParseFileId(cleanHref),
+      nodeId: figmaExtractQueryParam(cleanHref, figmaNodeIdParam),
+    );
+
 /// Splits a comma-separated id list, trims each entry, and caps the result
 /// at [max] (Java `Arrays.copyOf` parity).
 List<String> figmaCappedTrimmedIds(String nodeIds, int max) {

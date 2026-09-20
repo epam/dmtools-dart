@@ -11,10 +11,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
-
 import 'figma_document.dart';
 import 'figma_http_client.dart';
+import 'figma_transfer.dart';
 import 'figma_url.dart';
 
 /// Figma API methods exposed to the MCP tool runtime.
@@ -87,28 +86,16 @@ class FigmaClient {
   /// Returns the decoded response, or `null` on any failure (Java logs and
   /// returns null).
   Future<Map<String, dynamic>?> getFileStructure(String href) async {
-    final clean = figmaCleanHref(href);
-    final fileId = figmaParseFileId(clean);
-    String? nodeId;
     try {
-      nodeId = figmaExtractQueryParam(clean, 'node-id');
-    } on StateError {
-      nodeId = null;
-    }
-    try {
-      if (nodeId != null && nodeId.isNotEmpty) {
-        return await _getJson('files/$fileId/nodes', queryParams: {
-          'ids': nodeId,
-        });
-      }
-      return await _getJson('files/$fileId', queryParams: const {
-        'geometry': 'paths',
-        'depth': '2',
-      });
+      final request = figmaStructureRequest(figmaCleanHref(href));
+      return await _getJson(request.path, queryParams: request.params);
     } on Object {
       return null;
     }
   }
+
+  /// File key of a design [href] (cleaned).
+  String _fileIdOf(String href) => figmaParseFileId(figmaCleanHref(href));
 
   /// `figma_get_icons` — exportable visual elements of the design,
   /// deduplicated by node id; `null` on failure (Java parity).
@@ -118,7 +105,7 @@ class FigmaClient {
       if (response == null) {
         return null;
       }
-      final fileId = figmaParseFileId(figmaCleanHref(href));
+      final fileId = _fileIdOf(href);
       final unique = <String, Map<String, dynamic>>{};
       for (final icon in figmaFindAllComponents(response)) {
         final id = icon['id'];
@@ -133,9 +120,8 @@ class FigmaClient {
   }
 
   /// `figma_get_image_fills` — GET `/files/{fileId}/images`, raw body.
-  Future<String> getImageFills(String href) => _getText(
-        'files/${figmaParseFileId(figmaCleanHref(href))}/images',
-      );
+  Future<String> getImageFills(String href) =>
+      _getText('files/${_fileIdOf(href)}/images');
 
   /// `figma_render_nodes` — batched (100/request) node renders merged into
   /// one `nodeId → URL` map, JSON-encoded. Errors propagate (Java parity).
@@ -168,15 +154,11 @@ class FigmaClient {
   Future<String?> getImageOfSource(String url) async {
     try {
       final fileId = figmaParseFileId(url);
-      final nodeId = figmaExtractQueryParam(url, 'node-id');
+      final nodeId = figmaExtractQueryParam(url, figmaNodeIdParam);
       final response = await _getJson('images/$fileId', queryParams: {
         'ids': nodeId,
       });
-      final images = response['images'];
-      if (images is Map) {
-        return images[figmaColonNodeId(nodeId)]?.toString();
-      }
-      return null;
+      return _imageUrlFor(response, figmaColonNodeId(nodeId));
     } on Object {
       return null;
     }
@@ -190,16 +172,16 @@ class FigmaClient {
     String? format,
     int? scale,
   }) async {
-    final fileId = figmaParseFileId(figmaCleanHref(href));
-    final effectiveFormat = (format == null || format.isEmpty) ? 'png' : format;
-    final effectiveScale = scale ?? 2;
-    final response = await _getJson('images/$fileId', queryParams: {
-      'ids': nodeId,
-      'format': effectiveFormat,
-      'scale': '$effectiveScale',
-    });
-    final images = response['images'];
-    final imageUrl = images is Map ? images[nodeId]?.toString() : null;
+    final fileId = _fileIdOf(href);
+    final response = await _getJson(
+      'images/$fileId',
+      queryParams: figmaRenderParams(
+        nodeId,
+        (format == null || format.isEmpty) ? 'png' : format,
+        scale ?? 2,
+      ),
+    );
+    final imageUrl = _imageUrlFor(response, nodeId);
     if (imageUrl == null) {
       return null;
     }
@@ -211,21 +193,13 @@ class FigmaClient {
   /// Java `downloadImage` + `getCachedFile`: md5-named file (`.png` when
   /// the URL contains "images"), reused without re-fetching when present.
   Future<String> downloadImage(String url) async {
-    final file = _cacheFileFor(url);
+    final file = figmaCacheFileFor(url, cacheDir);
     if (file.existsSync()) {
       return file.path;
     }
     final body = await _http.getAbsolute(url);
     file.writeAsBytesSync(utf8.encode(body), flush: true);
     return file.path;
-  }
-
-  /// Cache file for [url] — md5 name, `.png` suffix for image URLs.
-  File _cacheFileFor(String url) {
-    final name = md5.convert(utf8.encode(url)).toString();
-    final suffix = url.contains('images') ? '.png' : '';
-    final dir = Directory(cacheDir)..createSync(recursive: true);
-    return File('${dir.path}/$name$suffix');
   }
 
   /// `figma_download_image_of_file` — converts a design URL to a
@@ -264,20 +238,12 @@ class FigmaClient {
     String format,
   ) async {
     try {
-      final fileId = figmaParseFileId(figmaCleanHref(href));
-      final params = <String, dynamic>{
-        'ids': nodeId,
-        'format': format,
-      };
-      if (format == 'png') {
-        params['scale'] = '2';
-      }
-      final response = await _getJson('images/$fileId', queryParams: params);
-      final images = response['images'];
-      if (images is Map) {
-        return images[figmaColonNodeId(nodeId)]?.toString();
-      }
-      return null;
+      final fileId = _fileIdOf(href);
+      final response = await _getJson(
+        'images/$fileId',
+        queryParams: figmaIconRenderParams(nodeId, format),
+      );
+      return _imageUrlFor(response, figmaColonNodeId(nodeId));
     } on Object {
       return null;
     }
@@ -304,11 +270,8 @@ class FigmaClient {
     String nodeIds,
   ) async {
     try {
-      final fileId = figmaParseFileId(figmaCleanHref(href));
-      final ids = _cappedTrimmedIds(nodeIds, 10);
-      final response = await _getJson('files/$fileId/nodes', queryParams: {
-        'ids': ids.join(','),
-      });
+      final ids = figmaCappedTrimmedIds(nodeIds, figmaMaxDetailIds);
+      final response = await _nodesRequest(_fileIdOf(href), ids);
       return figmaNodeDocument(response, ids.first);
     } on Object {
       return null;
@@ -322,30 +285,27 @@ class FigmaClient {
     String nodeIds,
   ) async {
     try {
-      final fileId = figmaParseFileId(figmaCleanHref(href));
-      final ids = _cappedTrimmedIds(nodeIds, 20);
-      final response = await _getJson('files/$fileId/nodes', queryParams: {
-        'ids': ids.join(','),
-      });
+      final ids = figmaCappedTrimmedIds(nodeIds, figmaMaxTextIds);
+      final response = await _nodesRequest(_fileIdOf(href), ids);
       return figmaTextContent(response, ids);
     } on Object {
       return null;
     }
   }
 
-  /// Splits [nodeIds], trims each, and caps the list at [max] (Java
-  /// `Arrays.copyOf` parity).
-  List<String> _cappedTrimmedIds(String nodeIds, int max) {
-    final ids = nodeIds.split(',').map((id) => id.trim()).toList();
-    return ids.length > max ? ids.sublist(0, max) : ids;
-  }
+  /// GET `files/{fileId}/nodes` for the comma-joined [ids].
+  Future<Map<String, dynamic>> _nodesRequest(
+    String fileId,
+    List<String> ids,
+  ) =>
+      _getJson('files/$fileId/nodes', queryParams: {'ids': ids.join(',')});
 
   /// `figma_get_styles` (Java parity) — hits the styles endpoint but
   /// returns the empty token envelope (`{colorStyles: [], textStyles: []}`);
   /// `null` on failure.
   Future<Map<String, dynamic>?> getDesignStyles(String href) async {
     try {
-      final fileId = figmaParseFileId(figmaCleanHref(href));
+      final fileId = _fileIdOf(href);
       await _getText('files/$fileId/styles');
       return figmaStylesResult();
     } on Object {
@@ -357,14 +317,10 @@ class FigmaClient {
   /// dashed `parentNodeId`); `null` when there are no children or on
   /// request failure (Java parity).
   Future<Map<String, dynamic>?> getLayers(String href) async {
-    final clean = figmaCleanHref(href);
-    final fileId = figmaParseFileId(clean);
-    final nodeId = figmaExtractQueryParam(clean, 'node-id');
+    final target = _urlNodeId(href);
     try {
-      final response = await _getJson('files/$fileId/nodes', queryParams: {
-        'ids': nodeId,
-      });
-      final document = _nodeDocumentByColonId(response, nodeId);
+      final response = await _nodesRequest(target.fileId, [target.nodeId]);
+      final document = _nodeDocumentByColonId(response, target.nodeId);
       if (document == null) {
         return null;
       }
@@ -372,7 +328,7 @@ class FigmaClient {
       if (children.isEmpty) {
         return null;
       }
-      return {'parentNodeId': nodeId, 'children': children};
+      return {'parentNodeId': target.nodeId, 'children': children};
     } on Object {
       return null;
     }
@@ -387,7 +343,9 @@ class FigmaClient {
     try {
       final fileId = figmaParseFileId(figmaCleanHref(href));
       final requested = nodeIds.split(',');
-      final ids = requested.length > 10 ? requested.sublist(0, 10) : requested;
+      final ids = requested.length > figmaMaxDetailIds
+          ? requested.sublist(0, figmaMaxDetailIds)
+          : requested;
       final response = await _getJson('files/$fileId/nodes', queryParams: {
         'ids': ids.join(','),
       });
@@ -411,23 +369,37 @@ class FigmaClient {
   /// (`depth=1`, raw node id as parent); `null` when absent. Errors
   /// propagate (Java rethrows).
   Future<Map<String, dynamic>?> getNodeChildren(String href) async {
-    final clean = figmaCleanHref(href);
-    final fileId = figmaParseFileId(clean);
-    final nodeId = figmaExtractQueryParam(clean, 'node-id');
-    final response = await _getJson('files/$fileId/nodes', queryParams: {
-      'ids': nodeId,
-      'depth': '1',
-    });
+    final target = _urlNodeId(href);
+    final response = await _getJson('files/${target.fileId}/nodes',
+        queryParams: {
+          'ids': target.nodeId,
+          'depth': '1',
+        });
     final nodes = response['nodes'];
-    final nodeData = nodes is Map ? nodes[nodeId] : null;
+    final nodeData = nodes is Map ? nodes[target.nodeId] : null;
     final document = _documentOf(nodeData);
     if (document == null) {
       return null;
     }
     return {
-      'parentNodeId': nodeId,
+      'parentNodeId': target.nodeId,
       'children': figmaLayerSummaries(document),
     };
+  }
+
+  /// (fileId, node-id) pair extracted from a design URL.
+  ({String fileId, String nodeId}) _urlNodeId(String href) {
+    final clean = figmaCleanHref(href);
+    return (
+      fileId: figmaParseFileId(clean),
+      nodeId: figmaExtractQueryParam(clean, figmaNodeIdParam),
+    );
+  }
+
+  /// The `images` value of a render response, or `null` when absent.
+  String? _imageUrlFor(Map<String, dynamic> response, String key) {
+    final images = response['images'];
+    return images is Map ? images[key]?.toString() : null;
   }
 
   /// Looks up a node document by colon-normalized id (getLayers parity:

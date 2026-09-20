@@ -122,33 +122,39 @@ void _findComponentsRecursively(
   }
 }
 
-/// Java `FigmaFileDocument.isExportableVisualElement` parity.
+/// Java `FigmaFileDocument.isExportableVisualElement` parity, decomposed
+/// into its independent checks.
 bool _isExportableVisualElement(Map<String, dynamic> node) {
   final type = node['type']?.toString() ?? '';
-  if (!_exportableTypes.contains(type)) {
-    return false;
-  }
-  final id = node['id']?.toString();
-  if (id != null && id.contains(';') && id.split(';').length >= 4) {
-    return false;
-  }
-  if (node.containsKey('visible') && node['visible'] == false) {
-    return false;
-  }
-  if (node.containsKey('opacity') && _asDouble(node['opacity']) < 0.01) {
-    return false;
-  }
-  if (_widthOf(node) <= 0 || _heightOf(node) <= 0) {
-    return false;
-  }
-  // Oversized FRAME/GROUP nodes are UI containers, not elements.
-  if (_widthOf(node) > 200 &&
-      _heightOf(node) > 200 &&
-      (type == 'FRAME' || type == 'GROUP')) {
-    return false;
-  }
-  return true;
+  return _exportableTypes.contains(type) &&
+      !_isOvercomplexId(node['id']?.toString()) &&
+      !_isExplicitlyHidden(node) &&
+      !_isNearlyTransparent(node) &&
+      _hasPositiveBounds(node) &&
+      !_isOversizedContainer(node, type);
 }
+
+/// Java filter for `I…;…;…;…` instance ids (4+ semicolon parts).
+bool _isOvercomplexId(String? id) =>
+    id != null && id.contains(';') && id.split(';').length >= 4;
+
+/// Java: `visible` present and false → not renderable.
+bool _isExplicitlyHidden(Map<String, dynamic> node) =>
+    node.containsKey('visible') && node['visible'] == false;
+
+/// Java: `opacity` present and below 0.01 → not renderable.
+bool _isNearlyTransparent(Map<String, dynamic> node) =>
+    node.containsKey('opacity') && _asDouble(node['opacity']) < 0.01;
+
+/// Java: positive bounding-box dimensions are required.
+bool _hasPositiveBounds(Map<String, dynamic> node) =>
+    _widthOf(node) > 0 && _heightOf(node) > 0;
+
+/// Java: FRAME/GROUP larger than 200×200 are UI containers, not elements.
+bool _isOversizedContainer(Map<String, dynamic> node, String type) =>
+    _widthOf(node) > 200 &&
+    _heightOf(node) > 200 &&
+    (type == 'FRAME' || type == 'GROUP');
 
 /// Builds one icon entry — Java `FigmaIcon.fromNode`.
 Map<String, dynamic> _iconFromNode(Map<String, dynamic> node, String? nodeId) {
@@ -191,63 +197,57 @@ String _elementCategory(Map<String, dynamic> node, String type) {
   return 'graphic';
 }
 
-/// Java `FigmaFileDocument.isLikelyIcon` parity.
+/// Java `FigmaFileDocument.isLikelyIcon` parity, decomposed into the
+/// name-match and small-shape heuristics.
 bool _isLikelyIcon(Map<String, dynamic> node, String type) {
   final name = node['name']?.toString().toLowerCase() ?? '';
-  if (_iconNameHints.any(name.contains)) {
-    return true;
-  }
-  if (_iconSymbols.any(name.contains)) {
-    return true;
-  }
-  final width = _widthOf(node);
-  final height = _heightOf(node);
-  if ((type == 'COMPONENT' || type == 'INSTANCE') &&
-      width > 0 &&
-      height > 0 &&
-      width <= 48 &&
-      height <= 48) {
-    return true;
-  }
-  if (type == 'VECTOR' &&
-      width > 0 &&
-      height > 0 &&
-      width <= 64 &&
-      height <= 64) {
-    return true;
-  }
-  if ((type == 'RECTANGLE' || type == 'ELLIPSE') &&
-      width > 0 &&
-      height > 0 &&
-      width <= 50 &&
-      height <= 50) {
-    return true;
-  }
-  return false;
+  return _iconNameMatch(name) ||
+      _smallShapeByType(type, _widthOf(node), _heightOf(node));
 }
 
-/// Java `FigmaFileDocument.isLikelyIllustration` parity.
+/// Java icon-name heuristics: hint fragments or symbol characters.
+bool _iconNameMatch(String name) =>
+    _iconNameHints.any(name.contains) || _iconSymbols.any(name.contains);
+
+/// Java small-shape heuristics per node type (positive size within the
+/// type's icon ceiling).
+bool _smallShapeByType(String type, double width, double height) {
+  final ceiling = switch (type) {
+    'COMPONENT' || 'INSTANCE' => 48.0,
+    'VECTOR' => 64.0,
+    'RECTANGLE' || 'ELLIPSE' => 50.0,
+    _ => 0.0,
+  };
+  return ceiling > 0 &&
+      width > 0 &&
+      height > 0 &&
+      width <= ceiling &&
+      height <= ceiling;
+}
+
+/// Java `FigmaFileDocument.isLikelyIllustration` parity, decomposed into
+/// the name-match and large-element heuristics.
 bool _isLikelyIllustration(Map<String, dynamic> node, String type) {
   final name = node['name']?.toString().toLowerCase() ?? '';
-  if (name.contains('illustration') ||
-      name.contains('graphic') ||
-      name.contains('image') ||
-      name.contains('master') ||
-      name.contains('header') ||
-      name.contains('section') ||
-      (name.contains('tab') && name.contains('services'))) {
-    return true;
-  }
-  final width = _widthOf(node);
-  final height = _heightOf(node);
-  if (type == 'FRAME' && width > 200 && height > 100) {
-    return true;
-  }
-  if ((type == 'GROUP' || type == 'VECTOR') && width > 100 && height > 100) {
-    return true;
-  }
-  return false;
+  return _illustrationNameMatch(name) ||
+      _largeElementByType(type, _widthOf(node), _heightOf(node));
 }
+
+/// Java illustration-name heuristics.
+bool _illustrationNameMatch(String name) =>
+    name.contains('illustration') ||
+    name.contains('graphic') ||
+    name.contains('image') ||
+    name.contains('master') ||
+    name.contains('header') ||
+    name.contains('section') ||
+    (name.contains('tab') && name.contains('services'));
+
+/// Java large-element heuristics: big FRAMEs and large GROUP/VECTORs read
+/// as illustrations.
+bool _largeElementByType(String type, double width, double height) =>
+    (type == 'FRAME' && width > 200 && height > 100) ||
+    ((type == 'GROUP' || type == 'VECTOR') && width > 100 && height > 100);
 
 /// Maps a node's children to the layer summaries shared by
 /// `figma_get_layers` / `figma_get_layers_batch` / `figma_get_node_children`

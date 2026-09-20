@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dmtools/src/config/property_reader.dart';
 import 'package:dmtools/src/js/sync_tools/figma_sync_tools.dart';
@@ -21,12 +22,22 @@ void main() {
     _testStructureEchoTools();
     _testListingEchoTools();
     _testContentEchoTools();
+    _testLayersEchoTools();
+    _testSvgEchoTools();
+    _testDownloadEchoTools();
   }
 }
 
 Map<String, String> _config(int port) => {
       'FIGMA_TOKEN': 'figma-token',
       'FIGMA_BASE_PATH': 'http://127.0.0.1:$port/v1',
+    };
+
+/// Config whose base path carries a fixture marker the echo server
+/// routes on (`/figsvg`, `/figdl`, `/figlayers`).
+Map<String, String> _markerConfig(int port, String marker) => {
+      'FIGMA_TOKEN': 'figma-token',
+      'FIGMA_BASE_PATH': 'http://127.0.0.1:$port/$marker/v1',
     };
 
 void _testRoutingAndConfig() {

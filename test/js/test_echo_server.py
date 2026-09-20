@@ -402,7 +402,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         # back at this same server. Marker prefixes keep the fixtures clear
         # of every other integration's routes.
         if self.path.startswith("/figsvg/v1/images/"):
-            port = self.server_address[1]
+            port = self.server.server_address[1]
             payload.clear()
             payload["images"] = {
                 "1:2": "http://127.0.0.1:%d/figsvg/body.svg" % port,
@@ -423,7 +423,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(encoded)
             return
         if self.path.startswith("/figdl/v1/images/"):
-            port = self.server_address[1]
+            port = self.server.server_address[1]
             payload.clear()
             payload["images"] = {
                 "1:2": "http://127.0.0.1:%d/figdl/image.png" % port,
@@ -448,7 +448,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         if (self.command == "GET"
                 and "/figlayers/v1/files/" in self.path
                 and "/nodes" in self.path):
-            query = urllib.parse_qs(urllib.parse.urlparse(self.path).query)
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             nodes = {}
             for raw in query.get("ids", [""])[0].split(","):
                 colon = raw.strip().replace("-", ":")

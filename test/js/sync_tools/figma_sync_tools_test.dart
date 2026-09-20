@@ -123,6 +123,22 @@ void _testOauthRouting() {
       );
     });
 
+    test('oauth2_exchange_code reports a missing redirect URI', () {
+      PropertyReader.setOverrides({
+        'FIGMA_CLIENT_ID': 'cid',
+        'FIGMA_CLIENT_SECRET': 'cs',
+      });
+      expect(
+        jsonDecode(
+          tools.dispatch('figma_oauth2_exchange_code', {'code': 'c'}),
+        ),
+        {
+          'error':
+              'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
+        },
+      );
+    });
+
     test('oauth2_get_auth_url builds the URL from env config', () {
       PropertyReader.setOverrides({
         'FIGMA_CLIENT_ID': 'cid',
@@ -324,6 +340,220 @@ void _testListingEchoTools() {
         tools.dispatch('figma_get_file_comments', {'href': 'rawkey'}),
       );
       expect(result, []);
+    });
+  });
+}
+
+void _testLayersEchoTools() {
+  group('FigmaSyncTools layers tools over the echo server', () {
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      PropertyReader.setOverrides(_markerConfig(server.port, 'figlayers'));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('figma_get_layers_batch maps dashed ids and skips null documents', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_get_layers_batch', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeIds': ' 1-2 , 3-4 , 7-7 ',
+        }),
+      ) as Map<String, dynamic>;
+      // 7:7 carries a null document on the fixture: only 1:2 and 3:4 map.
+      expect(result.keys, ['1:2', '3:4']);
+      final layer = result['1:2'] as Map<String, dynamic>;
+      expect(layer['parentNodeId'], '1:2');
+      final children = layer['children'] as List<dynamic>;
+      expect(children, hasLength(1));
+      final child = children.first as Map<String, dynamic>;
+      expect(child['id'], '1:2:1');
+      expect(child['name'], 'Child');
+      expect(child['type'], 'RECTANGLE');
+      expect(child['width'], 3);
+      expect(child['height'], 4);
+      expect(child['x'], 1);
+      expect(child['y'], 2);
+      expect(child['visible'], isFalse);
+    });
+
+    test('figma_get_layers_batch caps the request at 10 node ids', () {
+      final nodeIds = [for (var i = 1; i <= 12; i++) '1-$i'].join(',');
+      final result = jsonDecode(
+        tools.dispatch('figma_get_layers_batch', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeIds': nodeIds,
+        }),
+      ) as Map<String, dynamic>;
+      expect(result.keys, hasLength(10));
+      expect(result.containsKey('1:10'), isTrue);
+      expect(result.containsKey('1:11'), isFalse);
+    });
+  });
+}
+
+void _testSvgEchoTools() {
+  group('FigmaSyncTools svg tool over the echo server', () {
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      PropertyReader.setOverrides(_markerConfig(server.port, 'figsvg'));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('figma_get_svg_content returns the SVG body of the node', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_get_svg_content', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '1:2',
+        }),
+      );
+      expect(result, '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    });
+
+    test('figma_get_svg_content returns JSON null without an image URL', () {
+      expect(
+        tools.dispatch('figma_get_svg_content', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '3:3',
+        }),
+        'null',
+      );
+    });
+
+    test('figma_get_svg_content returns JSON null on a failed fetch', () {
+      expect(
+        tools.dispatch('figma_get_svg_content', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '2:2',
+        }),
+        'null',
+      );
+    });
+  });
+}
+
+void _testDownloadEchoTools() {
+  group('FigmaSyncTools download tools over the echo server', () {
+    final cacheDir = Directory(
+      '${Directory.systemTemp.path}/dmtools_figma_cache',
+    );
+    final expectedPngBytes = <int>[
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+      ...'<REDACTED_TOKEN>'.codeUnits,
+    ];
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      // Clear the md5 cache so the curl download branch runs every time.
+      if (cacheDir.existsSync()) {
+        cacheDir.deleteSync(recursive: true);
+      }
+      PropertyReader.setOverrides(_markerConfig(server.port, 'figdl'));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
+    test('figma_download_image_as_file downloads into the md5 cache', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_download_image_as_file', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '1:2',
+          'format': 'png',
+        }),
+      ) as String;
+      final file = File(result);
+      expect(file.existsSync(), isTrue);
+      expect(file.readAsBytesSync(), expectedPngBytes);
+    });
+
+    test('figma_download_image_as_file reuses the cached file', () {
+      final args = <String, dynamic>{
+        'href': 'https://www.figma.com/file/abc123/Design',
+        'nodeId': '1:2',
+        'format': 'png',
+      };
+      final first = jsonDecode(tools.dispatch(
+        'figma_download_image_as_file',
+        args,
+      )) as String;
+      final second = jsonDecode(tools.dispatch(
+        'figma_download_image_as_file',
+        args,
+      )) as String;
+      expect(second, first);
+      expect(File(second).existsSync(), isTrue);
+    });
+
+    test(
+        'figma_download_image_as_file returns JSON null when the '
+        'download fails', () {
+      expect(
+        tools.dispatch('figma_download_image_as_file', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '2:2',
+          'format': 'png',
+        }),
+        'null',
+      );
+    });
+
+    test('figma_download_node_image renders and downloads the node', () {
+      final result = jsonDecode(
+        tools.dispatch('figma_download_node_image', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '1:2',
+        }),
+      ) as String;
+      expect(File(result).existsSync(), isTrue);
+    });
+
+    test(
+        'figma_download_node_image returns JSON null without an image '
+        'URL', () {
+      expect(
+        tools.dispatch('figma_download_node_image', {
+          'href': 'https://www.figma.com/file/abc123/Design',
+          'nodeId': '3:3',
+        }),
+        'null',
+      );
     });
   });
 }

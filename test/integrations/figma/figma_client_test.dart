@@ -61,15 +61,15 @@ void httpClientTests() {
   });
 }
 
-/// `figma_test` — connectivity check via GET `/me`.
+/// `figma_test` — connectivity check via GET `/me` (Java `me()` shape).
 void testConnectionTests() {
   group('FigmaClient.testConnection', () {
-    test('returns success with the user handle', () async {
+    test('returns success with the user map', () async {
       final f = mockFigma((o) => routeByPath({'/me': _meBody}, o));
       final result = await f.client.testConnection();
       expect(result['success'], isTrue);
-      expect(result['message'], 'Figma connection successful');
-      expect(result['user'], 'designer-1');
+      expect(result['message'], 'Figma API connection successful');
+      expect(result['user'], isA<Map>());
       expect(f.adapter.calls.single.path, endsWith('/me'));
     });
 
@@ -213,15 +213,17 @@ void getComponentSetsTests() {
   });
 }
 
-/// `figma_get_styles` — GET `/files/{key}/styles`.
+/// `figma_get_styles` — Java parity: the styles endpoint is hit but the
+/// tool returns the empty design-token envelope.
 void getStylesTests() {
-  group('FigmaClient.getStyles', () {
-    test('returns the decoded styles map', () async {
+  group('FigmaClient.getDesignStyles', () {
+    test('returns the empty token envelope', () async {
       final f = mockFigma(
         (o) => routeByPath({'/styles': _stylesBody}, o),
       );
-      final styles = await f.client.getStyles('aBc123');
-      expect(styles['meta'], isA<Map>());
+      final styles =
+          await f.client.getDesignStyles('https://www.figma.com/file/aBc123/X');
+      expect(styles, {'colorStyles': [], 'textStyles': []});
       final call = f.adapter.calls.single;
       expect(call.method, 'GET');
       expect(call.path, endsWith('/files/aBc123/styles'));

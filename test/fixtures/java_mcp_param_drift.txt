@@ -5,7 +5,6 @@ ado_list_prs:repository,status
 confluence_create_page:title,parentId,body,space
 confluence_download_attachment:attachment,targetDir
 confluence_sync_markdown_directory:directory,parentId,space,deleteOrphans,attachmentsDir,preserveInlineComments
-figma_get_styles:href
 github_get_pr_comments:workspace,repository,pullRequestId
 gitlab_approve_mr:workspace,repository,pullRequestId
 gitlab_get_mr:workspace,repository,pullRequestId

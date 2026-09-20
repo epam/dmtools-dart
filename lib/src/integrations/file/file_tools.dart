@@ -281,8 +281,16 @@ class FileToolExecutor {
   Future<String> read(String path) => File(path).readAsString();
 
   /// Writes [content] to the file at [path], creating or overwriting it.
-  Future<void> write(String path, String content) =>
-      File(path).writeAsString(content);
+  ///
+  /// Creates any missing parent directories first, matching the Java
+  /// DMTools `FileUtils.writeStringToFile` behavior.
+  Future<void> write(String path, String content) async {
+    final parent = File(path).parent;
+    if (!parent.existsSync()) {
+      await parent.create(recursive: true);
+    }
+    await File(path).writeAsString(content);
+  }
 
   /// Lists the entry paths inside the directory at [path].
   Future<List<String>> list(String path) =>

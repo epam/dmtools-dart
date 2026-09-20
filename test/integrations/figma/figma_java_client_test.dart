@@ -222,6 +222,12 @@ void layersTests() {
       });
       expect(await f.client.getLayers(_href), isNull);
     });
+
+    test('returns null when the href has no node-id (Java parity)',
+        () async {
+      final f = mockFigma((o) => throw StateError('must not be called'));
+      expect(await f.client.getLayers(_hrefNoNode), isNull);
+    });
   });
 }
 

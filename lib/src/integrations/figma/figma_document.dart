@@ -1,0 +1,353 @@
+/// Pure JSON shaping for the Java-parity Figma tools — ports the
+/// `FigmaFileResponse` / `FigmaFileDocument` / `FigmaIconsResult` /
+/// `FigmaNodeChildrenResult` / `FigmaTextContentResult` /
+/// `FigmaStylesResult` model behavior.
+///
+/// Everything here is a pure function from decoded API JSON to the result
+/// envelope the Java `@MCPTool` methods build, so both the async
+/// [FigmaClient] and the sync JS-surface executors share one implementation.
+library;
+
+/// Node types the Java `isExportableVisualElement` accepts.
+const _exportableTypes = {
+  'VECTOR',
+  'BOOLEAN_OPERATION',
+  'RECTANGLE',
+  'ELLIPSE',
+  'POLYGON',
+  'STAR',
+  'LINE',
+  'FRAME',
+  'GROUP',
+  'COMPONENT',
+  'INSTANCE',
+  'COMPONENT_SET',
+  'TEXT',
+};
+
+/// Node types the Java `isVectorBased` recognizes (SVG-capable).
+const _vectorTypes = {
+  'VECTOR',
+  'BOOLEAN_OPERATION',
+  'RECTANGLE',
+  'ELLIPSE',
+  'POLYGON',
+  'STAR',
+  'LINE',
+};
+
+/// Node types that additionally support PDF export.
+const _pdfTypes = {'FRAME', 'COMPONENT', 'COMPONENT_SET'};
+
+/// Name fragments the Java `isLikelyIcon` matches.
+const _iconNameHints = [
+  'icon',
+  'chevron',
+  'arrow',
+  'button',
+  'exit',
+  'badge',
+];
+
+/// Symbol characters the Java icon-name regex carries.
+const _iconSymbols = ['♣', '♠', '♥', '♦', '🏠', '📦', '💬', '👤', '⚙️', '🔒', '😊', '🤝', 'ℹ️'];
+
+/// Finds all exportable visual elements in a file or nodes response —
+/// Java `FigmaFileResponse.findAllComponents`.
+///
+/// A `nodes` envelope walks every node's `document`; a `document` envelope
+/// walks the document tree directly.
+List<Map<String, dynamic>> figmaFindAllComponents(
+  Map<String, dynamic> response,
+) {
+  final components = <Map<String, dynamic>>[];
+  final nodes = response['nodes'];
+  if (nodes is Map) {
+    for (final nodeData in nodes.values) {
+      final document = _documentOf(nodeData);
+      if (document != null) {
+        _findComponentsRecursively(document, document['id']?.toString(), components);
+      }
+    }
+  } else {
+    final document = response['document'];
+    if (document is Map) {
+      _findComponentsRecursively(
+        Map<String, dynamic>.from(document),
+        'document',
+        components,
+      );
+    }
+  }
+  return components;
+}
+
+/// Recursively collects exportable elements — Java
+/// `FigmaFileDocument.findComponentsRecursively`.
+void _findComponentsRecursively(
+  Map<String, dynamic> node,
+  String? nodeId,
+  List<Map<String, dynamic>> components,
+) {
+  if (_isExportableVisualElement(node)) {
+    components.add(_iconFromNode(node, nodeId));
+  }
+  final children = node['children'];
+  if (children is List) {
+    for (var i = 0; i < children.length; i++) {
+      final child = children[i];
+      if (child is Map) {
+        final childMap = Map<String, dynamic>.from(child);
+        final childId = childMap['id']?.toString() ?? '${nodeId}_child_$i';
+        _findComponentsRecursively(childMap, childId, components);
+      }
+    }
+  }
+}
+
+/// Java `FigmaFileDocument.isExportableVisualElement` parity.
+bool _isExportableVisualElement(Map<String, dynamic> node) {
+  final type = node['type']?.toString() ?? '';
+  if (!_exportableTypes.contains(type)) {
+    return false;
+  }
+  final id = node['id']?.toString();
+  if (id != null && id.contains(';') && id.split(';').length >= 4) {
+    return false;
+  }
+  if (node.containsKey('visible') && node['visible'] == false) {
+    return false;
+  }
+  if (node.containsKey('opacity') && _asDouble(node['opacity']) < 0.01) {
+    return false;
+  }
+  if (_widthOf(node) <= 0 || _heightOf(node) <= 0) {
+    return false;
+  }
+  // Oversized FRAME/GROUP nodes are UI containers, not elements.
+  if (_widthOf(node) > 200 && _heightOf(node) > 200 &&
+      (type == 'FRAME' || type == 'GROUP')) {
+    return false;
+  }
+  return true;
+}
+
+/// Builds one icon entry — Java `FigmaIcon.fromNode`.
+Map<String, dynamic> _iconFromNode(Map<String, dynamic> node, String? nodeId) {
+  final type = node['type']?.toString() ?? 'unknown';
+  return {
+    'id': node['id']?.toString() ?? nodeId,
+    'name': node['name']?.toString() ?? '',
+    'type': type,
+    'width': _widthOf(node),
+    'height': _heightOf(node),
+    'supportedFormats': _supportedFormats(type),
+    'isVectorBased': _vectorTypes.contains(type),
+    'category': _elementCategory(node, type),
+  };
+}
+
+/// Java `FigmaFileDocument.getSupportedFormats` parity.
+List<String> _supportedFormats(String type) {
+  final formats = ['png', 'jpg'];
+  if (_vectorTypes.contains(type)) {
+    formats.add('svg');
+  }
+  if (_pdfTypes.contains(type)) {
+    formats.add('pdf');
+  }
+  return formats;
+}
+
+/// Java `FigmaFileDocument.getElementCategory` parity.
+String _elementCategory(Map<String, dynamic> node, String type) {
+  if (_isLikelyIcon(node, type)) {
+    return 'icon';
+  }
+  if (_isLikelyIllustration(node, type)) {
+    return 'illustration';
+  }
+  if (type == 'TEXT') {
+    return 'text';
+  }
+  return 'graphic';
+}
+
+/// Java `FigmaFileDocument.isLikelyIcon` parity.
+bool _isLikelyIcon(Map<String, dynamic> node, String type) {
+  final name = node['name']?.toString().toLowerCase() ?? '';
+  if (_iconNameHints.any(name.contains)) {
+    return true;
+  }
+  if (_iconSymbols.any(name.contains)) {
+    return true;
+  }
+  final width = _widthOf(node);
+  final height = _heightOf(node);
+  if ((type == 'COMPONENT' || type == 'INSTANCE') &&
+      width > 0 && height > 0 && width <= 48 && height <= 48) {
+    return true;
+  }
+  if (type == 'VECTOR' && width > 0 && height > 0 && width <= 64 && height <= 64) {
+    return true;
+  }
+  if ((type == 'RECTANGLE' || type == 'ELLIPSE') &&
+      width > 0 && height > 0 && width <= 50 && height <= 50) {
+    return true;
+  }
+  return false;
+}
+
+/// Java `FigmaFileDocument.isLikelyIllustration` parity.
+bool _isLikelyIllustration(Map<String, dynamic> node, String type) {
+  final name = node['name']?.toString().toLowerCase() ?? '';
+  if (name.contains('illustration') ||
+      name.contains('graphic') ||
+      name.contains('image') ||
+      name.contains('master') ||
+      name.contains('header') ||
+      name.contains('section') ||
+      (name.contains('tab') && name.contains('services'))) {
+    return true;
+  }
+  final width = _widthOf(node);
+  final height = _heightOf(node);
+  if (type == 'FRAME' && width > 200 && height > 100) {
+    return true;
+  }
+  if ((type == 'GROUP' || type == 'VECTOR') && width > 100 && height > 100) {
+    return true;
+  }
+  return false;
+}
+
+/// Maps a node's children to the layer summaries shared by
+/// `figma_get_layers` / `figma_get_layers_batch` / `figma_get_node_children`
+/// — Java's `layerInfo` JSONObject.
+List<Map<String, dynamic>> figmaLayerSummaries(Map<String, dynamic> document) {
+  final children = document['children'];
+  if (children is! List) {
+    return const [];
+  }
+  return [
+    for (final child in children)
+      if (child is Map) _layerInfo(Map<String, dynamic>.from(child)),
+  ];
+}
+
+/// One layer entry: id/name/type, bounding-box dims when present, and
+/// `visible` defaulting to `true`.
+Map<String, dynamic> _layerInfo(Map<String, dynamic> child) {
+  final layer = <String, dynamic>{
+    'id': child['id']?.toString() ?? '',
+    'name': child['name']?.toString() ?? '',
+    'type': child['type']?.toString() ?? '',
+  };
+  final bbox = child['absoluteBoundingBox'];
+  if (bbox is Map) {
+    layer['width'] = _asDouble(bbox['width']);
+    layer['height'] = _asDouble(bbox['height']);
+    layer['x'] = _asDouble(bbox['x']);
+    layer['y'] = _asDouble(bbox['y']);
+  }
+  layer['visible'] = child['visible'] ?? true;
+  return layer;
+}
+
+/// Builds the `figma_get_icons` result envelope — Java
+/// `FigmaIconsResult.create`.
+Map<String, dynamic> figmaIconsResult(
+  String fileId,
+  List<Map<String, dynamic>> icons,
+) =>
+    {'fileId': fileId, 'totalIcons': icons.length, 'icons': icons};
+
+/// Builds the `figma_get_text_content` result envelope — Java
+/// `FigmaTextContentResult.create` over the per-node extraction in
+/// `getTextContent`. Only requested ids whose document is a TEXT node
+/// appear, keyed in request order.
+Map<String, dynamic> figmaTextContent(
+  Map<String, dynamic> response,
+  List<String> nodeIds,
+) {
+  final textNodes = <String, dynamic>{};
+  final nodes = response['nodes'];
+  for (final nodeId in nodeIds) {
+    final nodeData = nodes is Map ? nodes[nodeId] : null;
+    final document = _documentOf(nodeData);
+    if (document == null || document['type'] != 'TEXT') {
+      continue;
+    }
+    textNodes[nodeId] = _textEntry(document);
+  }
+  return {'textNodes': textNodes};
+}
+
+/// One text entry — Java's `entryData` JSONObject (style keys appear only
+/// when a style object exists).
+Map<String, dynamic> _textEntry(Map<String, dynamic> document) {
+  final entry = <String, dynamic>{
+    'text': document['characters']?.toString() ?? '',
+  };
+  final style = document['style'];
+  if (style is Map) {
+    entry['fontFamily'] = style['fontFamily']?.toString() ?? '';
+    entry['fontSize'] = _asDouble(style['fontSize']);
+    entry['fontWeight'] = _asInt(style['fontWeight'], 400);
+    entry['lineHeight'] = _asDouble(style['lineHeightPx']);
+    entry['letterSpacing'] = _asDouble(style['letterSpacing']);
+    entry['textAlign'] = style['textAlignHorizontal']?.toString() ?? 'LEFT';
+  }
+  final overrides = document['characterStyleOverrides'];
+  if (overrides is List && overrides.isNotEmpty) {
+    entry['characterStyleOverrides'] = overrides;
+  }
+  final overrideTable = document['styleOverrideTable'];
+  if (overrideTable is Map && overrideTable.isNotEmpty) {
+    entry['styleOverrideTable'] = overrideTable;
+  }
+  return entry;
+}
+
+/// The `figma_get_styles` envelope — Java returns empty token arrays (the
+/// styles endpoint carries metadata, not values).
+Map<String, dynamic> figmaStylesResult() => {
+      'colorStyles': <dynamic>[],
+      'textStyles': <dynamic>[],
+    };
+
+/// The `document` object of one node entry in a `/nodes` response,
+/// or `null` when absent.
+Map<String, dynamic>? figmaNodeDocument(
+  Map<String, dynamic> response,
+  String nodeId,
+) {
+  final nodes = response['nodes'];
+  if (nodes is! Map) {
+    return null;
+  }
+  return _documentOf(nodes[nodeId]);
+}
+
+/// Reads `document` out of a node-data envelope.
+Map<String, dynamic>? _documentOf(dynamic nodeData) {
+  if (nodeData is Map && nodeData['document'] is Map) {
+    return Map<String, dynamic>.from(nodeData['document'] as Map);
+  }
+  return null;
+}
+
+/// Width from `absoluteBoundingBox` (Java `getWidth`, default 0).
+double _widthOf(Map<String, dynamic> node) => _bboxDim(node, 'width');
+
+/// Height from `absoluteBoundingBox` (Java `getHeight`, default 0).
+double _heightOf(Map<String, dynamic> node) => _bboxDim(node, 'height');
+
+double _bboxDim(Map<String, dynamic> node, String key) {
+  final bbox = node['absoluteBoundingBox'];
+  return bbox is Map ? _asDouble(bbox[key]) : 0;
+}
+
+double _asDouble(dynamic value) => value is num ? value.toDouble() : 0.0;
+
+int _asInt(dynamic value, int fallback) => value is num ? value.toInt() : fallback;

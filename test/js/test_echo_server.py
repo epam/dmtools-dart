@@ -397,6 +397,87 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(encoded)
                 return
             payload["fields"] = {"labels": ["existing"]}
+        # Figma sync fixtures (gh-173): the layers-batch / svg-content /
+        # download handlers need a render (`/images`) map whose URLs point
+        # back at this same server. Marker prefixes keep the fixtures clear
+        # of every other integration's routes.
+        if self.path.startswith("/figsvg/v1/images/"):
+            port = self.server.server_address[1]
+            payload.clear()
+            payload["images"] = {
+                "1:2": "http://127.0.0.1:%d/figsvg/body.svg" % port,
+                "2:2": "http://127.0.0.1:%d/figsvg/missing.svg" % port,
+            }
+        elif self.path == "/figsvg/body.svg":
+            self._send(
+                b'<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+                "image/svg+xml",
+            )
+            return
+        elif self.path == "/figsvg/missing.svg":
+            encoded = b"not found"
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/figdl/v1/images/"):
+            port = self.server.server_address[1]
+            payload.clear()
+            payload["images"] = {
+                "1:2": "http://127.0.0.1:%d/figdl/image.png" % port,
+                "2:2": "http://127.0.0.1:%d/figdl/missing.png" % port,
+            }
+        elif self.path == "/figdl/image.png":
+            self._send(
+                b"\x89PNG\r\n\x1a\nfigdl-fixture-bytes", "image/png"
+            )
+            return
+        elif self.path == "/figdl/missing.png":
+            encoded = b"missing"
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        # Figma layers-batch fixture: the /nodes endpoint answers a document
+        # with one child per requested id (keyed by the colon id); id "7:7"
+        # carries a null document so the skip branch is exercised.
+        if (self.command == "GET"
+                and "/figlayers/v1/files/" in self.path
+                and "/nodes" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            nodes = {}
+            for raw in query.get("ids", [""])[0].split(","):
+                colon = raw.strip().replace("-", ":")
+                if colon == "7:7":
+                    nodes[colon] = {"document": None}
+                else:
+                    nodes[colon] = {
+                        "document": {
+                            "id": colon,
+                            "name": "Frame %s" % colon,
+                            "type": "FRAME",
+                            "children": [
+                                {
+                                    "id": "%s:1" % colon,
+                                    "name": "Child",
+                                    "type": "RECTANGLE",
+                                    "absoluteBoundingBox": {
+                                        "x": 1,
+                                        "y": 2,
+                                        "width": 3,
+                                        "height": 4,
+                                    },
+                                    "visible": False,
+                                }
+                            ],
+                        }
+                    }
+            payload.clear()
+            payload["nodes"] = nodes
         response = json.dumps(payload)
         encoded = response.encode("utf-8")
         self.send_response(200)

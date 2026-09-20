@@ -28,6 +28,7 @@ import 'sync_tools/ado_sync_tools.dart';
 import 'sync_tools/ai_sync_tools.dart';
 import 'sync_tools/bitrise_sync_tools.dart';
 import 'sync_tools/confluence_sync_tools.dart';
+import 'sync_tools/figma_sync_tools.dart';
 import 'sync_tools/github_sync_tools.dart';
 import 'sync_tools/gitlab_sync_tools.dart';
 import 'sync_tools/jenkins_sync_tools.dart';
@@ -72,6 +73,9 @@ class SyncToolDispatcher {
   /// Jenkins tools; built lazily on the first `jenkins_*` dispatch.
   late final JenkinsSyncTools _jenkins = JenkinsSyncTools(_reader);
 
+  /// Figma tools; built lazily on the first `figma_*` dispatch.
+  late final FigmaSyncTools _figma = FigmaSyncTools(_reader);
+
   /// Per-provider AI chat tools; built lazily on first `<provider>_ai_chat`.
   late final AiSyncTools _ai = AiSyncTools(_reader);
 
@@ -84,6 +88,7 @@ class SyncToolDispatcher {
     MapEntry('ado_', _viaHandlers('ADO', _adoHandlers)),
     MapEntry('bitrise_', _bitrise.dispatch),
     MapEntry('jenkins_', _jenkins.dispatch),
+    MapEntry('figma_', _figma.dispatch),
   ];
 
   /// GitHub executors, mirroring [GitHubSyncTools.handlers].

@@ -274,7 +274,7 @@ class FigmaClient {
       if (imageUrl == null || imageUrl.isEmpty) {
         return null;
       }
-      return downloadImage(imageUrl);
+      return await downloadImage(imageUrl);
     } on Object {
       return null;
     }

@@ -77,12 +77,14 @@ void meTests() {
       expect(result['message'], 'Empty response from Figma API');
     });
 
-    test('reports connection failure with error class', () async {
+    test('reports connection failure with the exception class name', () async {
       final f = mockFigma((o) => throw StateError('boom'));
       final result = await f.client.me();
       expect(result['success'], isFalse);
       expect(result['message'], contains('Figma API connection failed'));
-      expect(result['error'], 'StateError');
+      // The transport wraps the throw in its own exception type (the
+      // Java client records e.getClass().getSimpleName() the same way).
+      expect(result['error'], 'DioException');
     });
 
     test('meJson encodes the me map', () async {
@@ -242,8 +244,10 @@ void layersTests() {
 
   group('FigmaClient.getNodeChildren', () {
     test('requests depth 1 and wraps children', () async {
-      final colonHref =
-          'https://www.figma.com/file/abc123/Design?node-id=1%3A2';
+      // Unencoded colon id: Java looks the node up by the raw query
+      // value, so percent-encoded colon URLs would miss (parity).
+      const colonHref =
+          'https://www.figma.com/file/abc123/Design?node-id=1:2';
       final f = _routed({'/files/abc123/nodes': nodesBody});
       final result = await f.client.getNodeChildren(colonHref);
       expect(result, isNotNull);
@@ -394,10 +398,11 @@ void imageTests() {
       expect(path1, isNotNull);
       expect(File(path1!).readAsStringSync(), 'PNG-DATA');
       expect(fetches, 2);
-      // Second call serves from cache (no new fetch).
+      // Second call re-requests the render URL (Java parity) but serves
+      // the image itself from cache — a cache miss would be 4 fetches.
       final path2 = await client.downloadNodeImage(_href, '1-2');
       expect(path2, path1);
-      expect(fetches, 2);
+      expect(fetches, 3);
     });
 
     test('downloadNodeImage returns null when the node has no image URL',

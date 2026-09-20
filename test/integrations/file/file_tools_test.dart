@@ -121,6 +121,12 @@ void writeTests() {
       expect(File(path).readAsStringSync(), 'new');
     });
 
+    test('creates missing parent directories (Java parity)', () async {
+      final path = '${tempDir.path}/a/b/c/out.txt';
+      await executor.write(path, 'nested');
+      expect(File(path).readAsStringSync(), 'nested');
+    });
+
     test('routes file_write through execute dispatch', () async {
       final path = '${tempDir.path}/dispatch_write.txt';
       await executor

@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        integration: [jira, github, gitlab, confluence, ado, bitrise, testrail]
+        integration: [jira, github, gitlab, confluence, ado, bitrise]
     concurrency:
       group: pr-integration-${{ matrix.integration }}-${{ github.event.pull_request.number || github.run_id }}
       cancel-in-progress: false

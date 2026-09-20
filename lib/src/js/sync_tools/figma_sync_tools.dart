@@ -445,12 +445,9 @@ class FigmaSyncTools {
 
   /// `figma_oauth2_exchange_code` — Java `oauth2ExchangeCode` parity.
   String _oauth2ExchangeCode(Map<String, dynamic> args) {
-    final clientId = _reader.getFigmaClientId() ?? '';
-    final clientSecret = _reader.getFigmaClientSecret() ?? '';
-    if (clientId.isEmpty || clientSecret.isEmpty) {
-      return syncErr(
-        'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',
-      );
+    final credentialsError = _oauth2CredentialsError();
+    if (credentialsError != null) {
+      return credentialsError;
     }
     final redirectUri = _redirectUri(args);
     if (redirectUri == null) {
@@ -460,8 +457,8 @@ class FigmaSyncTools {
       figmaOAuthTokenUrl,
       headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
       body: figmaTokenRequestBody(
-        clientId: clientId,
-        clientSecret: clientSecret,
+        clientId: _reader.getFigmaClientId() ?? '',
+        clientSecret: [REDACTED:Sensitive Value] ?? '',
         code: syncAsStr(args['code']),
         redirectUri: redirectUri,
       ),
@@ -482,6 +479,20 @@ class FigmaSyncTools {
           'also set FIGMA_OAUTH_ACCESS_TOKEN=${tokens.accessToken} for '
           'immediate use (expires in ${tokens.expiresIn}s).',
     });
+  }
+
+  /// The shared missing-credentials error envelope, or `null` when both
+  /// Figma OAuth2 client credentials are configured — split out of
+  /// [_oauth2ExchangeCode] to keep the CRAP score under the threshold.
+  String? _oauth2CredentialsError() {
+    final clientId = _reader.getFigmaClientId() ?? '';
+    final clientSecret = [REDACTED:Sensitive Value]) ?? '';
+    if (clientId.isEmpty || clientSecret.isEmpty) {
+      return syncErr(
+        'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',
+      );
+    }
+    return null;
   }
 
   /// Redirect URI from args or env, or `null` when unusable.

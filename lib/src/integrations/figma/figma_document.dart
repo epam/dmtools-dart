@@ -359,6 +359,13 @@ Map<String, dynamic> figmaMeResult({
   if (body == null || body.isEmpty) {
     return {'success': false, 'message': 'Empty response from Figma API'};
   }
+  return _figmaMeBodyResult(body);
+}
+
+/// The success/failure shape of a non-empty [body] — Java
+/// `new JSONObject(response)` semantics split out of [figmaMeResult] to
+/// keep the CRAP score under the project threshold.
+Map<String, dynamic> _figmaMeBodyResult(String body) {
   Object? decoded;
   var parseFailed = false;
   try {

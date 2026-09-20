@@ -28,9 +28,15 @@ import 'figma_oauth.dart';
 List<ToolDefinition> figmaTools() => [
       ..._authTools(),
       ..._userTools(),
-      ..._contentAccessTools(),
+      ..._downloadTools(),
+      ..._discoveryTools(),
+      ..._exportTools(),
+      ..._contentTools(),
+      ..._listingTools(),
       ..._structureAnalysisTools(),
-      ..._legacyRestTools(),
+      ..._legacyFileTools(),
+      ..._legacyImageCommentTools(),
+      ..._legacyStyleTools(),
     ];
 
 /// OAuth2 tools: `figma_oauth2_get_auth_url` / `figma_oauth2_exchange_code`.
@@ -42,9 +48,7 @@ List<ToolDefinition> _authTools() => [
             'browser, authorize the app, and copy the code parameter from '
             'the redirect URL. Then call figma_oauth2_exchange_code to get '
             'access and refresh tokens. Requires FIGMA_CLIENT_ID and '
-            'FIGMA_CLIENT_SECRET to be configured. Optional scope can be '
-            'passed explicitly or via FIGMA_SCOPE/FIGMA_OAUTH_SCOPES env '
-            'variable.',
+            'FIGMA_CLIENT_SECRET to be configured.',
         integration: 'figma',
         category: 'auth',
         params: [
@@ -125,8 +129,8 @@ ToolParam _hrefParam() => ToolParam(
       required: true,
     );
 
-/// Content-access tools (Java `category = "content_access"`).
-List<ToolDefinition> _contentAccessTools() => [
+/// Download tools (Java `category = "content_access"`).
+List<ToolDefinition> _downloadTools() => [
       ToolDefinition(
         name: 'figma_get_screen_source',
         description: 'Get screen source content by URL. Returns the image '
@@ -175,6 +179,10 @@ List<ToolDefinition> _contentAccessTools() => [
         category: 'file_management',
         params: [_hrefParam()],
       ),
+    ];
+
+/// File discovery tools (Java `category = "content_access"`).
+List<ToolDefinition> _discoveryTools() => [
       ToolDefinition(
         name: 'figma_get_file_structure',
         description: 'Get full JSON structure of a Figma design file by URL. '
@@ -230,6 +238,10 @@ List<ToolDefinition> _contentAccessTools() => [
           ),
         ],
       ),
+    ];
+
+/// Node export tools (Java `category = "content_access"`).
+List<ToolDefinition> _exportTools() => [
       ToolDefinition(
         name: 'figma_download_image_as_file',
         description: 'Download image as file by node ID and format. Use this '
@@ -282,6 +294,10 @@ List<ToolDefinition> _contentAccessTools() => [
           ),
         ],
       ),
+    ];
+
+/// Text/style/children content tools (Java `category = "content_access"`).
+List<ToolDefinition> _contentTools() => [
       ToolDefinition(
         name: 'figma_get_text_content',
         description: 'Extract text content from text nodes. Returns map of '
@@ -313,6 +329,10 @@ List<ToolDefinition> _contentAccessTools() => [
         category: 'content_access',
         params: [_hrefParam()],
       ),
+    ];
+
+/// Team/project listing tools (Java `category = "content_access"`).
+List<ToolDefinition> _listingTools() => [
       ToolDefinition(
         name: 'figma_list_team_projects',
         description: 'List all projects within a Figma team, so a team-level '
@@ -392,8 +412,8 @@ List<ToolDefinition> _structureAnalysisTools() => [
       ),
     ];
 
-/// Legacy Dart REST-shaped tools that predate the Java parity port.
-List<ToolDefinition> _legacyRestTools() => [
+/// Legacy file/node lookup tools that predate the Java parity port.
+List<ToolDefinition> _legacyFileTools() => [
       ToolDefinition(
         name: 'figma_get_file',
         description: 'Get a Figma file by key',
@@ -443,6 +463,10 @@ List<ToolDefinition> _legacyRestTools() => [
           ),
         ],
       ),
+    ];
+
+/// Legacy image/comment/component tools that predate the Java parity port.
+List<ToolDefinition> _legacyImageCommentTools() => [
       ToolDefinition(
         name: 'figma_export_image',
         description: 'Export nodes from a Figma file as images',
@@ -499,6 +523,10 @@ List<ToolDefinition> _legacyRestTools() => [
         category: 'components',
         params: [_keyParam()],
       ),
+    ];
+
+/// Legacy style/variable/library tools that predate the Java parity port.
+List<ToolDefinition> _legacyStyleTools() => [
       ToolDefinition(
         name: 'figma_get_style',
         description: 'Get a style from a Figma file',

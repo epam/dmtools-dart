@@ -4,21 +4,20 @@
 /// blocking HTTP via [SyncHttpClient] (curl subprocess — safe inside
 /// QuickJS callbacks), and returns a JSON result string. Tool names,
 /// parameters, and response shapes port the Java `FigmaClient`
-/// `@MCPTool` methods; the pure shaping lives in
-/// `figma_document.dart` / `figma_url.dart` / `figma_oauth.dart`, shared
-/// with the async [FigmaClient].
+/// `@MCPTool` methods; the pure shaping and request building live in
+/// `figma_document.dart` / `figma_url.dart` / `figma_oauth.dart` /
+/// `figma_transfer.dart`, shared with the async [FigmaClient].
 library;
 
 import 'dart:convert';
 import 'dart:io';
-
-import 'package:crypto/crypto.dart';
 
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/figma/figma_document.dart';
 import '../../integrations/figma/figma_http_client.dart';
 import '../../integrations/figma/figma_oauth.dart';
+import '../../integrations/figma/figma_transfer.dart';
 import '../../integrations/figma/figma_url.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
@@ -99,16 +98,13 @@ class FigmaSyncTools {
       final url = syncAsStr(args['url']);
       try {
         final fileId = figmaParseFileId(url);
-        final nodeId = figmaExtractQueryParam(url, 'node-id');
+        final nodeId = figmaExtractQueryParam(url, figmaNodeIdParam);
         final response = _getJson(config, 'images/$fileId', {'ids': nodeId});
-        final images = response?['images'];
-        if (images is Map) {
-          return jsonEncode(images[figmaColonNodeId(nodeId)]);
-        }
+        return jsonEncode(_imagesMap(response)?[figmaColonNodeId(nodeId)]);
       } on Object {
         // Java catches and returns null.
+        return figmaJsonNull;
       }
-      return 'null';
     });
   }
 
@@ -117,19 +113,18 @@ class FigmaSyncTools {
   /// API returns no image URL.
   String _downloadNodeImage(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final href = figmaCleanHref(syncAsStr(args['href']));
-      final fileId = figmaParseFileId(href);
-      final nodeId = syncAsStr(args['nodeId']);
-      final format = _optional(args['format']) ?? 'png';
-      final scale = args['scale'] is num ? (args['scale'] as num).toInt() : 2;
-      final response = _getJson(config, 'images/$fileId', {
-        'ids': nodeId,
-        'format': format,
-        'scale': '$scale',
-      });
-      final imageUrl = _imagesMap(response)?[nodeId];
+      final response = _getJson(
+        config,
+        'images/${_fileIdOf(args)}',
+        figmaRenderParams(
+          syncAsStr(args['nodeId']),
+          _optional(args['format']) ?? 'png',
+          args['scale'] is num ? (args['scale'] as num).toInt() : 2,
+        ),
+      );
+      final imageUrl = _imagesMap(response)?[syncAsStr(args['nodeId'])];
       if (imageUrl is! String || imageUrl.isEmpty) {
-        return 'null';
+        return figmaJsonNull;
       }
       return jsonEncode(_download(imageUrl));
     });
@@ -141,7 +136,7 @@ class FigmaSyncTools {
     return syncWithConfig(_config(), _notConfigured, (config) {
       final source = jsonDecode(_getScreenSource(args));
       if (source is! String || !source.startsWith('http')) {
-        return 'null';
+        return figmaJsonNull;
       }
       return jsonEncode(_download(source));
     });
@@ -151,27 +146,13 @@ class FigmaSyncTools {
   /// URL `node-id` subtree; JSON `null` on failure (Java parity).
   String _getFileStructure(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final clean = figmaCleanHref(syncAsStr(args['href']));
       try {
-        final fileId = figmaParseFileId(clean);
-        String? nodeId;
-        try {
-          nodeId = figmaExtractQueryParam(clean, 'node-id');
-        } on StateError {
-          nodeId = null;
-        }
-        final Map<String, dynamic>? response;
-        if (nodeId != null && nodeId.isNotEmpty) {
-          response = _getJson(config, 'files/$fileId/nodes', {'ids': nodeId});
-        } else {
-          response = _getJson(config, 'files/$fileId', const {
-            'geometry': 'paths',
-            'depth': '2',
-          });
-        }
-        return response == null ? 'null' : jsonEncode(response);
+        final request =
+            figmaStructureRequest(figmaCleanHref(syncAsStr(args['href'])));
+        final response = _getJson(config, request.path, request.params);
+        return response == null ? figmaJsonNull : jsonEncode(response);
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -184,7 +165,7 @@ class FigmaSyncTools {
         final clean = figmaCleanHref(syncAsStr(args['href']));
         final structure = _getStructureJson(config, clean);
         if (structure == null) {
-          return 'null';
+          return figmaJsonNull;
         }
         final unique = <String, Map<String, dynamic>>{};
         for (final icon in figmaFindAllComponents(structure)) {
@@ -197,7 +178,7 @@ class FigmaSyncTools {
           figmaIconsResult(figmaParseFileId(clean), unique.values.toList()),
         );
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -206,9 +187,8 @@ class FigmaSyncTools {
   /// surface as an error envelope (Java rethrows).
   String _getImageFills(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
       return syncBodyOrError(SyncHttpClient.get(
-        '${config.baseUrl}/files/$fileId/images',
+        '${config.baseUrl}/files/${_fileIdOf(args)}/images',
         headers: config.headers,
       ));
     });
@@ -218,17 +198,16 @@ class FigmaSyncTools {
   /// `nodeId → URL` map.
   String _renderNodes(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final fileId = figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+      final fileId = _fileIdOf(args);
       final format = _optional(args['format']) ?? 'png';
-      final ids = syncAsStr(args['nodeIds']).split(',');
       final combined = <String, dynamic>{};
-      for (var i = 0; i < ids.length; i += 100) {
-        final end = (i + 100 > ids.length) ? ids.length : i + 100;
+      for (final batch in figmaBatches(syncAsStr(args['nodeIds']).split(','))) {
         final response = _getJson(config, 'images/$fileId', {
-          'ids': ids.sublist(i, end).join(','),
+          'ids': batch.join(','),
           'format': format,
         });
-        _imagesMap(response)?.forEach((key, value) => combined['$key'] = value);
+        _imagesMap(response)
+            ?.forEach((key, value) => combined['$key'] = value);
       }
       return jsonEncode(combined);
     });
@@ -245,12 +224,12 @@ class FigmaSyncTools {
         syncAsStr(args['format']),
       );
       if (imageUrl == null || imageUrl.isEmpty) {
-        return 'null';
+        return figmaJsonNull;
       }
       try {
         return jsonEncode(_download(imageUrl));
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -266,16 +245,16 @@ class FigmaSyncTools {
         'svg',
       );
       if (svgUrl == null || svgUrl.isEmpty) {
-        return 'null';
+        return figmaJsonNull;
       }
       try {
         final resp = SyncHttpClient.get(svgUrl, headers: const {});
         if (!resp.isOk) {
-          return 'null';
+          return figmaJsonNull;
         }
         return jsonEncode(resp.body);
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -285,16 +264,13 @@ class FigmaSyncTools {
   String _getNodeDetails(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId =
-            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
-        final ids = _cappedTrimmedIds(syncAsStr(args['nodeIds']), 10);
-        final response =
-            _getJson(config, 'files/$fileId/nodes', {'ids': ids.join(',')});
+        final ids = figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxDetailIds);
+        final response = _nodesJson(config, _fileIdOf(args), ids);
         final document =
             response == null ? null : figmaNodeDocument(response, ids.first);
-        return document == null ? 'null' : jsonEncode(document);
+        return document == null ? figmaJsonNull : jsonEncode(document);
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -304,16 +280,13 @@ class FigmaSyncTools {
   String _getTextContent(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId =
-            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
-        final ids = _cappedTrimmedIds(syncAsStr(args['nodeIds']), 20);
-        final response =
-            _getJson(config, 'files/$fileId/nodes', {'ids': ids.join(',')});
+        final ids = figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxTextIds);
+        final response = _nodesJson(config, _fileIdOf(args), ids);
         return response == null
-            ? 'null'
+            ? figmaJsonNull
             : jsonEncode(figmaTextContent(response, ids));
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -323,18 +296,16 @@ class FigmaSyncTools {
   String _getStyles(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId =
-            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final resp = SyncHttpClient.get(
-          '${config.baseUrl}/files/$fileId/styles',
+          '${config.baseUrl}/files/${_fileIdOf(args)}/styles',
           headers: config.headers,
         );
         if (!resp.isOk) {
-          return 'null';
+          return figmaJsonNull;
         }
         return jsonEncode(figmaStylesResult());
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -343,23 +314,21 @@ class FigmaSyncTools {
   /// dashed `parentNodeId`); JSON `null` without children (Java parity).
   String _getLayers(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final clean = figmaCleanHref(syncAsStr(args['href']));
+      final target = _urlNodeId(args);
       try {
-        final fileId = figmaParseFileId(clean);
-        final nodeId = figmaExtractQueryParam(clean, 'node-id');
         final response =
-            _getJson(config, 'files/$fileId/nodes', {'ids': nodeId});
-        final document = _documentByColonId(response, nodeId);
+            _nodesJson(config, target.fileId, [target.nodeId]);
+        final document = _documentByColonId(response, target.nodeId);
         if (document == null) {
-          return 'null';
+          return figmaJsonNull;
         }
         final children = figmaLayerSummaries(document);
         if (children.isEmpty) {
-          return 'null';
+          return figmaJsonNull;
         }
-        return jsonEncode({'parentNodeId': nodeId, 'children': children});
+        return jsonEncode({'parentNodeId': target.nodeId, 'children': children});
       } on Object {
-        return 'null';
+        return figmaJsonNull;
       }
     });
   }
@@ -369,13 +338,11 @@ class FigmaSyncTools {
   String _getLayersBatch(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       try {
-        final fileId =
-            figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
         final requested = syncAsStr(args['nodeIds']).split(',');
-        final ids =
-            requested.length > 10 ? requested.sublist(0, 10) : requested;
-        final response =
-            _getJson(config, 'files/$fileId/nodes', {'ids': ids.join(',')});
+        final ids = requested.length > figmaMaxDetailIds
+            ? requested.sublist(0, figmaMaxDetailIds)
+            : requested;
+        final response = _nodesJson(config, _fileIdOf(args), ids);
         final results = <String, Map<String, dynamic>>{};
         for (final rawId in ids) {
           final document = _documentByColonId(response, rawId.trim());
@@ -400,20 +367,16 @@ class FigmaSyncTools {
   /// rethrows).
   String _getNodeChildren(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final clean = figmaCleanHref(syncAsStr(args['href']));
-      final fileId = figmaParseFileId(clean);
-      final nodeId = figmaExtractQueryParam(clean, 'node-id');
-      final response = _getJson(config, 'files/$fileId/nodes', {
-        'ids': nodeId,
-        'depth': '1',
-      });
+      final target = _urlNodeId(args);
+      final response =
+          _nodesJson(config, target.fileId, [target.nodeId], depth: '1');
       final nodes = response?['nodes'];
-      final document = _documentOf(nodes is Map ? nodes[nodeId] : null);
+      final document = _documentOf(nodes is Map ? nodes[target.nodeId] : null);
       if (document == null) {
-        return 'null';
+        return figmaJsonNull;
       }
       return jsonEncode({
-        'parentNodeId': nodeId,
+        'parentNodeId': target.nodeId,
         'children': figmaLayerSummaries(document),
       });
     });
@@ -464,12 +427,9 @@ class FigmaSyncTools {
     if (clientSecret.isEmpty) {
       return syncErr('FIGMA_CLIENT_SECRET is not configured');
     }
-    var redirectUri =
-        _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
-    if (redirectUri == null || redirectUri.isEmpty) {
-      return syncErr(
-        'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
-      );
+    final redirectUri = _redirectUri(args);
+    if (redirectUri == null) {
+      return _redirectUriError();
     }
     final state = _optional(args['state']) ??
         DateTime.now().microsecondsSinceEpoch.toRadixString(16);
@@ -497,23 +457,19 @@ class FigmaSyncTools {
         'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',
       );
     }
-    var redirectUri =
-        _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
-    if (redirectUri == null || redirectUri.isEmpty) {
-      return syncErr(
-        'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
-      );
+    final redirectUri = _redirectUri(args);
+    if (redirectUri == null) {
+      return _redirectUriError();
     }
-    final body = figmaTokenRequestBody(
-      clientId: clientId,
-      clientSecret: clientSecret,
-      code: syncAsStr(args['code']),
-      redirectUri: redirectUri,
-    );
     final resp = SyncHttpClient.post(
       figmaOAuthTokenUrl,
       headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: body,
+      body: figmaTokenRequestBody(
+        clientId: clientId,
+        clientSecret: clientSecret,
+        code: syncAsStr(args['code']),
+        redirectUri: redirectUri,
+      ),
     );
     if (!resp.isOk) {
       return syncErr(
@@ -531,6 +487,45 @@ class FigmaSyncTools {
           'also set FIGMA_OAUTH_ACCESS_TOKEN=${tokens.accessToken} for '
           'immediate use (expires in ${tokens.expiresIn}s).',
     });
+  }
+
+  /// Redirect URI from args or env, or `null` when unusable.
+  String? _redirectUri(Map<String, dynamic> args) {
+    final uri = _optional(args['redirectUri']) ?? _reader.getFigmaRedirectUri();
+    return uri == null || uri.isEmpty ? null : uri;
+  }
+
+  /// The shared missing-redirect-URI error envelope.
+  String _redirectUriError() => syncErr(
+        'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
+      );
+
+  /// File key of the args' `href` (cleaned).
+  String _fileIdOf(Map<String, dynamic> args) =>
+      figmaParseFileId(figmaCleanHref(syncAsStr(args['href'])));
+
+  /// GET `files/{fileId}/nodes` for the comma-joined [ids] with an
+  /// optional `depth`.
+  Map<String, dynamic>? _nodesJson(
+    _Conf config,
+    String fileId,
+    List<String> ids, {
+    String? depth,
+  }) {
+    final params = <String, String>{'ids': ids.join(',')};
+    if (depth != null) {
+      params['depth'] = depth;
+    }
+    return _getJson(config, 'files/$fileId/nodes', params);
+  }
+
+  /// (fileId, node-id) pair extracted from the args' `href`.
+  ({String fileId, String nodeId}) _urlNodeId(Map<String, dynamic> args) {
+    final clean = figmaCleanHref(syncAsStr(args['href']));
+    return (
+      fileId: figmaParseFileId(clean),
+      nodeId: figmaExtractQueryParam(clean, figmaNodeIdParam),
+    );
   }
 
   /// GETs one API path and decodes the JSON object body, or `null` when
@@ -554,36 +549,24 @@ class FigmaSyncTools {
   /// Fetches and decodes a design structure (shared by the icon/structure
   /// tools); `null` on failure.
   Map<String, dynamic>? _getStructureJson(_Conf config, String cleanHref) {
-    final fileId = figmaParseFileId(cleanHref);
-    String? nodeId;
-    try {
-      nodeId = figmaExtractQueryParam(cleanHref, 'node-id');
-    } on StateError {
-      nodeId = null;
-    }
-    if (nodeId != null && nodeId.isNotEmpty) {
-      return _getJson(config, 'files/$fileId/nodes', {'ids': nodeId});
-    }
-    return _getJson(config, 'files/$fileId', const {
-      'geometry': 'paths',
-      'depth': '2',
-    });
+    final request = figmaStructureRequest(cleanHref);
+    return _getJson(config, request.path, request.params);
   }
 
-  /// Export URL of a node in a format — Java `getImageById` (png adds a
-  /// 2x scale); `null` on failure.
-  String? _imageById(_Conf config, String href, String nodeId, String format) {
+  /// Export URL of a node in a format — Java `getImageById`; `null` on
+  /// failure.
+  String? _imageById(
+    _Conf config,
+    String href,
+    String nodeId,
+    String format,
+  ) {
     try {
-      final fileId = figmaParseFileId(figmaCleanHref(href));
-      final params = <String, String>{
-        'ids': nodeId,
-        'format': format,
-      };
-      if (format == 'png') {
-        params['scale'] = '2';
-      }
-      return _imagesMap(_getJson(config, 'images/$fileId', params))?[
-              figmaColonNodeId(nodeId)]
+      return _imagesMap(_getJson(
+        config,
+        'images/${figmaParseFileId(figmaCleanHref(href))}',
+        figmaIconRenderParams(nodeId, format),
+      ))?[figmaColonNodeId(nodeId)]
           ?.toString();
     } on Object {
       return null;
@@ -593,7 +576,7 @@ class FigmaSyncTools {
   /// Downloads [url] to the md5-named cache file, returning its path —
   /// Java `downloadImage` + `getCachedFile` parity.
   String _download(String url) {
-    final file = _cacheFileFor(url);
+    final file = figmaCacheFileFor(url, _cacheDir);
     if (!file.existsSync()) {
       final resp = syncCurlStaged(
         'GET',
@@ -609,14 +592,6 @@ class FigmaSyncTools {
       }
     }
     return file.path;
-  }
-
-  /// Cache file for [url] — md5 name, `.png` suffix for image URLs.
-  File _cacheFileFor(String url) {
-    final name = md5.convert(utf8.encode(url)).toString();
-    final suffix = url.contains('images') ? '.png' : '';
-    final dir = Directory(_cacheDir)..createSync(recursive: true);
-    return File('${dir.path}/$name$suffix');
   }
 
   /// The `images` map of a render response.
@@ -643,12 +618,6 @@ class FigmaSyncTools {
       return Map<String, dynamic>.from(nodeData['document'] as Map);
     }
     return null;
-  }
-
-  /// Splits [nodeIds], trims each, and caps the list at [max].
-  List<String> _cappedTrimmedIds(String nodeIds, int max) {
-    final ids = nodeIds.split(',').map((id) => id.trim()).toList();
-    return ids.length > max ? ids.sublist(0, max) : ids;
   }
 
   /// Optional string argument: `null` or blank → `null`.

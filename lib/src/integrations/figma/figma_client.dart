@@ -381,11 +381,18 @@ class FigmaClient {
     if (document == null) {
       return null;
     }
-    return {
-      'parentNodeId': target.nodeId,
-      'children': figmaLayerSummaries(document),
-    };
+    return _childrenEnvelope(
+      target.nodeId,
+      figmaLayerSummaries(document),
+    );
   }
+
+  /// `{parentNodeId, children}` result envelope.
+  Map<String, dynamic> _childrenEnvelope(
+    String nodeId,
+    List<Map<String, dynamic>> children,
+  ) =>
+      {'parentNodeId': nodeId, 'children': children};
 
   /// (fileId, node-id) pair extracted from a design URL.
   ({String fileId, String nodeId}) _urlNodeId(String href) {

@@ -46,4 +46,11 @@ class FigmaHttpClient extends BearerHttpClient {
     required super.basePath,
     required super.token,
   });
+
+  /// GETs an absolute URL (image CDNs, SVG exports) with no auth headers
+  /// and no base-path prefix — Java `downloadImage`'s direct OkHttp call.
+  Future<String> getAbsolute(String url) async {
+    final response = await dio.get<String>(url);
+    return response.data ?? '';
+  }
 }

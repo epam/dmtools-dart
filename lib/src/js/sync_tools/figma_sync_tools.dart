@@ -453,13 +453,20 @@ class FigmaSyncTools {
     if (redirectUri == null) {
       return _redirectUriError();
     }
+    return _oauth2Exchange(redirectUri, syncAsStr(args['code']));
+  }
+
+  /// POSTs the token request and builds the result envelope — Java
+  /// `oauth2ExchangeCode` network half, split out of
+  /// [_oauth2ExchangeCode] to keep the CRAP score under the threshold.
+  String _oauth2Exchange(String redirectUri, String code) {
     final resp = SyncHttpClient.post(
       figmaOAuthTokenUrl,
       headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
       body: figmaTokenRequestBody(
         clientId: _reader.getFigmaClientId() ?? '',
         clientSecret: _reader.getFigmaClientSecret() ?? '',
-        code: syncAsStr(args['code']),
+        code: code,
         redirectUri: redirectUri,
       ),
     );

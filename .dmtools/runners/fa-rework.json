@@ -1,6 +1,6 @@
 {
   "parent": {
-    "path": "../../factory-agents/bug_development.json"
+    "path": "../../factory-agents/pr_rework.json"
   },
   "params": {
     "envVariables": {

@@ -15,8 +15,10 @@ void main() {
     PropertyReader.testEnvironment.clear();
   });
   _testRoutingAndConfig();
+  _testOauthRouting();
   if (hasPython3()) {
-    _testOverEchoServer();
+    _testStructureEchoTools();
+    _testContentEchoTools();
   }
 }
 
@@ -77,6 +79,20 @@ void _testRoutingAndConfig() {
       );
     });
 
+  });
+}
+
+void _testOauthRouting() {
+  group('FigmaSyncTools OAuth routing', () {
+    late FigmaSyncTools tools;
+
+    setUp(() {
+      PropertyReader.setOverrides({'FIGMA_TOKEN': ''});
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
+
     test('oauth2_get_auth_url reports a missing client id', () {
       expect(
         jsonDecode(tools.dispatch('figma_oauth2_get_auth_url', {})),
@@ -115,8 +131,8 @@ void _testRoutingAndConfig() {
   });
 }
 
-void _testOverEchoServer() {
-  group('FigmaSyncTools over the echo server', () {
+void _testStructureEchoTools() {
+  group('FigmaSyncTools structure tools over the echo server', () {
     late EchoServer server;
     late FigmaSyncTools tools;
 
@@ -178,6 +194,28 @@ void _testOverEchoServer() {
         'null',
       );
     });
+
+  });
+}
+
+void _testContentEchoTools() {
+  group('FigmaSyncTools content tools over the echo server', () {
+    late EchoServer server;
+    late FigmaSyncTools tools;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    setUp(() {
+      PropertyReader.setOverrides(_config(server.port));
+      tools = FigmaSyncTools(PropertyReader());
+    });
+
+    tearDown(() => PropertyReader.clearOverrides());
 
     test('figma_list_team_projects accepts a team URL', () {
       final result = jsonDecode(

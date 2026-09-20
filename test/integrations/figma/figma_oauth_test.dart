@@ -9,6 +9,14 @@ import 'package:dmtools/src/integrations/figma/figma_oauth.dart';
 import 'package:test/test.dart';
 
 void main() {
+  authorizationUrlTests();
+  scopeTests();
+  tokenBodyTests();
+  parseResponseTests();
+  exchangeTests();
+}
+
+void authorizationUrlTests() {
   group('figmaBuildAuthorizationUrl', () {
     test('assembles the authorize URL with encoded components', () {
       final url = figmaBuildAuthorizationUrl(
@@ -36,6 +44,9 @@ void main() {
     });
   });
 
+}
+
+void scopeTests() {
   group('figmaNormalizeScope', () {
     test('falls back to the default minimal read scope', () {
       expect(figmaNormalizeScope(null), figmaDefaultOAuthScope);
@@ -47,6 +58,9 @@ void main() {
     });
   });
 
+}
+
+void tokenBodyTests() {
   group('figmaTokenRequestBody', () {
     test('form-encodes the authorization_code grant', () {
       expect(
@@ -72,6 +86,9 @@ void main() {
     });
   });
 
+}
+
+void parseResponseTests() {
   group('figmaParseTokenResponse', () {
     test('reads all three fields', () {
       final parsed = figmaParseTokenResponse(
@@ -90,6 +107,9 @@ void main() {
     });
   });
 
+}
+
+void exchangeTests() {
   group('FigmaOAuth2Exchange', () {
     test('posts the form body to the token endpoint and parses tokens',
         () async {

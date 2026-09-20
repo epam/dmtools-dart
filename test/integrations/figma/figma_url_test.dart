@@ -5,6 +5,13 @@ import 'package:dmtools/src/integrations/figma/figma_url.dart';
 import 'package:test/test.dart';
 
 void main() {
+  parseFileIdTests();
+  queryParamTests();
+  idCoercionTests();
+  nodeIdFormattingTests();
+}
+
+void parseFileIdTests() {
   group('figmaParseFileId', () {
     test('extracts the key from a design URL', () {
       expect(
@@ -26,6 +33,9 @@ void main() {
     });
   });
 
+}
+
+void queryParamTests() {
   group('figmaExtractQueryParam', () {
     test('returns the node-id value', () {
       expect(
@@ -53,6 +63,9 @@ void main() {
     });
   });
 
+}
+
+void idCoercionTests() {
   group('figmaExtractTeamId', () {
     test('accepts a raw numeric ID', () {
       expect(figmaExtractTeamId('1633438210497791577'), '1633438210497791577');
@@ -94,6 +107,9 @@ void main() {
     });
   });
 
+}
+
+void nodeIdFormattingTests() {
   group('figmaColonNodeId', () {
     test('converts dashes to colons', () {
       expect(figmaColonNodeId('26032-397193'), '26032:397193');

@@ -27,9 +27,12 @@ void main() {
   fileStructureTests();
   iconsTests();
   layersTests();
+  childrenAndBatchTests();
+  nodeChildrenGroup();
   textAndDetailsTests();
   stylesTests();
   imageTests();
+  downloadTests();
   listingsTests();
 }
 
@@ -219,6 +222,16 @@ void layersTests() {
     });
   });
 
+}
+
+void childrenAndBatchTests() {
+  const nodesBody = '''
+    {"nodes":{"1:2":{"document":{"id":"1:2","type":"FRAME","children":[
+      {"id":"3:4","name":"Child","type":"TEXT",
+       "absoluteBoundingBox":{"x":1,"y":2,"width":10,"height":20}}
+    ]}}}}
+  ''';
+
   group('FigmaClient.getLayersBatch', () {
     test('maps each found node by colon id', () async {
       final f = _routed({'/files/abc123/nodes': nodesBody});
@@ -240,6 +253,16 @@ void layersTests() {
       expect(result, isEmpty);
     });
   });
+
+}
+
+void nodeChildrenGroup() {
+  const nodesBody = '''
+    {"nodes":{"1:2":{"document":{"id":"1:2","type":"FRAME","children":[
+      {"id":"3:4","name":"Child","type":"TEXT",
+       "absoluteBoundingBox":{"x":1,"y":2,"width":10,"height":20}}
+    ]}}}}
+  ''';
 
   group('FigmaClient.getNodeChildren', () {
     test('requests depth 1 and wraps children', () async {
@@ -387,6 +410,9 @@ void imageTests() {
     });
   });
 
+}
+
+void downloadTests() {
   group('downloads', () {
     test('downloadNodeImage fetches with defaults and caches by md5', () async {
       var fetches = 0;

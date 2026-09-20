@@ -7,6 +7,15 @@ import 'package:dmtools/src/integrations/figma/figma_document.dart';
 import 'package:test/test.dart';
 
 void main() {
+  documentComponentsTests();
+  nodeComponentsTests();
+  layerSummaryTests();
+  iconEnvelopeTests();
+  textContentTests();
+  miscEnvelopeTests();
+}
+
+void documentComponentsTests() {
   group('figmaFindAllComponents (document response)', () {
     test('collects exportable elements recursively with metadata', () {
       final response = {
@@ -188,6 +197,9 @@ void main() {
     });
   });
 
+}
+
+void nodeComponentsTests() {
   group('figmaFindAllComponents (nodes response)', () {
     test('walks each node document', () {
       final response = {
@@ -217,6 +229,9 @@ void main() {
     });
   });
 
+}
+
+void layerSummaryTests() {
   group('figmaLayerSummaries', () {
     final document = {
       'children': [
@@ -261,6 +276,9 @@ void main() {
     });
   });
 
+}
+
+void iconEnvelopeTests() {
   group('figmaIconsResult', () {
     test('wraps icons with fileId and total', () {
       final icons = [
@@ -273,6 +291,9 @@ void main() {
     });
   });
 
+}
+
+void textContentTests() {
   group('figmaTextContent', () {
     final response = {
       'nodes': {
@@ -356,6 +377,9 @@ void main() {
     });
   });
 
+}
+
+void miscEnvelopeTests() {
   group('figmaStylesResult', () {
     test('returns the empty design-token envelope (Java stub parity)', () {
       expect(figmaStylesResult(), {

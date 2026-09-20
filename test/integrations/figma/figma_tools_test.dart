@@ -1,19 +1,19 @@
-import 'dart:convert';
-
-import 'package:dio/dio.dart';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
-import 'figma_test_support.dart';
+import 'figma_executor_test_support.dart';
 
 /// Tests for the [figmaTools] catalog and [FigmaToolExecutor] dispatch.
 void main() {
   tearDown(PropertyReader.clearOverrides);
   catalogTests();
-  catalogParamTests();
+  catalogLegacyParamTests();
+  catalogHrefParamTests();
+  catalogJavaParamTests();
   executorRoutingTests();
   javaCatalogRoutingTests();
-  oauthExecutorTests();
+  javaCatalogListingRoutingTests();
+  javaCatalogDownloadRoutingTests();
   commentComponentStyleExportRoutingTests();
   libraryVariableRoutingTests();
   nodeStyleRoutingTests();
@@ -23,9 +23,6 @@ void main() {
 /// Looks up a registered tool by name.
 ToolDefinition toolNamed(String name) =>
     figmaTools().firstWhere((t) => t.name == name);
-
-/// Serves `{}` for every request.
-String _spyRouter(RequestOptions o) => '{}';
 
 /// Catalog shape: tool count, order, and integration ownership.
 void catalogTests() {
@@ -98,8 +95,8 @@ const _requiredParamTools = <(String, List<String>)>[
   ('figma_get_library_components', ['library_key']),
 ];
 
-/// Param-shape checks for every tool.
-void catalogParamTests() {
+/// Param-shape checks for the legacy REST tools.
+void catalogLegacyParamTests() {
   group('legacy param shapes (all required)', () {
     for (final (name, params) in _requiredParamTools) {
       test('$name declares ${params.join(', ')}', () {
@@ -121,8 +118,11 @@ void catalogParamTests() {
       expect(tool.params[2].type, 'number');
     });
   });
+}
 
-  group('Java catalog param shapes', () {
+/// Param-shape checks for the Java-parity catalog tools.
+void catalogHrefParamTests() {
+  group('Java catalog href param shapes', () {
     const requiredHrefTools = [
       'figma_download_image_of_file',
       'figma_get_file_structure',
@@ -140,7 +140,11 @@ void catalogParamTests() {
         expect(tool.params.single.required, isTrue);
       });
     }
+  });
+}
 
+void catalogJavaParamTests() {
+  group('Java catalog param shapes', () {
     test('figma_oauth2_get_auth_url params are all optional', () {
       final tool = toolNamed('figma_oauth2_get_auth_url');
       expect(
@@ -225,10 +229,10 @@ void catalogParamTests() {
 
 /// [FigmaToolExecutor.execute] routes original tool names to client calls.
 void executorRoutingTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('routes figma_test to testConnection', () async {
       await f.executor.execute('figma_test', {});
@@ -260,10 +264,10 @@ void executorRoutingTests() {
 
 /// Java-catalog executor routing: each new name reaches its client method.
 void javaCatalogRoutingTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute (Java catalog)', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('routes figma_me to meJson', () async {
       await f.executor.execute('figma_me', {});
@@ -335,6 +339,15 @@ void javaCatalogRoutingTests() {
       });
       expect(f.spy.calls, ['getLayersBatch:h:1:2,3:4']);
     });
+  });
+}
+
+/// Java-catalog listing/children tool routing.
+void javaCatalogListingRoutingTests() {
+  late ExecutorFixture f;
+
+  group('FigmaToolExecutor.execute (Java listing tools)', () {
+    setUp(() => f = executorFixture());
 
     test('routes figma_get_node_children with href', () async {
       await f.executor.execute('figma_get_node_children', {'href': 'h'});
@@ -359,6 +372,15 @@ void javaCatalogRoutingTests() {
       await f.executor.execute('figma_get_file_comments', {'href': 'h'});
       expect(f.spy.calls, ['getFileComments:h']);
     });
+  });
+}
+
+/// Java-catalog download/export tool routing.
+void javaCatalogDownloadRoutingTests() {
+  late ExecutorFixture f;
+
+  group('FigmaToolExecutor.execute (Java download tools)', () {
+    setUp(() => f = executorFixture());
 
     test('routes figma_download_node_image with defaults', () async {
       await f.executor.execute('figma_download_node_image', {
@@ -393,146 +415,13 @@ void javaCatalogRoutingTests() {
   });
 }
 
-/// OAuth tool executor behavior: config validation and result envelopes.
-void oauthExecutorTests() {
-  group('FigmaToolExecutor OAuth tools', () {
-    test('get_auth_url reports a missing client id', () async {
-      final f = _executorFixture();
-      final result = jsonDecode(
-        await f.executor.execute('figma_oauth2_get_auth_url', {}),
-      ) as Map<String, dynamic>;
-      expect(result['error'], 'FIGMA_CLIENT_ID is not configured');
-    });
-
-    test('get_auth_url reports a missing client secret', () async {
-      final f = _executorFixture();
-      PropertyReader.setOverrides({'FIGMA_CLIENT_ID': 'cid'});
-      final result = jsonDecode(
-        await f.executor.execute('figma_oauth2_get_auth_url', {}),
-      ) as Map<String, dynamic>;
-      expect(result['error'], 'FIGMA_CLIENT_SECRET is not configured');
-    });
-
-    test('get_auth_url reports a missing redirect URI', () async {
-      final f = _executorFixture();
-      PropertyReader.setOverrides({
-        'FIGMA_CLIENT_ID': 'cid',
-        'FIGMA_CLIENT_SECRET': 'cs',
-      });
-      final result = jsonDecode(
-        await f.executor.execute('figma_oauth2_get_auth_url', {}),
-      ) as Map<String, dynamic>;
-      expect(
-        result['error'],
-        'redirectUri is required (or set FIGMA_REDIRECT_URI in dmtools.env)',
-      );
-    });
-
-    test('get_auth_url builds the authorization URL from config', () async {
-      final f = _executorFixture();
-      PropertyReader.setOverrides({
-        'FIGMA_CLIENT_ID': 'cid',
-        'FIGMA_CLIENT_SECRET': 'cs',
-        'FIGMA_REDIRECT_URI': 'http://localhost:8080/callback',
-      });
-      final result = jsonDecode(
-        await f.executor.execute('figma_oauth2_get_auth_url', {
-          'state': 'xyz',
-        }),
-      ) as Map<String, dynamic>;
-      expect(
-        result['authorization_url'],
-        'https://www.figma.com/oauth?client_id=cid'
-        '&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fcallback'
-        '&scope=file_content%3Aread+file_metadata%3Aread'
-        '&state=xyz&response_type=code',
-      );
-      expect(result['state'], 'xyz');
-      expect(result['instructions'], isNotNull);
-    });
-
-    test('exchange_code reports incomplete config', () async {
-      final f = _executorFixture();
-      final result = jsonDecode(
-        await f.executor.execute('figma_oauth2_exchange_code', {'code': 'c'}),
-      ) as Map<String, dynamic>;
-      expect(
-        result['error'],
-        'FIGMA_CLIENT_ID and FIGMA_CLIENT_SECRET must be configured',
-      );
-    });
-
-    test('exchange_code returns tokens and instructions', () async {
-      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
-      PropertyReader.setOverrides({
-        'FIGMA_CLIENT_ID': 'cid',
-        'FIGMA_CLIENT_SECRET': 'cs',
-        'FIGMA_REDIRECT_URI': 'http://cb/',
-      });
-      final executor = FigmaToolExecutor(
-        spy,
-        PropertyReader(),
-        _FakeExchange(),
-      );
-      final result = jsonDecode(
-        await executor.execute('figma_oauth2_exchange_code', {'code': 'c'}),
-      ) as Map<String, dynamic>;
-      expect(result['access_token'], 'at');
-      expect(result['refresh_token'], 'rt');
-      expect(result['expires_in'], 3600);
-      expect(
-        result['instructions'],
-        contains('FIGMA_OAUTH_REFRESH_TOKEN=rt'),
-      );
-    });
-
-    test('exchange_code wraps failures in the Java error text', () async {
-      final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
-      PropertyReader.setOverrides({
-        'FIGMA_CLIENT_ID': 'cid',
-        'FIGMA_CLIENT_SECRET': 'cs',
-        'FIGMA_REDIRECT_URI': 'http://cb/',
-      });
-      final executor = FigmaToolExecutor(
-        spy,
-        PropertyReader(),
-        _FakeExchange(fail: true),
-      );
-      final result = jsonDecode(
-        await executor.execute('figma_oauth2_exchange_code', {'code': 'c'}),
-      ) as Map<String, dynamic>;
-      expect(result['error'], startsWith('Token exchange failed:'));
-    });
-  });
-}
-
-/// A canned [FigmaOAuth2Exchange].
-class _FakeExchange extends FigmaOAuth2Exchange {
-  _FakeExchange({this.fail = false});
-
-  final bool fail;
-
-  @override
-  Future<FigmaTokenResponse> exchangeCode({
-    required String code,
-    required String redirectUri,
-    required String clientId,
-    required String clientSecret,
-  }) async {
-    if (fail) {
-      throw StateError('Figma OAuth2 token request failed [400]: bad');
-    }
-    return (accessToken: 'at', refreshToken: 'rt', expiresIn: 3600);
-  }
-}
-
 /// [FigmaToolExecutor.execute] routes the comment, component, and
 /// image-export tools.
 void commentComponentStyleExportRoutingTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute (comments, components, export)', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('routes figma_get_comments with key', () async {
       await f.executor.execute('figma_get_comments', {'key': 'aBc123'});
@@ -576,10 +465,10 @@ void commentComponentStyleExportRoutingTests() {
 /// [FigmaToolExecutor.execute] routes the component-library and
 /// variable-collection tools.
 void libraryVariableRoutingTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute (libraries and variables)', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('routes figma_get_file_components as alias to getComponents',
         () async {
@@ -607,10 +496,10 @@ void libraryVariableRoutingTests() {
 
 /// [FigmaToolExecutor.execute] routes the node and style lookup tools.
 void nodeStyleRoutingTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute (node and style lookups)', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('routes figma_get_style with key', () async {
       await f.executor.execute('figma_get_style', {'key': 'aBc123'});
@@ -629,10 +518,10 @@ void nodeStyleRoutingTests() {
 
 /// [FigmaToolExecutor.execute] error cases.
 void executorEdgeCaseTests() {
-  late _ExecutorFixture f;
+  late ExecutorFixture f;
 
   group('FigmaToolExecutor.execute (edge cases)', () {
-    setUp(() => f = _executorFixture());
+    setUp(() => f = executorFixture());
 
     test('throws ArgumentError for an unknown tool', () {
       expect(
@@ -641,234 +530,4 @@ void executorEdgeCaseTests() {
       );
     });
   });
-}
-
-/// A spy client plus the executor bound to it.
-typedef _ExecutorFixture = ({FigmaToolExecutor executor, _SpyFigmaClient spy});
-
-/// Builds a [_SpyFigmaClient] over the mocked transport and wraps it.
-_ExecutorFixture _executorFixture() {
-  final spy = _SpyFigmaClient(mockFigmaHttp(_spyRouter).http);
-  return (executor: FigmaToolExecutor(spy), spy: spy);
-}
-
-/// Records every dispatched call then delegates to the real client logic.
-class _SpyFigmaClient extends FigmaClient {
-  _SpyFigmaClient(super.http);
-
-  final List<String> calls = [];
-
-  @override
-  Future<Map<String, dynamic>> testConnection() {
-    calls.add('testConnection');
-    return super.testConnection();
-  }
-
-  @override
-  Future<String> meJson() {
-    calls.add('meJson');
-    return super.meJson();
-  }
-
-  @override
-  Future<String?> getImageOfSource(String url) async {
-    calls.add('getImageOfSource:$url');
-    return null;
-  }
-
-  @override
-  Future<String?> downloadNodeImage(
-    String href,
-    String nodeId, {
-    String? format,
-    int? scale,
-  }) async {
-    calls.add('downloadNodeImage:$href:$nodeId:$format:$scale');
-    return null;
-  }
-
-  @override
-  Future<String?> convertUrlToFile(String href) async {
-    calls.add('convertUrlToFile:$href');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getFileStructure(String href) async {
-    calls.add('getFileStructure:$href');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getIcons(String href) async {
-    calls.add('getIcons:$href');
-    return null;
-  }
-
-  @override
-  Future<String> getImageFills(String href) async {
-    calls.add('getImageFills:$href');
-    return '';
-  }
-
-  @override
-  Future<String> renderNodes(
-    String href,
-    String nodeIds, {
-    String? format,
-  }) async {
-    calls.add('renderNodes:$href:$nodeIds:$format');
-    return '';
-  }
-
-  @override
-  Future<String?> downloadIconFile(
-    String href,
-    String nodeId,
-    String format,
-  ) async {
-    calls.add('downloadIconFile:$href:$nodeId:$format');
-    return null;
-  }
-
-  @override
-  Future<String?> getSvgContent(String href, String nodeId) async {
-    calls.add('getSvgContent:$href:$nodeId');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getNodeDetails(
-      String href, String nodeIds) async {
-    calls.add('getNodeDetails:$href:$nodeIds');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getTextContent(
-      String href, String nodeIds) async {
-    calls.add('getTextContent:$href:$nodeIds');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getDesignStyles(String href) async {
-    calls.add('getDesignStyles:$href');
-    return null;
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getLayers(String href) async {
-    calls.add('getLayers:$href');
-    return null;
-  }
-
-  @override
-  Future<Map<String, Map<String, dynamic>>> getLayersBatch(
-    String href,
-    String nodeIds,
-  ) async {
-    calls.add('getLayersBatch:$href:$nodeIds');
-    return {};
-  }
-
-  @override
-  Future<Map<String, dynamic>?> getNodeChildren(String href) async {
-    calls.add('getNodeChildren:$href');
-    return null;
-  }
-
-  @override
-  Future<List<dynamic>> listTeamProjects(String teamIdOrUrl) async {
-    calls.add('listTeamProjects:$teamIdOrUrl');
-    return const [];
-  }
-
-  @override
-  Future<List<dynamic>> listProjectFiles(String projectIdOrUrl) async {
-    calls.add('listProjectFiles:$projectIdOrUrl');
-    return const [];
-  }
-
-  @override
-  Future<List<dynamic>> getFileComments(String href) async {
-    calls.add('getFileComments:$href');
-    return const [];
-  }
-
-  @override
-  Future<Map<String, dynamic>> getFile(String key) {
-    calls.add('getFile:$key');
-    return super.getFile(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getFileNodes(String key, String nodeIds) {
-    calls.add('getFileNodes:$key:$nodeIds');
-    return super.getFileNodes(key, nodeIds);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getImage(String key, String nodeId) {
-    calls.add('getImage:$key:$nodeId');
-    return super.getImage(key, nodeId);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getComments(String key) {
-    calls.add('getComments:$key');
-    return super.getComments(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> postComment(String key, String message) {
-    calls.add('postComment:$key:$message');
-    return super.postComment(key, message);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getComponents(String key) {
-    calls.add('getComponents:$key');
-    return super.getComponents(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getComponentSets(String key) {
-    calls.add('getComponentSets:$key');
-    return super.getComponentSets(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> exportImage(
-    String key, {
-    String? format,
-    double? scale,
-  }) {
-    calls.add('exportImage:$key:$format:$scale');
-    return super.exportImage(key, format: format, scale: scale);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getVariableCollections(String key) {
-    calls.add('getVariableCollections:$key');
-    return super.getVariableCollections(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getLibraryComponents(String libraryKey) {
-    calls.add('getLibraryComponents:$libraryKey');
-    return super.getLibraryComponents(libraryKey);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getStyle(String key) {
-    calls.add('getStyle:$key');
-    return super.getStyle(key);
-  }
-
-  @override
-  Future<Map<String, dynamic>> getNode(String key, String nodeId) {
-    calls.add('getNode:$key:$nodeId');
-    return super.getNode(key, nodeId);
-  }
 }

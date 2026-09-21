@@ -62,8 +62,8 @@ void postCommentConversionTests() {
       final f = mockJira((o) => routeByPath(
           {'/issue/PROJ-1/comment': '{"comments":[{"body":"*hi* there"}]}'},
           o));
-      final posted = await f.client.postCommentIfNotExists('PROJ-1',
-          '**hi** there');
+      final posted =
+          await f.client.postCommentIfNotExists('PROJ-1', '**hi** there');
       expect(posted, isFalse);
       expect(f.adapter.calls, hasLength(1));
       expect(f.adapter.calls.single.method, 'GET');
@@ -71,10 +71,8 @@ void postCommentConversionTests() {
 
     test('detects an existing heading stored as wiki markup', () async {
       final f = mockJira((o) => routeByPath(
-          {'/issue/PROJ-1/comment': '{"comments":[{"body":"h1. Title"}]}'},
-          o));
-      final posted =
-          await f.client.postCommentIfNotExists('PROJ-1', '# Title');
+          {'/issue/PROJ-1/comment': '{"comments":[{"body":"h1. Title"}]}'}, o));
+      final posted = await f.client.postCommentIfNotExists('PROJ-1', '# Title');
       expect(posted, isFalse);
       expect(f.adapter.calls, hasLength(1));
     });

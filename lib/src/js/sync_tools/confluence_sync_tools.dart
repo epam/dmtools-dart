@@ -91,10 +91,7 @@ class ConfluenceSyncTools {
   String _search(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final cql = Uri.encodeQueryComponent(syncAsStr(args['cql']));
-      return syncBodyOrError(SyncHttpClient.get(
-        '${config.baseUrl}/content/search?cql=$cql',
-        headers: config.headers,
-      ));
+      return _syncGetBody(config, '${config.baseUrl}/content/search?cql=$cql');
     });
   }
 
@@ -103,11 +100,11 @@ class ConfluenceSyncTools {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final spaceKey = Uri.encodeQueryComponent(syncAsStr(args['spaceKey']));
       final title = Uri.encodeQueryComponent(syncAsStr(args['title']));
-      return syncBodyOrError(SyncHttpClient.get(
+      return _syncGetBody(
+        config,
         '${config.baseUrl}/content?spaceKey=$spaceKey&title=$title'
         '&expand=body.storage',
-        headers: config.headers,
-      ));
+      );
     });
   }
 
@@ -156,17 +153,14 @@ class ConfluenceSyncTools {
   /// `results` array (Java returns the content list, not the wrapper).
   String _getChildrenById(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      return _childrenPayload(
-        config,
-        syncAsStr(args['contentId']),
-        syncAsStr(args['format']),
-      );
+      return _childrenPayload(config, syncAsStr(args['contentId']), args);
     });
   }
 
   /// The shared `get_children_*` tail: fetches the child page list of
   /// [id], validates the envelope, applies `format=md`, and encodes.
-  String _childrenPayload(_Conf config, String id, String format) {
+  String _childrenPayload(_Conf config, String id, Map<String, dynamic> args) {
+    final format = syncAsStr(args['format']);
     final resp = _contentGet(
       config,
       '$id/child/page?limit=100&expand=$_contentExpand',
@@ -275,10 +269,7 @@ class ConfluenceSyncTools {
         return syncErr('Content not found: ${syncAsStr(args['contentName'])}');
       }
       return _childrenPayload(
-        config,
-        found.first['id']?.toString() ?? '',
-        syncAsStr(args['format']),
-      );
+          config, found.first['id']?.toString() ?? '', args);
     });
   }
 
@@ -302,10 +293,7 @@ class ConfluenceSyncTools {
   /// `confluence_get_current_user_profile` — GET `user/current`.
   String _getCurrentUserProfile(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      return syncBodyOrError(SyncHttpClient.get(
-        '${config.baseUrl}/user/current',
-        headers: config.headers,
-      ));
+      return _syncGetBody(config, '${config.baseUrl}/user/current');
     });
   }
 
@@ -677,6 +665,11 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   }
   return (ref: ref, url: current);
 }
+
+/// GETs [url] with the resolved config's auth headers and returns the body
+/// verbatim (the shared tail of the read-only handlers).
+String _syncGetBody(_Conf config, String url) =>
+    syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 
 /// GETs `content/{suffix}` with the resolved config's auth headers.
 SyncHttpResponse _contentGet(_Conf config, String suffix) =>

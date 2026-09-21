@@ -2,9 +2,38 @@ name: Quality
 
 on: [push, pull_request]
 
+concurrency:
+  # PR branches: a fresh push supersedes the in-flight run (saves a full
+  # runner cycle per amend). Main keeps every run (badges + history).
+  group: quality-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  quality:
+  static:
+    # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
+    # finish in ~2 min and fail the pipeline early on style/type errors.
     runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart format --set-exit-if-changed .
+      - run: dart analyze
+
+  test:
+    # The suite (~2.3k tests) is sharded 4 ways — wall time drops from
+    # ~17 min serial to ~5-6 min (fixed per-shard overhead ~3 min +
+    # suite/4). Each shard uploads its partial lcov + test count; the
+    # gate job merges them.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      TOTAL_SHARDS: 4
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,28 +65,70 @@ jobs:
         run: |
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
           bash "$PKG/tool/build_quickjs.sh"
-      - run: dart format --set-exit-if-changed .
-      - run: dart analyze
-      - name: dart test --coverage=coverage
+      - name: dart test (shard ${{ matrix.shard }}/${{ env.TOTAL_SHARDS }}) --coverage
         id: test
-        # pipefail keeps a red suite red through the tee; the captured count
-        # feeds the badges step so the full suite runs ONCE per job.
+        # pipefail keeps a red shard red through the tee; the captured count
+        # feeds the badges step (summed across shards in the gate job).
+        # --reporter compact: on CI dart test auto-selects the github
+        # reporter, which has no +N counters and would leave COUNT empty
+        # (grep exits 1, bash -e kills the step).
         run: |
           set -o pipefail
-          # --reporter compact: on CI dart test auto-selects the github
-          # reporter, which has no +N counters and would leave COUNT empty
-          # (grep exits 1, bash -e kills the step).
-          dart test --coverage=coverage --reporter compact 2>&1 | tee /tmp/test_run.log
+          dart test --coverage=coverage --reporter compact \
+            --total-shards "$TOTAL_SHARDS" --shard-index "${{ matrix.shard }}" \
+            2>&1 | tee /tmp/test_run.log
           COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+' || true)
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - run: dart pub global activate coverage
-      - name: Format coverage
-        id: coverage
+      - name: Format coverage (shard)
         run: |
           dart pub global run coverage:format_coverage \
             --lcov --in coverage --out coverage/lcov.info --report-on lib
-          COV=$(grep -o 'end_of_record' coverage/lcov.info | wc -l)
-          echo "lines=$(wc -l < coverage/lcov.info)" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov-${{ matrix.shard }}
+          path: coverage/lcov.info
+          retention-days: 1
+      - name: Upload shard test count
+        run: echo "${{ steps.test.outputs.test_count }}" > shard_count.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: count-${{ matrix.shard }}
+          path: shard_count.txt
+          retention-days: 1
+
+  gate:
+    # Single merge point: full coverage lcov + total test count restored
+    # from the shards, then the crap4dart gates and the badges. Required
+    # status check — a red shard fails this job through `needs`.
+    needs: [static, test]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lcov-*
+          path: coverage-shards
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: count-*
+          path: shard-counts
+      - name: Merge shard coverage
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lcov
+          mkdir -p coverage
+          ARGS=$(for f in coverage-shards/lcov-*/lcov.info; do printf -- '-a %s ' "$f"; done)
+          # shellcheck disable=SC2086
+          lcov $ARGS -o coverage/lcov.info
+      - name: Sum shard test counts
+        id: counts
+        run: |
+          TOTAL=$(cat shard-counts/count-*/shard_count.txt | awk '{s+=$1} END{print s+0}')
+          echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
       - name: Install crap4dart
         # 0.9.5: fixed the test_assertions parser limitation with trailing
         # named `skip:` args, so the two config excludes are gone. Keep this
@@ -68,7 +139,7 @@ jobs:
       - name: Generate badges
         run: |
           mkdir -p .badges
-          TEST_COUNT="${{ steps.test.outputs.test_count }}"
+          TEST_COUNT="${{ steps.counts.outputs.test_count }}"
           COV_PCT=$(grep -o 'LH:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
           COV_TOTAL=$(grep -o 'LF:[0-9]*' coverage/lcov.info | awk -F: '{s+=$2} END{print s}')
           COV_FINAL=$(echo "scale=1; $COV_PCT * 100 / $COV_TOTAL" | bc 2>/dev/null || echo "0")
@@ -110,7 +181,7 @@ jobs:
           git push || true
 
   agents-suite:
-    # Runs in parallel with the quality job — both are required merge checks
+    # Runs in parallel with the test shards — both are required merge checks
     # and the suite hard-gates on its own, so serializing only adds wall time.
     runs-on: ubuntu-24.04
     steps:

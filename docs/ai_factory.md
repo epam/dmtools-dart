@@ -46,9 +46,9 @@ dev, review, rework and any pipeline-added label all re-enter the same gate).
 |---|---|
 | `ai-teammate.yml` | Thin trigger stub over the factory pack (reusable `teammate.yml` in the agents submodule): carries only the `issues` triggers, the per-issue concurrency group and the dispatch inputs — every job lives in `agents/.github/workflows/factory/teammate.yml` (guard → run → verdict → persist). |
 | `merge-trigger.yml` | Squash-merges the PR linked to a `pr_approved` issue once required checks are green. Fired by `check_suite completed` and `issues labeled pr_approved`. |
-| `quality.yml` | The gates every PR must pass: format → analyze → tests+coverage → crap4dart check/analyze → agents suite. These are the "CI green" the merge trigger waits for. |
+| `quality.yml` | The gates every PR must pass: format → analyze → tests+coverage → crap4dart check/analyze → agents suite. Dispatch-only (2026-09): pushes fire no CI — the SM dispatches it on PR heads when validation is due; required checks match the dispatched check runs on the head SHA. |
 | `release-cli.yml` | Dispatch-only release: version bump + tag → AOT builds (linux x64/arm64, macos x64/arm64, windows x64) → GitHub release with checksums. Idempotent: re-dispatching an existing version is a clean no-op. |
-| `auto-update-prs.yml` | Keeps open PR branches fresh against main. |
+| `machine-sm.yml` | Thin cron stub over the factory SM (reusable `factory-sm.yml` in the agents submodule). Owns the whole reconcile tick: silent branch refresh, dispatch-only CI (`ci-workflow` input), approval latches, merge. Replaces the retired `auto-update-prs.yml`. |
 
 Key env (top of the factory `teammate.yml`; the stub carries only the
 concurrency group and the dispatch inputs):

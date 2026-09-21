@@ -1,10 +1,20 @@
 name: Quality
 
-on: [push, pull_request]
+# Dispatch-only CI (2026-09 machine-loop redesign): pushes fire NO CI —
+# the SM (machine-sm.yml → factory-sm) is the only trigger. It dispatches
+# this workflow on the PR head when validation is due (sm rule
+# validate-fresh / validate-armed), so intermediate dev/rework pushes and
+# silent branch updates are free. Required checks still match: the
+# dispatched run registers its check runs on the head SHA.
+# Main keeps its push CI (badges + history).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
 
 concurrency:
-  # PR branches: a fresh push supersedes the in-flight run (saves a full
-  # runner cycle per amend). Main keeps every run (badges + history).
+  # PR branches: a fresh dispatch supersedes the in-flight run. Main keeps
+  # every run (badges + history).
   group: quality-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 

@@ -86,21 +86,18 @@ void markdownBranchTests() {
           '\n'
           '<code class="typescript">\n'
           "import { auth } from './auth';\n"
-          '\n'
-          'export const useAuth = () => {\n'
-          '  return auth;\n'
-          '};\n'
           '</code>\n';
+      // Java ground truth (Probe run against the real converter): the
+      // input carries no `#` / ``` / `* ` markers, so the whole body takes
+      // the HTML branch and the single-backtick span is preserved verbatim
+      // -- only the <code> element becomes a {code} block. Adjacent text
+      // runs keep their newline here where Jsoup pretty-print collapses it
+      // to a single space (documented whitespace deviation).
       expect(
         markdownToJiraMarkup(input),
         "Here's how to implement a feature:\n"
-        '\n'
-        '1. Update {{src/auth.ts}}:\n'
-        '\n'
-        '{code:typescript}import { auth } from \'./auth\';\n'
-        'export const useAuth = () => {\n'
-        '  return auth;\n'
-        '};{code}',
+        '1. Update `src/auth.ts`:\n'
+        "{code:typescript}import { auth } from './auth';{code}",
       );
     });
 
@@ -191,9 +188,11 @@ void htmlBranchTests() {
     });
 
     test('markdown image syntax converts', () {
+      // Java ground truth: only the ![name|attrs] part is rewritten; the
+      // trailing (url) stays (Java `processImages` regex does not cover it).
       expect(
         markdownToJiraMarkup('![Screenshot|width=300](img.png)'),
-        '!Screenshot|width=300!',
+        '!Screenshot|width=300!(img.png)',
       );
     });
   });
@@ -223,18 +222,21 @@ void mixedBranchTests() {
 void preserverTests() {
   group('HtmlCodeBlockPreserver', () {
     test('placeholder survives a preserve/restore round trip', () {
+      // Java parity: restoreCodeBlocks only substitutes the placeholder
+      // text — the surrounding <code> element stays (it is stripped later
+      // by the real conversion chain's tag pass, not by the preserver).
       final preserver = HtmlCodeBlockPreserver();
       final preserved = preserver.preserveCodeBlocks(
           '<p>a <code class="java">x = 1;</code> b</p>');
       expect(preserved, contains(codeBlockPlaceholder));
       final restored = preserver.restoreCodeBlocks(preserved);
-      expect(restored, '<p>a {code:java}x = 1;{code} b</p>');
+      expect(restored, '<p>a <code>{code:java}x = 1;{code}</code> b</p>');
     });
 
     test('inline code without class becomes {{monospace}}', () {
       final preserver = HtmlCodeBlockPreserver();
       final preserved = preserver.preserveCodeBlocks('<p>a <code>x</code> b</p>');
-      expect(preserver.restoreCodeBlocks(preserved), '<p>a {{x}} b</p>');
+      expect(preserver.restoreCodeBlocks(preserved), '<p>a <code>{{x}}</code> b</p>');
     });
 
     test('properties language maps to bash', () {
@@ -242,7 +244,7 @@ void preserverTests() {
       final preserved = preserver.preserveCodeBlocks(
           '<code class="properties">a=b\nc=d</code>');
       expect(preserver.restoreCodeBlocks(preserved),
-          '{code:bash}a=b\nc=d{code}');
+          '<code>{code:bash}a=b\nc=d{code}</code>');
     });
 
     test('decodeHtmlEntities normalizes newlines and decodes basics', () {

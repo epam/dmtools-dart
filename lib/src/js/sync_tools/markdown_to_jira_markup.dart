@@ -88,7 +88,7 @@ String _convertMixedContent(String input) {
         ? _convertHtmlToJiraMarkup(trimmed)
         : _convertMarkdownToJiraMarkup(trimmed));
   }
-  final joined = preserver.restoreCodeBlocks(parts.join('\n'));
+  final joined = preserver.restoreCodeBlocks(parts.join('\n\n'));
   return joined.trim();
 }
 

@@ -105,6 +105,13 @@ gates:
       # arguments in dm.ai's GitHub.java; same AGENTS.md rule-2 parity).
       - paths: ['lib/src/integrations/github/github_client_ci_tools.dart']
         max_params: 9
+      # The sync RetryPolicy mirrors the Java `RetryPolicyConfig` knobs 1:1
+      # (maxAttempts/baseDelay/maxDelay/backoffMultiplier/jitterFactor plus
+      # the WAIT_BEFORE_PERFORM throttle pair and the injected Random; Java
+      # source is the spec per AGENTS.md rule 2) — grouping them into a
+      # settings object would diverge from the parity surface.
+      - paths: ['lib/src/js/sync_retry_policy.dart']
+        max_params: 8
   # Detect duplicated code blocks.
   duplication:
     enabled: true

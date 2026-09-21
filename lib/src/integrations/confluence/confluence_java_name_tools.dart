@@ -3,18 +3,20 @@ part of 'confluence_tools.dart';
 /// The gh-191 Java-named tools (frozen gap snapshot, `Confluence.java`
 /// `@MCPTool` annotations), grouped per the file's list-function pattern.
 
-/// All 15 Java-named tool definitions in catalog order.
+/// All 15 Java-named tool definitions in Java catalog order.
 List<ToolDefinition> javaNameConfluenceTools() => [
-      ..._javaNameTitleTools(),
+      ..._javaNameContentByTitleTools(),
       ..._javaNameUrlFetchTools(),
+      ..._javaNameFindTools(),
+      ..._javaNameFindOrCreateTools(),
+      ..._javaNameAttachmentListTools(),
       ..._javaNameProfileAndSearchTools(),
-      ..._javaNameAttachmentTools(),
       ..._javaNameHistoryUpdateTools(),
       ..._javaNameUploadTools(),
     ];
 
-/// Title/default-space lookup family: `confluence_content_by_title*`, `confluence_find_*`, `confluence_get_children_by_name`.
-List<ToolDefinition> _javaNameTitleTools() => [
+/// Default-space title content: `confluence_content_by_title` / `confluence_content_by_title_and_space`.
+List<ToolDefinition> _javaNameContentByTitleTools() => [
       ToolDefinition(
         name: 'confluence_content_by_title',
         description: 'Get Confluence content by title in the default space. '
@@ -28,12 +30,7 @@ List<ToolDefinition> _javaNameTitleTools() => [
             description: 'Title of the Confluence page to get',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
       ToolDefinition(
@@ -54,14 +51,65 @@ List<ToolDefinition> _javaNameTitleTools() => [
             description: 'The space key where the content is located',
             required: true,
           ),
+          _formatParam(),
+        ],
+      ),
+    ];
+
+/// URL fetch + recursive page download: `confluence_contents_by_urls` / `confluence_download_pages`.
+List<ToolDefinition> _javaNameUrlFetchTools() => [
+      ToolDefinition(
+        name: 'confluence_contents_by_urls',
+        description: 'Get Confluence content by multiple URLs. Returns a list '
+            'of content objects for each valid URL. Use format=md to convert '
+            'body.storage.value to Markdown.',
+        integration: 'confluence',
+        category: 'content_retrieval',
+        params: [
           ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
+            name: 'urlStrings',
+            description: 'Array of Confluence URLs to retrieve content from',
+            required: true,
+          ),
+          _formatParam(),
+        ],
+      ),
+      ToolDefinition(
+        name: 'confluence_download_pages',
+        description: 'Download Confluence pages and their attachments to a '
+            'local folder. Follows child pages down to the given depth.',
+        integration: 'confluence',
+        category: 'content_management',
+        params: [
+          ToolParam(
+            name: 'urlStrings',
+            description: 'Array of Confluence page URLs to download',
+            required: true,
+          ),
+          ToolParam(
+            name: 'outputPath',
+            description:
+                'Local folder path where pages and attachments will be saved',
+            required: true,
+          ),
+          ToolParam(
+            name: 'depth',
+            description:
+                'How many levels of child pages to follow. Default is 1.',
+            required: false,
+          ),
+          ToolParam(
+            name: 'downloadAttachments',
+            description:
+                'Whether to download page attachments. Default is true.',
             required: false,
           ),
         ],
       ),
+    ];
+
+/// Find-by-title family: `confluence_find_content` / `confluence_find_content_by_title_and_space`.
+List<ToolDefinition> _javaNameFindTools() => [
       ToolDefinition(
         name: 'confluence_find_content',
         description: 'Find a Confluence page by title in the default space. '
@@ -75,12 +123,7 @@ List<ToolDefinition> _javaNameTitleTools() => [
             description: 'Title of the Confluence page to find',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
       ToolDefinition(
@@ -101,14 +144,13 @@ List<ToolDefinition> _javaNameTitleTools() => [
             description: 'The space key where to search for the content',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
+    ];
+
+/// Find-or-create + children-by-name: `confluence_find_or_create` / `confluence_get_children_by_name`.
+List<ToolDefinition> _javaNameFindOrCreateTools() => [
       ToolDefinition(
         name: 'confluence_find_or_create',
         description: 'Find a Confluence page by title in the default space, '
@@ -153,75 +195,13 @@ List<ToolDefinition> _javaNameTitleTools() => [
             description: 'The name/title of the parent page',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
     ];
 
-/// URL fetch + recursive page download: `confluence_contents_by_urls` / `confluence_download_pages`.
-List<ToolDefinition> _javaNameUrlFetchTools() => [
-      ToolDefinition(
-        name: 'confluence_contents_by_urls',
-        description: 'Get Confluence content by multiple URLs. Returns a list '
-            'of content objects for each valid URL. Use format=md to convert '
-            'body.storage.value to Markdown.',
-        integration: 'confluence',
-        category: 'content_retrieval',
-        params: [
-          ToolParam(
-            name: 'urlStrings',
-            description: 'Array of Confluence URLs to retrieve content from',
-            required: true,
-          ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
-        ],
-      ),
-      ToolDefinition(
-        name: 'confluence_download_pages',
-        description: 'Download Confluence pages and their attachments to a '
-            'local folder. Follows child pages down to the given depth.',
-        integration: 'confluence',
-        category: 'content_management',
-        params: [
-          ToolParam(
-            name: 'urlStrings',
-            description: 'Array of Confluence page URLs to download',
-            required: true,
-          ),
-          ToolParam(
-            name: 'outputPath',
-            description:
-                'Local folder path where pages and attachments will be saved',
-            required: true,
-          ),
-          ToolParam(
-            name: 'depth',
-            description:
-                'How many levels of child pages to follow. Default is 1.',
-            required: false,
-          ),
-          ToolParam(
-            name: 'downloadAttachments',
-            description:
-                'Whether to download page attachments. Default is true.',
-            required: false,
-          ),
-        ],
-      ),
-    ];
-
-/// User profiles + text search: `confluence_get_current_user_profile`, `confluence_get_user_profile_by_id`, `confluence_search_content_by_text`.
-List<ToolDefinition> _javaNameProfileAndSearchTools() => [
+/// Attachment listing: `confluence_get_content_attachments`.
+List<ToolDefinition> _javaNameAttachmentListTools() => [
       ToolDefinition(
         name: 'confluence_get_content_attachments',
         description: 'Get all attachments for a specific Confluence content. '
@@ -236,6 +216,10 @@ List<ToolDefinition> _javaNameProfileAndSearchTools() => [
           ),
         ],
       ),
+    ];
+
+/// User profiles + text search: `confluence_get_current_user_profile`, `confluence_get_user_profile_by_id`, `confluence_search_content_by_text`.
+List<ToolDefinition> _javaNameProfileAndSearchTools() => [
       ToolDefinition(
         name: 'confluence_get_current_user_profile',
         description: "Get the current user's profile information from "
@@ -259,40 +243,6 @@ List<ToolDefinition> _javaNameProfileAndSearchTools() => [
           ),
         ],
       ),
-    ];
-
-/// Attachment listing: `confluence_get_content_attachments`.
-List<ToolDefinition> _javaNameAttachmentTools() => [
-      ToolDefinition(
-        name: 'confluence_get_children_by_name',
-        description: 'Get child pages of a Confluence page by space key and '
-            'content name. Returns a list of child content objects. Use '
-            'format=md to convert body.storage.value to Markdown.',
-        integration: 'confluence',
-        category: 'content_retrieval',
-        params: [
-          ToolParam(
-            name: 'spaceKey',
-            description: 'The space key where the parent page is located',
-            required: true,
-          ),
-          ToolParam(
-            name: 'contentName',
-            description: 'The name/title of the parent page',
-            required: true,
-          ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
-        ],
-      ),
-    ];
-
-/// History-aware page update: `confluence_update_page_with_history`.
-List<ToolDefinition> _javaNameHistoryUpdateTools() => [
       ToolDefinition(
         name: 'confluence_search_content_by_text',
         description: 'Search Confluence content by text query using CQL '
@@ -317,8 +267,8 @@ List<ToolDefinition> _javaNameHistoryUpdateTools() => [
       ),
     ];
 
-/// Attachment uploads: `confluence_upload_attachment` / `confluence_upload_attachments`.
-List<ToolDefinition> _javaNameUploadTools() => [
+/// History-aware page update: `confluence_update_page_with_history`.
+List<ToolDefinition> _javaNameHistoryUpdateTools() => [
       ToolDefinition(
         name: 'confluence_update_page_with_history',
         description: 'Update an existing Confluence page with new content and '
@@ -359,6 +309,10 @@ List<ToolDefinition> _javaNameUploadTools() => [
           ),
         ],
       ),
+    ];
+
+/// Attachment uploads: `confluence_upload_attachment` / `confluence_upload_attachments`.
+List<ToolDefinition> _javaNameUploadTools() => [
       ToolDefinition(
         name: 'confluence_upload_attachment',
         description:
@@ -387,12 +341,40 @@ List<ToolDefinition> _javaNameUploadTools() => [
           ),
         ],
       ),
+      ToolDefinition(
+        name: 'confluence_upload_attachments',
+        description:
+            'Upload all files in a directory as attachments to a Confluence '
+            'page. Existing attachments are skipped by default. Returns a '
+            'JSON summary.',
+        integration: 'confluence',
+        category: 'content_management',
+        params: [
+          ToolParam(
+            name: 'contentId',
+            description: 'The content ID of the page to attach files to',
+            required: true,
+          ),
+          ToolParam(
+            name: 'directory',
+            description: 'The local directory containing files to upload',
+            required: true,
+          ),
+          ToolParam(
+            name: 'updateIfExists',
+            description:
+                'Whether to overwrite existing attachments with the same names',
+            required: false,
+          ),
+        ],
+      ),
     ];
 
 /// Handler entries for the Java-named tools, spread into
-/// [ConfluenceToolExecutor._handlers].
+/// `ConfluenceToolExecutor._handlers`.
 Map<String, Future<dynamic> Function(Map<String, dynamic>)> javaNameHandlers(
-        ConfluenceClient client) =>
+  ConfluenceClient client,
+) =>
     {
       'confluence_content_by_title': (a) =>
           client.contentByTitle(a['title'] as String, a['format'] as String?),

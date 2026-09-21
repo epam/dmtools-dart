@@ -11,6 +11,15 @@ import 'confluence_client.dart';
 
 part 'confluence_java_name_tools.dart';
 
+/// The shared `format` tool parameter of every content-retrieval tool
+/// (duplication gate: the same 5-line `ToolParam` block recurred per tool).
+ToolParam _formatParam() => ToolParam(
+      name: 'format',
+      description: "Output format for the page body. Use 'md' or "
+          "'markdown' to convert Confluence storage format to Markdown",
+      required: false,
+    );
+
 /// Returns all Confluence MCP tool definitions.
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
@@ -580,12 +589,7 @@ List<ToolDefinition> _contentRetrievalTools() => [
             description: 'The unique content ID of the Confluence page',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
       ToolDefinition(
@@ -601,12 +605,7 @@ List<ToolDefinition> _contentRetrievalTools() => [
             description: 'The content ID of the parent page',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
     ];

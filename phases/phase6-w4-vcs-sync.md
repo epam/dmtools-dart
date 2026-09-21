@@ -9,6 +9,15 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 
 # Phase 6 W4 — GitHub/GitLab sync executors (23 items)
 
+> gh-191 §3 verification (2026-09-21): both reference suites run green —
+> Java dm.ai `dmtools-core:test --tests *.github.* / *.gitlab.*` = 556
+> tests, 0 failures (5 skipped); Dart `dart test` = 3154 passed. The
+> items below are the exact divergence list: Java asserts Java behavior,
+> Dart asserts Dart behavior, and every unchecked entry is a confirmed
+> remaining difference (spot-verified P6-VCS-06 syncBodyOrError only
+> errors on transport failure, not non-2xx; P6-VCS-16 required-param
+> text absent from the sync surface).
+
 - [ ] **P6-VCS-01** curl `-L` (302 redirect follow) — `github_get_job_logs`
       returns empty today — dart sync_http_client.dart / java
       AbstractRestClient.java:59 — M

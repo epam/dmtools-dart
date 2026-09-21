@@ -264,36 +264,52 @@ _SpecialBlock? _consecutiveInlineBlock(
       i + 1 < nodes.length &&
       nodes[i + 1] is dom.Element &&
       (nodes[i + 1] as dom.Element).localName!.toLowerCase() == 'ul') {
-    final heading = '# *${el.text.trim()}*';
-    return (
-      block: '$heading\n${_processUnorderedList(nodes[i + 1] as dom.Element)}',
-      nextIndex: i + 1,
-    );
+    return _strongUlBlock(nodes, i, el);
   }
-  if (tag == 'b' || tag == 'i') {
-    final combined = StringBuffer(_trimLeadingSpaces(el.outerHtml));
-    var j = i;
-    while (j + 1 < nodes.length &&
-        nodes[j + 1] is dom.Element &&
-        (nodes[j + 1] as dom.Element).localName!.toLowerCase() == tag) {
-      combined
-        ..write(' ')
-        ..write(_trimLeadingSpaces((nodes[j + 1] as dom.Element).outerHtml));
-      j++;
-    }
-    return (
-      block: _processParagraph(parse(combined.toString()).body!),
-      nextIndex: j,
-    );
+  if (tag == 'b' || tag == 'i') return _boldItalicChain(nodes, i, tag, el);
+  if (tag == 'a') return _anchorBlock(i, el);
+  return null;
+}
+
+/// `# *text*` heading + the `<ul>` that directly follows it
+/// (Java's strong+list special case).
+_SpecialBlock _strongUlBlock(List<dom.Node> nodes, int i, dom.Element el) {
+  final heading = '# *${el.text.trim()}*';
+  return (
+    block: '$heading\n${_processUnorderedList(nodes[i + 1] as dom.Element)}',
+    nextIndex: i + 1,
+  );
+}
+
+/// Merges the run of sibling `<b>`/`<i>` elements starting at [i] into one
+/// paragraph (Java's consecutive-inline chain).
+_SpecialBlock _boldItalicChain(
+  List<dom.Node> nodes,
+  int i,
+  String tag,
+  dom.Element el,
+) {
+  final combined = StringBuffer(_trimLeadingSpaces(el.outerHtml));
+  var j = i;
+  while (j + 1 < nodes.length &&
+      nodes[j + 1] is dom.Element &&
+      (nodes[j + 1] as dom.Element).localName!.toLowerCase() == tag) {
+    combined
+      ..write(' ')
+      ..write(_trimLeadingSpaces((nodes[j + 1] as dom.Element).outerHtml));
+    j++;
   }
-  if (tag == 'a') {
-    return (
+  return (
+    block: _processParagraph(parse(combined.toString()).body!),
+    nextIndex: j,
+  );
+}
+
+/// A top-level `<a>` becomes a bare Jira link block.
+_SpecialBlock _anchorBlock(int i, dom.Element el) => (
       block: '[${el.text}|${el.attributes['href'] ?? ''}]',
       nextIndex: i,
     );
-  }
-  return null;
-}
 
 /// Strips leading whitespace from every element's own text, destroying
 /// nested markup in the process (Java `trimLeadingSpaces` — `Element.text()`
@@ -340,12 +356,11 @@ String _handleBlockElement(dom.Element el) {
 
 /// Strips the placeholder-wrapping `<code>` tags before re-insertion
 /// (magic-constants gate: this literal recurs at every restoration site).
-final RegExp codeTagPattern =
-    RegExp(r'</?code[^>]*>', caseSensitive: false);
+final RegExp codeTagPattern = RegExp(r'</?code[^>]*>', caseSensitive: false);
 
-final RegExp _anchorTag =
-    RegExp(r'<a\s+href="([^"]+)">(.*?)</a>');
-final RegExp _strongTag = RegExp(r'<strong>(.*?)</strong>', caseSensitive: false);
+final RegExp _anchorTag = RegExp(r'<a\s+href="([^"]+)">(.*?)</a>');
+final RegExp _strongTag =
+    RegExp(r'<strong>(.*?)</strong>', caseSensitive: false);
 final RegExp _emTag = RegExp(r'<em>(.*?)</em>', caseSensitive: false);
 final RegExp _bTag = RegExp(r'<b>(.*?)</b>', caseSensitive: false);
 final RegExp _iTag = RegExp(r'<i>(.*?)</i>', caseSensitive: false);
@@ -370,14 +385,13 @@ String _inlineChain(
         .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
         .replaceAll(brPattern, brReplacement)
         .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
-        .replaceAllMapped(
-            _inlineCodeTag, (m) => '{{${m.group(1)}}}')
+        .replaceAllMapped(_inlineCodeTag, (m) => '{{${m.group(1)}}}')
         .replaceAll(_anyTag, '');
 
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
-String _inlineMarkup(String html) =>
-    _inlineChain(html, brPattern: RegExp(r'<br\s*/?>', caseSensitive: false), brReplacement: '\n');
+String _inlineMarkup(String html) => _inlineChain(html,
+    brPattern: RegExp(r'<br\s*/?>', caseSensitive: false), brReplacement: '\n');
 
 /// Paragraph conversion: inline replacement chain over the element's inner
 /// HTML, entity decode, trim (Java `processParagraph`).
@@ -394,16 +408,12 @@ String _processParagraph(dom.Element p) {
 /// multi-line (Java `processCodeElement`).
 String _processCodeElement(dom.Element codeEl) {
   if (codeEl.outerHtml.contains(codeBlockPlaceholder)) {
-    return codeEl.outerHtml
-        .replaceAll(codeTagPattern, '');
+    return codeEl.outerHtml.replaceAll(codeTagPattern, '');
   }
-  final codeText = decodeHtmlEntities(codeEl.innerHtml)
-      .replaceAll(RegExp(r'^\r?\n+'), '')
-      .replaceAll(RegExp(r'\r?\n+$'), '');
-  final lang = codeEl.attributes['class']?.trim();
+  final codeText = _decodedCodeText(codeEl);
+  final lang = _codeLanguage(codeEl);
   if (codeText.contains('\n')) {
-    return '\n{code:${lang == null || lang.isEmpty ? 'java' : lang}}\n'
-        '$codeText\n{code}\n';
+    return '\n${_codeBlock(lang, codeText)}\n';
   }
   return '{{$codeText}}';
 }
@@ -414,18 +424,30 @@ String _processPre(dom.Element pre) {
   final codeEl = pre.querySelector('code');
   if (codeEl != null) {
     if (codeEl.innerHtml.contains(codeBlockPlaceholder)) {
-      return codeEl.innerHtml
-          .replaceAll(codeTagPattern, '');
+      return codeEl.innerHtml.replaceAll(codeTagPattern, '');
     }
-    final codeText = decodeHtmlEntities(codeEl.innerHtml)
-        .replaceAll(RegExp(r'^\r?\n+'), '')
-        .replaceAll(RegExp(r'\r?\n+$'), '');
-    final lang = codeEl.attributes['class']?.trim();
-    return '{code:${lang == null || lang.isEmpty ? 'java' : lang}}\n'
-        '$codeText\n{code}';
+    final codeText = _decodedCodeText(codeEl);
+    return _codeBlock(_codeLanguage(codeEl), codeText);
   }
   return decodeHtmlEntities(pre.text);
 }
+
+/// Entity-decoded code text with leading/trailing blank lines stripped
+/// (the shared body of the two code-block processors).
+String _decodedCodeText(dom.Element codeEl) =>
+    decodeHtmlEntities(codeEl.innerHtml)
+        .replaceAll(RegExp(r'^\r?\n+'), '')
+        .replaceAll(RegExp(r'\r?\n+$'), '');
+
+/// The `class`-attribute language of [codeEl], defaulting to `java`
+/// (Java `mapLanguage` default).
+String _codeLanguage(dom.Element codeEl) {
+  final lang = codeEl.attributes['class']?.trim();
+  return lang == null || lang.isEmpty ? 'java' : lang;
+}
+
+/// A `{code:lang}…{code}` block around [text].
+String _codeBlock(String lang, String text) => '{code:$lang}\n$text\n{code}';
 
 /// `<ul>` → `* item` lines with nested-list recursion (Java
 /// `processUnorderedList`).
@@ -452,8 +474,7 @@ String _processOrderedList(dom.Element ol) {
       continue;
     }
     if (li.innerHtml.contains(codeBlockPlaceholder)) {
-      sb.writeln(li.innerHtml
-          .replaceAll(codeTagPattern, ''));
+      sb.writeln(li.innerHtml.replaceAll(codeTagPattern, ''));
       continue;
     }
     sb.writeln('# ${_listItemText(li)}');
@@ -467,15 +488,13 @@ String _processOrderedList(dom.Element ol) {
 String _listItemText(dom.Element li) {
   final clone = li.clone(true);
   clone.querySelectorAll('ul,ol').forEach((e) => e.remove());
-  final raw = clone.innerHtml
-      .replaceAll(codeTagPattern, '');
+  final raw = clone.innerHtml.replaceAll(codeTagPattern, '');
   return decodeHtmlEntities(_listInlineMarkup(raw)).trim();
 }
 
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
-String _listInlineMarkup(String html) => _inlineChain(
-    html,
+String _listInlineMarkup(String html) => _inlineChain(html,
     brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
     brReplacement: '\n');
 
@@ -502,47 +521,56 @@ String _processTable(dom.Element table) {
     final cells = row.querySelectorAll('th,td');
     if (cells.isEmpty) continue;
     if (!headerDone && row.querySelectorAll('th').isNotEmpty) {
-      sb.write('||');
-      for (final th in cells) {
-        final trimmed = th.text.trim();
-        sb
-          ..write(decodeHtmlEntities(trimmed.isEmpty ? ' ' : trimmed))
-          ..write('||');
-        for (var i = 1; i < _colspan(th); i++) {
-          sb.write(' ||');
-        }
-      }
-      sb.writeln();
+      _writeHeaderRow(sb, cells);
       headerDone = true;
     } else {
-      sb.write('|');
-      for (final cell in cells) {
-        if (cell.innerHtml.contains(codeBlockPlaceholder)) {
-          sb
-            ..write(cell.innerHtml
-                .replaceAll(codeTagPattern, ''))
-            ..write('|');
-        } else {
-          final cellText = _tableCellMarkup(cell.innerHtml);
-          final trimmed = cellText.trim().replaceAll('|', '/');
-          sb
-            ..write(decodeHtmlEntities(trimmed.isEmpty ? ' ' : trimmed))
-            ..write('|');
-        }
-        for (var i = 1; i < _colspan(cell); i++) {
-          sb.write(' |');
-        }
-      }
-      sb.writeln();
+      _writeBodyRow(sb, cells);
     }
   }
   return sb.toString().trim();
 }
 
+/// Writes one `||header||` row (Java `processTable` header branch).
+void _writeHeaderRow(StringBuffer sb, List<dom.Element> cells) {
+  sb.write('||');
+  for (final th in cells) {
+    final trimmed = th.text.trim();
+    sb
+      ..write(decodeHtmlEntities(trimmed.isEmpty ? ' ' : trimmed))
+      ..write('||');
+    for (var i = 1; i < _colspan(th); i++) {
+      sb.write(' ||');
+    }
+  }
+  sb.writeln();
+}
+
+/// Writes one `|cell|` body row; placeholder-wrapped cells are restored
+/// verbatim, others run through the cell inline chain.
+void _writeBodyRow(StringBuffer sb, List<dom.Element> cells) {
+  sb.write('|');
+  for (final cell in cells) {
+    if (cell.innerHtml.contains(codeBlockPlaceholder)) {
+      sb
+        ..write(cell.innerHtml.replaceAll(codeTagPattern, ''))
+        ..write('|');
+    } else {
+      final cellText = _tableCellMarkup(cell.innerHtml);
+      final trimmed = cellText.trim().replaceAll('|', '/');
+      sb
+        ..write(decodeHtmlEntities(trimmed.isEmpty ? ' ' : trimmed))
+        ..write('|');
+    }
+    for (var i = 1; i < _colspan(cell); i++) {
+      sb.write(' |');
+    }
+  }
+  sb.writeln();
+}
+
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
-String _tableCellMarkup(String html) => _inlineChain(
-    html,
+String _tableCellMarkup(String html) => _inlineChain(html,
     brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
     brReplacement: '\n\\\\');
 

@@ -155,6 +155,35 @@ void _testNewWriteTools() {
 
     testnewwritetools_p1();
     testnewwritetools_p2();
+    testPostCommentConversion();
+  });
+}
+
+/// gh-191 / P6-JSY-09: `jira_post_comment` must convert Markdown bodies to
+/// Jira wiki markup before POSTing (Java `JiraClient.postComment` with
+/// `TextType.MARKDOWN`).
+void testPostCommentConversion() {
+  test('jira_post_comment converts markdown to Jira markup', () {
+    final body = jsonDecode(tools.dispatch('jira_post_comment', {
+      'key': 'P-1',
+      'comment': '## Done\n\n- **fixed** the bug\n\n```dart\nx();\n```',
+    }));
+    expect(body['method'], 'POST');
+    expect(body['path'], '/rest/api/latest/issue/P-1/comment');
+    final posted = jsonDecode(body['body'] as String)['body'] as String;
+    expect(
+      posted,
+      'h2. Done\n\n- *fixed* the bug\n\n{code:dart}x();{code}',
+    );
+  });
+
+  test('jira_post_comment keeps plain comments byte-for-byte', () {
+    final body = jsonDecode(tools.dispatch('jira_post_comment', {
+      'key': 'P-1',
+      'comment': 'plain text, no markup',
+    }));
+    final posted = jsonDecode(body['body'] as String)['body'] as String;
+    expect(posted, 'plain text, no markup');
   });
 }
 

@@ -84,14 +84,9 @@ String _convertMixedContent(String input) {
   for (final chunk in preserved.split('\n\n')) {
     final trimmed = chunk.trim();
     if (trimmed.isEmpty) continue;
-    final dbgIsHtml = containsHtmlTags(trimmed);
-    final dbgOut = dbgIsHtml
+    parts.add(containsHtmlTags(trimmed)
         ? _convertHtmlToJiraMarkup(trimmed)
-        : _convertMarkdownToJiraMarkup(trimmed);
-    // ignore: avoid_print
-    print('DBG html=\$dbgIsHtml chunk=[\${trimmed.replaceAll(chr(10), "\\n")}] '
-        'out=[\${dbgOut.replaceAll(chr(10), "\\n")}]');
-    parts.add(dbgOut);
+        : _convertMarkdownToJiraMarkup(trimmed));
   }
   final joined = preserver.restoreCodeBlocks(parts.join('\n\n'));
   return joined.trim();

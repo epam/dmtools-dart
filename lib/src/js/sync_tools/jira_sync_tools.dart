@@ -20,6 +20,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
+import 'markdown_to_jira_markup.dart';
 import 'tracker_github_router.dart';
 
 /// Executes `jira_*` MCP tool calls synchronously over curl subprocess.
@@ -94,8 +95,15 @@ class JiraSyncTools {
       });
 
   /// `jira_post_comment` — POST `issue/{key}/comment`.
+  ///
+  /// The comment body runs through [markdownToJiraMarkup] first: Java
+  /// `JiraClient.postComment` converts whenever
+  /// `TrackerClient.TextType == MARKDOWN` (gh-191, P6-JSY-09), and
+  /// `BasicJiraClient.getTextType()` always returns MARKDOWN for Jira.
   String _postComment(Map<String, dynamic> args) => _run((config) {
-        final body = jsonEncode({'body': _asStr(args['comment'])});
+        final body = jsonEncode(
+          {'body': markdownToJiraMarkup(_asStr(args['comment']))},
+        );
         return _postBody(
           config,
           '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
@@ -797,3 +805,4 @@ String _asStr(dynamic value) => value?.toString() ?? '';
 
 /// Encodes a JSON error result string.
 String _err(String message) => jsonEncode({'error': message});
+

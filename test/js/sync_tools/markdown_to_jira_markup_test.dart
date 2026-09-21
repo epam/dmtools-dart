@@ -96,7 +96,9 @@ void markdownBranchTests() {
       expect(
         markdownToJiraMarkup(input),
         "Here's how to implement a feature:\n"
+        '\n'
         '1. Update `src/auth.ts`:\n'
+        '\n'
         "{code:typescript}import { auth } from './auth';{code}",
       );
     });

@@ -182,8 +182,8 @@ class ConfluenceSyncTools {
   String _syncMarkdownDirectory(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final directory = syncAsStr(args['directory']);
-      final dir = Directory(directory);
-      if (!dir.existsSync()) {
+      final dir = _existingDir(directory);
+      if (dir == null) {
         return syncErr('Directory not found: $directory');
       }
       final engine = MarkdownConfluenceSync(
@@ -670,6 +670,13 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
 /// verbatim (the shared tail of the read-only handlers).
 String _syncGetBody(_Conf config, String url) =>
     syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+
+/// The local [path] as a `Directory`, `null` when it does not exist (the
+/// shared guard of the directory-consuming handlers).
+Directory? _existingDir(String path) {
+  final dir = Directory(path);
+  return dir.existsSync() ? dir : null;
+}
 
 /// GETs `content/{suffix}` with the resolved config's auth headers.
 SyncHttpResponse _contentGet(_Conf config, String suffix) =>

@@ -1,0 +1,346 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dmtools/src/config/property_reader.dart';
+import 'package:dmtools/src/js/sync_tools/confluence_sync_tools.dart';
+import 'package:test/test.dart';
+
+import '../echo_server_helper.dart';
+
+/// Tests for the 15 Java-named Confluence tools ported under gh-191
+/// (Java `Confluence.java` @MCPTool parity: `content_by_title…`,
+/// `find_content…`, `find_or_create`, `get_children_by_name`,
+/// `get_content_attachments`, user profiles, `search_content_by_text`,
+/// `update_page_with_history`, `contents_by_urls`, uploads, and
+/// `download_pages`).
+///
+/// Runs against the shared Python echo server — the Dart event loop is
+/// frozen during `Process.runSync('curl', …)`, so the server must be a
+/// separate process.
+void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
+
+  late EchoServer server;
+  late ConfluenceSyncTools tools;
+
+  setUp(() async {
+    server = EchoServer();
+    await server.start();
+    PropertyReader.setOverrides({
+      'CONFLUENCE_BASE_PATH': 'http://127.0.0.1:${server.port}',
+      'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
+      'CONFLUENCE_AUTH_TYPE': 'Basic',
+      'CONFLUENCE_DEFAULT_SPACE': 'ENG',
+    });
+    tools = ConfluenceSyncTools(PropertyReader());
+  });
+
+  tearDown(() {
+    PropertyReader.clearOverrides();
+    server.stop();
+  });
+
+  group('confluence title/find tools', () {
+    test('content_by_title lists in the default space with format', () {
+      final result = tools
+          .dispatch('confluence_content_by_title', {'title': 'Docs'});
+      final results = jsonDecode(result) as List;
+      expect(results, hasLength(2));
+      expect(results.first['id'], '801');
+    });
+
+    test('content_by_title requires the default space', () {
+      PropertyReader.setOverrides({
+        'CONFLUENCE_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
+        'CONFLUENCE_AUTH_TYPE': 'Basic',
+      });
+      expect(
+        jsonDecode(tools
+            .dispatch('confluence_content_by_title', {'title': 'Docs'})),
+        {'error': 'Default space not set'},
+      );
+    });
+
+    test('content_by_title_and_space lists by title in a space', () {
+      final results = jsonDecode(tools.dispatch(
+        'confluence_content_by_title_and_space',
+        {'title': 'Docs', 'space': 'DEV'},
+      )) as List;
+      expect(results, hasLength(2));
+      expect(results.first['id'], '801');
+    });
+
+    test('find_content returns the first match', () {
+      final result =
+          tools.dispatch('confluence_find_content', {'title': 'Docs'});
+      expect(jsonDecode(result)['id'], '801');
+    });
+
+    test('find_content converts to markdown on request', () {
+      final result = tools
+          .dispatch('confluence_find_content', {'title': 'Docs', 'format': 'md'});
+      expect(jsonDecode(result)['body']['storage']['value'], 'found');
+    });
+
+    test('find_content_by_title_and_space returns null when empty', () {
+      final result = tools.dispatch(
+        'confluence_find_content_by_title_and_space',
+        {'title': 'Nope', 'space': 'ENG'},
+      );
+      expect(jsonDecode(result), isNull);
+    });
+
+    test('find_or_create returns the existing page without creating', () {
+      final body = jsonDecode(tools.dispatch(
+        'confluence_find_or_create',
+        {'title': 'Docs', 'parentId': '7', 'body': '<p>new</p>'},
+      )) as Map;
+      expect(body['id'], '801');
+    });
+
+    test('find_or_create creates in the default space when not found', () {
+      final body = jsonDecode(tools.dispatch(
+        'confluence_find_or_create',
+        {'title': 'Nope', 'parentId': '7', 'body': '<p>new</p>'},
+      )) as Map;
+      expect(body['method'], 'POST');
+      expect(body['path'], '/wiki/rest/api/content');
+      final payload = jsonDecode(body['body'] as String);
+      expect(payload['space']['key'], 'ENG');
+      expect(payload['ancestors'], [
+        {'id': '7'},
+      ]);
+    });
+
+    test('get_children_by_name resolves the parent then lists children',
+        () {
+      final results = jsonDecode(tools.dispatch(
+        'confluence_get_children_by_name',
+        {'spaceKey': 'ENG', 'contentName': 'Parent'},
+      )) as List;
+      expect(results, hasLength(1));
+      expect(results.single['id'], '902');
+      expect(results.single['title'], 'Child Page');
+    });
+
+    test('get_children_by_name errors when the parent is not found', () {
+      expect(
+        jsonDecode(tools.dispatch('confluence_get_children_by_name',
+            {'spaceKey': 'ENG', 'contentName': 'Ghost'})),
+        {'error': 'Content not found: Ghost'},
+      );
+    });
+  });
+
+  group('confluence profile and search tools', () {
+    test('get_content_attachments returns the results array', () {
+      final results = jsonDecode(
+          tools.dispatch('confluence_get_content_attachments',
+              {'contentId': '42'})) as List;
+      expect(results, hasLength(2));
+      expect(results.first['id'], 'a1');
+    });
+
+    test('get_current_user_profile GETs user/current', () {
+      final body = jsonDecode(
+          tools.dispatch('confluence_get_current_user_profile', {})) as Map;
+      expect(body['method'], 'GET');
+      expect(body['path'], '/wiki/rest/api/user/current');
+    });
+
+    test('get_user_profile_by_id sends the accountId raw', () {
+      final body = jsonDecode(tools.dispatch(
+        'confluence_get_user_profile_by_id',
+        {'userId': '1234:abc'},
+      )) as Map;
+      expect(body['path'], '/wiki/rest/api/user?accountId=1234:abc');
+    });
+
+    test('search_content_by_text builds the Java CQL and default limit',
+        () {
+      final body = jsonDecode(tools
+          .dispatch('confluence_search_content_by_text', {'query': 'docs'}))
+          as Map;
+      expect(body['path'], startsWith('/wiki/rest/api/content/search?'));
+      expect(
+        body['path'],
+        contains(
+          'cql=${Uri.encodeQueryComponent('(title ~ "docs" OR text ~ "docs") ORDER BY lastModified ASC')}',
+        ),
+      );
+      expect(body['path'], contains('limit=20'));
+      expect(
+        body['path'],
+        contains('expand=title%2Cbody.excerpt%2Chistory%2Cspace'),
+      );
+    });
+
+    test('search_content_by_text unwraps results when present', () {
+      // The title-listing fixture answers any expand with
+      // body.storage,body.export_view — but content/search carries its own
+      // expand (title,body.excerpt,...), so the search route keeps the bare
+      // echo and the handler passes the raw body through.
+      final body = jsonDecode(tools.dispatch(
+        'confluence_search_content_by_text',
+        {'query': 'docs', 'limit': 5},
+      )) as Map;
+      expect(body['method'], 'GET');
+      expect(body['path'], contains('limit=5'));
+    });
+  });
+
+  group('confluence update/URL/upload tools', () {
+    test('update_page_with_history PUTs version+1 with the comment', () {
+      final body = jsonDecode(tools.dispatch('confluence_update_page_with_history', {
+        'contentId': '555',
+        'title': 'Up',
+        'parentId': '7',
+        'body': '<p>up</p>',
+        'space': 'ENG',
+        'historyComment': 'gh-191 update',
+      })) as Map;
+      expect(body['method'], 'PUT');
+      expect(body['path'], '/wiki/rest/api/content/555');
+      final payload = jsonDecode(body['body'] as String);
+      expect(payload['version']['number'], 4);
+      expect(payload['version']['message'], 'gh-191 update');
+    });
+
+    test('update_page_with_history surfaces the version-fetch failure', () {
+      expect(
+        jsonDecode(tools.dispatch('confluence_update_page_with_history', {
+          'contentId': '404',
+          'title': 'Up',
+          'parentId': '7',
+          'body': '<p>up</p>',
+          'space': 'ENG',
+          'historyComment': 'x',
+        })),
+        {'error': 'Failed to fetch version for 404'},
+      );
+    });
+
+    test('contents_by_urls resolves ids and skips failures', () {
+      final base = 'http://127.0.0.1:${server.port}';
+      final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
+        'urlStrings': [
+          '$base/wiki/spaces/ENG/pages/777/Hi',
+          '$base/l/redirect-me',
+          '$base/definitely-not-a-page-url',
+          '',
+        ],
+      })) as List;
+      // The direct page URL and the /l/ short link both resolve to 777;
+      // the unknown URL is skipped like Java (logger.error + continue).
+      expect(results, hasLength(2));
+      expect(results.first['id'], '777');
+    });
+
+    test('contents_by_urls converts storage on request', () {
+      final base = 'http://127.0.0.1:${server.port}';
+      final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
+        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'format': 'md',
+      })) as List;
+      expect(results.single['body']['storage']['value'], 'hi');
+    });
+
+    test('upload_attachment skips an existing name by default', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/exists.txt').writeAsStringSync('data');
+      final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': '555',
+        'file': '${dir.path}/exists.txt',
+      })) as Map;
+      expect(result['status'], 'skipped');
+    });
+
+    test('upload_attachment uploads a new file', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_upl2_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/fresh.txt').writeAsStringSync('data');
+      final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': '555',
+        'file': '${dir.path}/fresh.txt',
+        'updateIfExists': true,
+      })) as Map;
+      expect(result['status'], 'created');
+    });
+
+    test('upload_attachment errors on a missing file', () {
+      expect(
+        jsonDecode(tools.dispatch('confluence_upload_attachment', {
+          'contentId': '555',
+          'file': '/nonexistent-dmtools/file.txt',
+        })),
+        {'error': 'File not found: /nonexistent-dmtools/file.txt'},
+      );
+    });
+
+    test('upload_attachments summarizes created and skipped files', () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_upls_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/exists.txt').writeAsStringSync('a');
+      File('${dir.path}/fresh.txt').writeAsStringSync('b');
+      Directory('${dir.path}/sub').createSync(); // skipped: not a file
+      final summary = jsonDecode(tools.dispatch('confluence_upload_attachments', {
+        'contentId': '555',
+        'directory': dir.path,
+      })) as Map;
+      expect(summary['skipped'], ['exists.txt']);
+      expect(summary['uploaded'], ['fresh.txt']);
+      expect(summary['failed'], isEmpty);
+    });
+
+    test('upload_attachments errors on a missing directory', () {
+      expect(
+        jsonDecode(tools.dispatch('confluence_upload_attachments', {
+          'contentId': '555',
+          'directory': '/nonexistent-dmtools-dir',
+        })),
+        {'error': 'Directory not found: /nonexistent-dmtools-dir'},
+      );
+    });
+
+    test('download_pages writes markdown and follows children to depth',
+        () {
+      final out = Directory.systemTemp.createTempSync('dmtools_dl_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final base = 'http://127.0.0.1:${server.port}';
+      final result = tools.dispatch('confluence_download_pages', {
+        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'outputPath': out.path,
+        'depth': 2,
+      });
+      expect(result, 'Downloaded 2 Confluence page(s) to ${out.path}');
+      expect(
+        File('${out.path}/Hi Page.md').readAsStringSync(),
+        'hi',
+      );
+      expect(
+        File('${out.path}/Child Page.md').readAsStringSync(),
+        'kid',
+      );
+    });
+
+    test('download_pages downloads attachments when asked', () {
+      final out = Directory.systemTemp.createTempSync('dmtools_dl2_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final base = 'http://127.0.0.1:${server.port}';
+      tools.dispatch('confluence_download_pages', {
+        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'outputPath': out.path,
+        'depth': 1,
+      });
+      final bytes =
+          File('${out.path}/Hi Page-attachments/shot.png').readAsBytesSync();
+      expect(utf8.decode(bytes), 'PNG-fixture-bytes');
+    });
+  });
+}

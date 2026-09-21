@@ -22,8 +22,13 @@ typedef _PageUpdateSpec = ({
 class ConfluenceClient {
   final ConfluenceHttpClient _http;
 
+  /// The `CONFLUENCE_DEFAULT_SPACE` value backing the default-space tools
+  /// (`confluence_find_content`, `confluence_find_or_create`,
+  /// `confluence_content_by_title`); `null` when unset.
+  final String? defaultSpace;
+
   /// Creates a client backed by [_http].
-  ConfluenceClient(this._http);
+  ConfluenceClient(this._http, {this.defaultSpace});
 
   /// `confluence_test` — connectivity check via GET `user/current`.
   ///

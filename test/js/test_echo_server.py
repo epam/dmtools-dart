@@ -247,33 +247,67 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             ]
         # Confluence title listing (Java content(title, space) →
         # ContentResult): the default-space tools' distinctive expand list
-        # answers two results so first-match/applyFormat order is asserted.
-        # The plain get_page expand (body.storage only) keeps the bare echo.
+        # answers per the title param — 'Parent' resolves to page 555 (the
+        # get_children_by_name parent), 'Nope'/'Ghost' answer empty (not
+        # found), anything else answers two results so first-match /
+        # applyFormat order is asserted. The plain get_page expand
+        # (body.storage only) keeps the bare echo.
         elif (self.command == "GET"
               and "/wiki/rest/api/content?" in self.path
               and "body.storage%2Cbody.export_view" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            title = query.get("title", [""])[0]
+            payload.clear()
+            if title in ("Nope", "Ghost"):
+                payload["results"] = []
+            elif title == "Parent":
+                payload["results"] = [{
+                    "id": "555",
+                    "title": "Parent",
+                    "body": {
+                        "storage": {
+                            "value": "<p>parent</p>",
+                            "representation": "storage",
+                        }
+                    },
+                }]
+            else:
+                payload["results"] = [
+                    {
+                        "id": "801",
+                        "title": "Found Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>found</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                    {
+                        "id": "802",
+                        "title": "Second Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>second</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                ]
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/777/child/page" in self.path):
             payload.clear()
             payload["results"] = [
                 {
-                    "id": "801",
-                    "title": "Found Page",
+                    "id": "902",
+                    "title": "Child Page",
                     "body": {
                         "storage": {
-                            "value": "<p>found</p>",
+                            "value": "<p>kid</p>",
                             "representation": "storage",
                         }
                     },
-                },
-                {
-                    "id": "802",
-                    "title": "Second Page",
-                    "body": {
-                        "storage": {
-                            "value": "<p>second</p>",
-                            "representation": "storage",
-                        }
-                    },
-                },
+                }
             ]
         # Confluence attachment listing: two fixtures — exists.txt (the
         # skip-existing policy) and shot.png carrying a _links.download
@@ -293,10 +327,11 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/download/attachments/"):
             self._send(b"PNG-fixture-bytes", "application/octet-stream")
             return
-        # Confluence short-link redirect: /dt-redir answers a 302 whose
+        # Confluence short-link redirect: /l/... answers a 302 whose
         # Location points back at the 777 page URL (contents_by_urls must
-        # resolve it and fetch that page).
-        if self.path.startswith("/dt-redir"):
+        # resolve it and fetch that page). /dt-redir answers the same
+        # redirect for probes that bypass the URL-shape gate.
+        if self.path.startswith("/l/") or self.path.startswith("/dt-redir"):
             port = self.server.server_address[1]
             encoded = b'{"moved": true}'
             self.send_response(302)

@@ -21,6 +21,9 @@ import '../../integrations/confluence/markdown_confluence_sync.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
 
+part 'confluence_sync_page_ops.dart';
+part 'confluence_sync_downloader.dart';
+
 /// Confluence executors: `confluence_*` tool name → JSON result.
 class ConfluenceSyncTools {
   final PropertyReader _reader;
@@ -153,22 +156,31 @@ class ConfluenceSyncTools {
   /// `results` array (Java returns the content list, not the wrapper).
   String _getChildrenById(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final id = syncAsStr(args['contentId']);
-      final resp = _contentGet(
+      return _childrenPayload(
         config,
-        '$id/child/page?limit=100&expand=$_contentExpand',
+        syncAsStr(args['contentId']),
+        syncAsStr(args['format']),
       );
-      final results = _childrenResults(syncBodyOrError(resp));
-      if (results == null) {
-        return syncErr('Unexpected children response for $id');
-      }
-      if (_isMarkdownFormat(args['format'])) {
-        for (final content in results) {
-          _convertStorageToMarkdown(content);
-        }
-      }
-      return jsonEncode(results);
     });
+  }
+
+  /// The shared `get_children_*` tail: fetches the child page list of
+  /// [id], validates the envelope, applies `format=md`, and encodes.
+  String _childrenPayload(_Conf config, String id, String format) {
+    final resp = _contentGet(
+      config,
+      '$id/child/page?limit=100&expand=$_contentExpand',
+    );
+    final results = _childrenResults(syncBodyOrError(resp));
+    if (results == null) {
+      return syncErr('Unexpected children response for $id');
+    }
+    if (_isMarkdownFormat(format)) {
+      for (final content in results) {
+        _convertStorageToMarkdown(content);
+      }
+    }
+    return jsonEncode(results);
   }
 
   /// `confluence_sync_markdown_directory` — mirrors a local Markdown tree
@@ -262,21 +274,11 @@ class ConfluenceSyncTools {
       if (found.isEmpty) {
         return syncErr('Content not found: ${syncAsStr(args['contentName'])}');
       }
-      final id = found.first['id']?.toString() ?? '';
-      final resp = _contentGet(
+      return _childrenPayload(
         config,
-        '$id/child/page?limit=100&expand=$_contentExpand',
+        found.first['id']?.toString() ?? '',
+        syncAsStr(args['format']),
       );
-      final results = _childrenResults(syncBodyOrError(resp));
-      if (results == null) {
-        return syncErr('Unexpected children response for $id');
-      }
-      if (_isMarkdownFormat(args['format'])) {
-        for (final content in results) {
-          _convertStorageToMarkdown(content);
-        }
-      }
-      return jsonEncode(results);
     });
   }
 
@@ -512,201 +514,6 @@ class ConfluenceSyncTools {
       _versionNumberOf(_versionResponse(config, contentId));
 }
 
-/// Page CRUD over [SyncHttpClient] for [MarkdownConfluenceSync].
-class _SyncConfluencePageOps implements ConfluencePageOperations {
-  final _Conf _config;
-
-  /// Creates page operations bound to a resolved [_config].
-  _SyncConfluencePageOps(this._config);
-
-  @override
-  Map<String, dynamic> createPage(
-    String title,
-    String parentId,
-    String body,
-    String space,
-  ) {
-    final resp = SyncHttpClient.post(
-      '${_config.baseUrl}/content',
-      headers: _config.headers,
-      body: jsonEncode(
-        _contentPayload(
-            title: title, parentId: parentId, body: body, space: space),
-      ),
-    );
-    return _decodeOrThrow(resp, 'createPage');
-  }
-
-  @override
-  Map<String, dynamic> updatePage(
-    String contentId,
-    String title,
-    String parentId,
-    String body,
-    String space, [
-    String historyComment = '',
-  ]) {
-    final version = _fetchVersion(contentId);
-    final resp = SyncHttpClient.put(
-      '${_config.baseUrl}/content/$contentId',
-      headers: _config.headers,
-      body: jsonEncode(_contentPayload(
-        id: contentId,
-        title: title,
-        parentId: parentId,
-        body: body,
-        space: space,
-        version: {'number': version + 1, 'message': historyComment},
-      )),
-    );
-    return _decodeOrThrow(resp, 'updatePage');
-  }
-
-  @override
-  List<Map<String, dynamic>> getChildren(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/page?limit=100',
-      headers: _config.headers,
-    );
-    final decoded = _decodeOrThrow(resp, 'getChildren');
-    final results = decoded['results'];
-    if (results is! List) return const [];
-    return results.whereType<Map>().map(Map<String, dynamic>.from).toList();
-  }
-
-  @override
-  String deletePage(String contentId) => syncBodyOrError(SyncHttpClient.delete(
-        '${_config.baseUrl}/content/$contentId',
-        headers: _config.headers,
-      ));
-
-  @override
-  Map<String, dynamic> getContent(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId'
-      '?expand=body.storage,ancestors,version',
-      headers: _config.headers,
-    );
-    return _decodeOrThrow(resp, 'getContent');
-  }
-
-  /// Fetches the current version number of [contentId]; `0` on failure.
-  int _fetchVersion(String contentId) =>
-      _versionNumberOf(_versionResponse(_config, contentId)) ?? 0;
-
-  /// Decodes a JSON object response or throws with the operation context.
-  Map<String, dynamic> _decodeOrThrow(SyncHttpResponse resp, String op) {
-    if (resp.statusCode == 0) {
-      throw StateError('$op failed: ${resp.body}');
-    }
-    final decoded = syncTryDecode(resp.body);
-    if (decoded is Map<String, dynamic>) return decoded;
-    throw StateError('$op returned a non-object response');
-  }
-}
-
-/// Attachment listing + multipart upload over curl for the sync engine.
-class _SyncConfluenceAttachments implements SyncAttachmentHelper {
-  final _Conf _config;
-
-  /// Creates attachment operations bound to a resolved [_config].
-  _SyncConfluenceAttachments(this._config);
-
-  @override
-  List<String> listAttachmentNames(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
-    if (!resp.isOk) return const [];
-    final decoded = syncTryDecode(resp.body);
-    final results = decoded is Map ? decoded['results'] : null;
-    if (results is! List) return const [];
-    return [
-      for (final r in results)
-        if (r is Map && r['title'] is String) r['title'] as String,
-    ];
-  }
-
-  @override
-  void uploadAttachment(String contentId, File file) {
-    final url = '${_config.baseUrl}/content/$contentId/child/attachment';
-    final result = _multipartPost(url, file);
-    if (result.statusCode == 0 || !result.isOk) {
-      throw StateError('Attachment upload failed: ${result.body}');
-    }
-  }
-
-  /// Uploads [file] applying the Java `AttachmentHelper` policy: an
-  /// existing attachment is skipped unless [updateIfExists], in which case
-  /// the upload posts to the existing attachment's `/data` endpoint.
-  ///
-  /// Returns `{"status": "created"|"updated"|"skipped"|"failed",
-  /// "attachment": <object?>}`.
-  Map<String, dynamic> uploadWithPolicy(
-    File file,
-    String contentId,
-    bool updateIfExists,
-  ) {
-    final name = file.uri.pathSegments.last;
-    final existing = _existingByName(contentId, name);
-    if (existing != null && !updateIfExists) {
-      return {'status': 'skipped', 'attachment': existing};
-    }
-    final suffix = existing != null
-        ? '/child/attachment/${existing['id']}/data'
-        : '/child/attachment';
-    final result = _multipartPost(
-      '${_config.baseUrl}/content/$contentId$suffix',
-      file,
-    );
-    if (result.statusCode == 0 || !result.isOk) {
-      return {'status': 'failed', 'attachment': null};
-    }
-    final decoded = syncTryDecode(result.body);
-    final attachment = decoded is Map && decoded['results'] is List
-        ? (decoded['results'] as List).firstOrNull
-        : decoded is Map<String, dynamic>
-            ? decoded
-            : null;
-    return {
-      'status': existing != null ? 'updated' : 'created',
-      'attachment': attachment,
-    };
-  }
-
-  /// The existing attachment object with [name] on [contentId], if any.
-  Map<String, dynamic>? _existingByName(String contentId, String name) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
-    if (!resp.isOk) return null;
-    final results = _childrenResults(resp.body) ?? const [];
-    for (final attachment in results) {
-      if (attachment['title'] == name) return attachment;
-    }
-    return null;
-  }
-
-  /// POSTs [file] as `multipart/form-data` via a curl `-F` invocation.
-  ///
-  /// [SyncHttpClient] only carries JSON bodies, so the multipart call
-  /// stages its headers in a temp file (same secrecy contract) and runs
-  /// curl directly with `-F "file=@…"`.
-  SyncHttpResponse _multipartPost(String url, File file) => syncCurlStaged(
-        'POST',
-        url,
-        headers: {
-          ..._config.headers,
-          'X-Atlassian-Token': 'nocheck',
-        }..remove('Content-Type'),
-        multipartFile: file.path,
-      );
-}
-
-// ── Shared helpers ─────────────────────────────────────────────────────────
-
 /// Resolved sync integration config: root site URL, REST base URL, auth
 /// headers.
 typedef _Conf = ({
@@ -823,24 +630,11 @@ bool _flagOrFalse(dynamic value) =>
 Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   final uri = Uri.tryParse(urlString);
   if (uri == null) return null;
-  var ref = resolveConfluencePageUrl(uri);
   // The redirect follower tracks the *current* URL: each hop GETs the
   // Location resolved by the previous hop, never the original input.
-  var current = urlString;
-  for (var hops = 0; hops < 5; hops++) {
-    if (ref is! ConfluenceRedirectRef) break;
-    // Short link: follow the 3xx Location (curl never follows redirects).
-    final resp = SyncHttpClient.get(current, headers: config.headers);
-    final location = resp.headers.entries
-        .where((e) => e.key.toLowerCase() == 'location')
-        .map((e) => e.value)
-        .firstOrNull;
-    if (location == null || !resp.isRedirect) return null;
-    final next = Uri.tryParse(location);
-    if (next == null) return null;
-    current = location;
-    ref = resolveConfluencePageUrl(next);
-  }
+  final resolved = _resolveShortLink(config, urlString, uri);
+  if (resolved == null) return null;
+  final (:ref, url: _) = resolved;
   if (ref is ConfluencePageIdRef) {
     final decoded = syncTryDecode(syncBodyOrError(_contentGet(
       config,
@@ -857,95 +651,31 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   return null;
 }
 
-/// Depth-first page downloader: writes each page as Markdown and optionally
-/// mirrors its attachments, then recurses into child pages down to
-/// [depth] levels (Java `ConfluencePageDownloader`, limited to the child
-/// graph).
-class _PageDownloader {
-  final _Conf _config;
-  final Directory _output;
-  final bool _downloadAttachments;
-
-  /// Creates a downloader writing under [_output].
-  _PageDownloader(this._config, this._output, this._downloadAttachments);
-
-  int _written = 0;
-
-  /// Downloads every seed [urls] subtree; returns the pages written.
-  int download(List<String> urls, int depth) {
-    for (final url in urls) {
-      final content = _contentFromUrl(_config, url);
-      if (content == null) continue;
-      _downloadPage(content, depth);
-    }
-    return _written;
+/// Follows up to five 3xx hops for short links (`/l/…`, `/wiki/x/…`;
+/// curl never follows redirects), returning the final URL ref and the
+/// URL that produced it. Returns `null` when a hop fails or points at
+/// nothing parseable.
+({ConfluencePageRef ref, String url})? _resolveShortLink(
+  _Conf config,
+  String urlString,
+  Uri uri,
+) {
+  var ref = resolveConfluencePageUrl(uri);
+  var current = urlString;
+  for (var hops = 0; hops < 5; hops++) {
+    if (ref is! ConfluenceRedirectRef) break;
+    final resp = SyncHttpClient.get(current, headers: config.headers);
+    final location = resp.headers.entries
+        .where((e) => e.key.toLowerCase() == 'location')
+        .map((e) => e.value)
+        .firstOrNull;
+    if (location == null || !resp.isRedirect) return null;
+    final next = Uri.tryParse(location);
+    if (next == null) return null;
+    current = location;
+    ref = resolveConfluencePageUrl(next);
   }
-
-  void _downloadPage(Map<String, dynamic> content, int depth) {
-    final id = content['id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final body = content['body'];
-    final storage =
-        body is Map ? body['storage'] as Map<String, dynamic>? : null;
-    final value = storage?['value'];
-    if (value is! String) return;
-    _output.createSync(recursive: true);
-    final fileName = _sanitize(content['title']?.toString() ?? id);
-    File('${_output.path}/$fileName.md').writeAsStringSync(
-      confluenceStorageToMarkdown(value),
-    );
-    _written++;
-    if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
-    if (depth > 1) {
-      // Child pages carry no body unless the request expands it — without
-      // the expand param every child bails at the `value is! String` guard
-      // below and the subtree is silently dropped (gh-191 review).
-      final resp = _contentGet(
-          _config, '$id/child/page?limit=100&expand=$_contentExpand');
-      for (final child in _childrenResults(syncBodyOrError(resp)) ??
-          const <Map<String, dynamic>>[]) {
-        _downloadPage(child, depth - 1);
-      }
-    }
-  }
-
-  void _downloadAttachmentsOf(String contentId, String pageFolder) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
-    final results = _childrenResults(syncBodyOrError(resp)) ??
-        const <Map<String, dynamic>>[];
-    final baseHost = Uri.tryParse(_config.rootUrl)?.host;
-    for (final attachment in results) {
-      final links = attachment['_links'];
-      final downloadPath = links is Map ? links['download'] : null;
-      if (downloadPath is! String || downloadPath.isEmpty) continue;
-      // `_links.download` is relative to the site root (`/download/…`).
-      final url = downloadPath.startsWith('http')
-          ? downloadPath
-          : '${_config.rootUrl}$downloadPath';
-      // `_links.download` is server-controlled content: the Confluence
-      // credentials never travel to a foreign host.
-      var headers = _config.headers;
-      if (downloadPath.startsWith('http') &&
-          Uri.tryParse(downloadPath)?.host != baseHost) {
-        headers = {...headers}..removeWhere(
-            (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
-          );
-      }
-      final resp = SyncHttpClient.get(url, headers: headers);
-      if (!resp.isOk) continue;
-      final dir = Directory('${_output.path}/$pageFolder-attachments')
-        ..createSync(recursive: true);
-      File('${dir.path}/${_sanitize(attachment['title']?.toString() ?? 'file')}')
-          .writeAsBytesSync(resp.bodyBytes);
-    }
-  }
-
-  /// Filesystem-safe file name from a page title.
-  static String _sanitize(String title) =>
-      title.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_').trim();
+  return (ref: ref, url: current);
 }
 
 /// GETs `content/{suffix}` with the resolved config's auth headers.

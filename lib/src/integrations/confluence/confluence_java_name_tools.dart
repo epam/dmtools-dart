@@ -1,5 +1,26 @@
 part of 'confluence_tools.dart';
 
+/// Boilerplate-free `ToolDefinition` for the Java-named tools: the
+/// integration is always `confluence` (duplication gate).
+ToolDefinition _javaTool({
+  required String name,
+  required String description,
+  required String category,
+  required List<ToolParam> params,
+}) =>
+    ToolDefinition(
+      name: name,
+      description: description,
+      integration: 'confluence',
+      category: category,
+      params: params,
+    );
+
+/// Boilerplate-free `ToolParam` (duplication gate): name + description
+/// with `required` defaulting to true like the Java `@MCPParam`s.
+ToolParam _param(String name, String description, {bool required = true}) =>
+    ToolParam(name: name, description: description, required: required);
+
 /// The gh-191 Java-named tools (frozen gap snapshot, `Confluence.java`
 /// `@MCPTool` annotations), grouped per the file's list-function pattern.
 
@@ -17,40 +38,26 @@ List<ToolDefinition> javaNameConfluenceTools() => [
 
 /// Default-space title content: `confluence_content_by_title` / `confluence_content_by_title_and_space`.
 List<ToolDefinition> _javaNameContentByTitleTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_content_by_title',
         description: 'Get Confluence content by title in the default space. '
             'Returns content result with metadata and body information. Use '
             'format=md to convert body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'title',
-            description: 'Title of the Confluence page to get',
-            required: true,
-          ),
+          _param('title', 'Title of the Confluence page to get'),
           _formatParam(),
         ],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_content_by_title_and_space',
         description: 'Get Confluence content by title and space key. Returns '
             'content result with metadata and body information. Use format=md '
             'to convert body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'title',
-            description: 'The title of the Confluence page',
-            required: true,
-          ),
-          ToolParam(
-            name: 'space',
-            description: 'The space key where the content is located',
-            required: true,
-          ),
+          _param('title', 'The title of the Confluence page'),
+          _param('space', 'The space key where the content is located'),
           _formatParam(),
         ],
       ),
@@ -58,34 +65,25 @@ List<ToolDefinition> _javaNameContentByTitleTools() => [
 
 /// URL fetch + recursive page download: `confluence_contents_by_urls` / `confluence_download_pages`.
 List<ToolDefinition> _javaNameUrlFetchTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_contents_by_urls',
         description: 'Get Confluence content by multiple URLs. Returns a list '
             'of content objects for each valid URL. Use format=md to convert '
             'body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'urlStrings',
-            description: 'Array of Confluence URLs to retrieve content from',
-            required: true,
-          ),
+          _param('urlStrings',
+              'Array of Confluence URLs to retrieve content from'),
           _formatParam(),
         ],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_download_pages',
         description: 'Download Confluence pages and their attachments to a '
             'local folder. Follows child pages down to the given depth.',
-        integration: 'confluence',
         category: 'content_management',
         params: [
-          ToolParam(
-            name: 'urlStrings',
-            description: 'Array of Confluence page URLs to download',
-            required: true,
-          ),
+          _param('urlStrings', 'Array of Confluence page URLs to download'),
           ToolParam(
             name: 'outputPath',
             description:
@@ -110,40 +108,26 @@ List<ToolDefinition> _javaNameUrlFetchTools() => [
 
 /// Find-by-title family: `confluence_find_content` / `confluence_find_content_by_title_and_space`.
 List<ToolDefinition> _javaNameFindTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_find_content',
         description: 'Find a Confluence page by title in the default space. '
             "Returns the page content if found. Use format=md to convert "
             'body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'title',
-            description: 'Title of the Confluence page to find',
-            required: true,
-          ),
+          _param('title', 'Title of the Confluence page to find'),
           _formatParam(),
         ],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_find_content_by_title_and_space',
         description: 'Find Confluence content by title and space key. '
             'Returns the first matching content or null if not found. Use '
             'format=md to convert body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'title',
-            description: 'The title of the content to find',
-            required: true,
-          ),
-          ToolParam(
-            name: 'space',
-            description: 'The space key where to search for the content',
-            required: true,
-          ),
+          _param('title', 'The title of the content to find'),
+          _param('space', 'The space key where to search for the content'),
           _formatParam(),
         ],
       ),
@@ -151,50 +135,28 @@ List<ToolDefinition> _javaNameFindTools() => [
 
 /// Find-or-create + children-by-name: `confluence_find_or_create` / `confluence_get_children_by_name`.
 List<ToolDefinition> _javaNameFindOrCreateTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_find_or_create',
         description: 'Find a Confluence page by title in the default space, '
             "or create it if it doesn't exist. Returns the found or created "
             'content.',
-        integration: 'confluence',
         category: 'content_management',
         params: [
-          ToolParam(
-            name: 'title',
-            description: 'Title of the page to find or create',
-            required: true,
-          ),
-          ToolParam(
-            name: 'parentId',
-            description: 'ID of the parent page for creation',
-            required: true,
-          ),
-          ToolParam(
-            name: 'body',
-            description: 'Body content for the new page (if creation is '
-                'needed)',
-            required: true,
-          ),
+          _param('title', 'Title of the page to find or create'),
+          _param('parentId', 'ID of the parent page for creation'),
+          _param('body',
+              'Body content for the new page (if creation is ' 'needed)'),
         ],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_get_children_by_name',
         description: 'Get child pages of a Confluence page by space key and '
             'content name. Returns a list of child content objects. Use '
             'format=md to convert body.storage.value to Markdown.',
-        integration: 'confluence',
         category: 'content_retrieval',
         params: [
-          ToolParam(
-            name: 'spaceKey',
-            description: 'The space key where the parent page is located',
-            required: true,
-          ),
-          ToolParam(
-            name: 'contentName',
-            description: 'The name/title of the parent page',
-            required: true,
-          ),
+          _param('spaceKey', 'The space key where the parent page is located'),
+          _param('contentName', 'The name/title of the parent page'),
           _formatParam(),
         ],
       ),
@@ -202,60 +164,44 @@ List<ToolDefinition> _javaNameFindOrCreateTools() => [
 
 /// Attachment listing: `confluence_get_content_attachments`.
 List<ToolDefinition> _javaNameAttachmentListTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_get_content_attachments',
         description: 'Get all attachments for a specific Confluence content. '
             'Returns a list of attachment objects with metadata.',
-        integration: 'confluence',
         category: 'content_management',
         params: [
-          ToolParam(
-            name: 'contentId',
-            description: 'The content ID to get attachments for',
-            required: true,
-          ),
+          _param('contentId', 'The content ID to get attachments for'),
         ],
       ),
     ];
 
 /// User profiles + text search: `confluence_get_current_user_profile`, `confluence_get_user_profile_by_id`, `confluence_search_content_by_text`.
 List<ToolDefinition> _javaNameProfileAndSearchTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_get_current_user_profile',
         description: "Get the current user's profile information from "
             'Confluence. Returns user details for the authenticated user.',
-        integration: 'confluence',
         category: 'user_management',
         params: [],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_get_user_profile_by_id',
         description: "Get a specific user's profile information from "
             'Confluence by user ID. Returns user details for the specified '
             'user.',
-        integration: 'confluence',
         category: 'user_management',
         params: [
-          ToolParam(
-            name: 'userId',
-            description: 'The account ID of the user to get profile for',
-            required: true,
-          ),
+          _param('userId', 'The account ID of the user to get profile for'),
         ],
       ),
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_search_content_by_text',
         description: 'Search Confluence content by text query using CQL '
             '(Confluence Query Language). Returns search results with content '
             'excerpts. Default limit is 20 if not specified.',
-        integration: 'confluence',
         category: 'search',
         params: [
-          ToolParam(
-            name: 'query',
-            description: 'Search query text to find in Confluence content',
-            required: true,
-          ),
+          _param('query', 'Search query text to find in Confluence content'),
           ToolParam(
             name: 'limit',
             description:
@@ -269,44 +215,23 @@ List<ToolDefinition> _javaNameProfileAndSearchTools() => [
 
 /// History-aware page update: `confluence_update_page_with_history`.
 List<ToolDefinition> _javaNameHistoryUpdateTools() => [
-      ToolDefinition(
+      _javaTool(
         name: 'confluence_update_page_with_history',
         description: 'Update an existing Confluence page with new content and '
             'add a history comment. Returns the updated content object.',
-        integration: 'confluence',
         category: 'content_management',
         params: [
-          ToolParam(
-            name: 'contentId',
-            description: 'The ID of the page to update',
-            required: true,
-          ),
-          ToolParam(
-            name: 'title',
-            description: 'The new title for the page',
-            required: true,
-          ),
-          ToolParam(
-            name: 'parentId',
-            description: 'The ID of the new parent page',
-            required: true,
-          ),
+          _param('contentId', 'The ID of the page to update'),
+          _param('title', 'The new title for the page'),
+          _param('parentId', 'The ID of the new parent page'),
           ToolParam(
             name: 'body',
             description:
                 'The new body content of the page in Confluence storage format',
             required: true,
           ),
-          ToolParam(
-            name: 'space',
-            description: 'The space key where the page is located',
-            required: true,
-          ),
-          ToolParam(
-            name: 'historyComment',
-            description: 'Comment to add to the page history',
-            required: true,
-          ),
+          _param('space', 'The space key where the page is located'),
+          _param('historyComment', 'Comment to add to the page history'),
         ],
       ),
     ];

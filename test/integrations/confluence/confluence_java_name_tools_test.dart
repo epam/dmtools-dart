@@ -273,11 +273,18 @@ void uploadAndDownloadTests() {
     });
 
     test('downloadPages writes markdown and follows children', () async {
-      final f = mockConfluence((o) => routeByPath({
-        '/content/777': _page777,
-        '/child/page':
-            '{"results":[{"id":"902","title":"Child Page","body":{"storage":{"value":"<p>kid</p>","representation":"storage"}}}]}',
-      }, o, fallback: '{}'));
+      final f = mockConfluence((o) {
+        if (o.uri.path.endsWith('/child/page')) {
+          // Real Confluence only returns body.storage when the request
+          // carries the expand param — the downloader must ask for it.
+          final wantsBody =
+              (o.queryParameters['expand'] ?? '').contains('body.storage');
+          return wantsBody
+              ? '{"results":[{"id":"902","title":"Child Page","body":{"storage":{"value":"<p>kid</p>","representation":"storage"}}}]}'
+              : '{"results":[{"id":"902","title":"Child Page"}]}';
+        }
+        return routeByPath({'/content/777': _page777}, o, fallback: '{}');
+      });
       final out = Directory.systemTemp.createTempSync('dmtools_adl_');
       addTearDown(() => out.deleteSync(recursive: true));
       final result = await f.client.downloadPages(

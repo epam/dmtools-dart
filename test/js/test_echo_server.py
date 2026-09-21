@@ -219,19 +219,20 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["version"] = {"number": 3}
         elif (self.command == "GET"
               and "/wiki/rest/api/content/555/child/page" in self.path):
+            # Real Confluence only includes body.storage when the request
+            # asks for it via expand (gh-191 review: guards the downloader).
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            wants_body = "body.storage" in query.get("expand", [""])[0]
             payload.clear()
-            payload["results"] = [
-                {
-                    "id": "902",
-                    "title": "Child Page",
-                    "body": {
-                        "storage": {
-                            "value": "<p>kid</p>",
-                            "representation": "storage",
-                        }
-                    },
+            result = {"id": "902", "title": "Child Page"}
+            if wants_body:
+                result["body"] = {
+                    "storage": {
+                        "value": "<p>kid</p>",
+                        "representation": "storage",
+                    }
                 }
-            ]
+            payload["results"] = [result]
         elif self.command == "GET" and "/wiki/rest/api/content/99/child/page" in self.path:
             payload.clear()
             payload["results"] = [
@@ -296,19 +297,20 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 ]
         elif (self.command == "GET"
               and "/wiki/rest/api/content/777/child/page" in self.path):
+            # Same expand-gating as the 555 fixture above: no body unless
+            # the caller asks for it (the page downloader must request it).
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            wants_body = "body.storage" in query.get("expand", [""])[0]
             payload.clear()
-            payload["results"] = [
-                {
-                    "id": "902",
-                    "title": "Child Page",
-                    "body": {
-                        "storage": {
-                            "value": "<p>kid</p>",
-                            "representation": "storage",
-                        }
-                    },
+            result = {"id": "902", "title": "Child Page"}
+            if wants_body:
+                result["body"] = {
+                    "storage": {
+                        "value": "<p>kid</p>",
+                        "representation": "storage",
+                    }
                 }
-            ]
+            payload["results"] = [result]
         # Confluence attachment listing: two fixtures — exists.txt (the
         # skip-existing policy) and shot.png carrying a _links.download
         # path (the page-downloader fetches it below).

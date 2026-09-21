@@ -81,12 +81,17 @@ String _convertMixedContent(String input) {
   final preserver = HtmlCodeBlockPreserver();
   final preserved = preserver.preserveCodeBlocks(input);
   final parts = <String>[];
-  for (final chunk in preserved.split('\n')) {
+  for (final chunk in preserved.split('\n\n')) {
     final trimmed = chunk.trim();
     if (trimmed.isEmpty) continue;
-    parts.add(containsHtmlTags(trimmed)
+    final dbgIsHtml = containsHtmlTags(trimmed);
+    final dbgOut = dbgIsHtml
         ? _convertHtmlToJiraMarkup(trimmed)
-        : _convertMarkdownToJiraMarkup(trimmed));
+        : _convertMarkdownToJiraMarkup(trimmed);
+    // ignore: avoid_print
+    print('DBG html=\$dbgIsHtml chunk=[\${trimmed.replaceAll(chr(10), "\\n")}] '
+        'out=[\${dbgOut.replaceAll(chr(10), "\\n")}]');
+    parts.add(dbgOut);
   }
   final joined = preserver.restoreCodeBlocks(parts.join('\n\n'));
   return joined.trim();
@@ -627,3 +632,4 @@ extension on String {
   bool equalsIgnoreCase(String other) =>
       toLowerCase() == other.toLowerCase();
 }
+

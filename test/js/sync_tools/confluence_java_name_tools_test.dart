@@ -250,6 +250,31 @@ void main() {
       expect(results.single['body']['storage']['value'], 'hi');
     });
 
+    test('contents_by_urls follows chained short links', () {
+      final base = 'http://127.0.0.1:${server.port}';
+      final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
+        'urlStrings': ['$base/l/chain'],
+      })) as List;
+      // /l/chain → /dt-redir2 → page 777: each hop must be requested at
+      // its own URL, not the original one re-fetched five times.
+      expect(results, hasLength(1));
+      expect(results.single['id'], '777');
+    });
+
+    test('contents_by_urls skips a dead short link without aborting', () {
+      final base = 'http://127.0.0.1:${server.port}';
+      final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
+        'urlStrings': [
+          '$base/l/dead',
+          '$base/wiki/spaces/ENG/pages/777/Hi',
+        ],
+      })) as List;
+      // The 404 short link degrades to a skip (like Java logging +
+      // continuing); the healthy URL still resolves.
+      expect(results, hasLength(1));
+      expect(results.single['id'], '777');
+    });
+
     test('upload_attachment skips an existing name by default', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
       addTearDown(() => dir.deleteSync(recursive: true));

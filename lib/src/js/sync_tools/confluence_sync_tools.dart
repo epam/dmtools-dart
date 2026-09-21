@@ -810,10 +810,13 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   final uri = Uri.tryParse(urlString);
   if (uri == null) return null;
   var ref = resolveConfluencePageUrl(uri);
+  // The redirect follower tracks the *current* URL: each hop GETs the
+  // Location resolved by the previous hop, never the original input.
+  var current = urlString;
   for (var hops = 0; hops < 5; hops++) {
     if (ref is! ConfluenceRedirectRef) break;
     // Short link: follow the 3xx Location (curl never follows redirects).
-    final resp = SyncHttpClient.get(urlString, headers: config.headers);
+    final resp = SyncHttpClient.get(current, headers: config.headers);
     final location = resp.headers.entries
         .where((e) => e.key.toLowerCase() == 'location')
         .map((e) => e.value)
@@ -821,6 +824,7 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
     if (location == null || !resp.isRedirect) return null;
     final next = Uri.tryParse(location);
     if (next == null) return null;
+    current = location;
     ref = resolveConfluencePageUrl(next);
   }
   if (ref is ConfluencePageIdRef) {
@@ -879,7 +883,11 @@ class _PageDownloader {
     _written++;
     if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
     if (depth > 1) {
-      final resp = _contentGet(_config, '$id/child/page?limit=100');
+      // Child pages carry no body unless the request expands it — without
+      // the expand param every child bails at the `value is! String` guard
+      // below and the subtree is silently dropped (gh-191 review).
+      final resp =
+          _contentGet(_config, '$id/child/page?limit=100&expand=$_contentExpand');
       for (final child in _childrenResults(syncBodyOrError(resp)) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);

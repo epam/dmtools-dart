@@ -331,8 +331,46 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             return
         # Confluence short-link redirect: /l/... answers a 302 whose
         # Location points back at the 777 page URL (contents_by_urls must
-        # resolve it and fetch that page). /dt-redir answers the same
-        # redirect for probes that bypass the URL-shape gate.
+        # resolve it and fetch that page). /l/chain answers a chained hop
+        # (→ /dt-redir2 → page URL) so the redirect follower must track the
+        # current URL across hops instead of re-GETting the original. The
+        # dead short link answers 404 (no Location) — resolvers must
+        # degrade to null, not abort the whole call. /dt-redir answers the
+        # single-hop redirect for probes that bypass the URL-shape gate.
+        if self.path.startswith("/l/chain"):
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/x/AB12" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/wiki/x/"):
+            # Second chain hop: a wiki-shaped short link that itself
+            # redirects to the canonical page URL (the follower must GET
+            # each hop at its own URL).
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/spaces/ENG/pages/777/Hi" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/l/dead"):
+            encoded = b'{"gone": true}'
+            self.send_response(404)
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         if self.path.startswith("/l/") or self.path.startswith("/dt-redir"):
             port = self.server.server_address[1]
             encoded = b'{"moved": true}'

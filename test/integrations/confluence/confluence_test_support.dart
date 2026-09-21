@@ -117,3 +117,70 @@ String routeByPath(
   }
   return fallback;
 }
+
+/// A canned adapter entry: status code, optional 3xx `Location`, body.
+typedef RedirectRoute = ({int status, String? location, String body});
+
+/// A canned-response adapter that answers with real status codes and
+/// `Location` headers — exercises the 3xx redirect paths the 200-only
+/// [RoutingAdapter] cannot. Requests are matched by URL substring.
+class RedirectAdapter implements HttpClientAdapter {
+  RedirectAdapter(this._routes);
+
+  final Map<String, RedirectRoute> _routes;
+
+  /// Requests served so far, in call order.
+  final List<RequestOptions> calls = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    calls.add(options);
+    for (final entry in _routes.entries) {
+      if (options.uri.toString().contains(entry.key)) {
+        final route = entry.value;
+        final headers = <String, List<String>>{
+          Headers.contentTypeHeader: ['application/json'],
+          if (route.location != null) 'location': [route.location!],
+        };
+        return ResponseBody.fromString(route.body, route.status,
+            headers: headers);
+      }
+    }
+    return ResponseBody.fromString(
+      '{"error":"unrouted"}',
+      404,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// A mocked [ConfluenceClient] over a [RedirectAdapter].
+typedef RedirectConfluenceFixture = ({
+  ConfluenceClient client,
+  RedirectAdapter adapter,
+});
+
+/// Builds a [ConfluenceClient] over a [RedirectAdapter] with the standard
+/// Basic-auth Confluence config.
+RedirectConfluenceFixture mockRedirectConfluence(
+  Map<String, RedirectRoute> routes,
+) {
+  PropertyReader.setOverrides(_testConfig);
+  final adapter = RedirectAdapter(routes);
+  final dio = Dio()..httpClientAdapter = adapter;
+  return (
+    client: ConfluenceClient(
+      ConfluenceHttpClient(PropertyReader(), dio: dio),
+    ),
+    adapter: adapter,
+  );
+}

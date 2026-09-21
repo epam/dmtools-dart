@@ -723,12 +723,32 @@ class ConfluenceClient {
       await _downloadAttachmentsOf(id, output, fileName);
     }
     if (depth > 1) {
-      for (final child in await getContentChildren(id)) {
+      for (final child in await _getChildrenWithBody(id)) {
         written += await _downloadPageTree(
             child, output, depth - 1, downloadAttachments);
       }
     }
     return written;
+  }
+
+  /// Child pages fetched with `expand=body.storage` (the downloader needs
+  /// each child's storage body; plain `getContentChildren` omits bodies,
+  /// which made every child bail before being written — gh-191 review).
+  Future<List<Map<String, dynamic>>> _getChildrenWithBody(String id) async {
+    final body = await _http.get(
+      'content/$id/child/page',
+      queryParams: const {
+        'limit': '100',
+        'expand': 'body.storage,body.export_view,ancestors,version',
+      },
+    );
+    final decoded = jsonDecode(body);
+    final results = decoded is Map ? decoded['results'] : null;
+    if (results is! List) return const [];
+    return results
+        .whereType<Map>()
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList(growable: false);
   }
 
   /// Mirrors the attachments of [contentId] into `output/{page}-attachments`.

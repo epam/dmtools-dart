@@ -237,6 +237,55 @@ void profileAndSearchTests() {
           .contentByUrl('https://conf.example.com/wiki/spaces/ENG/pages/777');
       expect(content?['id'], '777');
     });
+
+    test('contentByUrl follows a chained short link sending auth headers',
+        () async {
+      final f = mockRedirectConfluence({
+        '/l/chain': (
+          status: 302,
+          location: 'https://conf.example.com/wiki/x/AB12',
+          body: ''
+        ),
+        '/wiki/x/AB12': (
+          status: 302,
+          location:
+              'https://conf.example.com/wiki/spaces/ENG/pages/777/Hi',
+          body: ''
+        ),
+        '/content/777': (status: 200, location: null, body: _page777),
+      });
+      final content =
+          await f.client.contentByUrl('https://conf.example.com/l/chain');
+      expect(content?['id'], '777');
+      // Every redirect probe travels authenticated — on instances with
+      // anonymous access disabled an unauthenticated probe 302s to the
+      // login page and short links silently stop resolving.
+      final probes = f.adapter.calls
+          .where((c) =>
+              c.uri.path.contains('/l/') || c.uri.path.contains('/wiki/x/'))
+          .toList();
+      expect(probes, hasLength(2));
+      for (final probe in probes) {
+        expect(probe.headers['Authorization'], startsWith('Basic '),
+            reason: 'unauthenticated probe on ${probe.uri}');
+      }
+    });
+
+    test('downloadPages skips a dead short link without aborting', () async {
+      final f = mockRedirectConfluence({
+        '/l/dead': (status: 404, location: null, body: 'gone'),
+        '/content/777': (status: 200, location: null, body: _page777),
+      });
+      final out = Directory.systemTemp.createTempSync('dmtools_adl_dead_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final result = await f.client.downloadPages([
+        'https://conf.example.com/l/dead',
+        'https://conf.example.com/wiki/spaces/ENG/pages/777/Hi',
+      ], out.path);
+      // The 404 short link degrades to a per-URL skip (sync-surface
+      // behavior); the healthy URL still downloads.
+      expect(result, 'Downloaded 1 Confluence page(s) to ${out.path}');
+    });
   });
 }
 

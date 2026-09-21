@@ -433,14 +433,18 @@ class JiraClient {
 
   /// `jira_post_comment_if_not_exists` — POST comment only if absent.
   ///
-  /// Fetches existing comments and compares each plain-text body to
-  /// [comment]; posts only when no match is found. Returns `true` when a
-  /// comment was posted, `false` when it already existed.
+  /// Fetches existing comments and compares each body to [comment] **and**
+  /// its converted `markdownToJiraMarkup` form (what `postComment` stores);
+  /// posts only when no match is found. Returns `true` when a comment was
+  /// posted, `false` when it already existed.
   Future<bool> postCommentIfNotExists(String key, String comment) async {
+    final converted = markdownToJiraMarkup(comment);
     final existing = await getComments(key);
     for (final c in existing) {
       final body = c['body'];
-      if (body is String && body == comment) return false;
+      if (body is String && (body == comment || body == converted)) {
+        return false;
+      }
     }
     await postComment(key, comment);
     return true;

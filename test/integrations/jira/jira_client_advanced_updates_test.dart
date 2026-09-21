@@ -53,6 +53,31 @@ void postCommentConversionTests() {
       final body = jsonDecode(f.adapter.calls.last.data as String) as Map;
       expect(body['body'], '*hi* there');
     });
+
+    test('detects an existing comment stored in converted wiki markup',
+        () async {
+      // gh-191 rework: postComment stores `markdownToJiraMarkup(comment)`,
+      // so the existence check must compare the converted text too — a
+      // raw-vs-converted mismatch would re-post duplicates on every rerun.
+      final f = mockJira((o) => routeByPath(
+          {'/issue/PROJ-1/comment': '{"comments":[{"body":"*hi* there"}]}'},
+          o));
+      final posted = await f.client.postCommentIfNotExists('PROJ-1',
+          '**hi** there');
+      expect(posted, isFalse);
+      expect(f.adapter.calls, hasLength(1));
+      expect(f.adapter.calls.single.method, 'GET');
+    });
+
+    test('detects an existing heading stored as wiki markup', () async {
+      final f = mockJira((o) => routeByPath(
+          {'/issue/PROJ-1/comment': '{"comments":[{"body":"h1. Title"}]}'},
+          o));
+      final posted =
+          await f.client.postCommentIfNotExists('PROJ-1', '# Title');
+      expect(posted, isFalse);
+      expect(f.adapter.calls, hasLength(1));
+    });
   });
 }
 

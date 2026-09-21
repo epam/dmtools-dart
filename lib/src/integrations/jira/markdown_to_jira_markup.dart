@@ -338,32 +338,53 @@ String _handleBlockElement(dom.Element el) {
   };
 }
 
+/// Strips the placeholder-wrapping `<code>` tags before re-insertion
+/// (magic-constants gate: this literal recurs at every restoration site).
+final RegExp codeTagPattern =
+    RegExp(r'</?code[^>]*>', caseSensitive: false);
+
+final RegExp _anchorTag =
+    RegExp(r'<a\s+href="([^"]+)">(.*?)</a>');
+final RegExp _strongTag = RegExp(r'<strong>(.*?)</strong>', caseSensitive: false);
+final RegExp _emTag = RegExp(r'<em>(.*?)</em>', caseSensitive: false);
+final RegExp _bTag = RegExp(r'<b>(.*?)</b>', caseSensitive: false);
+final RegExp _iTag = RegExp(r'<i>(.*?)</i>', caseSensitive: false);
+final RegExp _inlineCodeTag = RegExp(
+    '<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
+    caseSensitive: false);
+final RegExp _anyTag = RegExp(r'<[^>]+>');
+
+/// The shared inline replacement ladder for paragraph/list/table cells
+/// (Java's repeated `pClone.html()` replacement chain): links, bold/italic,
+/// `<br>` (context-specific [brPattern] → [brReplacement]), inline code,
+/// then any residual tag strip.
+String _inlineChain(
+  String html, {
+  required Pattern brPattern,
+  required String brReplacement,
+}) =>
+    html
+        .replaceAllMapped(_anchorTag, (m) => '[${m.group(2)}|${m.group(1)}]')
+        .replaceAllMapped(_strongTag, (m) => '*${m.group(1)}*')
+        .replaceAllMapped(_emTag, (m) => '_${m.group(1)}_')
+        .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
+        .replaceAll(brPattern, brReplacement)
+        .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
+        .replaceAllMapped(
+            _inlineCodeTag, (m) => '{{${m.group(1)}}}')
+        .replaceAll(_anyTag, '');
+
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
-String _inlineMarkup(String html) => html
-    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
-        (m) => '[${m.group(2)}|${m.group(1)}]')
-    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
-    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
-    .replaceAllMapped(
-        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
-    .replaceAllMapped(
-        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
-    .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-    .replaceAllMapped(
-        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
-            caseSensitive: false),
-        (m) => '{{${m.group(1)}}}')
-    .replaceAll(RegExp(r'<[^>]+>'), '');
+String _inlineMarkup(String html) =>
+    _inlineChain(html, brPattern: RegExp(r'<br\s*/?>', caseSensitive: false), brReplacement: '\n');
 
 /// Paragraph conversion: inline replacement chain over the element's inner
 /// HTML, entity decode, trim (Java `processParagraph`).
 String _processParagraph(dom.Element p) {
   final html = p.innerHtml;
   if (html.contains(codeBlockPlaceholder)) {
-    return html.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+    return html.replaceAll(codeTagPattern, '');
   }
   final text = _inlineMarkup(html);
   return _fixNewlineBeforeLink(decodeHtmlEntities(text).trim());
@@ -374,7 +395,7 @@ String _processParagraph(dom.Element p) {
 String _processCodeElement(dom.Element codeEl) {
   if (codeEl.outerHtml.contains(codeBlockPlaceholder)) {
     return codeEl.outerHtml
-        .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+        .replaceAll(codeTagPattern, '');
   }
   final codeText = decodeHtmlEntities(codeEl.innerHtml)
       .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -394,7 +415,7 @@ String _processPre(dom.Element pre) {
   if (codeEl != null) {
     if (codeEl.innerHtml.contains(codeBlockPlaceholder)) {
       return codeEl.innerHtml
-          .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+          .replaceAll(codeTagPattern, '');
     }
     final codeText = decodeHtmlEntities(codeEl.innerHtml)
         .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -432,7 +453,7 @@ String _processOrderedList(dom.Element ol) {
     }
     if (li.innerHtml.contains(codeBlockPlaceholder)) {
       sb.writeln(li.innerHtml
-          .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''));
+          .replaceAll(codeTagPattern, ''));
       continue;
     }
     sb.writeln('# ${_listItemText(li)}');
@@ -447,29 +468,16 @@ String _listItemText(dom.Element li) {
   final clone = li.clone(true);
   clone.querySelectorAll('ul,ol').forEach((e) => e.remove());
   final raw = clone.innerHtml
-      .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+      .replaceAll(codeTagPattern, '');
   return decodeHtmlEntities(_listInlineMarkup(raw)).trim();
 }
 
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
-String _listInlineMarkup(String html) => html
-    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
-        (m) => '[${m.group(2)}|${m.group(1)}]')
-    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
-    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
-    .replaceAllMapped(
-        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
-    .replaceAllMapped(
-        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
-    .replaceAll(RegExp(r'<br\s*/?>\s*', caseSensitive: false), '\n')
-    .replaceAllMapped(
-        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
-            caseSensitive: false),
-        (m) => '{{${m.group(1)}}}')
-    .replaceAll(RegExp(r'<[^>]+>'), '');
+String _listInlineMarkup(String html) => _inlineChain(
+    html,
+    brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
+    brReplacement: '\n');
 
 /// Appends nested `<ul>`/`<ol>` children of [li] to [sb] (Java's recursion
 /// tail in both list processors).
@@ -512,7 +520,7 @@ String _processTable(dom.Element table) {
         if (cell.innerHtml.contains(codeBlockPlaceholder)) {
           sb
             ..write(cell.innerHtml
-                .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''))
+                .replaceAll(codeTagPattern, ''))
             ..write('|');
         } else {
           final cellText = _tableCellMarkup(cell.innerHtml);
@@ -533,23 +541,10 @@ String _processTable(dom.Element table) {
 
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
-String _tableCellMarkup(String html) => html
-    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
-        (m) => '[${m.group(2)}|${m.group(1)}]')
-    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
-    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
-    .replaceAllMapped(
-        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
-    .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n\\\\')
-    .replaceAllMapped(
-        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
-    .replaceAllMapped(
-        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
-            caseSensitive: false),
-        (m) => '{{${m.group(1)}}}')
-    .replaceAll(RegExp(r'<[^>]+>'), '');
+String _tableCellMarkup(String html) => _inlineChain(
+    html,
+    brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
+    brReplacement: '\n\\\\');
 
 /// Numeric `colspan` attribute of [cell], `1` when absent or unparseable.
 int _colspan(dom.Element cell) =>

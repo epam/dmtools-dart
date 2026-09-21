@@ -82,9 +82,9 @@ ConfluencePageRef _checkBaseIndex(List<String> segments, int base) {
         return ConfluenceDisplayRef(
           segments[base + 1],
           // Java URLDecoder maps a literal '+' to a space (display URLs
-        // encode spaces as '+'); percent-encoded '+', once decoded by
-        // Uri.pathSegments, is already literal at this point.
-        segments[base + 2].replaceAll('+', ' '),
+          // encode spaces as '+'); percent-encoded '+', once decoded by
+          // Uri.pathSegments, is already literal at this point.
+          segments[base + 2].replaceAll('+', ' '),
         );
       }
   }

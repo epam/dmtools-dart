@@ -228,8 +228,8 @@ void preserverTests() {
       // text — the surrounding <code> element stays (it is stripped later
       // by the real conversion chain's tag pass, not by the preserver).
       final preserver = HtmlCodeBlockPreserver();
-      final preserved = preserver.preserveCodeBlocks(
-          '<p>a <code class="java">x = 1;</code> b</p>');
+      final preserved = preserver
+          .preserveCodeBlocks('<p>a <code class="java">x = 1;</code> b</p>');
       expect(preserved, contains(codeBlockPlaceholder));
       final restored = preserver.restoreCodeBlocks(preserved);
       expect(restored, '<p>a <code>{code:java}x = 1;{code}</code> b</p>');
@@ -237,14 +237,16 @@ void preserverTests() {
 
     test('inline code without class becomes {{monospace}}', () {
       final preserver = HtmlCodeBlockPreserver();
-      final preserved = preserver.preserveCodeBlocks('<p>a <code>x</code> b</p>');
-      expect(preserver.restoreCodeBlocks(preserved), '<p>a <code>{{x}}</code> b</p>');
+      final preserved =
+          preserver.preserveCodeBlocks('<p>a <code>x</code> b</p>');
+      expect(preserver.restoreCodeBlocks(preserved),
+          '<p>a <code>{{x}}</code> b</p>');
     });
 
     test('properties language maps to bash', () {
       final preserver = HtmlCodeBlockPreserver();
-      final preserved = preserver.preserveCodeBlocks(
-          '<code class="properties">a=b\nc=d</code>');
+      final preserved = preserver
+          .preserveCodeBlocks('<code class="properties">a=b\nc=d</code>');
       expect(preserver.restoreCodeBlocks(preserved),
           '<code>{code:bash}a=b\nc=d{code}</code>');
     });

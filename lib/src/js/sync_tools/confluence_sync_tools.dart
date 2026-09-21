@@ -900,8 +900,8 @@ class _PageDownloader {
       // Child pages carry no body unless the request expands it — without
       // the expand param every child bails at the `value is! String` guard
       // below and the subtree is silently dropped (gh-191 review).
-      final resp =
-          _contentGet(_config, '$id/child/page?limit=100&expand=$_contentExpand');
+      final resp = _contentGet(
+          _config, '$id/child/page?limit=100&expand=$_contentExpand');
       for (final child in _childrenResults(syncBodyOrError(resp)) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
@@ -930,8 +930,7 @@ class _PageDownloader {
       var headers = _config.headers;
       if (downloadPath.startsWith('http') &&
           Uri.tryParse(downloadPath)?.host != baseHost) {
-        headers = {...headers}
-          ..removeWhere(
+        headers = {...headers}..removeWhere(
             (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
           );
       }

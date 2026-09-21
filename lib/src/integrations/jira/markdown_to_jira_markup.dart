@@ -69,8 +69,7 @@ bool _containsOnlyHtmlEntities(String input) {
 /// Java parity: `containsHtml` strips ```-fenced blocks and `` ` `` spans
 /// before testing `<[^>]+>`.
 bool containsHtmlTags(String s) {
-  final noFences = s.replaceAll(
-      RegExp(r'```(\w*)\n([\s\S]*?)```'), '');
+  final noFences = s.replaceAll(RegExp(r'```(\w*)\n([\s\S]*?)```'), '');
   final noCode = noFences.replaceAll(RegExp(r'`[^`]*`'), '');
   return RegExp(r'<[^>]+>').hasMatch(noCode);
 }
@@ -166,8 +165,7 @@ String _processTextParagraph(String text) {
     trimmed = trimmed
         .replaceAllMapped(
             RegExp(r'`\s*([^`]+)\s*`'), (m) => '{{${m.group(1)}}}')
-        .replaceAllMapped(
-            RegExp(r'\*\*([^*]+)\*\*'), (m) => '*${m.group(1)}*')
+        .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => '*${m.group(1)}*')
         .replaceAllMapped(RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
             (m) => '[${m.group(1)}|${m.group(2)}]');
     output.add(trimmed);
@@ -243,8 +241,7 @@ String _convertHtmlToJiraMarkup(String html) {
   }
   flushInline();
 
-  final joined =
-      blocks.where((b) => b.trim().isNotEmpty).join('\n\n').trim();
+  final joined = blocks.where((b) => b.trim().isNotEmpty).join('\n\n').trim();
   return preserver.restoreCodeBlocks(_fixNewlineBeforeLink(joined));
 }
 
@@ -344,17 +341,16 @@ String _handleBlockElement(dom.Element el) {
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
 String _inlineMarkup(String html) => html
-    .replaceAllMapped(
-        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
         (m) => '[${m.group(2)}|${m.group(1)}]')
     .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
         (m) => '*${m.group(1)}*')
     .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
         (m) => '_${m.group(1)}_')
-    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
-    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(
+        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
+    .replaceAllMapped(
+        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
     .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
     .replaceAllMapped(
         RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
@@ -377,7 +373,8 @@ String _processParagraph(dom.Element p) {
 /// multi-line (Java `processCodeElement`).
 String _processCodeElement(dom.Element codeEl) {
   if (codeEl.outerHtml.contains(codeBlockPlaceholder)) {
-    return codeEl.outerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+    return codeEl.outerHtml
+        .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
   }
   final codeText = decodeHtmlEntities(codeEl.innerHtml)
       .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -396,7 +393,8 @@ String _processPre(dom.Element pre) {
   final codeEl = pre.querySelector('code');
   if (codeEl != null) {
     if (codeEl.innerHtml.contains(codeBlockPlaceholder)) {
-      return codeEl.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+      return codeEl.innerHtml
+          .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
     }
     final codeText = decodeHtmlEntities(codeEl.innerHtml)
         .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -433,8 +431,8 @@ String _processOrderedList(dom.Element ol) {
       continue;
     }
     if (li.innerHtml.contains(codeBlockPlaceholder)) {
-      sb.writeln(
-          li.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''));
+      sb.writeln(li.innerHtml
+          .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''));
       continue;
     }
     sb.writeln('# ${_listItemText(li)}');
@@ -448,24 +446,24 @@ String _processOrderedList(dom.Element ol) {
 String _listItemText(dom.Element li) {
   final clone = li.clone(true);
   clone.querySelectorAll('ul,ol').forEach((e) => e.remove());
-  final raw = clone.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
+  final raw = clone.innerHtml
+      .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
   return decodeHtmlEntities(_listInlineMarkup(raw)).trim();
 }
 
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
 String _listInlineMarkup(String html) => html
-    .replaceAllMapped(
-        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
         (m) => '[${m.group(2)}|${m.group(1)}]')
     .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
         (m) => '*${m.group(1)}*')
     .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
         (m) => '_${m.group(1)}_')
-    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
-    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(
+        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
+    .replaceAllMapped(
+        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
     .replaceAll(RegExp(r'<br\s*/?>\s*', caseSensitive: false), '\n')
     .replaceAllMapped(
         RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
@@ -536,18 +534,17 @@ String _processTable(dom.Element table) {
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
 String _tableCellMarkup(String html) => html
-    .replaceAllMapped(
-        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+    .replaceAllMapped(RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
         (m) => '[${m.group(2)}|${m.group(1)}]')
     .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
         (m) => '*${m.group(1)}*')
     .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
         (m) => '_${m.group(1)}_')
-    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
-        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(
+        RegExp(r'<b>(.*?)</b>', caseSensitive: false), (m) => '*${m.group(1)}*')
     .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n\\\\')
-    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
-        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(
+        RegExp(r'<i>(.*?)</i>', caseSensitive: false), (m) => '_${m.group(1)}_')
     .replaceAllMapped(
         RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
             caseSensitive: false),
@@ -562,8 +559,8 @@ int _colspan(dom.Element cell) =>
 /// original, ported unchanged (two of them are effectively no-ops but keep
 /// byte-parity with the Java output).
 String _fixNewlineBeforeLink(String text) => text
-    .replaceAllMapped(RegExp(r'(\S)\n\[(https?://)'),
-        (m) => '${m.group(1)}\n[${m.group(2)}')
+    .replaceAllMapped(
+        RegExp(r'(\S)\n\[(https?://)'), (m) => '${m.group(1)}\n[${m.group(2)}')
     .replaceAll(RegExp(r'\n\[\n(https?://)'), '\n[https://')
     .replaceAll(RegExp(r'\n\[https?://'), '\n[https://');
 
@@ -571,8 +568,7 @@ String _fixNewlineBeforeLink(String text) => text
 /// swapping them for indexed placeholders (Dart port of the Java
 /// `HTMLCodeBlockPreserver`).
 class HtmlCodeBlockPreserver {
-  static final _codePattern =
-      RegExp(r'<code[^>]*>(.*?)</code>', dotAll: true);
+  static final _codePattern = RegExp(r'<code[^>]*>(.*?)</code>', dotAll: true);
   static final _classPattern = RegExp("class=[\"']([^\"']*)[\"']");
 
   final List<({String content, String language, bool isInline})>
@@ -590,8 +586,8 @@ class HtmlCodeBlockPreserver {
           final language = classMatch?.group(1) ?? 'java';
           final isInline =
               !fullMatch.contains('class=') && !codeContent.contains('\n');
-          _preservedCodeBlocks
-              .add((content: codeContent, language: language, isInline: isInline));
+          _preservedCodeBlocks.add(
+              (content: codeContent, language: language, isInline: isInline));
           return '<code>$codeBlockPlaceholder${_preservedCodeBlocks.length - 1}'
               '</code>';
         },
@@ -624,7 +620,5 @@ class HtmlCodeBlockPreserver {
 
 /// Case-insensitive comparison helper local to this library.
 extension on String {
-  bool equalsIgnoreCase(String other) =>
-      toLowerCase() == other.toLowerCase();
+  bool equalsIgnoreCase(String other) => toLowerCase() == other.toLowerCase();
 }
-

@@ -153,9 +153,8 @@ void profileAndSearchTests() {
   group('ConfluenceClient profile/search/URL tools', () {
     test('getContentAttachments returns the results', () async {
       final f = mockConfluence((o) => routeByPath({
-        '/child/attachment':
-            '{"results":[{"id":"a1","title":"x.png"}]}',
-      }, o));
+            '/child/attachment': '{"results":[{"id":"a1","title":"x.png"}]}',
+          }, o));
       final attachments = await f.client.getContentAttachments('42');
       expect(attachments.single['id'], 'a1');
     });
@@ -193,9 +192,8 @@ void profileAndSearchTests() {
     });
 
     test('updatePageWithHistory sends the version message', () async {
-      final f = mockConfluence((o) => o.method == 'GET'
-          ? '{"version":{"number":3}}'
-          : '{"id":"555"}');
+      final f = mockConfluence((o) =>
+          o.method == 'GET' ? '{"version":{"number":3}}' : '{"id":"555"}');
       final updated = await f.client.updatePageWithHistory(
         contentId: '555',
         title: 'Up',
@@ -214,8 +212,8 @@ void profileAndSearchTests() {
 
     test('contentsByUrls resolves ids and skips failures', () async {
       final f = mockConfluence((o) => routeByPath({
-        '/content/777': _page777,
-      }, o, fallback: '{}'));
+            '/content/777': _page777,
+          }, o, fallback: '{}'));
       final contents = await f.client.contentsByUrls([
         'https://conf.example.com/wiki/spaces/ENG/pages/777/Hi',
         'https://conf.example.com/not-a-page',
@@ -248,8 +246,7 @@ void profileAndSearchTests() {
         ),
         '/wiki/x/AB12': (
           status: 302,
-          location:
-              'https://conf.example.com/wiki/spaces/ENG/pages/777/Hi',
+          location: 'https://conf.example.com/wiki/spaces/ENG/pages/777/Hi',
           body: ''
         ),
         '/content/777': (status: 200, location: null, body: _page777),
@@ -300,23 +297,24 @@ void uploadAndDownloadTests() {
   group('ConfluenceClient upload/download tools', () {
     test('uploadAttachment skips an existing name by default', () async {
       final f = mockConfluence((o) => routeByPath({
-        '/child/attachment':
-            '{"results":[{"id":"a1","title":"exists.txt"}]}',
-      }, o));
+            '/child/attachment':
+                '{"results":[{"id":"a1","title":"exists.txt"}]}',
+          }, o));
       final dir = Directory.systemTemp.createTempSync('dmtools_au_');
       addTearDown(() => dir.deleteSync(recursive: true));
       File('${dir.path}/exists.txt').writeAsStringSync('data');
-      final result = await f.client.uploadAttachment('42', '${dir.path}/exists.txt');
+      final result =
+          await f.client.uploadAttachment('42', '${dir.path}/exists.txt');
       expect(result['status'], 'skipped');
     });
 
     test('uploadAttachments summarizes created and skipped files', () async {
       final f = mockConfluence((o) => routeByPath({
-        '/child/attachment':
-            '{"results":[{"id":"a1","title":"exists.txt"}]}',
-        '/data': '{"results":[{"id":"a1"}]}',
-        '/attachment': '{"id":"a2"}',
-      }, o, fallback: '{"id":"a9"}'));
+            '/child/attachment':
+                '{"results":[{"id":"a1","title":"exists.txt"}]}',
+            '/data': '{"results":[{"id":"a1"}]}',
+            '/attachment': '{"id":"a2"}',
+          }, o, fallback: '{"id":"a9"}'));
       final dir = Directory.systemTemp.createTempSync('dmtools_aus_');
       addTearDown(() => dir.deleteSync(recursive: true));
       File('${dir.path}/exists.txt').writeAsStringSync('a');
@@ -362,11 +360,7 @@ void uploadAndDownloadTests() {
           body:
               '{"results":[{"id":"a2","title":"shot.png","_links":{"download":"/wiki/download/attachments/123/shot.png"}}]}',
         ),
-        '/shot.png': (
-          status: 200,
-          location: null,
-          body: 'PNG-fixture-bytes'
-        ),
+        '/shot.png': (status: 200, location: null, body: 'PNG-fixture-bytes'),
       });
       final out = Directory.systemTemp.createTempSync('dmtools_adl_att_');
       addTearDown(() => out.deleteSync(recursive: true));
@@ -374,13 +368,12 @@ void uploadAndDownloadTests() {
         ['https://conf.example.com/wiki/spaces/ENG/pages/777/Hi'],
         out.path,
       );
-      final written =
-          File('${out.path}/Hi Page-attachments/shot.png');
+      final written = File('${out.path}/Hi Page-attachments/shot.png');
       expect(written.readAsStringSync(), 'PNG-fixture-bytes');
       // Attachment downloads go out authenticated (private spaces disable
       // anonymous download — unauthenticated fetches silently 401).
-      final downloadCall = f.adapter.calls
-          .firstWhere((c) => c.uri.path.contains('/download/'));
+      final downloadCall =
+          f.adapter.calls.firstWhere((c) => c.uri.path.contains('/download/'));
       expect(downloadCall.headers['Authorization'], startsWith('Basic '));
     });
 
@@ -449,9 +442,8 @@ void executorAndDefinitionTests() {
       final summary = await ConfluenceToolExecutor(dl.client)
           .execute('confluence_download_pages', {
         'urlStrings': ['https://conf.example.com/wiki/spaces/ENG/pages/777'],
-        'outputPath': Directory.systemTemp
-            .createTempSync('dmtools_exec_dl_')
-            .path,
+        'outputPath':
+            Directory.systemTemp.createTempSync('dmtools_exec_dl_').path,
         'depth': '2',
       });
       expect(summary, contains('2 Confluence page(s)'));
@@ -492,7 +484,11 @@ void executorAndDefinitionTests() {
           'format'
         ],
         'confluence_find_or_create': ['title', 'parentId', 'body'],
-        'confluence_get_children_by_name': ['spaceKey', 'contentName', 'format'],
+        'confluence_get_children_by_name': [
+          'spaceKey',
+          'contentName',
+          'format'
+        ],
         'confluence_get_content_attachments': ['contentId'],
         'confluence_get_current_user_profile': <String>[],
         'confluence_get_user_profile_by_id': ['userId'],
@@ -550,6 +546,4 @@ const _page777 =
     '{"id":"777","title":"Hi Page","body":{"storage":{"value":"<p>hi</p>","representation":"storage"}}}';
 
 List<Map<String, dynamic>> _results(Map<String, dynamic> listing) =>
-    (listing['results'] as List)
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    (listing['results'] as List).whereType<Map<String, dynamic>>().toList();

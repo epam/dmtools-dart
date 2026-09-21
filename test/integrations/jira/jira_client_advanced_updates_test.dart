@@ -36,8 +36,7 @@ void postCommentConversionTests() {
     test('leaves plain wiki markup untouched', () async {
       final f = mockJira((o) => '{}');
       await f.client.postComment('PROJ-1', 'plain text only');
-      final body =
-          jsonDecode(f.adapter.calls.single.data as String) as Map;
+      final body = jsonDecode(f.adapter.calls.single.data as String) as Map;
       expect(body['body'], 'plain text only');
     });
 

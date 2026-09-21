@@ -46,8 +46,8 @@ void main() {
 
   group('confluence title/find tools', () {
     test('content_by_title lists in the default space with format', () {
-      final result = tools
-          .dispatch('confluence_content_by_title', {'title': 'Docs'});
+      final result =
+          tools.dispatch('confluence_content_by_title', {'title': 'Docs'});
       // Java serializes the ContentResult JSONModel verbatim — the full
       // listing object, shape-identical with the async/MCP surface.
       final listing = jsonDecode(result) as Map;
@@ -64,8 +64,8 @@ void main() {
         'CONFLUENCE_AUTH_TYPE': 'Basic',
       });
       expect(
-        jsonDecode(tools
-            .dispatch('confluence_content_by_title', {'title': 'Docs'})),
+        jsonDecode(
+            tools.dispatch('confluence_content_by_title', {'title': 'Docs'})),
         {'error': 'Default space not set'},
       );
     });
@@ -87,8 +87,8 @@ void main() {
     });
 
     test('find_content converts to markdown on request', () {
-      final result = tools
-          .dispatch('confluence_find_content', {'title': 'Docs', 'format': 'md'});
+      final result = tools.dispatch(
+          'confluence_find_content', {'title': 'Docs', 'format': 'md'});
       expect(jsonDecode(result)['body']['storage']['value'], 'found');
     });
 
@@ -122,8 +122,7 @@ void main() {
       ]);
     });
 
-    test('get_children_by_name resolves the parent then lists children',
-        () {
+    test('get_children_by_name resolves the parent then lists children', () {
       final results = jsonDecode(tools.dispatch(
         'confluence_get_children_by_name',
         {'spaceKey': 'ENG', 'contentName': 'Parent'},
@@ -144,16 +143,16 @@ void main() {
 
   group('confluence profile and search tools', () {
     test('get_content_attachments returns the results array', () {
-      final results = jsonDecode(
-          tools.dispatch('confluence_get_content_attachments',
-              {'contentId': '42'})) as List;
+      final results = jsonDecode(tools.dispatch(
+          'confluence_get_content_attachments', {'contentId': '42'})) as List;
       expect(results, hasLength(3));
       expect(results.first['id'], 'a1');
     });
 
     test('get_current_user_profile GETs user/current', () {
-      final body = jsonDecode(
-          tools.dispatch('confluence_get_current_user_profile', {})) as Map;
+      final body =
+          jsonDecode(tools.dispatch('confluence_get_current_user_profile', {}))
+              as Map;
       expect(body['method'], 'GET');
       expect(body['path'], '/wiki/rest/api/user/current');
     });
@@ -173,15 +172,12 @@ void main() {
         'confluence_get_user_profile_by_id',
         {'userId': '1234-abc-def'},
       )) as Map;
-      expect(body['path'],
-          '/wiki/rest/api/user?accountId=1234-abc-def');
+      expect(body['path'], '/wiki/rest/api/user?accountId=1234-abc-def');
     });
 
-    test('search_content_by_text builds the Java CQL and default limit',
-        () {
-      final body = jsonDecode(tools
-          .dispatch('confluence_search_content_by_text', {'query': 'docs'}))
-          as Map;
+    test('search_content_by_text builds the Java CQL and default limit', () {
+      final body = jsonDecode(tools.dispatch(
+          'confluence_search_content_by_text', {'query': 'docs'})) as Map;
       expect(body['path'], startsWith('/wiki/rest/api/content/search?'));
       expect(
         body['path'],
@@ -212,7 +208,8 @@ void main() {
 
   group('confluence update/URL/upload tools', () {
     test('update_page_with_history PUTs version+1 with the comment', () {
-      final body = jsonDecode(tools.dispatch('confluence_update_page_with_history', {
+      final body =
+          jsonDecode(tools.dispatch('confluence_update_page_with_history', {
         'contentId': '555',
         'title': 'Up',
         'parentId': '7',
@@ -330,7 +327,8 @@ void main() {
       File('${dir.path}/exists.txt').writeAsStringSync('a');
       File('${dir.path}/fresh.txt').writeAsStringSync('b');
       Directory('${dir.path}/sub').createSync(); // skipped: not a file
-      final summary = jsonDecode(tools.dispatch('confluence_upload_attachments', {
+      final summary =
+          jsonDecode(tools.dispatch('confluence_upload_attachments', {
         'contentId': '555',
         'directory': dir.path,
       })) as Map;
@@ -349,8 +347,7 @@ void main() {
       );
     });
 
-    test('download_pages writes markdown and follows children to depth',
-        () {
+    test('download_pages writes markdown and follows children to depth', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dl_');
       addTearDown(() => out.deleteSync(recursive: true));
       final base = 'http://127.0.0.1:${server.port}';

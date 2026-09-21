@@ -805,4 +805,3 @@ String _asStr(dynamic value) => value?.toString() ?? '';
 
 /// Encodes a JSON error result string.
 String _err(String message) => jsonEncode({'error': message});
-

@@ -265,7 +265,7 @@ after.
       drift because all tools are defined in the `*_tools.dart` files next to their
       implementations. CI catalog comparison: `test/mcp/catalog_parity_test.dart`
       against the frozen gap snapshot
-      (`test/fixtures/java_mcp_tool_gaps.txt`, 98 remaining non-agent names; gh-191 shrank it from 159 by porting the 15 Confluence Java-named tools).
+      (`test/fixtures/java_mcp_tool_gaps.txt`, 98 remaining non-agent names; gh-191 removed the final 15 Confluence entries — the snapshot had 113 before this PR).
 - [x] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.

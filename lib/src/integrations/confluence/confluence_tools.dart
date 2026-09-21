@@ -1132,7 +1132,7 @@ class ConfluenceToolExecutor {
     'confluence_download_pages': (a) => _client.downloadPages(
           (a['urlStrings'] as List).map((e) => e as String).toList(),
           a['outputPath'] as String,
-          _intArg(a, 'depth', 1),
+          _intArg(a, 'depth', 1) ?? 1,
           _boolArg(a, 'downloadAttachments', fallback: true),
         ),
     'confluence_find_content': (a) => _client.findContent(
@@ -1164,8 +1164,7 @@ class ConfluenceToolExecutor {
           a['query'] as String,
           _intArg(a, 'limit'),
         ),
-    'confluence_update_page_with_history': (a) =>
-        _client.updatePageWithHistory(
+    'confluence_update_page_with_history': (a) => _client.updatePageWithHistory(
           contentId: a['contentId'] as String,
           title: a['title'] as String,
           parentId: a['parentId'] as String,
@@ -1176,12 +1175,37 @@ class ConfluenceToolExecutor {
     'confluence_upload_attachment': (a) => _client.uploadAttachment(
           a['contentId'] as String,
           a['file'] as String,
-          a['updateIfExists'] as bool? ?? false,
+          _boolArg(a, 'updateIfExists'),
         ),
     'confluence_upload_attachments': (a) => _client.uploadAttachments(
           a['contentId'] as String,
           a['directory'] as String,
-          a['updateIfExists'] as bool? ?? false,
+          _boolArg(a, 'updateIfExists'),
         ),
   };
+}
+
+/// Reads an int arg that may arrive as num or numeric string (MCP/JSON
+/// callers frequently send `"depth": "2"`; hard casts would throw a
+/// [TypeError] where the sync surface coerces).
+int? _intArg(Map<String, dynamic> args, String name, [int? fallback]) {
+  final value = args[name];
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+/// Reads a bool arg that may arrive as bool or string — the same shapes
+/// the sync surface's `_flagOrFalse` accepts.
+bool _boolArg(
+  Map<String, dynamic> args,
+  String name, {
+  bool fallback = false,
+}) {
+  final value = args[name];
+  if (value is bool) return value;
+  if (value is String) {
+    return value == 'true' || value == 'True';
+  }
+  return fallback;
 }

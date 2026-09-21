@@ -123,7 +123,9 @@ typedef RedirectRoute = ({int status, String? location, String body});
 
 /// A canned-response adapter that answers with real status codes and
 /// `Location` headers — exercises the 3xx redirect paths the 200-only
-/// [RoutingAdapter] cannot. Requests are matched by URL substring.
+/// [RoutingAdapter] cannot. Requests are matched by path suffix (same
+/// discipline as [routeByPath], so `/content/777/child/attachment` does
+/// not match a `/content/777` route).
 class RedirectAdapter implements HttpClientAdapter {
   RedirectAdapter(this._routes);
 
@@ -140,7 +142,7 @@ class RedirectAdapter implements HttpClientAdapter {
   ) async {
     calls.add(options);
     for (final entry in _routes.entries) {
-      if (options.uri.toString().contains(entry.key)) {
+      if (options.uri.path.endsWith(entry.key)) {
         final route = entry.value;
         final headers = <String, List<String>>{
           Headers.contentTypeHeader: ['application/json'],

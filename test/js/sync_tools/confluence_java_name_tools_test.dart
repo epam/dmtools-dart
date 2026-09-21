@@ -48,9 +48,13 @@ void main() {
     test('content_by_title lists in the default space with format', () {
       final result = tools
           .dispatch('confluence_content_by_title', {'title': 'Docs'});
-      final results = jsonDecode(result) as List;
+      // Java serializes the ContentResult JSONModel verbatim — the full
+      // listing object, shape-identical with the async/MCP surface.
+      final listing = jsonDecode(result) as Map;
+      final results = listing['results'] as List;
       expect(results, hasLength(2));
       expect(results.first['id'], '801');
+      expect(listing.containsKey('start'), isTrue);
     });
 
     test('content_by_title requires the default space', () {
@@ -67,10 +71,11 @@ void main() {
     });
 
     test('content_by_title_and_space lists by title in a space', () {
-      final results = jsonDecode(tools.dispatch(
+      final listing = jsonDecode(tools.dispatch(
         'confluence_content_by_title_and_space',
         {'title': 'Docs', 'space': 'DEV'},
-      )) as List;
+      )) as Map;
+      final results = listing['results'] as List;
       expect(results, hasLength(2));
       expect(results.first['id'], '801');
     });
@@ -142,7 +147,7 @@ void main() {
       final results = jsonDecode(
           tools.dispatch('confluence_get_content_attachments',
               {'contentId': '42'})) as List;
-      expect(results, hasLength(2));
+      expect(results, hasLength(3));
       expect(results.first['id'], 'a1');
     });
 

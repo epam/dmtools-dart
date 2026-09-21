@@ -593,21 +593,31 @@ class ConfluenceClient {
   /// Follows one 3xx hop for [uri], returning the `Location` URL, or `null`
   /// when the response is not a redirect (dio follows redirects by default;
   /// this disables that to mirror Java `resolveRedirect`).
+  ///
+  /// The probe travels authenticated (instances with anonymous access
+  /// disabled answer 302 → login otherwise) and any non-redirect outcome —
+  /// including a thrown 4xx/5xx — degrades to `null` so one dead short link
+  /// never aborts a whole `downloadPages` call.
   Future<String?> _resolveRedirect(Uri uri) async {
-    final response = await _http.dio.getUri<dynamic>(
-      uri,
-      options: Options(
-        followRedirects: false,
-        validateStatus: (status) => status != null && status < 400,
-      ),
-    );
-    final location = response.headers.value('location');
-    return (response.statusCode != null &&
-            response.statusCode! >= 300 &&
-            response.statusCode! < 400 &&
-            location != null)
-        ? location
-        : null;
+    try {
+      final response = await _http.dio.getUri<dynamic>(
+        uri,
+        options: Options(
+          followRedirects: false,
+          validateStatus: (_) => true,
+          headers: _http.headers,
+        ),
+      );
+      final location = response.headers.value('location');
+      return (response.statusCode != null &&
+              response.statusCode! >= 300 &&
+              response.statusCode! < 400 &&
+              location != null)
+          ? location
+          : null;
+    } on DioException {
+      return null;
+    }
   }
 
   /// `confluence_upload_attachment` — multipart upload of one file with the
@@ -768,10 +778,22 @@ class ConfluenceClient {
           ? Uri.tryParse(downloadPath)
           : Uri.tryParse('${_http.basePath}$downloadPath');
       if (uri == null) continue;
+      // `_links.download` is server-controlled content: the Confluence
+      // credentials never travel to a foreign host.
+      final baseHost = Uri.tryParse(_http.basePath)?.host;
+      final headers = {..._http.headers};
+      if (downloadPath.startsWith('http') && uri.host != baseHost) {
+        headers.removeWhere(
+          (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
+        );
+      }
       try {
         final response = await _http.dio.get<List<int>>(
           '$uri',
-          options: Options(responseType: ResponseType.bytes),
+          options: Options(
+            responseType: ResponseType.bytes,
+            headers: headers,
+          ),
         );
         final bytes = response.data;
         if (bytes == null) continue;

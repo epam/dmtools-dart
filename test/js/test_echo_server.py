@@ -313,8 +313,12 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["results"] = [result]
         # Confluence attachment listing: two fixtures — exists.txt (the
         # skip-existing policy) and shot.png carrying a _links.download
-        # path (the page-downloader fetches it below).
+        # path (the page-downloader fetches it below). evil.txt carries an
+        # absolute URL on a foreign host (localhost vs 127.0.0.1) — the
+        # downloader must fetch it WITHOUT the Confluence credentials, and
+        # /download/evil.bin answers CLEAN/LEAKED accordingly.
         elif self.command == "GET" and "/child/attachment" in self.path:
+            port = self.server.server_address[1]
             payload.clear()
             payload["results"] = [
                 {"id": "a1", "title": "exists.txt"},
@@ -325,7 +329,20 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                         "download": "/download/attachments/123/shot.png"
                     },
                 },
+                {
+                    "id": "a3",
+                    "title": "evil.txt",
+                    "_links": {
+                        "download":
+                            "http://localhost:%d/download/evil.bin" % port
+                    },
+                },
             ]
+        if self.path.startswith("/download/evil.bin"):
+            leaked = self.headers.get("Authorization") is not None
+            self._send(b"LEAKED" if leaked else b"CLEAN",
+                       "application/octet-stream")
+            return
         if self.path.startswith("/download/attachments/"):
             self._send(b"PNG-fixture-bytes", "application/octet-stream")
             return

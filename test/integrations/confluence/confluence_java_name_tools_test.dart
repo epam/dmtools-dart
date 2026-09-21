@@ -275,6 +275,12 @@ void profileAndSearchTests() {
       final f = mockRedirectConfluence({
         '/l/dead': (status: 404, location: null, body: 'gone'),
         '/content/777': (status: 200, location: null, body: _page777),
+        '/child/page': (status: 200, location: null, body: '{"results":[]}'),
+        '/child/attachment': (
+          status: 200,
+          location: null,
+          body: '{"results":[]}',
+        ),
       });
       final out = Directory.systemTemp.createTempSync('dmtools_adl_dead_');
       addTearDown(() => out.deleteSync(recursive: true));
@@ -344,6 +350,68 @@ void uploadAndDownloadTests() {
       expect(result, 'Downloaded 2 Confluence page(s) to ${out.path}');
       expect(File('${out.path}/Hi Page.md').readAsStringSync(), 'hi');
       expect(File('${out.path}/Child Page.md').readAsStringSync(), 'kid');
+    });
+
+    test('downloadPages fetches attachments with auth headers', () async {
+      final f = mockRedirectConfluence({
+        '/content/777': (status: 200, location: null, body: _page777),
+        '/child/page': (status: 200, location: null, body: '{"results":[]}'),
+        '/child/attachment': (
+          status: 200,
+          location: null,
+          body:
+              '{"results":[{"id":"a2","title":"shot.png","_links":{"download":"/wiki/download/attachments/123/shot.png"}}]}',
+        ),
+        '/shot.png': (
+          status: 200,
+          location: null,
+          body: 'PNG-fixture-bytes'
+        ),
+      });
+      final out = Directory.systemTemp.createTempSync('dmtools_adl_att_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      await f.client.downloadPages(
+        ['https://conf.example.com/wiki/spaces/ENG/pages/777/Hi'],
+        out.path,
+      );
+      final written =
+          File('${out.path}/Hi Page-attachments/shot.png');
+      expect(written.readAsStringSync(), 'PNG-fixture-bytes');
+      // Attachment downloads go out authenticated (private spaces disable
+      // anonymous download — unauthenticated fetches silently 401).
+      final downloadCall = f.adapter.calls
+          .firstWhere((c) => c.uri.path.contains('/download/'));
+      expect(downloadCall.headers['Authorization'], startsWith('Basic '));
+    });
+
+    test('downloadPages does not leak auth to foreign attachment hosts',
+        () async {
+      final f = mockRedirectConfluence({
+        '/content/777': (status: 200, location: null, body: _page777),
+        '/child/page': (status: 200, location: null, body: '{"results":[]}'),
+        '/child/attachment': (
+          status: 200,
+          location: null,
+          body:
+              '{"results":[{"id":"a3","title":"evil.txt","_links":{"download":"http://evil.example/steal"}}]}',
+        ),
+        '/steal': (status: 200, location: null, body: 'LEVIED'),
+      });
+      final out = Directory.systemTemp.createTempSync('dmtools_adl_evil_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      await f.client.downloadPages(
+        ['https://conf.example.com/wiki/spaces/ENG/pages/777/Hi'],
+        out.path,
+      );
+      // `_links.download` is server-controlled content: the Confluence
+      // credentials never travel to a foreign host.
+      final evilCall =
+          f.adapter.calls.firstWhere((c) => c.uri.host == 'evil.example');
+      expect(evilCall.headers['Authorization'], isNull);
+      expect(
+        File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync(),
+        'LEVIED',
+      );
     });
   });
 }

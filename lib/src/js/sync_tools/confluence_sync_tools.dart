@@ -311,7 +311,8 @@ class ConfluenceSyncTools {
   String _getUserProfileById(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       return syncBodyOrError(SyncHttpClient.get(
-        '${config.baseUrl}/user?accountId=${syncAsStr(args['userId'])}',
+        '${config.baseUrl}/user?accountId='
+        '${Uri.encodeQueryComponent(syncAsStr(args['userId']))}',
         headers: config.headers,
       ));
     });
@@ -756,14 +757,27 @@ List<Map<String, dynamic>> _contentList(SyncHttpResponse resp) {
 /// Runs the Java `applyFormat` contract over the `confluence_content…`
 /// listing: converts each result's storage body when [format] asks for
 /// Markdown and returns the re-encoded JSON.
+///
+/// The response is the full `ContentResult` listing object (`{"results":
+/// […], "start", "limit", "size"}`) — Java's MCP layer serializes the
+/// `ContentResult` JSONModel verbatim, and the async/MCP surface must stay
+/// shape-identical with this sync port.
 String _titleAndSpaceContent(
-        _Conf config, Map<String, dynamic> args, String space) =>
-    jsonEncode(_applyFormatToList(
-      _contentList(
-        _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
-      ),
+    _Conf config, Map<String, dynamic> args, String space) {
+  final resp = _titleAndSpaceResponse(config, syncAsStr(args['title']), space);
+  final decoded = syncTryDecode(syncBodyOrError(resp));
+  if (decoded is! Map<String, dynamic>) {
+    return syncErr('Unexpected content listing response');
+  }
+  final results = decoded['results'];
+  if (results is List) {
+    decoded['results'] = _applyFormatToList(
+      results.whereType<Map>().map(Map<String, dynamic>.from).toList(),
       args['format'],
-    ));
+    );
+  }
+  return jsonEncode(decoded);
+}
 
 /// The first content of a title/space listing, JSON `null` when none.
 String _firstContent(
@@ -902,6 +916,7 @@ class _PageDownloader {
     );
     final results = _childrenResults(syncBodyOrError(resp)) ??
         const <Map<String, dynamic>>[];
+    final baseHost = Uri.tryParse(_config.rootUrl)?.host;
     for (final attachment in results) {
       final links = attachment['_links'];
       final downloadPath = links is Map ? links['download'] : null;
@@ -910,7 +925,17 @@ class _PageDownloader {
       final url = downloadPath.startsWith('http')
           ? downloadPath
           : '${_config.rootUrl}$downloadPath';
-      final resp = SyncHttpClient.get(url, headers: _config.headers);
+      // `_links.download` is server-controlled content: the Confluence
+      // credentials never travel to a foreign host.
+      var headers = _config.headers;
+      if (downloadPath.startsWith('http') &&
+          Uri.tryParse(downloadPath)?.host != baseHost) {
+        headers = {...headers}
+          ..removeWhere(
+            (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
+          );
+      }
+      final resp = SyncHttpClient.get(url, headers: headers);
       if (!resp.isOk) continue;
       final dir = Directory('${_output.path}/$pageFolder-attachments')
         ..createSync(recursive: true);

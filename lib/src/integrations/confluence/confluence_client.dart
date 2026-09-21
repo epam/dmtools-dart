@@ -6,8 +6,13 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 
 import 'confluence_http_client.dart';
+import 'confluence_markdown.dart';
+import 'confluence_page_url.dart';
 
 /// The mutable page fields of an update (Java `updatePage` params).
 typedef _PageUpdateSpec = ({
@@ -76,15 +81,17 @@ class ConfluenceClient {
   /// `confluence_create_page` — POST `content`.
   ///
   /// Creates a new page in [spaceKey] with the given [title] and storage-format
-  /// [body]; returns the created page object from the API.
+  /// [body]; returns the created page object from the API. [parentId] nests
+  /// the page under an ancestor (Java `createPage` overload).
   Future<Map<String, dynamic>> createPage(
     String spaceKey,
     String title,
-    String body,
-  ) async {
+    String body, {
+    String? parentId,
+  }) async {
     final responseBody = await _http.post(
       'content',
-      body: jsonEncode(_pagePayload(spaceKey, title, body)),
+      body: jsonEncode(_pagePayload(spaceKey, title, body, parentId)),
     );
     return jsonDecode(responseBody) as Map<String, dynamic>;
   }
@@ -93,12 +100,17 @@ class ConfluenceClient {
   Map<String, dynamic> _pagePayload(
     String spaceKey,
     String title,
-    String body,
-  ) =>
+    String body, [
+    String? parentId,
+  ]) =>
       {
         'type': 'page',
         'title': title,
         'space': {'key': spaceKey},
+        if (parentId != null && parentId.isNotEmpty)
+          'ancestors': [
+            {'id': parentId},
+          ],
         'body': {
           'storage': {'value': body, 'representation': 'storage'},
         },
@@ -398,6 +410,404 @@ class ConfluenceClient {
   /// Returns the watchers (notifications) on the content with [contentId].
   Future<List<Map<String, dynamic>>> getWatchers(String contentId) =>
       _getList('content/$contentId/notification');
+
+  // ── gh-191: Java-named tools from the frozen gap snapshot ────────────────
+
+  /// `confluence_content_by_title` — GET `content?title=&expand=…` in the
+  /// configured default space (Java `contentByTitleInDefaultSpace`).
+  ///
+  /// Returns the full listing response; [format] `md`/`markdown` converts
+  /// every result's storage body to Markdown in place.
+  Future<Map<String, dynamic>> contentByTitle(
+    String title, [
+    String? format,
+  ]) async {
+    final space = defaultSpace;
+    if (space == null) {
+      throw StateError('Default space not set');
+    }
+    return contentByTitleAndSpace(title, space, format);
+  }
+
+  /// `confluence_content_by_title_and_space` — GET
+  /// `content?title=&spaceKey=&expand=…` (Java `content`).
+  Future<Map<String, dynamic>> contentByTitleAndSpace(
+    String title,
+    String space, [
+    String? format,
+  ]) async {
+    final body = await _http.get('content', queryParams: {
+      'expand': 'body.storage,body.export_view,ancestors,version',
+      'title': title,
+      if (space.isNotEmpty) 'spaceKey': space,
+    });
+    final decoded = jsonDecode(body) as Map<String, dynamic>;
+    _applyFormat(_resultList(decoded), format);
+    return decoded;
+  }
+
+  /// `confluence_find_content` — first match by title (in [space] or the
+  /// configured default space), or `null` (Java `findContent`).
+  Future<Map<String, dynamic>?> findContent(
+    String title, {
+    String? space,
+    String? format,
+  }) async {
+    final effectiveSpace = space ?? defaultSpace;
+    if (effectiveSpace == null) {
+      throw StateError('Default space not set');
+    }
+    final listing = await contentByTitleAndSpace(title, effectiveSpace, null);
+    final contents = _resultList(listing);
+    if (contents.isEmpty) return null;
+    _applyFormat([contents.first], format);
+    return contents.first;
+  }
+
+  /// `confluence_find_or_create` — find by title in the default space or
+  /// create under [parentId] (Java `findOrCreate`).
+  Future<Map<String, dynamic>> findOrCreate(
+    String title,
+    String parentId,
+    String body,
+  ) async {
+    final space = defaultSpace;
+    if (space == null) {
+      throw StateError('Default space not set');
+    }
+    final existing = await findContent(title, space: space);
+    return existing ?? createPage(space, title, body, parentId: parentId);
+  }
+
+  /// `confluence_get_children_by_name` — children of the page found by
+  /// title in [spaceKey] (Java `getChildrenOfContentByName`).
+  Future<List<Map<String, dynamic>>> getChildrenByName(
+    String spaceKey,
+    String contentName, [
+    String? format,
+  ]) async {
+    final parent = await findContent(contentName, space: spaceKey);
+    if (parent == null) {
+      throw StateError('Content not found: $contentName');
+    }
+    final children = await getContentChildren(parent['id'] as String);
+    _applyFormat(children, format);
+    return children;
+  }
+
+  /// `confluence_get_content_attachments` — GET
+  /// `content/{contentId}/child/attachment` (Java `getContentAttachments`).
+  Future<List<Map<String, dynamic>>> getContentAttachments(String contentId) =>
+      getPageAttachments(contentId);
+
+  /// `confluence_get_current_user_profile` — GET `user/current`.
+  Future<Map<String, dynamic>> getCurrentUserProfile() async {
+    final body = await _http.get('user/current');
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_get_user_profile_by_id` — GET `user?accountId={userId}`.
+  Future<Map<String, dynamic>> getUserProfileById(String userId) async {
+    final body = await _http.get('user', queryParams: {'accountId': userId});
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_search_content_by_text` — CQL `(title ~ … OR text ~ …)`
+  /// search with the Java expand list (Java `searchContentByText`; the
+  /// GraphQL fast path is not ported).
+  Future<List<Map<String, dynamic>>> searchContentByText(
+    String query, [
+    int? limit,
+  ]) =>
+      _getList(
+        'content/search',
+        queryParams: {
+          'cql':
+              '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
+          'limit': '${limit ?? 20}',
+          'expand': 'title,body.excerpt,history,space,body.storage',
+        },
+      );
+
+  /// `confluence_update_page_with_history` — [updatePage] whose bumped
+  /// version message is [historyComment] (Java tool of the same name).
+  Future<Map<String, dynamic>> updatePageWithHistory({
+    required String contentId,
+    required String title,
+    required String parentId,
+    required String body,
+    required String space,
+    required String historyComment,
+  }) =>
+      updatePage(contentId, title, parentId, body, space, historyComment);
+
+  /// `confluence_contents_by_urls` — resolve each URL to its content,
+  /// skipping failures like Java (`contentsByUrls`).
+  Future<List<Map<String, dynamic>>> contentsByUrls(
+    List<String> urlStrings, [
+    String? format,
+  ]) async {
+    final contents = <Map<String, dynamic>>[];
+    for (final url in urlStrings) {
+      if (url.isEmpty) continue;
+      try {
+        final content = await contentByUrl(url);
+        if (content != null) contents.add(content);
+      } on Object {
+        continue; // Java logs and continues on per-URL failures.
+      }
+    }
+    _applyFormat(contents, format);
+    return contents;
+  }
+
+  /// `contentByUrl` — resolves a Confluence page URL to its content object
+  /// (Java `contentByUrl`): `/spaces/{s}/pages/{id}[/title]` direct ids,
+  /// `/display/{s}/{title}` lookups, `/wiki/x/{key}` and `/l/…` short
+  /// links resolved through their 3xx Location. Returns `null` for unknown
+  /// URL shapes.
+  Future<Map<String, dynamic>?> contentByUrl(String urlString) async {
+    final parsed = Uri.tryParse(urlString);
+    if (parsed == null) return null;
+    var uri = parsed;
+    var ref = resolveConfluencePageUrl(uri);
+    var hops = 0;
+    while (ref is ConfluenceRedirectRef && hops < 5) {
+      hops++;
+      final location = await _resolveRedirect(uri);
+      if (location == null) return null;
+      final next = Uri.tryParse(location);
+      if (next == null) return null;
+      uri = next;
+      ref = resolveConfluencePageUrl(uri);
+    }
+    if (ref is ConfluencePageIdRef) return getPageById(ref.id);
+    if (ref is ConfluenceDisplayRef) {
+      final listing = await contentByTitleAndSpace(ref.title, ref.space);
+      final contents = _resultList(listing);
+      return contents.isEmpty ? null : contents.first;
+    }
+    return null;
+  }
+
+  /// Follows one 3xx hop for [uri], returning the `Location` URL, or `null`
+  /// when the response is not a redirect (dio follows redirects by default;
+  /// this disables that to mirror Java `resolveRedirect`).
+  Future<String?> _resolveRedirect(Uri uri) async {
+    final response = await _http.dio.getUri<dynamic>(
+      uri,
+      options: Options(
+        followRedirects: false,
+        validateStatus: (status) => status != null && status < 400,
+      ),
+    );
+    final location = response.headers.value('location');
+    return (response.statusCode != null &&
+            response.statusCode! >= 300 &&
+            response.statusCode! < 400 &&
+            location != null)
+        ? location
+        : null;
+  }
+
+  /// `confluence_upload_attachment` — multipart upload of one file with the
+  /// skip-existing / overwrite policy (Java `AttachmentHelper`).
+  ///
+  /// Returns `{status: created|updated|skipped|failed, attachment: …}`.
+  Future<Map<String, dynamic>> uploadAttachment(
+    String contentId,
+    String filePath, [
+    bool updateIfExists = false,
+  ]) async {
+    final file = File(filePath);
+    final name = file.uri.pathSegments.last;
+    final existing = await _attachmentByName(contentId, name);
+    if (existing != null && !updateIfExists) {
+      return {'status': 'skipped', 'attachment': existing};
+    }
+    final pathSuffix = existing != null
+        ? 'content/$contentId/child/attachment/${existing['id']}/data'
+        : 'content/$contentId/child/attachment';
+    try {
+      final body = await _http.dio.post<dynamic>(
+        _http.buildUrl(pathSuffix),
+        data: FormData.fromMap(<String, dynamic>{
+          'file': await MultipartFile.fromFile(filePath, filename: name),
+        }),
+        options: Options(headers: {
+          ..._http.authHeaders,
+          'X-Atlassian-Token': 'nocheck',
+        }),
+      );
+      final decoded = _decodeDioBody(body.data);
+      final attachment = decoded?['results'] is List
+          ? (decoded!['results'] as List).firstOrNull
+          : decoded;
+      return {
+        'status': existing != null ? 'updated' : 'created',
+        'attachment': attachment,
+      };
+    } on DioException {
+      return {'status': 'failed', 'attachment': null};
+    }
+  }
+
+  /// `confluence_upload_attachments` — upload every file in [directory]
+  /// with the same policy; returns a JSON summary.
+  Future<Map<String, dynamic>> uploadAttachments(
+    String contentId,
+    String directory, [
+    bool updateIfExists = false,
+  ]) async {
+    final uploaded = <String>[];
+    final skipped = <String>[];
+    final failed = <String>[];
+    for (final entry in Directory(directory).listSync()) {
+      if (entry is! File) continue;
+      final name = entry.uri.pathSegments.last;
+      final result = await uploadAttachment(
+        contentId,
+        entry.path,
+        updateIfExists,
+      );
+      (switch (result['status']) {
+        'created' || 'updated' => uploaded,
+        'skipped' => skipped,
+        _ => failed,
+      })
+          .add(name);
+    }
+    return {'uploaded': uploaded, 'skipped': skipped, 'failed': failed};
+  }
+
+  /// `confluence_download_pages` — downloads pages (+ attachments) reached
+  /// from [urlStrings] up to [depth] child-page levels, converted to
+  /// Markdown (Java `ConfluencePageDownloader`; the link-graph walk is
+  /// limited to child pages). Returns the Java summary line.
+  Future<String> downloadPages(
+    List<String> urlStrings,
+    String outputPath, [
+    int depth = 1,
+    bool downloadAttachments = true,
+  ]) async {
+    var written = 0;
+    for (final url in urlStrings) {
+      final content = await contentByUrl(url);
+      if (content == null) continue;
+      written += await _downloadPageTree(
+          content, Directory(outputPath), depth, downloadAttachments);
+    }
+    return 'Downloaded $written Confluence page(s) to $outputPath';
+  }
+
+  /// Recursively writes [content] and its child-page subtree, returning
+  /// the number of pages written.
+  Future<int> _downloadPageTree(
+    Map<String, dynamic> content,
+    Directory output,
+    int depth,
+    bool downloadAttachments,
+  ) async {
+    final id = content['id']?.toString();
+    if (id == null || id.isEmpty) return 0;
+    final body = content['body'];
+    final storage = body is Map ? body['storage'] as Map? : null;
+    final value = storage?['value'];
+    if (value is! String) return 0;
+    output.createSync(recursive: true);
+    final fileName = _sanitizeFileName(content['title']?.toString() ?? id);
+    File('${output.path}/$fileName.md')
+        .writeAsStringSync(confluenceStorageToMarkdown(value));
+    var written = 1;
+    if (downloadAttachments) {
+      await _downloadAttachmentsOf(id, output, fileName);
+    }
+    if (depth > 1) {
+      for (final child in await getContentChildren(id)) {
+        written += await _downloadPageTree(
+            child, output, depth - 1, downloadAttachments);
+      }
+    }
+    return written;
+  }
+
+  /// Mirrors the attachments of [contentId] into `output/{page}-attachments`.
+  Future<void> _downloadAttachmentsOf(
+    String contentId,
+    Directory output,
+    String pageFolder,
+  ) async {
+    for (final attachment in await getPageAttachments(contentId)) {
+      final links = attachment['_links'];
+      final downloadPath = links is Map ? links['download'] : null;
+      if (downloadPath is! String || downloadPath.isEmpty) continue;
+      // `_links.download` is relative to the wiki base (`/wiki/download/…`
+      // on Cloud): Java concatenates basePath + link, so the `/wiki`
+      // segment survives.
+      final uri = downloadPath.startsWith('http')
+          ? Uri.tryParse(downloadPath)
+          : Uri.tryParse('${_http.basePath}$downloadPath');
+      if (uri == null) continue;
+      try {
+        final response = await _http.dio.get<List<int>>(
+          '$uri',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        final bytes = response.data;
+        if (bytes == null) continue;
+        final dir = Directory('${output.path}/$pageFolder-attachments')
+          ..createSync(recursive: true);
+        File(
+          '${dir.path}/'
+          '${_sanitizeFileName(attachment['title']?.toString() ?? 'file')}',
+        ).writeAsBytesSync(bytes);
+      } on DioException {
+        continue;
+      }
+    }
+  }
+
+  /// The existing attachment object with [name] on [contentId], if any.
+  Future<Map<String, dynamic>?> _attachmentByName(
+    String contentId,
+    String name,
+  ) async {
+    for (final attachment in await getPageAttachments(contentId)) {
+      if (attachment['title'] == name) return attachment;
+    }
+    return null;
+  }
+
+  /// Decodes a dio response body that may arrive as String or JSON.
+  Map<String, dynamic>? _decodeDioBody(Object? data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is String && data.isNotEmpty) {
+      final decoded = jsonDecode(data);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    }
+    return null;
+  }
+
+  /// Applies the Java `applyFormat` contract: converts each content's
+  /// storage body to Markdown in place when [format] is `md`/`markdown`.
+  static void _applyFormat(
+      List<Map<String, dynamic>> contents, String? format) {
+    final f = format?.toLowerCase();
+    if (f != 'md' && f != 'markdown') return;
+    for (final content in contents) {
+      final body = content['body'];
+      final storage = body is Map ? body['storage'] : null;
+      if (storage is! Map || storage['value'] is! String) continue;
+      body.remove('export_view'); // redundant once Markdown is returned
+      storage['value'] =
+          confluenceStorageToMarkdown(storage['value'] as String);
+      storage['representation'] = 'markdown';
+    }
+  }
+
+  /// Filesystem-safe file name from a page title.
+  static String _sanitizeFileName(String title) =>
+      title.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_').trim();
 
   /// GET helper: fetches [path] and returns its `results` array as typed maps.
   Future<List<Map<String, dynamic>>> _getList(

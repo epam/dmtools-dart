@@ -16,6 +16,7 @@ import 'dart:io';
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/confluence/confluence_markdown.dart';
+import '../../integrations/confluence/confluence_page_url.dart';
 import '../../integrations/confluence/markdown_confluence_sync.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
@@ -36,6 +37,22 @@ class ConfluenceSyncTools {
         'confluence_content_by_id': _contentById,
         'confluence_get_children_by_id': _getChildrenById,
         'confluence_sync_markdown_directory': _syncMarkdownDirectory,
+        'confluence_content_by_title': _contentByTitle,
+        'confluence_content_by_title_and_space': _contentByTitleAndSpace,
+        'confluence_contents_by_urls': _contentsByUrls,
+        'confluence_download_pages': _downloadPages,
+        'confluence_find_content': _findContent,
+        'confluence_find_content_by_title_and_space':
+            _findContentByTitleAndSpace,
+        'confluence_find_or_create': _findOrCreate,
+        'confluence_get_children_by_name': _getChildrenByName,
+        'confluence_get_content_attachments': _getContentAttachments,
+        'confluence_get_current_user_profile': _getCurrentUserProfile,
+        'confluence_get_user_profile_by_id': _getUserProfileById,
+        'confluence_search_content_by_text': _searchContentByText,
+        'confluence_update_page_with_history': _updatePageWithHistory,
+        'confluence_upload_attachment': _uploadAttachment,
+        'confluence_upload_attachments': _uploadAttachments,
       };
 
   /// Dispatches a Confluence tool call, mirroring the dispatcher's errors.
@@ -57,6 +74,7 @@ class ConfluenceSyncTools {
     if (token == null || token.isEmpty) return null;
     final authType = _reader.getConfluenceAuthType();
     return (
+      rootUrl: basePath,
       baseUrl: '$basePath/wiki/rest/api',
       headers: {
         'Authorization': '$authType $token',
@@ -363,8 +381,13 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
-/// Resolved sync integration config: base URL plus auth headers.
-typedef _Conf = ({String baseUrl, Map<String, String> headers});
+/// Resolved sync integration config: root site URL, REST base URL, auth
+/// headers.
+typedef _Conf = ({
+  String rootUrl,
+  String baseUrl,
+  Map<String, String> headers,
+});
 
 /// Error payload returned when Confluence config is incomplete.
 const _notConfiguredError = 'Confluence not configured';

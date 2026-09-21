@@ -16,9 +16,18 @@ void main() {
 
   titleToolTests();
   findToolTests();
-  profileAndSearchTests();
-  uploadAndDownloadTests();
-  executorAndDefinitionTests();
+  childrenToolTests();
+  profileTests();
+  searchByTextTests();
+  contentByUrlTests();
+  shortLinkAuthTests();
+  downloadShortLinkTests();
+  uploadAttachmentTests();
+  downloadPagesTests();
+  foreignHostDownloadTests();
+  executorDispatchTests();
+  executorCoercionTests();
+  toolDefinitionTests();
 }
 
 /// Looks up a registered tool by name.
@@ -82,7 +91,7 @@ void titleToolTests() {
   });
 }
 
-/// `findContent` / `findOrCreate` / `getChildrenByName`.
+/// `findContent` / `findOrCreate`.
 void findToolTests() {
   group('ConfluenceClient.find* tools', () {
     test('findContent returns the first match or null', () async {
@@ -153,8 +162,8 @@ void childrenToolTests() {
   });
 }
 
-/// Profiles, text search, URL fetch, history-aware update.
-void profileAndSearchTests() {
+/// Profiles and attachments.
+void profileTests() {
   group('ConfluenceClient profile/search/URL tools', () {
     test('getContentAttachments returns the results', () async {
       final f = mockConfluence((o) => routeByPath({
@@ -179,7 +188,12 @@ void profileAndSearchTests() {
       expect(user['accountId'], '1234:abc');
       expect(f.adapter.calls.single.queryParameters['accountId'], '1234:abc');
     });
+  });
+}
 
+/// Text search and the history-aware page update.
+void searchByTextTests() {
+  group('ConfluenceClient profile/search/URL tools', () {
     test('searchContentByText builds the Java CQL with the limit', () async {
       final f = mockConfluence(
         (o) => routeByPath({'/content/search': '{"results":[{"id":"9"}]}'}, o),
@@ -214,7 +228,12 @@ void profileAndSearchTests() {
       expect(payload['version']['number'], 4);
       expect(payload['version']['message'], 'gh-191');
     });
+  });
+}
 
+/// URL fetch tools.
+void contentByUrlTests() {
+  group('ConfluenceClient profile/search/URL tools', () {
     test('contentsByUrls resolves ids and skips failures', () async {
       final f = mockConfluence((o) => routeByPath({
             '/content/777': _page777,
@@ -240,7 +259,12 @@ void profileAndSearchTests() {
           .contentByUrl('https://conf.example.com/wiki/spaces/ENG/pages/777');
       expect(content?['id'], '777');
     });
+  });
+}
 
+/// Short-link redirects must travel authenticated.
+void shortLinkAuthTests() {
+  group('ConfluenceClient profile/search/URL tools', () {
     test('contentByUrl follows a chained short link sending auth headers',
         () async {
       final f = mockRedirectConfluence({
@@ -302,8 +326,8 @@ void downloadShortLinkTests() {
   });
 }
 
-/// Uploads and the page downloader (real temp dirs, canned listings).
-void uploadAndDownloadTests() {
+/// Uploads (real temp dirs, canned listings).
+void uploadAttachmentTests() {
   group('ConfluenceClient upload/download tools', () {
     test('uploadAttachment skips an existing name by default', () async {
       final f = mockConfluence((o) => routeByPath({
@@ -334,7 +358,12 @@ void uploadAndDownloadTests() {
       expect(summary['uploaded'], ['fresh.txt']);
       expect(summary['failed'], isEmpty);
     });
+  });
+}
 
+/// The page downloader (real temp dirs, canned listings).
+void downloadPagesTests() {
+  group('ConfluenceClient upload/download tools', () {
     test('downloadPages writes markdown and follows children', () async {
       final f = mockConfluence((o) {
         if (o.uri.path.endsWith('/child/page')) {
@@ -424,8 +453,8 @@ void foreignHostDownloadTests() {
   });
 }
 
-/// Executor routing + fixture classification for the new names.
-void executorAndDefinitionTests() {
+/// Executor routing for the new names.
+void executorDispatchTests() {
   group('Confluence gh-191 executor and definitions', () {
     final f = mockWithDefaultSpace(
       (o) => routeByPath({
@@ -438,7 +467,12 @@ void executorAndDefinitionTests() {
           .execute('confluence_get_current_user_profile', {});
       expect((profile as Map)['displayName'], 'Dev');
     });
+  });
+}
 
+/// MCP/JSON callers send string-typed args; the executor coerces.
+void executorCoercionTests() {
+  group('Confluence gh-191 executor and definitions', () {
     test('executor coerces string-typed JSON args', () async {
       // MCP/JSON callers send "depth": "2" / "updateIfExists": "true";
       // hard casts crash with a TypeError while the sync surface coerces.
@@ -527,17 +561,9 @@ const _javaParamExpectations = <String, List<String>>{
     'downloadAttachments'
   ],
   'confluence_find_content': ['title', 'format'],
-  'confluence_find_content_by_title_and_space': [
-    'title',
-    'space',
-    'format'
-  ],
+  'confluence_find_content_by_title_and_space': ['title', 'space', 'format'],
   'confluence_find_or_create': ['title', 'parentId', 'body'],
-  'confluence_get_children_by_name': [
-    'spaceKey',
-    'contentName',
-    'format'
-  ],
+  'confluence_get_children_by_name': ['spaceKey', 'contentName', 'format'],
   'confluence_get_content_attachments': ['contentId'],
   'confluence_get_current_user_profile': <String>[],
   'confluence_get_user_profile_by_id': ['userId'],
@@ -551,11 +577,7 @@ const _javaParamExpectations = <String, List<String>>{
     'historyComment'
   ],
   'confluence_upload_attachment': ['contentId', 'file', 'updateIfExists'],
-  'confluence_upload_attachments': [
-    'contentId',
-    'directory',
-    'updateIfExists'
-  ],
+  'confluence_upload_attachments': ['contentId', 'directory', 'updateIfExists'],
 };
 
 /// The canned title listing (two results, storage bodies).
@@ -570,4 +592,3 @@ const _page777 =
 
 List<Map<String, dynamic>> _results(Map<String, dynamic> listing) =>
     (listing['results'] as List).whereType<Map<String, dynamic>>().toList();
-

@@ -13,7 +13,10 @@ import 'echo_server_helper.dart';
 
 void main() {
   policyConfigTests();
+  policyOverrideAndUrlTests();
+  policyStatusAndBudgetTests();
   delayMathTests();
+  jitterDelayTests();
   retryIntegrationTests();
 }
 
@@ -64,7 +67,12 @@ void policyConfigTests() {
           });
       expect(off.performDelayMs, 0);
     });
+  });
+}
 
+/// Env overrides and per-URL policy selection.
+void policyOverrideAndUrlTests() {
+  group('SyncRetryPolicy configuration', () {
     test('environment overrides are honored', () {
       final env = {
         'JIRA_RETRY_MAX_ATTEMPTS': '3',
@@ -106,7 +114,12 @@ void policyConfigTests() {
       final policy = SyncRetryPolicy.forUrl('http://127.0.0.1:1/x');
       expect(policy.maxAttempts, 5);
     });
+  });
+}
 
+/// Retryable statuses and the Java attempt budget.
+void policyStatusAndBudgetTests() {
+  group('SyncRetryPolicy configuration', () {
     test('retryable statuses are 429 and the 502/503/504 family', () {
       final policy = SyncRetryPolicy.fromEnvMap((_) => null);
       for (final status in [429, 502, 503, 504]) {

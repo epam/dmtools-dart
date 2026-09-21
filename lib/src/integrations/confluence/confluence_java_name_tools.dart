@@ -295,76 +295,90 @@ List<ToolDefinition> _javaNameUploadTools() => [
       ),
     ];
 
+/// Handlers: content/find/URL/profile/search/history-update tools.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+    _javaNameLookupHandlers(ConfluenceClient client) => {
+          'confluence_content_by_title': (a) => client.contentByTitle(
+              a['title'] as String, a['format'] as String?),
+          'confluence_content_by_title_and_space': (a) =>
+              client.contentByTitleAndSpace(
+                a['title'] as String,
+                a['space'] as String,
+                a['format'] as String?,
+              ),
+          'confluence_contents_by_urls': (a) => client.contentsByUrls(
+                (a['urlStrings'] as List).map((e) => e as String).toList(),
+                a['format'] as String?,
+              ),
+          'confluence_download_pages': (a) => client.downloadPages(
+                (a['urlStrings'] as List).map((e) => e as String).toList(),
+                a['outputPath'] as String,
+                _intArg(a, 'depth', 1) ?? 1,
+                _boolArg(a, 'downloadAttachments', fallback: true),
+              ),
+          'confluence_find_content': (a) => client.findContent(
+                a['title'] as String,
+                format: a['format'] as String?,
+              ),
+          'confluence_find_content_by_title_and_space': (a) =>
+              client.findContent(
+                a['title'] as String,
+                space: a['space'] as String,
+                format: a['format'] as String?,
+              ),
+          'confluence_find_or_create': (a) => client.findOrCreate(
+                a['title'] as String,
+                a['parentId'] as String,
+                a['body'] as String,
+              ),
+          'confluence_get_children_by_name': (a) => client.getChildrenByName(
+                a['spaceKey'] as String,
+                a['contentName'] as String,
+                a['format'] as String?,
+              ),
+        };
+
+/// Handlers: attachment listing + uploads.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+    _javaNameTransferHandlers(ConfluenceClient client) => {
+          'confluence_get_content_attachments': (a) =>
+              client.getContentAttachments(a['contentId'] as String),
+          'confluence_get_current_user_profile': (_) =>
+              client.getCurrentUserProfile(),
+          'confluence_get_user_profile_by_id': (a) =>
+              client.getUserProfileById(a['userId'] as String),
+          'confluence_search_content_by_text': (a) =>
+              client.searchContentByText(
+                a['query'] as String,
+                _intArg(a, 'limit'),
+              ),
+          'confluence_update_page_with_history': (a) =>
+              client.updatePageWithHistory(
+                contentId: a['contentId'] as String,
+                title: a['title'] as String,
+                parentId: a['parentId'] as String,
+                body: a['body'] as String,
+                space: a['space'] as String,
+                historyComment: a['historyComment'] as String,
+              ),
+          'confluence_upload_attachment': (a) => client.uploadAttachment(
+                a['contentId'] as String,
+                a['file'] as String,
+                _boolArg(a, 'updateIfExists'),
+              ),
+          'confluence_upload_attachments': (a) => client.uploadAttachments(
+                a['contentId'] as String,
+                a['directory'] as String,
+                _boolArg(a, 'updateIfExists'),
+              ),
+        };
+
 /// Handler entries for the Java-named tools, spread into
 /// `ConfluenceToolExecutor._handlers`.
 Map<String, Future<dynamic> Function(Map<String, dynamic>)> javaNameHandlers(
   ConfluenceClient client,
 ) =>
     {
-      'confluence_content_by_title': (a) =>
-          client.contentByTitle(a['title'] as String, a['format'] as String?),
-      'confluence_content_by_title_and_space': (a) =>
-          client.contentByTitleAndSpace(
-            a['title'] as String,
-            a['space'] as String,
-            a['format'] as String?,
-          ),
-      'confluence_contents_by_urls': (a) => client.contentsByUrls(
-            (a['urlStrings'] as List).map((e) => e as String).toList(),
-            a['format'] as String?,
-          ),
-      'confluence_download_pages': (a) => client.downloadPages(
-            (a['urlStrings'] as List).map((e) => e as String).toList(),
-            a['outputPath'] as String,
-            _intArg(a, 'depth', 1) ?? 1,
-            _boolArg(a, 'downloadAttachments', fallback: true),
-          ),
-      'confluence_find_content': (a) => client.findContent(
-            a['title'] as String,
-            format: a['format'] as String?,
-          ),
-      'confluence_find_content_by_title_and_space': (a) => client.findContent(
-            a['title'] as String,
-            space: a['space'] as String,
-            format: a['format'] as String?,
-          ),
-      'confluence_find_or_create': (a) => client.findOrCreate(
-            a['title'] as String,
-            a['parentId'] as String,
-            a['body'] as String,
-          ),
-      'confluence_get_children_by_name': (a) => client.getChildrenByName(
-            a['spaceKey'] as String,
-            a['contentName'] as String,
-            a['format'] as String?,
-          ),
-      'confluence_get_content_attachments': (a) =>
-          client.getContentAttachments(a['contentId'] as String),
-      'confluence_get_current_user_profile': (_) =>
-          client.getCurrentUserProfile(),
-      'confluence_get_user_profile_by_id': (a) =>
-          client.getUserProfileById(a['userId'] as String),
-      'confluence_search_content_by_text': (a) => client.searchContentByText(
-            a['query'] as String,
-            _intArg(a, 'limit'),
-          ),
-      'confluence_update_page_with_history': (a) =>
-          client.updatePageWithHistory(
-            contentId: a['contentId'] as String,
-            title: a['title'] as String,
-            parentId: a['parentId'] as String,
-            body: a['body'] as String,
-            space: a['space'] as String,
-            historyComment: a['historyComment'] as String,
-          ),
-      'confluence_upload_attachment': (a) => client.uploadAttachment(
-            a['contentId'] as String,
-            a['file'] as String,
-            _boolArg(a, 'updateIfExists'),
-          ),
-      'confluence_upload_attachments': (a) => client.uploadAttachments(
-            a['contentId'] as String,
-            a['directory'] as String,
-            _boolArg(a, 'updateIfExists'),
-          ),
+      ..._javaNameLookupHandlers(client),
+      ..._javaNameTransferHandlers(client),
     };

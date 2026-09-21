@@ -14,7 +14,9 @@ import 'package:test/test.dart';
 void main() {
   edgeCaseTests();
   markdownBranchTests();
+  markdownCodeBlockTests();
   htmlBranchTests();
+  htmlInlineAndEntityTests();
   mixedBranchTests();
   preserverTests();
 }

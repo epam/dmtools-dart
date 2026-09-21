@@ -7,6 +7,10 @@ import 'package:test/test.dart';
 
 import '../echo_server_helper.dart';
 
+/// Shared per-test fixtures, (re)assigned by `main`'s `setUp`.
+late EchoServer server;
+late ConfluenceSyncTools tools;
+
 /// Tests for the 15 Java-named Confluence tools ported under gh-191
 /// (Java `Confluence.java` @MCPTool parity: `content_by_title…`,
 /// `find_content…`, `find_or_create`, `get_children_by_name`,
@@ -23,9 +27,6 @@ void main() {
     PropertyReader.testIsolation = false;
     PropertyReader.testEnvironment.clear();
   });
-
-  late EchoServer server;
-  late ConfluenceSyncTools tools;
 
   setUp(() async {
     server = EchoServer();
@@ -92,7 +93,11 @@ void contentByTitleTests() {
       expect(results, hasLength(2));
       expect(results.first['id'], '801');
     });
+  });
+}
 
+void findToolTests() {
+  group('confluence title/find tools', () {
     test('find_content returns the first match', () {
       final result =
           tools.dispatch('confluence_find_content', {'title': 'Docs'});
@@ -157,7 +162,9 @@ void findOrCreateChildrenTests() {
       );
     });
   });
+}
 
+void profileToolTests() {
   group('confluence profile and search tools', () {
     test('get_content_attachments returns the results array', () {
       final results = jsonDecode(tools.dispatch(
@@ -191,7 +198,11 @@ void findOrCreateChildrenTests() {
       )) as Map;
       expect(body['path'], '/wiki/rest/api/user?accountId=1234-abc-def');
     });
+  });
+}
 
+void searchToolTests() {
+  group('confluence profile and search tools', () {
     test('search_content_by_text builds the Java CQL and default limit', () {
       final body = jsonDecode(tools.dispatch(
           'confluence_search_content_by_text', {'query': 'docs'})) as Map;
@@ -222,7 +233,9 @@ void findOrCreateChildrenTests() {
       expect(body['path'], contains('limit=5'));
     });
   });
+}
 
+void updateToolTests() {
   group('confluence update/URL/upload tools', () {
     test('update_page_with_history PUTs version+1 with the comment', () {
       final body =
@@ -308,7 +321,11 @@ void contentsByUrlsTests() {
       expect(results, hasLength(1));
       expect(results.single['id'], '777');
     });
+  });
+}
 
+void uploadAttachmentToolTests() {
+  group('confluence update/URL/upload tools', () {
     test('upload_attachment skips an existing name by default', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -341,7 +358,11 @@ void contentsByUrlsTests() {
         {'error': 'File not found: /nonexistent-dmtools/file.txt'},
       );
     });
+  });
+}
 
+void uploadAttachmentsToolTests() {
+  group('confluence update/URL/upload tools', () {
     test('upload_attachments summarizes created and skipped files', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_upls_');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -413,6 +434,3 @@ void downloadPagesToolTests() {
     });
   });
 }
-});
-}
-

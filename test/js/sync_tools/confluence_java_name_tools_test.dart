@@ -44,6 +44,19 @@ void main() {
     server.stop();
   });
 
+  contentByTitleTests();
+  findToolTests();
+  findOrCreateChildrenTests();
+  profileToolTests();
+  searchToolTests();
+  updateToolTests();
+  contentsByUrlsTests();
+  uploadAttachmentToolTests();
+  uploadAttachmentsToolTests();
+  downloadPagesToolTests();
+}
+
+void contentByTitleTests() {
   group('confluence title/find tools', () {
     test('content_by_title lists in the default space with format', () {
       final result =
@@ -99,7 +112,11 @@ void main() {
       );
       expect(jsonDecode(result), isNull);
     });
+  });
+}
 
+void findOrCreateChildrenTests() {
+  group('confluence title/find tools', () {
     test('find_or_create returns the existing page without creating', () {
       final body = jsonDecode(tools.dispatch(
         'confluence_find_or_create',
@@ -237,7 +254,11 @@ void main() {
         {'error': 'Failed to fetch version for 404'},
       );
     });
+  });
+}
 
+void contentsByUrlsTests() {
+  group('confluence update/URL/upload tools', () {
     test('contents_by_urls resolves ids and skips failures', () {
       final base = 'http://127.0.0.1:${server.port}';
       final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
@@ -346,7 +367,11 @@ void main() {
         {'error': 'Directory not found: /nonexistent-dmtools-dir'},
       );
     });
+  });
+}
 
+void downloadPagesToolTests() {
+  group('confluence update/URL/upload tools', () {
     test('download_pages writes markdown and follows children to depth', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dl_');
       addTearDown(() => out.deleteSync(recursive: true));
@@ -388,3 +413,6 @@ void main() {
     });
   });
 }
+});
+}
+

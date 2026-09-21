@@ -123,7 +123,12 @@ void findToolTests() {
       ]);
       expect(payload['space']['key'], 'ENG');
     });
+  });
+}
 
+/// `getChildrenByName`.
+void childrenToolTests() {
+  group('ConfluenceClient.find* tools', () {
     test('getChildrenByName resolves the parent then fetches children',
         () async {
       final f = mockWithDefaultSpace(
@@ -267,7 +272,12 @@ void profileAndSearchTests() {
             reason: 'unauthenticated probe on ${probe.uri}');
       }
     });
+  });
+}
 
+/// A dead short link degrades to a per-URL skip.
+void downloadShortLinkTests() {
+  group('ConfluenceClient profile/search/URL tools', () {
     test('downloadPages skips a dead short link without aborting', () async {
       final f = mockRedirectConfluence({
         '/l/dead': (status: 404, location: null, body: 'gone'),
@@ -376,7 +386,12 @@ void uploadAndDownloadTests() {
           f.adapter.calls.firstWhere((c) => c.uri.path.contains('/download/'));
       expect(downloadCall.headers['Authorization'], startsWith('Basic '));
     });
+  });
+}
 
+/// `_links.download` is server-controlled: no auth to foreign hosts.
+void foreignHostDownloadTests() {
+  group('ConfluenceClient upload/download tools', () {
     test('downloadPages does not leak auth to foreign attachment hosts',
         () async {
       final f = mockRedirectConfluence({
@@ -465,49 +480,14 @@ void executorAndDefinitionTests() {
       });
       expect((uploaded as Map)['status'], 'created');
     });
+  });
+}
 
+/// Fixture classification for the new names.
+void toolDefinitionTests() {
+  group('Confluence gh-191 executor and definitions', () {
     test('every new tool definition carries Java parameter names', () {
-      final expected = {
-        'confluence_content_by_title': ['title', 'format'],
-        'confluence_content_by_title_and_space': ['title', 'space', 'format'],
-        'confluence_contents_by_urls': ['urlStrings', 'format'],
-        'confluence_download_pages': [
-          'urlStrings',
-          'outputPath',
-          'depth',
-          'downloadAttachments'
-        ],
-        'confluence_find_content': ['title', 'format'],
-        'confluence_find_content_by_title_and_space': [
-          'title',
-          'space',
-          'format'
-        ],
-        'confluence_find_or_create': ['title', 'parentId', 'body'],
-        'confluence_get_children_by_name': [
-          'spaceKey',
-          'contentName',
-          'format'
-        ],
-        'confluence_get_content_attachments': ['contentId'],
-        'confluence_get_current_user_profile': <String>[],
-        'confluence_get_user_profile_by_id': ['userId'],
-        'confluence_search_content_by_text': ['query', 'limit'],
-        'confluence_update_page_with_history': [
-          'contentId',
-          'title',
-          'parentId',
-          'body',
-          'space',
-          'historyComment'
-        ],
-        'confluence_upload_attachment': ['contentId', 'file', 'updateIfExists'],
-        'confluence_upload_attachments': [
-          'contentId',
-          'directory',
-          'updateIfExists'
-        ],
-      };
+      final expected = _javaParamExpectations;
       final registered = confluenceTools();
       for (final entry in expected.entries) {
         final tool = registered.firstWhere((t) => t.name == entry.key);
@@ -535,6 +515,49 @@ void executorAndDefinitionTests() {
   });
 }
 
+/// Tool name → expected Java parameter names (catalog parity fixture).
+const _javaParamExpectations = <String, List<String>>{
+  'confluence_content_by_title': ['title', 'format'],
+  'confluence_content_by_title_and_space': ['title', 'space', 'format'],
+  'confluence_contents_by_urls': ['urlStrings', 'format'],
+  'confluence_download_pages': [
+    'urlStrings',
+    'outputPath',
+    'depth',
+    'downloadAttachments'
+  ],
+  'confluence_find_content': ['title', 'format'],
+  'confluence_find_content_by_title_and_space': [
+    'title',
+    'space',
+    'format'
+  ],
+  'confluence_find_or_create': ['title', 'parentId', 'body'],
+  'confluence_get_children_by_name': [
+    'spaceKey',
+    'contentName',
+    'format'
+  ],
+  'confluence_get_content_attachments': ['contentId'],
+  'confluence_get_current_user_profile': <String>[],
+  'confluence_get_user_profile_by_id': ['userId'],
+  'confluence_search_content_by_text': ['query', 'limit'],
+  'confluence_update_page_with_history': [
+    'contentId',
+    'title',
+    'parentId',
+    'body',
+    'space',
+    'historyComment'
+  ],
+  'confluence_upload_attachment': ['contentId', 'file', 'updateIfExists'],
+  'confluence_upload_attachments': [
+    'contentId',
+    'directory',
+    'updateIfExists'
+  ],
+};
+
 /// The canned title listing (two results, storage bodies).
 const _listingBody =
     '{"results":[{"id":"801","title":"Found Page","body":{"storage":{"value":"<p>found</p>","representation":"storage"}}},'
@@ -547,3 +570,4 @@ const _page777 =
 
 List<Map<String, dynamic>> _results(Map<String, dynamic> listing) =>
     (listing['results'] as List).whereType<Map<String, dynamic>>().toList();
+

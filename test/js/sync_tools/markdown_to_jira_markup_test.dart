@@ -78,7 +78,11 @@ void markdownBranchTests() {
         'See [the docs|https://example.com/docs] for {{details}}.',
       );
     });
+  });
+}
 
+void markdownCodeBlockTests() {
+  group('markdownToJiraMarkup: markdown branch', () {
     test('code blocks conversion (Java testCodeBlocksConversion)', () {
       const input = "Here's how to implement a feature:\n"
           '\n'
@@ -163,7 +167,11 @@ void htmlBranchTests() {
         '\\\\second line|',
       );
     });
+  });
+}
 
+void htmlInlineAndEntityTests() {
+  group('markdownToJiraMarkup: HTML branch', () {
     test('multi-line code element becomes a block', () {
       const html = '<p>before</p><code class="kotlin">\nval x = 1\n'
           'val y = 2\n</code>';

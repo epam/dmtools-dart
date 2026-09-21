@@ -178,7 +178,12 @@ void delayMathTests() {
       expect(policy.connectionDelayMs(3), 800);
       expect(policy.connectionDelayMs(10), 5000);
     });
+  });
+}
 
+/// Jitter stays within ±jitterFactor/2 (deterministic Random(42)).
+void jitterDelayTests() {
+  group('SyncRetryPolicy delay math', () {
     test('jitter stays within ±jitterFactor/2 of the delay', () {
       final jittered = SyncRetryPolicy(
         maxAttempts: 8,

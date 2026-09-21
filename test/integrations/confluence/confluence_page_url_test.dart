@@ -4,6 +4,11 @@ import 'package:dmtools/src/integrations/confluence/confluence_page_url.dart';
 /// Tests for [resolveConfluencePageUrl] — the Java `contentByUrl` /
 /// `handleWikiUrls` / `checkBaseIndex` segment walk.
 void main() {
+  parseUrlTests();
+  shortLinkAndRejectTests();
+}
+
+void parseUrlTests() {
   group('resolveConfluencePageUrl', () {
     test('parses /wiki/spaces/{space}/pages/{id}/{title}', () {
       final ref = resolveConfluencePageUrl(Uri.parse(
@@ -38,7 +43,11 @@ void main() {
       expect(display.space, '~jdoe');
       expect(display.title, 'My Page');
     });
+  });
+}
 
+void shortLinkAndRejectTests() {
+  group('resolveConfluencePageUrl', () {
     test('marks /wiki/x/{id} short links as redirects', () {
       final ref = resolveConfluencePageUrl(
         Uri.parse('https://conf.example.com/wiki/x/AABBCC'),

@@ -13,6 +13,9 @@
 /// - Everything else reads the `JIRA_RETRY_*` environment: `MAX_ATTEMPTS`
 ///   (5), `BASE_DELAY_MS` (1000), `MAX_DELAY_MS` (60000),
 ///   `BACKOFF_MULTIPLIER` (2.0), `JITTER_FACTOR` (0.3), `ENABLED` (true).
+/// - The per-perform throttle (Java `BasicJiraClient`): `JIRA_WAIT_BEFORE_
+///   PERFORM` (bool, default false) sleeps `SLEEP_TIME_REQUEST`
+///   milliseconds (default 300) before each request execution.
 library;
 
 import 'dart:io' show Platform;
@@ -40,6 +43,14 @@ class SyncRetryPolicy {
   /// Random source for jitter (injected in tests).
   final Random random;
 
+  /// Java `isWaitBeforePerform`: throttle every perform (env
+  /// `JIRA_WAIT_BEFORE_PERFORM`, default false).
+  final bool waitBeforePerform;
+
+  /// Java `sleepTimeRequest`: the throttle length in milliseconds (env
+  /// `SLEEP_TIME_REQUEST`, default 300).
+  final int sleepTimeRequestMs;
+
   /// Creates a policy with explicit settings.
   const SyncRetryPolicy({
     required this.maxAttempts,
@@ -48,7 +59,13 @@ class SyncRetryPolicy {
     required this.backoffMultiplier,
     required this.jitterFactor,
     this.random = const _NeutralRandom(),
+    this.waitBeforePerform = false,
+    this.sleepTimeRequestMs = 300,
   });
+
+  /// Milliseconds to sleep before each request execution (Java
+  /// `AbstractRestClient` pre-loop throttle); `0` disables the throttle.
+  int get performDelayMs => waitBeforePerform ? sleepTimeRequestMs : 0;
 
   /// Java `RetryPolicyConfig.forJiraCloud`: Atlassian-recommended Cloud
   /// tuning — more attempts, longer cap, wider jitter.
@@ -88,6 +105,9 @@ class SyncRetryPolicy {
               backoffMultiplier:
                   _doubleEnv(get, 'JIRA_RETRY_BACKOFF_MULTIPLIER', 2.0),
               jitterFactor: _doubleEnv(get, 'JIRA_RETRY_JITTER_FACTOR', 0.3),
+              waitBeforePerform:
+                  get('JIRA_WAIT_BEFORE_PERFORM')?.toLowerCase() == 'true',
+              sleepTimeRequestMs: _intEnv(get, 'SLEEP_TIME_REQUEST', 300),
               random: random ?? Random(),
             );
 

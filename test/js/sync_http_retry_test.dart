@@ -35,6 +35,34 @@ void policyConfigTests() {
       expect(policy.maxDelayMs, 60000);
       expect(policy.backoffMultiplier, 2.0);
       expect(policy.jitterFactor, 0.3);
+      // Per-perform throttle defaults: off, 300ms when enabled (Java
+      // BasicJiraClient defaults).
+      expect(policy.waitBeforePerform, isFalse);
+      expect(policy.sleepTimeRequestMs, 300);
+      expect(policy.performDelayMs, 0);
+    });
+
+    test('JIRA_WAIT_BEFORE_PERFORM + SLEEP_TIME_REQUEST drive the throttle',
+        () {
+      final policy = SyncRetryPolicy.fromEnvMap((k) => switch (k) {
+            'JIRA_WAIT_BEFORE_PERFORM' => 'true',
+            'SLEEP_TIME_REQUEST' => '1500',
+            _ => null,
+          });
+      expect(policy.waitBeforePerform, isTrue);
+      expect(policy.sleepTimeRequestMs, 1500);
+      expect(policy.performDelayMs, 1500);
+      final disabled = SyncRetryPolicy.fromEnvMap((k) => switch (k) {
+            'JIRA_WAIT_BEFORE_PERFORM' => 'true',
+            _ => null,
+          });
+      expect(disabled.performDelayMs, 300); // SLEEP_TIME_REQUEST default
+      final off = SyncRetryPolicy.fromEnvMap((k) => switch (k) {
+            'JIRA_WAIT_BEFORE_PERFORM' => 'false',
+            'SLEEP_TIME_REQUEST' => '1500',
+            _ => null,
+          });
+      expect(off.performDelayMs, 0);
     });
 
     test('environment overrides are honored', () {
@@ -54,14 +82,15 @@ void policyConfigTests() {
     });
 
     test('JIRA_RETRY_ENABLED=false disables retrying', () {
-      final policy =
-          SyncRetryPolicy.fromEnvMap((k) => k == 'JIRA_RETRY_ENABLED' ? 'false' : null);
+      final policy = SyncRetryPolicy.fromEnvMap(
+          (k) => k == 'JIRA_RETRY_ENABLED' ? 'false' : null);
       expect(policy.maxAttempts, 0);
       expect(policy.shouldRetry(1, 429), isFalse);
     });
 
     test('forUrl picks the cloud policy for atlassian.net', () {
-      final policy = SyncRetryPolicy.forUrl('https://x.atlassian.net/rest/api/2/issue');
+      final policy =
+          SyncRetryPolicy.forUrl('https://x.atlassian.net/rest/api/2/issue');
       expect(policy.maxAttempts, 7);
     });
 
@@ -185,10 +214,9 @@ void retryIntegrationTests() {
 
     tearDownAll(() => server.stop());
 
-    test('429 + Retry-After: 0 is retried and the echo answer is returned',
-        () {
-      final resp = SyncHttpClient.get(
-          'http://127.0.0.1:${server.port}/dt-retry/a');
+    test('429 + Retry-After: 0 is retried and the echo answer is returned', () {
+      final resp =
+          SyncHttpClient.get('http://127.0.0.1:${server.port}/dt-retry/a');
       expect(resp.statusCode, 200);
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       expect(body['path'], '/dt-retry/a');
@@ -196,8 +224,8 @@ void retryIntegrationTests() {
 
     test('503 without retry headers is retried with backoff', () {
       final stopwatch = Stopwatch()..start();
-      final resp = SyncHttpClient.get(
-          'http://127.0.0.1:${server.port}/dt-retryfail/b');
+      final resp =
+          SyncHttpClient.get('http://127.0.0.1:${server.port}/dt-retryfail/b');
       stopwatch.stop();
       expect(resp.statusCode, 200);
       // First attempt pays the 1s base backoff before the retry.

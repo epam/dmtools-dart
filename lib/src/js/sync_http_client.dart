@@ -109,6 +109,9 @@ class SyncHttpClient {
     String? body,
   }) {
     final policy = SyncRetryPolicy.forUrl(url);
+    // Java `isWaitBeforePerform` throttle before the request goes out.
+    final performDelay = policy.performDelayMs;
+    if (performDelay > 0) sleep(Duration(milliseconds: performDelay));
     var attempt = 1;
     while (true) {
       final resp = _transport(method, url, headers: headers, body: body);

@@ -124,15 +124,7 @@ class ConfluenceSyncTools {
   /// version (Java `updatePage`: fetch current version, +1, ancestors, space).
   String _updatePage(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final contentId = syncAsStr(args['contentId']);
-      final version = _currentVersion(config, contentId);
-      if (version == null)
-        return syncErr('Failed to fetch version for $contentId');
-      return syncBodyOrError(SyncHttpClient.put(
-        '${config.baseUrl}/content/$contentId',
-        headers: config.headers,
-        body: jsonEncode(_updatePayload(args, contentId, version + 1)),
-      ));
+      return _updateWithVersion(config, args);
     });
   }
 
@@ -355,22 +347,35 @@ class ConfluenceSyncTools {
   /// (Java `confluence_update_page_with_history`).
   String _updatePageWithHistory(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final contentId = syncAsStr(args['contentId']);
-      final version = _currentVersion(config, contentId);
-      if (version == null) {
-        return syncErr('Failed to fetch version for $contentId');
-      }
-      return syncBodyOrError(SyncHttpClient.put(
-        '${config.baseUrl}/content/$contentId',
-        headers: config.headers,
-        body: jsonEncode(_updatePayload(
-          args,
-          contentId,
-          version + 1,
-          historyComment: syncAsStr(args['historyComment']),
-        )),
-      ));
+      return _updateWithVersion(
+        config,
+        args,
+        historyComment: syncAsStr(args['historyComment']),
+      );
     });
+  }
+
+  /// The shared `update_page*` tail: bumps the current version of the page
+  /// and PUTs the merged payload (Java `updatePage`; the history-comment
+  /// variant adds `version.message`).
+  String _updateWithVersion(
+    _Conf config,
+    Map<String, dynamic> args, {
+    String historyComment = '',
+  }) {
+    final contentId = syncAsStr(args['contentId']);
+    final version = _currentVersion(config, contentId);
+    if (version == null) {
+      return syncErr('Failed to fetch version for $contentId');
+    }
+    return syncBodyOrError(SyncHttpClient.put(
+      '${config.baseUrl}/content/$contentId',
+      headers: config.headers,
+      body: jsonEncode(
+        _updatePayload(args, contentId, version + 1,
+            historyComment: historyComment),
+      ),
+    ));
   }
 
   /// `confluence_upload_attachment` — multipart upload of one file with the

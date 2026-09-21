@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -49,7 +50,7 @@ void titleToolTests() {
   group('ConfluenceClient.contentByTitle*', () {
     test('contentByTitle lists in the default space', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _listingBody}, o, fallback: '[]'),
+        (o) => routeByPath({'/content': _listingBody}, o),
       );
       final listing = await f.client.contentByTitle('Docs');
       expect(_results(listing), hasLength(2));
@@ -68,7 +69,7 @@ void titleToolTests() {
 
     test('contentByTitleAndSpace converts storage to markdown', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _listingBody}, o, fallback: '[]'),
+        (o) => routeByPath({'/content': _listingBody}, o),
       );
       final listing =
           await f.client.contentByTitleAndSpace('Docs', 'DEV', 'md');
@@ -86,37 +87,32 @@ void findToolTests() {
   group('ConfluenceClient.find* tools', () {
     test('findContent returns the first match or null', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _listingBody}, o, fallback: '[]'),
+        (o) => routeByPath({'/content': _listingBody}, o),
       );
       expect((await f.client.findContent('Docs'))?['id'], '801');
     });
 
     test('findContent by explicit space hits spaceKey', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _emptyListingBody}, o,
-            fallback: '[]'),
+        (o) => routeByPath({'/content': _emptyListingBody}, o),
       );
-      final found =
-          await f.client.findContent('Docs', space: 'DEV');
+      final found = await f.client.findContent('Docs', space: 'DEV');
       expect(found, isNull);
       expect(f.adapter.calls.single.queryParameters['spaceKey'], 'DEV');
     });
 
     test('findOrCreate returns the existing page', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _listingBody}, o, fallback: '[]'),
+        (o) => routeByPath({'/content': _listingBody}, o),
       );
       final page = await f.client.findOrCreate('Docs', '7', '<p>new</p>');
       expect(page['id'], '801');
     });
 
     test('findOrCreate creates under the parent when not found', () async {
-      final f = mockWithDefaultSpace(
-        (o) => routeByPath({
-          '/content?': _emptyListingBody,
-          '/content': '{"id":"909","title":"Docs"}',
-        }, o),
-      );
+      final f = mockWithDefaultSpace((o) => o.method == 'POST'
+          ? '{"id":"909","title":"Docs"}'
+          : _emptyListingBody);
       final page = await f.client.findOrCreate('Docs', '7', '<p>new</p>');
       expect(page['id'], '909');
       final post = f.adapter.calls.last;
@@ -132,8 +128,8 @@ void findToolTests() {
         () async {
       final f = mockWithDefaultSpace(
         (o) => routeByPath({
-          '/content?': '{"results":[{"id":"555","title":"Parent"}]}',
           '/child/page': '{"results":[{"id":"902","title":"Child"}]}',
+          '/content': '{"results":[{"id":"555","title":"Parent"}]}',
         }, o),
       );
       final children = await f.client.getChildrenByName('ENG', 'Parent');
@@ -142,7 +138,7 @@ void findToolTests() {
 
     test('getChildrenByName throws when the parent is missing', () async {
       final f = mockWithDefaultSpace(
-        (o) => routeByPath({'/content?': _emptyListingBody}, o),
+        (o) => routeByPath({'/content': _emptyListingBody}, o),
       );
       expect(
         f.client.getChildrenByName('ENG', 'Ghost'),
@@ -173,7 +169,7 @@ void profileAndSearchTests() {
 
     test('getUserProfileById sends the accountId', () async {
       final f = mockConfluence(
-        (o) => routeByPath({'/user?': '{"accountId":"1234:abc"}'}, o),
+        (o) => routeByPath({'/user': '{"accountId":"1234:abc"}'}, o),
       );
       final user = await f.client.getUserProfileById('1234:abc');
       expect(user['accountId'], '1234:abc');
@@ -197,10 +193,9 @@ void profileAndSearchTests() {
     });
 
     test('updatePageWithHistory sends the version message', () async {
-      final f = mockConfluence((o) => routeByPath({
-        '/content/555': '{"version":{"number":3}}',
-        '/content/': '{"id":"555"}',
-      }, o, fallback: '{"id":"555"}'));
+      final f = mockConfluence((o) => o.method == 'GET'
+          ? '{"version":{"number":3}}'
+          : '{"id":"555"}');
       final updated = await f.client.updatePageWithHistory(
         contentId: '555',
         title: 'Up',

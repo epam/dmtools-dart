@@ -3,7 +3,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:dmtools/src/js/sync_http_client.dart';

@@ -189,12 +189,12 @@ void _testParseResponse() {
 void _testIsOk() {
   group('SyncHttpResponse.isOk', () {
     test('2xx is true, everything else false', () {
-      expect(const SyncHttpResponse(200, '').isOk, isTrue);
-      expect(const SyncHttpResponse(201, '').isOk, isTrue);
-      expect(const SyncHttpResponse(299, '').isOk, isTrue);
-      expect(const SyncHttpResponse(300, '').isOk, isFalse);
-      expect(const SyncHttpResponse(404, '').isOk, isFalse);
-      expect(const SyncHttpResponse(0, '').isOk, isFalse);
+      expect(SyncHttpResponse(200, '').isOk, isTrue);
+      expect(SyncHttpResponse(201, '').isOk, isTrue);
+      expect(SyncHttpResponse(299, '').isOk, isTrue);
+      expect(SyncHttpResponse(300, '').isOk, isFalse);
+      expect(SyncHttpResponse(404, '').isOk, isFalse);
+      expect(SyncHttpResponse(0, '').isOk, isFalse);
     });
   });
 }

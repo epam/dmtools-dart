@@ -144,9 +144,9 @@ String _convertMarkdownToJiraMarkup(String markdown) {
 }
 
 /// `![name|attrs]` → `!name|attrs!` (Java `processImages`).
-String _processImages(String text) => text.replaceAll(
+String _processImages(String text) => text.replaceAllMapped(
       RegExp(r'!\[(.*?)\|([^\]]+)\]'),
-      '!\$1|\$2!',
+      (m) => '!${m.group(1)}|${m.group(2)}!',
     );
 
 /// Per-paragraph Markdown inline conversion (Java `processTextParagraph`):
@@ -156,17 +156,20 @@ String _processTextParagraph(String text) {
   final output = <String>[];
   for (final line in _processImages(text).split('\n')) {
     var trimmed = line.trim();
-    trimmed = trimmed.replaceAll(
-        RegExp(r'^1\. \*\*(.*?)\*\*'), '*\$1*');
+    trimmed = trimmed.replaceAllMapped(
+        RegExp(r'^1\. \*\*(.*?)\*\*'), (m) => '*${m.group(1)}*');
     final heading = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(trimmed);
     if (heading != null) {
       output.add('h${heading.group(1)!.length}. ${heading.group(2)}');
       continue;
     }
     trimmed = trimmed
-        .replaceAll(RegExp(r'`\s*([^`]+)\s*`'), '{{\$1}}')
-        .replaceAll(RegExp(r'\*\*([^*]+)\*\*'), '*\$1*')
-        .replaceAll(RegExp(r'\[([^\]]+)\]\(([^)]+)\)'), '[\$1|\$2]');
+        .replaceAllMapped(
+            RegExp(r'`\s*([^`]+)\s*`'), (m) => '{{${m.group(1)}}}')
+        .replaceAllMapped(
+            RegExp(r'\*\*([^*]+)\*\*'), (m) => '*${m.group(1)}*')
+        .replaceAllMapped(RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
+            (m) => '[${m.group(1)}|${m.group(2)}]');
     output.add(trimmed);
   }
   return output.join('\n');
@@ -341,15 +344,22 @@ String _handleBlockElement(dom.Element el) {
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
 String _inlineMarkup(String html) => html
-    .replaceAll(
-        RegExp(r'(?i)<a\s+href="([^"]+)">(.*?)</a>'), '[\$2|\$1]')
-    .replaceAll(RegExp(r'(?i)<strong>(.*?)</strong>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<em>(.*?)</em>'), '_$1_')
-    .replaceAll(RegExp(r'(?i)<b>(.*?)</b>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<i>(.*?)</i>'), '_$1_')
-    .replaceAll(RegExp(r'(?i)<br\s*/?>'), '\n')
-    .replaceAll(RegExp('(?)<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>'),
-        '{{\$1}}')
+    .replaceAllMapped(
+        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+        (m) => '[${m.group(2)}|${m.group(1)}]')
+    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+    .replaceAllMapped(
+        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
+            caseSensitive: false),
+        (m) => '{{${m.group(1)}}}')
     .replaceAll(RegExp(r'<[^>]+>'), '');
 
 /// Paragraph conversion: inline replacement chain over the element's inner
@@ -357,7 +367,7 @@ String _inlineMarkup(String html) => html
 String _processParagraph(dom.Element p) {
   final html = p.innerHtml;
   if (html.contains(codeBlockPlaceholder)) {
-    return html.replaceAll(RegExp(r'(?i)</?code[^>]*>'), '');
+    return html.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
   }
   final text = _inlineMarkup(html);
   return _fixNewlineBeforeLink(decodeHtmlEntities(text).trim());
@@ -367,7 +377,7 @@ String _processParagraph(dom.Element p) {
 /// multi-line (Java `processCodeElement`).
 String _processCodeElement(dom.Element codeEl) {
   if (codeEl.outerHtml.contains(codeBlockPlaceholder)) {
-    return codeEl.outerHtml.replaceAll(RegExp(r'(?i)</?code[^>]*>'), '');
+    return codeEl.outerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
   }
   final codeText = decodeHtmlEntities(codeEl.innerHtml)
       .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -386,7 +396,7 @@ String _processPre(dom.Element pre) {
   final codeEl = pre.querySelector('code');
   if (codeEl != null) {
     if (codeEl.innerHtml.contains(codeBlockPlaceholder)) {
-      return codeEl.innerHtml.replaceAll(RegExp(r'(?i)</?code[^>]*>'), '');
+      return codeEl.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
     }
     final codeText = decodeHtmlEntities(codeEl.innerHtml)
         .replaceAll(RegExp(r'^\r?\n+'), '')
@@ -395,7 +405,7 @@ String _processPre(dom.Element pre) {
     return '{code:${lang == null || lang.isEmpty ? 'java' : lang}}\n'
         '$codeText\n{code}';
   }
-  return decodeHtmlEntities(pre.text ?? '');
+  return decodeHtmlEntities(pre.text);
 }
 
 /// `<ul>` → `* item` lines with nested-list recursion (Java
@@ -424,7 +434,7 @@ String _processOrderedList(dom.Element ol) {
     }
     if (li.innerHtml.contains(codeBlockPlaceholder)) {
       sb.writeln(
-          li.innerHtml.replaceAll(RegExp(r'(?i)</?code[^>]*>'), ''));
+          li.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''));
       continue;
     }
     sb.writeln('# ${_listItemText(li)}');
@@ -438,22 +448,29 @@ String _processOrderedList(dom.Element ol) {
 String _listItemText(dom.Element li) {
   final clone = li.clone(true);
   clone.querySelectorAll('ul,ol').forEach((e) => e.remove());
-  final raw = clone.innerHtml.replaceAll(RegExp(r'(?i)</?code[^>]*>'), '');
+  final raw = clone.innerHtml.replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), '');
   return decodeHtmlEntities(_listInlineMarkup(raw)).trim();
 }
 
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
 String _listInlineMarkup(String html) => html
-    .replaceAll(
-        RegExp(r'(?i)<a\s+href="([^"]+)">(.*?)</a>'), '[\$2|\$1]')
-    .replaceAll(RegExp(r'(?i)<strong>(.*?)</strong>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<em>(.*?)</em>'), '_$1_')
-    .replaceAll(RegExp(r'(?i)<b>(.*?)</b>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<i>(.*?)</i>'), '_$1_')
-    .replaceAll(RegExp(r'(?i)<br\s*/?>\s*'), '\n')
-    .replaceAll(RegExp('(?)<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>'),
-        '{{\$1}}')
+    .replaceAllMapped(
+        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+        (m) => '[${m.group(2)}|${m.group(1)}]')
+    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAll(RegExp(r'<br\s*/?>\s*', caseSensitive: false), '\n')
+    .replaceAllMapped(
+        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
+            caseSensitive: false),
+        (m) => '{{${m.group(1)}}}')
     .replaceAll(RegExp(r'<[^>]+>'), '');
 
 /// Appends nested `<ul>`/`<ol>` children of [li] to [sb] (Java's recursion
@@ -497,7 +514,7 @@ String _processTable(dom.Element table) {
         if (cell.innerHtml.contains(codeBlockPlaceholder)) {
           sb
             ..write(cell.innerHtml
-                .replaceAll(RegExp(r'(?i)</?code[^>]*>'), ''))
+                .replaceAll(RegExp(r'</?code[^>]*>', caseSensitive: false), ''))
             ..write('|');
         } else {
           final cellText = _tableCellMarkup(cell.innerHtml);
@@ -519,15 +536,22 @@ String _processTable(dom.Element table) {
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
 String _tableCellMarkup(String html) => html
-    .replaceAll(
-        RegExp(r'(?i)<a\s+href="([^"]+)">(.*?)</a>'), '[\$2|\$1]')
-    .replaceAll(RegExp(r'(?i)<strong>(.*?)</strong>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<em>(.*?)</em>'), '_$1_')
-    .replaceAll(RegExp(r'(?i)<b>(.*?)</b>'), '*\$1*')
-    .replaceAll(RegExp(r'(?i)<br\s*/?>'), '\n\\\\')
-    .replaceAll(RegExp(r'(?i)<i>(.*?)</i>'), '_$1_')
-    .replaceAll(RegExp('(?)<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>'),
-        '{{\$1}}')
+    .replaceAllMapped(
+        RegExp(r'<a\s+href="([^"]+)">(.*?)</a>'),
+        (m) => '[${m.group(2)}|${m.group(1)}]')
+    .replaceAllMapped(RegExp(r'<strong>(.*?)</strong>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAllMapped(RegExp(r'<em>(.*?)</em>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(RegExp(r'<b>(.*?)</b>', caseSensitive: false),
+        (m) => '*${m.group(1)}*')
+    .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n\\\\')
+    .replaceAllMapped(RegExp(r'<i>(.*?)</i>', caseSensitive: false),
+        (m) => '_${m.group(1)}_')
+    .replaceAllMapped(
+        RegExp('<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
+            caseSensitive: false),
+        (m) => '{{${m.group(1)}}}')
     .replaceAll(RegExp(r'<[^>]+>'), '');
 
 /// Numeric `colspan` attribute of [cell], `1` when absent or unparseable.
@@ -538,7 +562,8 @@ int _colspan(dom.Element cell) =>
 /// original, ported unchanged (two of them are effectively no-ops but keep
 /// byte-parity with the Java output).
 String _fixNewlineBeforeLink(String text) => text
-    .replaceAll(RegExp(r'(\S)\n\[(https?://)'), '\$1\n[\$2')
+    .replaceAllMapped(RegExp(r'(\S)\n\[(https?://)'),
+        (m) => '${m.group(1)}\n[${m.group(2)}')
     .replaceAll(RegExp(r'\n\[\n(https?://)'), '\n[https://')
     .replaceAll(RegExp(r'\n\[https?://'), '\n[https://');
 
@@ -548,7 +573,7 @@ String _fixNewlineBeforeLink(String text) => text
 class HtmlCodeBlockPreserver {
   static final _codePattern =
       RegExp(r'<code[^>]*>(.*?)</code>', dotAll: true);
-  static final _classPattern = RegExp(r'class=["\']([^"\']*)["\']');
+  static final _classPattern = RegExp("class=[\"']([^\"']*)[\"']");
 
   final List<({String content, String language, bool isInline})>
       _preservedCodeBlocks = [];

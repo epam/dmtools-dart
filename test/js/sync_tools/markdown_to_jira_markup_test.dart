@@ -8,7 +8,7 @@
 /// code, links, images, entities).
 library;
 
-import 'package:dmtools/src/js/sync_tools/markdown_to_jira_markup.dart';
+import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
 import 'package:test/test.dart';
 
 void main() {

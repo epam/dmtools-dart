@@ -431,6 +431,49 @@ void executorAndDefinitionTests() {
       expect((profile as Map)['displayName'], 'Dev');
     });
 
+    test('executor coerces string-typed JSON args', () async {
+      // MCP/JSON callers send "depth": "2" / "updateIfExists": "true";
+      // hard casts crash with a TypeError while the sync surface coerces.
+      final routes = (RequestOptions o) {
+        if (o.uri.path.endsWith('/child/page')) {
+          return '{"results":[{"id":"902","title":"Child Page",'
+              '"body":{"storage":{"value":"<p>kid</p>",'
+              '"representation":"storage"}}}]}';
+        }
+        if (o.uri.path.endsWith('/child/attachment')) {
+          return '{"results":[]}';
+        }
+        return routeByPath({'/content/777': _page777}, o, fallback: '{}');
+      };
+      final dl = mockWithDefaultSpace(routes);
+      final summary = await ConfluenceToolExecutor(dl.client)
+          .execute('confluence_download_pages', {
+        'urlStrings': ['https://conf.example.com/wiki/spaces/ENG/pages/777'],
+        'outputPath': Directory.systemTemp
+            .createTempSync('dmtools_exec_dl_')
+            .path,
+        'depth': '2',
+      });
+      expect(summary, contains('2 Confluence page(s)'));
+
+      final dir = Directory.systemTemp.createTempSync('dmtools_exec_up_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      File('${dir.path}/fresh.txt').writeAsStringSync('a');
+      final up = mockWithDefaultSpace(
+        (o) => routeByPath({
+          '/child/attachment': '{"results":[]}',
+          '/attachment': '{"id":"a9"}',
+        }, o, fallback: '{"id":"a9"}'),
+      );
+      final uploaded = await ConfluenceToolExecutor(up.client)
+          .execute('confluence_upload_attachment', {
+        'contentId': '42',
+        'file': '${dir.path}/fresh.txt',
+        'updateIfExists': 'true',
+      });
+      expect((uploaded as Map)['status'], 'created');
+    });
+
     test('every new tool definition carries Java parameter names', () {
       final expected = {
         'confluence_content_by_title': ['title', 'format'],

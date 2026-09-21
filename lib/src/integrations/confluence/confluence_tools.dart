@@ -1132,8 +1132,8 @@ class ConfluenceToolExecutor {
     'confluence_download_pages': (a) => _client.downloadPages(
           (a['urlStrings'] as List).map((e) => e as String).toList(),
           a['outputPath'] as String,
-          (a['depth'] as num?)?.toInt() ?? 1,
-          a['downloadAttachments'] as bool? ?? true,
+          _intArg(a, 'depth', 1),
+          _boolArg(a, 'downloadAttachments', fallback: true),
         ),
     'confluence_find_content': (a) => _client.findContent(
           a['title'] as String,
@@ -1162,7 +1162,7 @@ class ConfluenceToolExecutor {
         _client.getUserProfileById(a['userId'] as String),
     'confluence_search_content_by_text': (a) => _client.searchContentByText(
           a['query'] as String,
-          (a['limit'] as num?)?.toInt(),
+          _intArg(a, 'limit'),
         ),
     'confluence_update_page_with_history': (a) =>
         _client.updatePageWithHistory(

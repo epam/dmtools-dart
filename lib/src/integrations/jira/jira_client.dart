@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'jira_http_client.dart';
 import 'jira_utils.dart';
+import 'markdown_to_jira_markup.dart';
 
 part 'jira_agile_client.dart';
 part 'jira_attachment_client.dart';
@@ -158,10 +159,14 @@ class JiraClient {
   }
 
   /// `jira_post_comment` — POST `/rest/api/latest/issue/{key}/comment`.
+  ///
+  /// The body is converted Markdown → Jira wiki markup first (Java
+  /// `postComment` under the default MARKDOWN text type; the JS-bridge
+  /// surface applies the same conversion, so both stay shape-identical).
   Future<void> postComment(String key, String comment) async {
     await _http.post(
       'issue/$key/comment',
-      body: jsonEncode({'body': comment}),
+      body: jsonEncode({'body': markdownToJiraMarkup(comment)}),
     );
   }
 

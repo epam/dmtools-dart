@@ -54,7 +54,7 @@ void main() {
       final results = listing['results'] as List;
       expect(results, hasLength(2));
       expect(results.first['id'], '801');
-      expect(listing.containsKey('start'), isTrue);
+      expect(listing.containsKey('results'), isTrue);
     });
 
     test('content_by_title requires the default space', () {
@@ -158,12 +158,23 @@ void main() {
       expect(body['path'], '/wiki/rest/api/user/current');
     });
 
-    test('get_user_profile_by_id sends the accountId raw', () {
+    test('get_user_profile_by_id encodes the accountId', () {
       final body = jsonDecode(tools.dispatch(
         'confluence_get_user_profile_by_id',
         {'userId': '1234:abc'},
       )) as Map;
-      expect(body['path'], '/wiki/rest/api/user?accountId=1234:abc');
+      // Encoded like every other query built here — raw '&'/'#'/spaces in
+      // an accountId would break or mutate the query string.
+      expect(body['path'], '/wiki/rest/api/user?accountId=1234%3Aabc');
+    });
+
+    test('get_user_profile_by_id keeps query-safe accountIds readable', () {
+      final body = jsonDecode(tools.dispatch(
+        'confluence_get_user_profile_by_id',
+        {'userId': '1234-abc-def'},
+      )) as Map;
+      expect(body['path'],
+          '/wiki/rest/api/user?accountId=1234-abc-def');
     });
 
     test('search_content_by_text builds the Java CQL and default limit',
@@ -371,6 +382,12 @@ void main() {
       final bytes =
           File('${out.path}/Hi Page-attachments/shot.png').readAsBytesSync();
       expect(utf8.decode(bytes), 'PNG-fixture-bytes');
+      // evil.txt points at an absolute URL on a foreign host (localhost vs
+      // the configured 127.0.0.1) — `_links.download` is server-controlled
+      // content, so the Confluence credentials must stay home.
+      final evil =
+          File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync();
+      expect(evil, 'CLEAN');
     });
   });
 }

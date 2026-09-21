@@ -11,11 +11,50 @@ import 'jira_test_support.dart';
 void main() {
   tearDown(PropertyReader.clearOverrides);
   postCommentIfNotExistsTests();
+  postCommentConversionTests();
   updateFieldAsAdfTests();
   getAllFieldsWithNameTests();
   updateAllFieldsWithNameTests();
   updateTicketTests();
   advancedUpdatesExecutorDispatchTests();
+}
+
+/// `jira_post_comment` — the body is converted Markdown → Jira wiki markup
+/// on both surfaces (Java `postComment` with the default MARKDOWN text
+/// type; gh-191 review: the MCP surface must match the JS bridge).
+void postCommentConversionTests() {
+  group('JiraClient.postComment markdown conversion', () {
+    test('converts Markdown to Jira wiki markup before POSTing', () async {
+      final f = mockJira((o) => '{}');
+      await f.client.postComment('PROJ-1', '# Title\n\n**Bold** point');
+      final post = f.adapter.calls.single;
+      expect(post.method, 'POST');
+      final body = jsonDecode(post.data as String) as Map;
+      expect(body['body'], 'h1. Title\n\n*Bold* point');
+    });
+
+    test('leaves plain wiki markup untouched', () async {
+      final f = mockJira((o) => '{}');
+      await f.client.postComment('PROJ-1', 'plain text only');
+      final body =
+          jsonDecode(f.adapter.calls.single.data as String) as Map;
+      expect(body['body'], 'plain text only');
+    });
+
+    test('postCommentIfNotExists converts the posted body too', () async {
+      var firstCall = true;
+      final f = mockJira((o) {
+        if (firstCall && o.path.contains('/comment')) {
+          firstCall = false;
+          return '{"comments":[]}';
+        }
+        return '{}';
+      });
+      await f.client.postCommentIfNotExists('PROJ-1', '**hi** there');
+      final body = jsonDecode(f.adapter.calls.last.data as String) as Map;
+      expect(body['body'], '*hi* there');
+    });
+  });
 }
 
 /// `jira_post_comment_if_not_exists` — POST only when comment is absent.

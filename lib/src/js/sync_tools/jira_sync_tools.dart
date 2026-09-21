@@ -20,7 +20,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
-import 'markdown_to_jira_markup.dart';
+import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
 import 'tracker_github_router.dart';
 
 /// Executes `jira_*` MCP tool calls synchronously over curl subprocess.

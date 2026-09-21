@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'sync_http_bridge.dart';
+import 'sync_retry_policy.dart';
 
 /// Response from a sync HTTP request.
 class SyncHttpResponse {
@@ -134,12 +135,14 @@ class SyncHttpClient {
   /// Exposed for unit testing so the argument construction (method, URL,
   /// timeouts, file references) can be verified without spawning curl.
   /// Headers and the body are referenced by file path only — see the
-  /// library docs.
+  /// library docs. [headerDumpFile] enables `-D` response-header capture
+  /// for the retry policy's `Retry-After` handling.
   static List<String> buildArgs(
     String method,
     String url, {
     String? headerFile,
     String? bodyFile,
+    String? headerDumpFile,
   }) {
     final args = [
       '-s',
@@ -154,6 +157,7 @@ class SyncHttpClient {
     ];
     if (headerFile != null) args.addAll(['-H', '@$headerFile']);
     if (bodyFile != null) args.addAll(['--data-binary', '@$bodyFile']);
+    if (headerDumpFile != null) args.addAll(['-D', headerDumpFile]);
     args.add(url);
     return args;
   }
@@ -197,7 +201,8 @@ class SyncHttpClient {
   /// Curl fallback transport: stages headers/body in a 0700 temp dir and
   /// spawns curl (`Process.runSync`) — used before the isolate bridge has
   /// booted, and kept as the reference transport for the staged-binary
-  /// helpers in `sync_request_helpers.dart`.
+  /// helpers in `sync_request_helpers.dart`. Response headers are captured
+  /// via `-D` so the retry policy can honor `Retry-After`.
   static SyncHttpResponse _curlRequest(
     String method,
     String url, {
@@ -214,17 +219,42 @@ class SyncHttpClient {
       if (body != null) {
         bodyFile = _stageFile(dir, 'body', body);
       }
+      final headerDumpFile = '${dir.path}/response_headers';
       final args = buildArgs(
         method,
         url,
         headerFile: headerFile,
         bodyFile: bodyFile,
+        headerDumpFile: headerDumpFile,
       );
       final result = Process.runSync('curl', args, stdoutEncoding: utf8);
-      return parseResponse(result);
+      return _withDumpedHeaders(parseResponse(result), headerDumpFile);
     } finally {
       dir.deleteSync(recursive: true);
     }
+  }
+
+  /// Attaches the `-D` header dump to [resp] when it exists.
+  static SyncHttpResponse _withDumpedHeaders(
+    SyncHttpResponse resp,
+    String headerDumpFile,
+  ) {
+    final dump = File(headerDumpFile);
+    if (!dump.existsSync()) return resp;
+    return SyncHttpResponse(resp.statusCode, resp.body, parseHeaderDump(dump));
+  }
+
+  /// Parses a curl `-D` dump into a name/value map (last value wins,
+  /// status lines skipped).
+  static Map<String, String> parseHeaderDump(File dump) {
+    final headers = <String, String>{};
+    for (final line in dump.readAsLinesSync()) {
+      final colon = line.indexOf(':');
+      if (colon <= 0) continue;
+      headers[line.substring(0, colon).trim()] =
+          line.substring(colon + 1).trim();
+    }
+    return headers;
   }
 
   /// Writes [content] to a file inside the private temp [dir].

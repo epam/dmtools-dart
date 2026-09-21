@@ -23,6 +23,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
     """Echoes request details as a JSON response."""
 
     DELETE_LOG = []
+    RETRY_HITS = {}
 
     def _send(self, encoded, content_type="application/json"):
         self.send_response(200)
@@ -44,6 +45,42 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             "headers": {k: v for k, v in self.headers.items()},
             "body": body,
         }
+        # Retry-policy fixtures (gh-191 / P6-JSY-18): the first request to a
+        # dt-retry path answers 429 with Retry-After: 0, later requests echo
+        # normally; dt-retryalways answers 429 forever (attempt-budget
+        # guard); dt-retryfail answers 503 with no retry headers.
+        if "dt-retryalways" in self.path:
+            encoded = b'{"error": "rate limited"}'
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", "0")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if "dt-retryfail" in self.path:
+            hits = RETRY_HITS.get(self.path, 0)
+            RETRY_HITS[self.path] = hits + 1
+            if hits == 0:
+                encoded = b'{"error": "unavailable"}'
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+        if "dt-retry" in self.path:
+            hits = RETRY_HITS.get(self.path, 0)
+            RETRY_HITS[self.path] = hits + 1
+            if hits == 0:
+                encoded = b'{"error": "rate limited"}'
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "0")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
         # JS source fixture for the URL-jsPath tests: serves an agent script
         # (with the action() contract) as plain text so the loader can eval
         # it — mirrors a raw.githubusercontent.com fetch.

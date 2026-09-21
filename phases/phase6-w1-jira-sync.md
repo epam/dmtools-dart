@@ -41,7 +41,12 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
       ✅ Landed (gh-191): `markdownToJiraMarkup` ports the Java converter's
       markdown branch line-for-line (validated against the Java test
       corpus via jsoup probe) + the mixed/HTML branch via package:html;
-      `_postComment` converts unless args['markup'] is set.
+      `_postComment` converts unless args['markup'] is set. Shared from
+      `lib/src/integrations/jira/markdown_to_jira_markup.dart` so
+      `JiraClient.postComment` (MCP surface) converts identically, and
+      `postCommentIfNotExists` compares both the raw and converted text
+      against stored comments (review fix: raw-vs-converted mismatch
+      duplicate-posted Markdown comments on every rerun).
 - [ ] **P6-JSY-10** cloud search must check errorMessages (throw) and send
       maxResults when JIRA_MAX_SEARCH_RESULTS set — dart
       jira_sync_tools.dart:108 / java JiraClient.java:494,674 — M

@@ -197,17 +197,41 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         # Confluence content fixtures: a page GET (777) answers a page
         # object and a child listing (99) answers a results array, both
         # with storage bodies, so the format=markdown conversion runs.
+        # Page 555 answers a version object (update-with-history) and its
+        # child listing carries a titled child for the downloader.
         elif (self.command == "GET"
               and "/wiki/rest/api/content/777" in self.path
               and "/child/" not in self.path):
             payload.clear()
             payload["id"] = "777"
+            payload["title"] = "Hi Page"
             payload["body"] = {
                 "storage": {
                     "value": "<p>hi</p>",
                     "representation": "storage",
                 }
             }
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/555" in self.path
+              and "/child/" not in self.path):
+            payload.clear()
+            payload["id"] = "555"
+            payload["version"] = {"number": 3}
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/555/child/page" in self.path):
+            payload.clear()
+            payload["results"] = [
+                {
+                    "id": "902",
+                    "title": "Child Page",
+                    "body": {
+                        "storage": {
+                            "value": "<p>kid</p>",
+                            "representation": "storage",
+                        }
+                    },
+                }
+            ]
         elif self.command == "GET" and "/wiki/rest/api/content/99/child/page" in self.path:
             payload.clear()
             payload["results"] = [
@@ -221,6 +245,69 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     },
                 }
             ]
+        # Confluence title listing (Java content(title, space) →
+        # ContentResult): the default-space tools' distinctive expand list
+        # answers two results so first-match/applyFormat order is asserted.
+        # The plain get_page expand (body.storage only) keeps the bare echo.
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content?" in self.path
+              and "body.storage%2Cbody.export_view" in self.path):
+            payload.clear()
+            payload["results"] = [
+                {
+                    "id": "801",
+                    "title": "Found Page",
+                    "body": {
+                        "storage": {
+                            "value": "<p>found</p>",
+                            "representation": "storage",
+                        }
+                    },
+                },
+                {
+                    "id": "802",
+                    "title": "Second Page",
+                    "body": {
+                        "storage": {
+                            "value": "<p>second</p>",
+                            "representation": "storage",
+                        }
+                    },
+                },
+            ]
+        # Confluence attachment listing: two fixtures — exists.txt (the
+        # skip-existing policy) and shot.png carrying a _links.download
+        # path (the page-downloader fetches it below).
+        elif self.command == "GET" and "/child/attachment" in self.path:
+            payload.clear()
+            payload["results"] = [
+                {"id": "a1", "title": "exists.txt"},
+                {
+                    "id": "a2",
+                    "title": "shot.png",
+                    "_links": {
+                        "download": "/download/attachments/123/shot.png"
+                    },
+                },
+            ]
+        if self.path.startswith("/download/attachments/"):
+            self._send(b"PNG-fixture-bytes", "application/octet-stream")
+            return
+        # Confluence short-link redirect: /dt-redir answers a 302 whose
+        # Location points back at the 777 page URL (contents_by_urls must
+        # resolve it and fetch that page).
+        if self.path.startswith("/dt-redir"):
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/spaces/ENG/pages/777/Hi" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         elif (self.command == "GET" and "/pipelines?" in self.path
               and urllib.parse.parse_qs(
                   urllib.parse.urlparse(self.path).query

@@ -196,6 +196,275 @@ class ConfluenceSyncTools {
     });
   }
 
+  /// `confluence_content_by_title` — GET `content?title=&expand=…` in the
+  /// configured default space (Java `contentByTitleInDefaultSpace`).
+  String _contentByTitle(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final space = _defaultSpace();
+      if (space == null) return syncErr(_defaultSpaceRequired);
+      return _titleAndSpaceContent(config, args, space);
+    });
+  }
+
+  /// `confluence_content_by_title_and_space` — GET
+  /// `content?title=&spaceKey=&expand=…` (Java `content`).
+  String _contentByTitleAndSpace(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      return _titleAndSpaceContent(config, args, syncAsStr(args['space']));
+    });
+  }
+
+  /// `confluence_find_content` — first match by title in the default space
+  /// or JSON `null` (Java `findContentInDefaultSpace`).
+  String _findContent(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final space = _defaultSpace();
+      if (space == null) return syncErr(_defaultSpaceRequired);
+      return _firstContent(config, args, space);
+    });
+  }
+
+  /// `confluence_find_content_by_title_and_space` — first match by title in
+  /// [ConfluenceSyncTools] space or JSON `null` (Java `findContent`).
+  String _findContentByTitleAndSpace(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      return _firstContent(config, args, syncAsStr(args['space']));
+    });
+  }
+
+  /// `confluence_find_or_create` — find by title in the default space or
+  /// create under [parentId] (Java `findOrCreate`).
+  String _findOrCreate(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final space = _defaultSpace();
+      if (space == null) return syncErr(_defaultSpaceRequired);
+      final existing = _contentList(
+        _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
+      );
+      if (existing.isNotEmpty) return jsonEncode(existing.first);
+      return syncBodyOrError(SyncHttpClient.post(
+        '${config.baseUrl}/content',
+        headers: config.headers,
+        body: jsonEncode(_pagePayload(args)..['space'] = {'key': space}),
+      ));
+    });
+  }
+
+  /// `confluence_get_children_by_name` — children of the page found by
+  /// title in [spaceKey] (Java `getChildrenOfContentByName`).
+  String _getChildrenByName(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final found = _contentList(_titleAndSpaceResponse(
+        config,
+        syncAsStr(args['contentName']),
+        syncAsStr(args['spaceKey']),
+      ));
+      if (found.isEmpty) {
+        return syncErr('Content not found: ${syncAsStr(args['contentName'])}');
+      }
+      final id = found.first['id']?.toString() ?? '';
+      final resp = _contentGet(
+        config,
+        '$id/child/page?limit=100&expand=$_contentExpand',
+      );
+      final results = _childrenResults(syncBodyOrError(resp));
+      if (results == null) {
+        return syncErr('Unexpected children response for $id');
+      }
+      if (_isMarkdownFormat(args['format'])) {
+        for (final content in results) {
+          _convertStorageToMarkdown(content);
+        }
+      }
+      return jsonEncode(results);
+    });
+  }
+
+  /// `confluence_get_content_attachments` — GET
+  /// `content/{contentId}/child/attachment`, returning the `results` array.
+  String _getContentAttachments(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final id = syncAsStr(args['contentId']);
+      final resp = SyncHttpClient.get(
+        '${config.baseUrl}/content/$id/child/attachment',
+        headers: config.headers,
+      );
+      final results = _childrenResults(syncBodyOrError(resp));
+      if (results == null) {
+        return syncErr('Unexpected attachments response for $id');
+      }
+      return jsonEncode(results);
+    });
+  }
+
+  /// `confluence_get_current_user_profile` — GET `user/current`.
+  String _getCurrentUserProfile(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      return syncBodyOrError(SyncHttpClient.get(
+        '${config.baseUrl}/user/current',
+        headers: config.headers,
+      ));
+    });
+  }
+
+  /// `confluence_get_user_profile_by_id` — GET `user?accountId={userId}`.
+  String _getUserProfileById(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      return syncBodyOrError(SyncHttpClient.get(
+        '${config.baseUrl}/user?accountId=${syncAsStr(args['userId'])}',
+        headers: config.headers,
+      ));
+    });
+  }
+
+  /// `confluence_search_content_by_text` — CQL `(title ~ … OR text ~ …)`
+  /// search (Java `searchContentByText`; the GraphQL fast path is not
+  /// ported — Dart always uses the REST search).
+  String _searchContentByText(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final query = syncAsStr(args['query']);
+      final limit = args['limit'] is num
+          ? (args['limit'] as num).toInt()
+          : (int.tryParse(syncAsStr(args['limit'])) ?? 20);
+      final cql = Uri.encodeQueryComponent(
+        '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
+      );
+      final resp = SyncHttpClient.get(
+        '${config.baseUrl}/content/search?cql=$cql'
+        '&limit=$limit'
+        '&expand=${Uri.encodeQueryComponent(_searchExpand)}',
+        headers: config.headers,
+      );
+      final body = syncBodyOrError(resp);
+      final decoded = syncTryDecode(body);
+      if (decoded is Map && decoded['results'] is List) {
+        return jsonEncode(decoded['results']);
+      }
+      return body;
+    });
+  }
+
+  /// `confluence_contents_by_urls` — resolve each URL to content, skipping
+  /// failures like Java (`contentsByUrls`).
+  String _contentsByUrls(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final urls = _stringList(args['urlStrings']);
+      final contents = <Map<String, dynamic>>[];
+      for (final url in urls) {
+        if (url.isEmpty) continue;
+        final content = _contentFromUrl(config, url);
+        if (content != null) contents.add(content);
+      }
+      return jsonEncode(_applyFormatToList(contents, args['format']));
+    });
+  }
+
+  /// `confluence_update_page_with_history` — like [ConfluenceSyncTools]
+  /// update but the bumped version carries [historyComment] as its message
+  /// (Java `confluence_update_page_with_history`).
+  String _updatePageWithHistory(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final contentId = syncAsStr(args['contentId']);
+      final version = _currentVersion(config, contentId);
+      if (version == null) {
+        return syncErr('Failed to fetch version for $contentId');
+      }
+      return syncBodyOrError(SyncHttpClient.put(
+        '${config.baseUrl}/content/$contentId',
+        headers: config.headers,
+        body: jsonEncode(_updatePayload(
+          args,
+          contentId,
+          version + 1,
+          historyComment: syncAsStr(args['historyComment']),
+        )),
+      ));
+    });
+  }
+
+  /// `confluence_upload_attachment` — multipart upload of one file with the
+  /// skip-existing / overwrite policy (Java `AttachmentHelper`).
+  String _uploadAttachment(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final file = File(syncAsStr(args['file']));
+      if (!file.existsSync()) {
+        return syncErr('File not found: ${file.path}');
+      }
+      final result = _SyncConfluenceAttachments(config).uploadWithPolicy(
+        file,
+        syncAsStr(args['contentId']),
+        _flagOrFalse(args['updateIfExists']),
+      );
+      return jsonEncode(result);
+    });
+  }
+
+  /// `confluence_upload_attachments` — upload every file in [directory]
+  /// with the same policy; returns a JSON summary.
+  String _uploadAttachments(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final dir = Directory(syncAsStr(args['directory']));
+      if (!dir.existsSync()) {
+        return syncErr('Directory not found: ${dir.path}');
+      }
+      final updateIfExists = _flagOrFalse(args['updateIfExists']);
+      final helper = _SyncConfluenceAttachments(config);
+      final uploaded = <String>[];
+      final skipped = <String>[];
+      final failed = <String>[];
+      for (final entry in dir.listSync()) {
+        if (entry is! File) continue;
+        try {
+          final result = helper.uploadWithPolicy(
+            entry,
+            syncAsStr(args['contentId']),
+            updateIfExists,
+          );
+          final bucket = result['status'] == 'skipped'
+              ? skipped
+              : result['status'] == 'failed'
+                  ? failed
+                  : uploaded;
+          bucket.add(entry.uri.pathSegments.last);
+        } on StateError {
+          failed.add(entry.uri.pathSegments.last);
+        }
+      }
+      return jsonEncode({
+        'uploaded': uploaded,
+        'skipped': skipped,
+        'failed': failed,
+      });
+    });
+  }
+
+  /// `confluence_download_pages` — download pages (+ attachments) reached
+  /// from [urlStrings] up to [depth] child-page levels, converted to
+  /// Markdown (Java `ConfluencePageDownloader`; link-graph walking is
+  /// limited to child pages).
+  String _downloadPages(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final urls = _stringList(args['urlStrings']);
+      final outputPath = syncAsStr(args['outputPath']);
+      final depth = args['depth'] is num
+          ? (args['depth'] as num).toInt()
+          : (int.tryParse(syncAsStr(args['depth'])) ?? 1);
+      final downloadAttachments = args['downloadAttachments'] == null ||
+          args['downloadAttachments'] == true ||
+          args['downloadAttachments'] == 'true';
+      final downloader = _PageDownloader(
+        config,
+        Directory(outputPath),
+        downloadAttachments,
+      );
+      final written = downloader.download(urls, depth);
+      return 'Downloaded $written Confluence page(s) to $outputPath';
+    });
+  }
+
+  /// The `CONFLUENCE_DEFAULT_SPACE` config value; `null` when unset.
+  String? _defaultSpace() => _reader.getConfluenceDefaultSpace();
+
   /// Builds the page creation payload (Java `createPage` wire format).
   Map<String, dynamic> _pagePayload(Map<String, dynamic> args) {
     final payload = <String, dynamic>{
@@ -222,15 +491,19 @@ class ConfluenceSyncTools {
   Map<String, dynamic> _updatePayload(
     Map<String, dynamic> args,
     String contentId,
-    int version,
-  ) =>
+    int version, {
+    String historyComment = '',
+  }) =>
       _contentPayload(
         id: contentId,
         title: syncAsStr(args['title']),
         parentId: syncAsStr(args['parentId']),
         body: syncAsStr(args['body']),
         space: syncAsStr(args['space']),
-        version: {'number': version},
+        version: {
+          'number': version,
+          if (historyComment.isNotEmpty) 'message': historyComment,
+        },
       );
 
   /// Fetches the current version number of [contentId]; `null` on failure.
@@ -363,6 +636,58 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
     }
   }
 
+  /// Uploads [file] applying the Java `AttachmentHelper` policy: an
+  /// existing attachment is skipped unless [updateIfExists], in which case
+  /// the upload posts to the existing attachment's `/data` endpoint.
+  ///
+  /// Returns `{"status": "created"|"updated"|"skipped"|"failed",
+  /// "attachment": <object?>}`.
+  Map<String, dynamic> uploadWithPolicy(
+    File file,
+    String contentId,
+    bool updateIfExists,
+  ) {
+    final name = file.uri.pathSegments.last;
+    final existing = _existingByName(contentId, name);
+    if (existing != null && !updateIfExists) {
+      return {'status': 'skipped', 'attachment': existing};
+    }
+    final suffix = existing != null
+        ? '/child/attachment/${existing['id']}/data'
+        : '/child/attachment';
+    final result = _multipartPost(
+      '${_config.baseUrl}/content/$contentId$suffix',
+      file,
+    );
+    if (result.statusCode == 0 || !result.isOk) {
+      return {'status': 'failed', 'attachment': null};
+    }
+    final decoded = syncTryDecode(result.body);
+    final attachment = decoded is Map && decoded['results'] is List
+        ? (decoded['results'] as List).firstOrNull
+        : decoded is Map<String, dynamic>
+            ? decoded
+            : null;
+    return {
+      'status': existing != null ? 'updated' : 'created',
+      'attachment': attachment,
+    };
+  }
+
+  /// The existing attachment object with [name] on [contentId], if any.
+  Map<String, dynamic>? _existingByName(String contentId, String name) {
+    final resp = SyncHttpClient.get(
+      '${_config.baseUrl}/content/$contentId/child/attachment',
+      headers: _config.headers,
+    );
+    if (!resp.isOk) return null;
+    final results = _childrenResults(resp.body) ?? const [];
+    for (final attachment in results) {
+      if (attachment['title'] == name) return attachment;
+    }
+    return null;
+  }
+
   /// POSTs [file] as `multipart/form-data` via a curl `-F` invocation.
   ///
   /// [SyncHttpClient] only carries JSON bodies, so the multipart call
@@ -395,6 +720,201 @@ const _notConfiguredError = 'Confluence not configured';
 /// The Java `contentById` expand list (full storage, export view,
 /// ancestors, and version).
 const _contentExpand = 'body.storage,body.export_view,ancestors,version';
+
+/// The Java `searchContentByText` expand list.
+const _searchExpand = 'title,body.excerpt,history,space,body.storage';
+
+/// Error when a default-space tool runs without `CONFLUENCE_DEFAULT_SPACE`
+/// (Java `IllegalStateException`).
+const _defaultSpaceRequired = 'Default space not set';
+
+/// GETs `content?expand=…&title=…[&spaceKey=…]` (Java `content(title,
+/// space)`; the spaceKey param is dropped for an empty space).
+SyncHttpResponse _titleAndSpaceResponse(
+  _Conf config,
+  String title,
+  String space,
+) =>
+    SyncHttpClient.get(
+      '${config.baseUrl}/content?expand=${Uri.encodeQueryComponent(_contentExpand)}'
+      '&title=${Uri.encodeQueryComponent(title)}'
+      '${space.isEmpty ? '' : '&spaceKey=${Uri.encodeQueryComponent(space)}'}',
+      headers: config.headers,
+    );
+
+/// The content objects of a title/space listing.
+List<Map<String, dynamic>> _contentList(SyncHttpResponse resp) {
+  final decoded = syncTryDecode(syncBodyOrError(resp));
+  final results = decoded is Map ? decoded['results'] : decoded;
+  if (results is! List) return const [];
+  return results
+      .whereType<Map>()
+      .map(Map<String, dynamic>.from)
+      .toList(growable: false);
+}
+
+/// Runs the Java `applyFormat` contract over the `confluence_content…`
+/// listing: converts each result's storage body when [format] asks for
+/// Markdown and returns the re-encoded JSON.
+String _titleAndSpaceContent(
+        _Conf config, Map<String, dynamic> args, String space) =>
+    jsonEncode(_applyFormatToList(
+      _contentList(
+        _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
+      ),
+      args['format'],
+    ));
+
+/// The first content of a title/space listing, JSON `null` when none.
+String _firstContent(
+  _Conf config,
+  Map<String, dynamic> args,
+  String space,
+) {
+  final list = _applyFormatToList(
+    _contentList(
+      _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
+    ),
+    args['format'],
+  );
+  return jsonEncode(list.isEmpty ? null : list.first);
+}
+
+/// Applies the Java `applyFormat` contract to a content list, in place.
+List<Map<String, dynamic>> _applyFormatToList(
+  List<Map<String, dynamic>> contents,
+  dynamic format,
+) {
+  if (_isMarkdownFormat(format)) {
+    for (final content in contents) {
+      _convertStorageToMarkdown(content);
+    }
+  }
+  return contents;
+}
+
+/// Coerces an array-ish arg into a string list.
+List<String> _stringList(dynamic value) {
+  if (value is List) return value.map(syncAsStr).toList();
+  final single = syncAsStr(value);
+  return single.isEmpty ? const [] : [single];
+}
+
+/// Reads a boolean flag that may arrive as bool or string.
+bool _flagOrFalse(dynamic value) =>
+    value == true || value == 'true' || value == 'True';
+
+/// Resolves [urlString] to its content object (Java `contentByUrl`), or
+/// `null` when the URL is malformed or the fetch fails.
+Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
+  final uri = Uri.tryParse(urlString);
+  if (uri == null) return null;
+  var ref = resolveConfluencePageUrl(uri);
+  for (var hops = 0; hops < 5; hops++) {
+    if (ref is! ConfluenceRedirectRef) break;
+    // Short link: follow the 3xx Location (curl never follows redirects).
+    final resp = SyncHttpClient.get(urlString, headers: config.headers);
+    final location = resp.headers.entries
+        .where((e) => e.key.toLowerCase() == 'location')
+        .map((e) => e.value)
+        .firstOrNull;
+    if (location == null || !resp.isRedirect) return null;
+    final next = Uri.tryParse(location);
+    if (next == null) return null;
+    ref = resolveConfluencePageUrl(next);
+  }
+  if (ref is ConfluencePageIdRef) {
+    final decoded = syncTryDecode(syncBodyOrError(_contentGet(
+      config,
+      '${ref.id}?expand=$_contentExpand',
+    )));
+    return decoded is Map<String, dynamic> ? decoded : null;
+  }
+  if (ref is ConfluenceDisplayRef) {
+    final list = _contentList(
+      _titleAndSpaceResponse(config, ref.title, ref.space),
+    );
+    return list.isEmpty ? null : list.first;
+  }
+  return null;
+}
+
+/// Depth-first page downloader: writes each page as Markdown and optionally
+/// mirrors its attachments, then recurses into child pages down to
+/// [depth] levels (Java `ConfluencePageDownloader`, limited to the child
+/// graph).
+class _PageDownloader {
+  final _Conf _config;
+  final Directory _output;
+  final bool _downloadAttachments;
+
+  /// Creates a downloader writing under [_output].
+  _PageDownloader(this._config, this._output, this._downloadAttachments);
+
+  int _written = 0;
+
+  /// Downloads every seed [urls] subtree; returns the pages written.
+  int download(List<String> urls, int depth) {
+    for (final url in urls) {
+      final content = _contentFromUrl(_config, url);
+      if (content == null) continue;
+      _downloadPage(content, depth);
+    }
+    return _written;
+  }
+
+  void _downloadPage(Map<String, dynamic> content, int depth) {
+    final id = content['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final body = content['body'];
+    final storage =
+        body is Map ? body['storage'] as Map<String, dynamic>? : null;
+    final value = storage?['value'];
+    if (value is! String) return;
+    _output.createSync(recursive: true);
+    final fileName = _sanitize(content['title']?.toString() ?? id);
+    File('${_output.path}/$fileName.md').writeAsStringSync(
+      confluenceStorageToMarkdown(value),
+    );
+    _written++;
+    if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
+    if (depth > 1) {
+      final resp = _contentGet(_config, '$id/child/page?limit=100');
+      for (final child in _childrenResults(syncBodyOrError(resp)) ??
+          const <Map<String, dynamic>>[]) {
+        _downloadPage(child, depth - 1);
+      }
+    }
+  }
+
+  void _downloadAttachmentsOf(String contentId, String pageFolder) {
+    final resp = SyncHttpClient.get(
+      '${_config.baseUrl}/content/$contentId/child/attachment',
+      headers: _config.headers,
+    );
+    final results = _childrenResults(syncBodyOrError(resp)) ??
+        const <Map<String, dynamic>>[];
+    for (final attachment in results) {
+      final links = attachment['_links'];
+      final downloadPath = links is Map ? links['download'] : null;
+      if (downloadPath is! String || downloadPath.isEmpty) continue;
+      // `_links.download` is relative to the site root (`/download/…`).
+      final url = downloadPath.startsWith('http')
+          ? downloadPath
+          : '${_config.rootUrl}$downloadPath';
+      final resp = SyncHttpClient.get(url, headers: _config.headers);
+      if (!resp.isOk) continue;
+      final dir = Directory('${_output.path}/$pageFolder-attachments')
+        ..createSync(recursive: true);
+      File('${dir.path}/${_sanitize(attachment['title']?.toString() ?? 'file')}')
+          .writeAsBytesSync(resp.bodyBytes);
+    }
+  }
+
+  /// Filesystem-safe file name from a page title.
+  static String _sanitize(String title) =>
+      title.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_').trim();
+}
 
 /// GETs `content/{suffix}` with the resolved config's auth headers.
 SyncHttpResponse _contentGet(_Conf config, String suffix) =>

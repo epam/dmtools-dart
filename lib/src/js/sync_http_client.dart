@@ -35,12 +35,21 @@ class SyncHttpResponse {
   /// transport does not capture them (curl-staged helpers, older bridges).
   final Map<String, String> headers;
 
+  /// The raw response bytes when the transport captured them (curl reads
+  /// the response file verbatim); falls back to the UTF-8 encoding of
+  /// [body] — lossy for non-UTF-8 payloads.
+  final List<int> bodyBytes;
+
   /// Creates a response with [statusCode], [body], and optional [headers].
-  const SyncHttpResponse(this.statusCode, this.body,
-      [this.headers = const <String, String>{}]);
+  SyncHttpResponse(this.statusCode, this.body,
+      [this.headers = const <String, String>{}, List<int>? rawBytes])
+      : bodyBytes = rawBytes ?? utf8.encode(body);
 
   /// Whether the request succeeded (2xx status code).
   bool get isOk => statusCode >= 200 && statusCode < 300;
+
+  /// Whether the response is a redirect the caller must follow.
+  bool get isRedirect => statusCode >= 300 && statusCode < 400;
 }
 
 /// Synchronous HTTP client: pooled-isolate transport with a curl fallback.
@@ -175,7 +184,9 @@ class SyncHttpClient {
   /// The `-w '\n%{http_code}'` flag appends the status code as the final line
   /// of stdout. When curl fails to connect (status code `000`), stderr is
   /// returned as the body for diagnostics; curl exit 28 (timeout expiry) is
-  /// surfaced as a distinct timeout error.
+  /// surfaced as a distinct timeout error. stdout may be a String (when the
+  /// caller passed an encoding) or raw bytes (the default transport) — raw
+  /// bytes are preserved on the response for binary downloads.
   static SyncHttpResponse parseResponse(ProcessResult result) {
     if (result.exitCode == _curlExitTimedOut) {
       return SyncHttpResponse(
@@ -183,8 +194,12 @@ class SyncHttpClient {
         'Request timed out after ${maxTimeSeconds}s (--max-time)',
       );
     }
-    final output = result.stdout as String;
-    final lines = output.split('\n');
+    final stdout = result.stdout;
+    if (stdout is! String) {
+      return _parseRawResponse(
+          stdout as List<int>, result.exitCode, result.stderr as String);
+    }
+    final lines = stdout.split('\n');
     final statusCode = int.tryParse(lines.removeLast().trim()) ?? 0;
     final responseBody = lines.join('\n');
     if (statusCode == 0) {
@@ -196,6 +211,32 @@ class SyncHttpClient {
       return SyncHttpResponse(0, diag);
     }
     return SyncHttpResponse(statusCode, responseBody);
+  }
+
+  /// Byte-mode twin of the string parser: splits the trailing status line
+  /// off the raw stdout and keeps the body bytes verbatim.
+  static SyncHttpResponse _parseRawResponse(
+    List<int> stdout,
+    int exitCode,
+    String stderr,
+  ) {
+    final separator = stdout.lastIndexOf(0x0A); // last \n before %{http_code}
+    if (separator < 0) return SyncHttpResponse(0, 'curl exit $exitCode');
+    final statusLine = utf8.decode(stdout.sublist(separator + 1));
+    final statusCode = int.tryParse(statusLine.trim()) ?? 0;
+    final bodyBytes = stdout.sublist(0, separator);
+    if (statusCode == 0) {
+      final diag = stderr.isEmpty
+          ? utf8.decode(bodyBytes, allowMalformed: true)
+          : stderr;
+      return SyncHttpResponse(0, 'curl exit $exitCode: $diag');
+    }
+    return SyncHttpResponse(
+      statusCode,
+      utf8.decode(bodyBytes, allowMalformed: true),
+      const {},
+      bodyBytes,
+    );
   }
 
   /// Curl fallback transport: stages headers/body in a 0700 temp dir and
@@ -227,8 +268,9 @@ class SyncHttpClient {
         bodyFile: bodyFile,
         headerDumpFile: headerDumpFile,
       );
-      final result = Process.runSync('curl', args, stdoutEncoding: utf8);
-      return _withDumpedHeaders(parseResponse(result), headerDumpFile);
+      final result = Process.runSync('curl', args);
+      final resp = parseResponse(result);
+      return _withDumpedHeaders(resp, headerDumpFile);
     } finally {
       dir.deleteSync(recursive: true);
     }
@@ -241,7 +283,8 @@ class SyncHttpClient {
   ) {
     final dump = File(headerDumpFile);
     if (!dump.existsSync()) return resp;
-    return SyncHttpResponse(resp.statusCode, resp.body, parseHeaderDump(dump));
+    return SyncHttpResponse(
+        resp.statusCode, resp.body, parseHeaderDump(dump), resp.bodyBytes);
   }
 
   /// Parses a curl `-D` dump into a name/value map (last value wins,

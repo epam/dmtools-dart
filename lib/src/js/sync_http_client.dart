@@ -30,8 +30,13 @@ class SyncHttpResponse {
   /// The response body text (UTF-8 decoded).
   final String body;
 
-  /// Creates a response with [statusCode] and [body].
-  const SyncHttpResponse(this.statusCode, this.body);
+  /// Response headers (case-insensitive names as sent); empty when the
+  /// transport does not capture them (curl-staged helpers, older bridges).
+  final Map<String, String> headers;
+
+  /// Creates a response with [statusCode], [body], and optional [headers].
+  const SyncHttpResponse(this.statusCode, this.body,
+      [this.headers = const <String, String>{}]);
 
   /// Whether the request succeeded (2xx status code).
   bool get isOk => statusCode >= 200 && statusCode < 300;
@@ -84,9 +89,33 @@ class SyncHttpClient {
       _dispatch('PATCH', url, headers: headers, body: body);
 
   /// Routes a request through the pooled-isolate bridge when booted, the
-  /// curl subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
-  /// so later requests (after any event-loop turn) use the pool.
+  /// curl subprocess otherwise, retrying retryable failures per
+  /// [SyncRetryPolicy.forUrl] (gh-191, P6-JSY-18: Java `JiraClient.execute`
+  /// retries 429/502/503/504 and connection errors with backoff).
   static SyncHttpResponse _dispatch(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    String? body,
+  }) {
+    final policy = SyncRetryPolicy.forUrl(url);
+    var attempt = 1;
+    while (true) {
+      final resp = _transport(method, url, headers: headers, body: body);
+      if (!policy.shouldRetry(attempt, resp.statusCode)) return resp;
+      final delayMs = resp.statusCode == 0
+          ? policy.connectionDelayMs(attempt)
+          : policy.statusDelayMs(attempt, resp.headers);
+      if (delayMs == null) return resp; // Retry-After over the cap: give up
+      sleep(Duration(milliseconds: delayMs));
+      attempt++;
+    }
+  }
+
+  /// One transport attempt: pooled-isolate bridge when booted, curl
+  /// subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
+  /// so later requests (after any event-loop turn) use the pool.
+  static SyncHttpResponse _transport(
     String method,
     String url, {
     Map<String, String>? headers,

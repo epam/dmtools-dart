@@ -35,9 +35,13 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-08** transitions URL needs `?expand=transitions.fields`;
       return List not envelope — dart jira_sync_tools.dart:244 / java
       JiraClient.java:3068 — S
-- [ ] **P6-JSY-09** `jira_post_comment` must convert markdown→Jira markup
+- [x] **P6-JSY-09** `jira_post_comment` must convert markdown→Jira markup
       (TextType MARKDOWN) — dart jira_sync_tools.dart:83 / java
       JiraClient.java:1033 + MarkdownToJiraConverter — M
+      ✅ Landed (gh-191): `markdownToJiraMarkup` ports the Java converter's
+      markdown branch line-for-line (validated against the Java test
+      corpus via jsoup probe) + the mixed/HTML branch via package:html;
+      `_postComment` converts unless args['markup'] is set.
 - [ ] **P6-JSY-10** cloud search must check errorMessages (throw) and send
       maxResults when JIRA_MAX_SEARCH_RESULTS set — dart
       jira_sync_tools.dart:108 / java JiraClient.java:494,674 — M
@@ -59,7 +63,13 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-17** `jira_execute_request` missing from sync handlers (runs
       any path/URL with auth, returns raw string) — dart
       sync_tool_dispatcher.dart:80 / java JiraClient.java:2649 — M
-- [ ] **P6-JSY-18** retry policy: 429/503 backoff (RetryPolicy,
+- [x] **P6-JSY-18** retry policy: 429/503 backoff (RetryPolicy,
       Cloud-tuned), `JIRA_WAIT_BEFORE_PERFORM` + `SLEEP_TIME_REQUEST`, 60s
       connect — dart sync_http_client.dart:38 / java
       JiraClient.java:168-193,2742 — M
+      ✅ Landed (gh-191): `sync_retry_policy.dart` ports `RetryPolicy`
+      (exponential+jitter, Retry-After / X-RateLimit-Reset, 200ms
+      connection schedule) + `forJiraCloud` tuning; `JIRA_WAIT_BEFORE_
+      PERFORM` / `SLEEP_TIME_REQUEST` (300ms default) throttle each
+      perform. Note: connect budget stays 10s by design (sync-path
+      fails-fast; documented deviation from the Java 60s).

@@ -254,18 +254,18 @@ after.
 - [x] Tool schema registry: same tool names, same argument schemas, same
       availability rules (tool appears only when its integration is configured).
       `default_tool_registry.dart` registers all 17 catalogs; `dmtools list` prints
-      the full catalog (387 tools).
+      the full catalog (457 tools).
 - [x] **Complete `@MCPTool` parity for the agent-used surface**: all Java
       @MCPTool methods the dmtools-agents scripts call are ported —
-      **387 canonical tools across 17 integrations** (Jira 67, GitHub 58,
-      GitLab 47, ADO 44, Confluence 32, File 19, TestRail 18, Figma 15,
+      **457 canonical tools across 17 integrations** (Jira 67, GitHub 58,
+      GitLab 47, ADO 44, Confluence 47, File 19, TestRail 18, Figma 15,
       AI 14 (incl. per-provider `*_ai_chat`), Jenkins 14, Bitrise 13,
       SharePoint 12, Teams 11, Xray 8, KB 8, Mermaid 4, CLI 3).
       Registry is the Dart equivalent of the generated catalog — the catalog cannot
       drift because all tools are defined in the `*_tools.dart` files next to their
       implementations. CI catalog comparison: `test/mcp/catalog_parity_test.dart`
       against the frozen gap snapshot
-      (`test/fixtures/java_mcp_tool_gaps.txt`, 159 remaining non-agent names).
+      (`test/fixtures/java_mcp_tool_gaps.txt`, 98 remaining non-agent names; gh-191 shrank it from 159 by porting the 15 Confluence Java-named tools).
 - [x] HTTP clients for the remaining integrations on `dio` (after Jira): ADO,
       GitHub, GitLab, Confluence, Figma, TestRail, Bitrise, Jenkins, Teams,
       SharePoint, KB, Mermaid.

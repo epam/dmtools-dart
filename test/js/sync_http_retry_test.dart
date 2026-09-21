@@ -209,7 +209,12 @@ void retryIntegrationTests() {
       final resp = SyncHttpClient.get(
           'http://127.0.0.1:${server.port}/dt-retryalways/c');
       expect(resp.statusCode, 429);
-      expect(resp.headers['Retry-After'], '0');
+      // Header names are case-insensitive: the bridge transport lowercases
+      // them (dart:io), the curl transport preserves the server's casing.
+      final retryAfter = resp.headers.entries
+          .firstWhere((e) => e.key.toLowerCase() == 'retry-after')
+          .value;
+      expect(retryAfter, '0');
     });
   });
 }

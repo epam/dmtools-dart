@@ -106,8 +106,9 @@ its own matrix slot with its own concurrency group.
 
 Repo automation (dm.ai parity): the
 [agents/](agents) submodule pins [IstiN/dmtools-agents](https://github.com/IstiN/dmtools-agents)
-and feeds the L4 suite; [auto-update-prs.yml](.github/workflows/auto-update-prs.yml)
-re-bases mergeable PRs after every push to main;
+and feeds the L4 suite; [machine-sm.yml](.github/workflows/machine-sm.yml)
+reconciles the loop every 10 min (silent branch refresh + dispatch-only CI:
+pushes fire no workflows, the SM validates heads via `workflow_dispatch`);
 [merge-trigger.yml](.github/workflows/merge-trigger.yml)
 squash-merges `pr_approved` issues once CI is green (gated by the
 `MERGE_TRIGGER_ENABLED` repo variable);

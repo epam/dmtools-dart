@@ -1,0 +1,101 @@
+# SM Quality Gate — the pull_request bridge over dispatch-only CI.
+#
+# GitHub does not associate workflow_dispatch runs with pull requests:
+# the SM-dispatched Quality run registers green check runs on the head
+# SHA, but branch protection's required checks (static / gate /
+# agents-suite) only read PR-ASSOCIATED check runs — they would sit
+# "expected" forever and every merge would 405 (live-verified 2026-09-21
+# on PR #193: "3 of 3 required status checks are expected").
+#
+# This bridge IS the PR association. It runs per head (pull_request
+# event — cheap: one poll job + three mirror steps, no CI matrix), waits
+# for the SM-dispatched Quality run (workflow_dispatch on this exact
+# head SHA) and mirrors its conclusion under the required check names.
+# The expensive matrix still runs ONLY when the SM dispatches it.
+#
+# Failure modes: SM broken / never dispatches -> the waiter times out
+# after 44 min and the mirrors go red (human signal). Dispatched run
+# red -> mirrors red. Draft PRs skip the waiter entirely (drafts cannot
+# merge anyway).
+
+name: 'SM Quality Gate'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  # A fresh head supersedes the in-flight gate (the old head's verdict is
+  # irrelevant; the SM re-dispatches validation on the new head).
+  group: sm-gate-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read     # poll the dispatched Quality run
+  contents: read
+
+jobs:
+  sm-validation:
+    name: 'sm-validation (waits for the SM-dispatched Quality run)'
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      conclusion: ${{ steps.wait.outputs.conclusion }}
+    steps:
+      - name: Wait for the dispatched Quality run on this head
+        id: wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          deadline=$((SECONDS + 2640))   # 44 min — the SM ticks every 10
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            c="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml/runs?event=workflow_dispatch&head_sha=${SHA}&per_page=1" \
+                  --jq '.workflow_runs[0].conclusion' 2>/dev/null || true)"
+            case "$c" in
+              success|failure|cancelled|timed_out|action_required|startup_failure)
+                echo "conclusion=$c" >> "$GITHUB_OUTPUT"
+                echo "SM-dispatched Quality run concluded: $c"
+                exit 0 ;;
+              *) sleep 30 ;;
+            esac
+          done
+          echo "::error::SM-dispatched validation did not conclude within 44 min (SM tick broken or queue stalled)"
+          exit 1
+
+  static:
+    name: static
+    needs: sm-validation
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror the SM validation verdict
+        env:
+          CONCLUSION: ${{ needs.sm-validation.outputs.conclusion }}
+        run: |
+          [ "$CONCLUSION" = "success" ] || { echo "::error::SM validation: ${CONCLUSION:-did not run}"; exit 1; }
+
+  gate:
+    name: gate
+    needs: sm-validation
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror the SM validation verdict
+        env:
+          CONCLUSION: ${{ needs.sm-validation.outputs.conclusion }}
+        run: |
+          [ "$CONCLUSION" = "success" ] || { echo "::error::SM validation: ${CONCLUSION:-did not run}"; exit 1; }
+
+  agents-suite:
+    name: agents-suite
+    needs: sm-validation
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror the SM validation verdict
+        env:
+          CONCLUSION: ${{ needs.sm-validation.outputs.conclusion }}
+        run: |
+          [ "$CONCLUSION" = "success" ] || { echo "::error::SM validation: ${CONCLUSION:-did not run}"; exit 1; }

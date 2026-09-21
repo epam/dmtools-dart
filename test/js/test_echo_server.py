@@ -59,8 +59,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(encoded)
             return
         if "dt-retryfail" in self.path:
-            hits = RETRY_HITS.get(self.path, 0)
-            RETRY_HITS[self.path] = hits + 1
+            hits = EchoHandler.RETRY_HITS.get(self.path, 0)
+            EchoHandler.RETRY_HITS[self.path] = hits + 1
             if hits == 0:
                 encoded = b'{"error": "unavailable"}'
                 self.send_response(503)
@@ -70,8 +70,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(encoded)
                 return
         if "dt-retry" in self.path:
-            hits = RETRY_HITS.get(self.path, 0)
-            RETRY_HITS[self.path] = hits + 1
+            hits = EchoHandler.RETRY_HITS.get(self.path, 0)
+            EchoHandler.RETRY_HITS[self.path] = hits + 1
             if hits == 0:
                 encoded = b'{"error": "rate limited"}'
                 self.send_response(429)

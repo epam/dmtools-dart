@@ -153,18 +153,24 @@ void delayMathTests() {
 
     test('jitter stays within ±jitterFactor/2 of the delay', () {
       final jittered = SyncRetryPolicy(
-        maxAttempts: 5,
+        maxAttempts: 8,
         baseDelayMs: 10000,
         maxDelayMs: 60000,
         backoffMultiplier: 2.0,
         jitterFactor: 0.4,
         random: Random(42),
       );
-      for (var attempt = 1; attempt <= 5; attempt++) {
+      // Attempts 1-2 sit under the cap: 10000/20000 ±20%.
+      for (var attempt = 1; attempt <= 2; attempt++) {
+        final nominal = 10000 * (1 << (attempt - 1));
         final delay = jittered.statusDelayMs(attempt)!;
-        expect(delay, greaterThanOrEqualTo(8000));
-        expect(delay, lessThanOrEqualTo(12000));
+        expect(delay, greaterThanOrEqualTo(nominal * 0.8));
+        expect(delay, lessThanOrEqualTo(nominal * 1.2));
       }
+      // Attempt 5 is capped at 60000 and still jitters ±20% around the cap.
+      final capped = jittered.statusDelayMs(5)!;
+      expect(capped, greaterThanOrEqualTo(48000));
+      expect(capped, lessThanOrEqualTo(72000));
     });
   });
 }

@@ -45,7 +45,12 @@ permissions:
 jobs:
   sm-validation:
     name: 'sm-validation (waits for the SM-dispatched Quality run)'
-    if: ${{ !github.event.pull_request.draft }}
+    # chore:pin PRs are EXEMPT from SM validation by design (factory #498:
+    # the factory suite gates pin content; the next real PR validates it via
+    # silent-update). Without this skip the waiter polls a run that never
+    # comes and stamps a false red "did not run" on every pin PR (live:
+    # dart #221 — four red jobs, zero real checks run).
+    if: ${{ !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'chore:pin') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:

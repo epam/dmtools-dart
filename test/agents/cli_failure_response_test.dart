@@ -10,9 +10,12 @@ import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
 void main() {
-  boundedLogTests();
+  boundedLogBasicTests();
+  boundedLogBoundaryTests();
   failureSummaryTests();
-  failureFallbackTests();
+  successFallbackTests();
+  monitoredPathTests();
+  requireOutputFileTests();
   downstreamMarkerContractTests();
 }
 
@@ -20,7 +23,7 @@ void main() {
 // boundedLog
 // ======================================================================
 
-void boundedLogTests() {
+void boundedLogBasicTests() {
   group('boundedLog', () {
     test('returns short logs unchanged', () {
       const log = 'CLI Command: echo hi\nResponse:\nhi';
@@ -45,7 +48,11 @@ void boundedLogTests() {
       expect(bounded, endsWith('aaaaa'));
       expect(bounded, contains('truncated'));
     });
+  });
+}
 
+void boundedLogBoundaryTests() {
+  group('boundedLog boundaries', () {
     test('returns a log of exactly cap unchanged (no marker)', () {
       final log = 'a' * boundedResponseLogCap;
       expect(boundedLog(log), log);
@@ -60,8 +67,8 @@ void boundedLogTests() {
     });
 
     test('never splits a UTF-16 surrogate pair at the head boundary', () {
-      // 'aaaa' + 😀 (2 code units) straddles the head cut of cap 10.
-      final bounded = boundedLog('aaaa😀${'b' * 20}', cap: 10);
+      // 'aaaa' + \u{1F600} (2 code units) straddles the head cut of cap 10.
+      final bounded = boundedLog('aaaa\u{1F600}${'b' * 20}', cap: 10);
       expect(
         bounded.runes.every((r) => r < 0xD800 || r > 0xDFFF),
         isTrue,
@@ -71,8 +78,8 @@ void boundedLogTests() {
     });
 
     test('never splits a UTF-16 surrogate pair at the tail boundary', () {
-      // The tail cut of cap 3 lands between 😀's surrogate pair.
-      final bounded = boundedLog('a😀b', cap: 3);
+      // The tail cut of cap 3 lands between the surrogate pair.
+      final bounded = boundedLog('a\u{1F600}b', cap: 3);
       expect(
         bounded.runes.every((r) => r < 0xD800 || r > 0xDFFF),
         isTrue,
@@ -111,12 +118,6 @@ void failureSummaryTests() {
         final response = result['response'] as String;
         expect(response, contains('CLI command failed'));
         expect(response, contains('exit code 7'));
-        // Downstream classification contract (gh-192 review): the vendored
-        // post-actions (pushReworkChanges/developTicketAndCreatePR in the
-        // pinned agents pack) sniff params.response for established
-        // interruption markers — 'outputs/response.md missing' must appear
-        // verbatim so a failed run is retried, never announced as completed.
-        expect(response, contains('outputs/response.md missing'));
         // Head of the log survives: the failing command line.
         expect(response, contains('session.log'));
         // Tail of the log survives: the actual failure detail.
@@ -156,8 +157,8 @@ void failureSummaryTests() {
 // CliAgent failure response — fallback contracts
 // ======================================================================
 
-void failureFallbackTests() {
-  group('CliAgent failure response fallbacks', () {
+void successFallbackTests() {
+  group('CliAgent success-path fallbacks', () {
     test('successful run without response.md keeps the full log fallback',
         () async {
       final tmp = await _createTempDir();
@@ -201,18 +202,23 @@ void failureFallbackTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void monitoredPathTests() {
+  group('CliAgent monitored-path excerpt contract', () {
     test(
-        'monitored path: timeout-style failure keeps the error marker in the '
-        'excerpt head, drops the transcript middle', () async {
+        'timeout-style failure keeps the error marker in the excerpt head, '
+        'drops the transcript middle', () async {
       final tmp = await _createTempDir();
       try {
         final session =
             List.generate(400, (i) => 'session log line $i').join('\n');
         await File('${tmp.path}/session.log').writeAsString(session);
-        // The production rework job (pr_rework.json) configures timerJSAction,
-        // which routes execution through executeCommandsWithCallbacks — a
-        // different commandResponses format than the buffered path.
+        // The production rework job (pr_rework.json) configures
+        // timerJSAction, which routes execution through
+        // executeCommandsWithCallbacks — a different commandResponses
+        // format than the buffered path.
         final result =
             await const CliExecutionHelper().executeCommandsWithCallbacks(
           ['cat "${tmp.path}/session.log"', 'exit 124'],
@@ -233,10 +239,12 @@ void failureFallbackTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
-    test(
-        'requireCliOutputFile keeps the interruption marker but bounds the log',
-        () async {
+void requireOutputFileTests() {
+  group('CliAgent requireCliOutputFile fallback', () {
+    test('keeps the interruption marker but bounds the log', () async {
       final tmp = await _createTempDir();
       try {
         final session =

@@ -13,6 +13,34 @@ import '../integrations/cli/process_output_tee.dart';
 /// The output response file name (both folders use the same file).
 const String responseFileName = 'response.md';
 
+/// Cap, in characters, of the log excerpt embedded in the response of a
+/// FAILED CLI run.
+///
+/// The extracted response is published verbatim by post-actions (PR/ticket
+/// comments, PR descriptions). A failed agent run's full session log must
+/// never leak into it — only a bounded head+tail excerpt is embedded
+/// (gh-192); the complete log stays in the run output.
+const int boundedResponseLogCap = 4000;
+
+/// Returns [log] trimmed, bounded to at most [cap] characters.
+///
+/// Logs longer than [cap] keep their first `cap ~/ 2` characters and their
+/// last `cap - cap ~/ 2` characters, joined by an explicit truncation
+/// marker — failures announce themselves at the start (command line, exit
+/// code) and their cause is usually at the end, while the middle (the full
+/// session transcript) is noise for a human reading the posted response.
+String boundedLog(String log, {int cap = boundedResponseLogCap}) {
+  final text = log.trim();
+  if (text.length <= cap) return text;
+  final headLength = cap ~/ 2;
+  final tailLength = cap - headLength;
+  final omitted = text.length - headLength - tailLength;
+  return '${text.substring(0, headLength)}\n'
+      '[... truncated $omitted characters — full session log in the run '
+      'output ...]\n'
+      '${text.substring(text.length - tailLength)}';
+}
+
 /// Folder preference when reading the output response.
 enum OutputFolderPreference {
   /// Check `output/` first, then `outputs/`.

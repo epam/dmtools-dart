@@ -381,13 +381,25 @@ class CliAgent {
   /// Mirrors Java `extractResponse`: `requireCliOutputFile` turns a missing
   /// output file into an error; the output file content is preferred;
   /// command responses are the fallback.
+  ///
+  /// Deliberate deviation from Java (gh-192): a failed run's fallback is a
+  /// [boundedLog] excerpt, not the full `commandResponses` — post-actions
+  /// publish the response verbatim as PR/ticket comments, and the full
+  /// session log of a failed agent must never be posted that way. Java
+  /// still returns the full log here; this repo intentionally does not.
   String _extractResponse(CliExecutionResult result) {
     if (params.requireCliOutputFile && !result.hasOutputResponse) {
       return 'CLI command executed but did not produce output file:\n'
-          '${result.commandResponses}';
+          '${boundedLog(result.commandResponses)}';
     }
     if (result.hasOutputResponse) {
       return result.outputResponse!;
+    }
+    if (result.hasFatalError) {
+      return 'CLI command failed (exit code ${result.lastExitCode ?? 'unknown'}) '
+          'and did not produce $responseFileName — the full session log is '
+          'excluded from this response (see the run output). Bounded excerpt:\n'
+          '${boundedLog(result.commandResponses)}';
     }
     return result.commandResponses;
   }

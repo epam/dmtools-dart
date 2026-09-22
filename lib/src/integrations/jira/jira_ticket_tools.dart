@@ -144,13 +144,16 @@ List<ToolDefinition> _assignTools() => [
 List<ToolDefinition> _fieldTools() => [
       _jiraTool(
         name: 'jira_update_field',
-        description: 'Update a single field on a Jira ticket',
+        description: "Update field(s) in a Jira ticket. When using field "
+            "names (e.g., 'Dependencies'), updates ALL fields with that "
+            "name. When using custom field IDs (e.g., 'customfield_10091'), "
+            "updates only that specific field.",
         params: [
           _keyParam,
           _fieldUpdateParam,
           ToolParam(
             name: 'value',
-            description: 'The new value for the field',
+            description: 'The new value for the field(s)',
             required: true,
           ),
         ],

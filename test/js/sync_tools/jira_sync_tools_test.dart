@@ -217,7 +217,8 @@ void testnewwritetools_p1() {
     expect(body['path'], '/rest/api/latest/issue/P-1/assignee');
   });
 
-  test('jira_create_ticket_with_parent POSTs parent key and description', () {
+  test('jira_create_ticket_with_parent embeds the fetched parent object',
+      () {
     final body = jsonDecode(tools.dispatch('jira_create_ticket_with_parent', {
       'project': 'PROJ',
       'issueType': 'Sub-task',
@@ -228,8 +229,26 @@ void testnewwritetools_p1() {
     expect(body['method'], 'POST');
     expect(body['path'], '/rest/api/latest/issue');
     final fields = jsonDecode(body['body'] as String)['fields'];
-    expect(fields['parent'], {'key': 'EPIC-1'});
+    // Java `createTicketInProjectWithParent`: the parent ticket is fetched
+    // first and embedded as the full JSON object, not a key reference.
+    expect(fields['parent']['method'], 'GET');
+    expect(fields['parent']['path'], contains('/issue/EPIC-1'));
     expect(fields['description'], 'Details here');
+  });
+
+  test('jira_create_ticket_with_parent fails upfront on a missing parent',
+      () {
+    final result = tools.dispatch('jira_create_ticket_with_parent', {
+      'project': 'PROJ',
+      'issueType': 'Sub-task',
+      'summary': 'Do the thing',
+      'description': 'Details here',
+      'parentKey': 'NOPE-1',
+    });
+    final body = jsonDecode(result) as Map<String, dynamic>;
+    expect(body['error'], isNotNull);
+    // No create request may reach the wire after the parent fetch fails.
+    expect(_lastRequest(server)['line'], contains('GET'));
   });
 }
 

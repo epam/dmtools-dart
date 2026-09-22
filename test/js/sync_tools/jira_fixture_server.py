@@ -101,6 +101,13 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
                 status=400,
             )
             return
+        if self.command == "GET" and "/issue/NOPE" in self.path:
+            # Missing parent ticket (createTicketWithParent failure path).
+            self._respond(
+                json.dumps({"errorMessages": ["Issue does not exist"]}),
+                status=404,
+            )
+            return
         self._respond(json.dumps({
             "method": self.command,
             "path": self.path,

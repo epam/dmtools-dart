@@ -19,10 +19,18 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-03** `jira_move_to_status` param is `statusName` in Java (Dart
       reads `status`; no-match returns null not error) — dart
       jira_sync_tools.dart:212 / java JiraClient.java:3083 — S
-- [ ] **P6-JSY-04** `jira_update_field` must PUT `{update:{field:[{set:v}]}}`
+- [x] **P6-JSY-04** `jira_update_field` must PUT `{update:{field:[{set:v}]}}`
       with `""`→clearField, coerceFieldValue (bool/int/long/double/JSON),
       field-name→ALL customfield ids, per-field PUT + ✅/❌ summary — dart
       jira_sync_tools.dart:212-225 / java JiraClient.java:2379-2481 — L
+      ✅ Landed (gh-191): `_updateField` ports the Java engine — `""`
+      clears via `{fields:{field:null}}`, `coerceJiraFieldValue`
+      (jira_utils.dart) coerces strings, system/`customfield_*` ids PUT
+      update-verb directly, other names resolve ALL active customfields
+      (`findAllJiraFieldsByName` + active filter, best-match fallback)
+      with per-field PUTs and the `✅`/`❌` summary; embedded Jira error
+      objects fail updates via `jiraResponseErrorDetail`. Multi-option
+      value normalization stays P6-INT-03 scope.
 - [ ] **P6-JSY-05** `jira_update_description` body must be
       `{update:{description:[{set}]}}` — dart jira_sync_tools.dart:238 /
       java JiraClient.java:1435 — S

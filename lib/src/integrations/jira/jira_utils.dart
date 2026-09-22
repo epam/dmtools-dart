@@ -150,3 +150,86 @@ List<Map<String, dynamic>> jsonDecodeList(String body) {
     decoded.map((e) => e as Map<String, dynamic>),
   );
 }
+
+/// Jira system (non-custom) field names that must never be resolved through
+/// the field-name → customfield mapping (Java `JiraClient.SYSTEM_FIELDS`).
+const systemJiraFields = {
+  'summary', 'description', 'status', 'assignee', 'reporter', 'creator',
+  'created', 'updated', 'resolution', 'priority', 'issuetype', 'project',
+  'labels', 'comment', 'attachment', 'worklog', 'timetracking',
+  'aggregatetimeestimate', 'aggregatetimespent', 'aggregateprogress',
+  'workratio', 'security', 'issuerestriction', 'thumbnail', 'timespent',
+  'timeestimate', 'duedate', 'environment', 'components', 'versions',
+  'fixversions', 'subtasks', 'parent', 'issuelinks', 'watches', 'votes',
+};
+
+/// Extracts the project key from a ticket key (`PROJ-123` → `PROJ`).
+///
+/// Mirrors Java `JiraClient.parseJiraProject`.
+String jiraProjectKeyOf(String key) => key.split('-').first.toUpperCase();
+
+/// Coerces a loosely-typed field value to the JSON type Jira expects.
+///
+/// Mirrors Java `JiraClient.coerceFieldValue`: strings equal to
+/// `true`/`false` (case-insensitive) become booleans, integer- and
+/// double-shaped strings become numbers, and strings that parse entirely
+/// as a JSON object/array become that structure (the strict full-string
+/// parse keeps wiki macros like `{code:mermaid}…{code}` from being
+/// mis-read as `{"code":"mermaid"}`). Non-strings and everything else
+/// pass through unchanged.
+Object? coerceJiraFieldValue(Object? value) {
+  if (value is! String) return value;
+  final str = value.trim();
+  if (str.isEmpty) return value;
+  switch (str.toLowerCase()) {
+    case 'true':
+      return true;
+    case 'false':
+      return false;
+  }
+  final intValue = int.tryParse(str);
+  if (intValue != null) return intValue;
+  final doubleValue = double.tryParse(str);
+  if (doubleValue != null) return doubleValue;
+  if ((str.startsWith('{') && str.endsWith('}')) ||
+      (str.startsWith('[') && str.endsWith(']'))) {
+    try {
+      final decoded = jsonDecode(str);
+      if (decoded is Map || decoded is List) return decoded;
+    } on FormatException {
+      // Fall through: not JSON, keep the original string.
+    }
+  }
+  return value;
+}
+
+/// Collects Jira field-update errors from a response body — the joined
+/// `errorMessages` and `errors` entries (`Field customfield_X: …` for
+/// custom fields, `X: …` otherwise) — or `null` when the body carries no
+/// error object. Mirrors Java `checkJiraResponseForErrors`.
+String? jiraResponseErrorDetail(String body) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
+  if (decoded is! Map) return null;
+  final messages = <String>[];
+  final errorMessages = decoded['errorMessages'];
+  if (errorMessages is List) {
+    messages.addAll(errorMessages.whereType<String>());
+  }
+  final errors = decoded['errors'];
+  if (errors is Map) {
+    errors.forEach((field, message) {
+      final name = field.toString();
+      messages.add(
+        name.startsWith('customfield_')
+            ? 'Field $name: $message'
+            : '$name: $message',
+      );
+    });
+  }
+  return messages.isEmpty ? null : messages.join('; ');
+}

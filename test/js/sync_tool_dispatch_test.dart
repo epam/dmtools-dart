@@ -522,7 +522,8 @@ void _testJiraExtendedWriteTools() {
       server.stop();
     });
 
-    test('jira_update_field PUTs the field value', () {
+    test('jira_update_field PUTs the update-verb payload for a system field',
+        () {
       final body = jsonDecode(dispatcher.execute('jira_update_field', {
         'key': 'PROJ-1',
         'field': 'priority',
@@ -530,8 +531,13 @@ void _testJiraExtendedWriteTools() {
       })!);
       expect(body['method'], 'PUT');
       expect(body['path'], '/rest/api/latest/issue/PROJ-1');
-      final fields = jsonDecode(body['body'] as String)['fields'];
-      expect(fields['priority'], 'High');
+      final update = jsonDecode(body['body'] as String)['update'];
+      expect(
+        update['priority'],
+        [
+          {'set': 'High'},
+        ],
+      );
     });
 
     test('jira_update_description PUTs the description', () {

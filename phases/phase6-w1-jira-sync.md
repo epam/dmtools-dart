@@ -63,9 +63,13 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
       jira_sync_tools.dart:128 / java JiraClient.java:550-594,1855 — S
 - [ ] **P6-JSY-12** search jql param aliases `searchQueryJQL`, `query` —
       dart jira_sync_tools.dart:100 / java JiraClient.java:463 — S
-- [ ] **P6-JSY-13** `jira_create_ticket_with_parent` must fetch the parent
+- [x] **P6-JSY-13** `jira_create_ticket_with_parent` must fetch the parent
       ticket and embed the full object (fail upfront on missing parent) —
       dart jira_sync_tools.dart:297 / java JiraClient.java:1140 — M
+      ✅ Landed (gh-191): `_createTicketWithParent` GETs
+      `issue/{parentKey}?fields=summary` first and embeds the full parent
+      object in the create payload; an unreadable parent fails upfront
+      with `Failed to fetch parent ticket …` and no create request.
 - [ ] **P6-JSY-14** create always sets description (even `""`) — dart
       jira_sync_tools.dart:584 / java JiraClient.java:1185 — S
 - [ ] **P6-JSY-15** create errors must surface Java's

@@ -452,7 +452,7 @@ class JiraSyncTools {
           ? "Field '$field' updated successfully on ticket $key"
           : "Failed to update field '$field' on ticket $key");
     }
-    results.write('Updated $successCount of ${fieldIds.length} fields '
+    results.write('\nUpdated $successCount of ${fieldIds.length} fields '
         "with name '$field' for ticket $key");
     final failureCount = fieldIds.length - successCount;
     if (failureCount > 0) results.write(' ($failureCount failed)');
@@ -522,10 +522,23 @@ class JiraSyncTools {
   /// Java `createTicketInProjectWithParent` signature (`description` is a
   /// declared `@MCPParam`); the parent travels as `{key}` like the async
   /// [JiraClient.createTicketWithParent].
-  String _createTicketWithParent(Map<String, dynamic> args) =>
-      _postIssueCreate({
-        ..._basicCreateFields(args),
-        'parent': {'key': _asStr(args['parentKey'])},
+  /// `jira_create_ticket_with_parent` — Java
+  /// `createTicketInProjectWithParent`: the parent ticket is fetched first
+  /// (`?fields=summary`, failing upfront when it cannot be read) and the
+  /// full parent object is embedded in the create payload.
+  String _createTicketWithParent(Map<String, dynamic> args) => _run((config) {
+        final parentKey = _asStr(args['parentKey']);
+        final parent = _getJson(
+          config,
+          '${config.baseUrl}/issue/$parentKey?fields=summary',
+        );
+        if (parent == null) {
+          return _err('Failed to fetch parent ticket $parentKey');
+        }
+        return _postIssueCreate({
+          ..._basicCreateFields(args),
+          'parent': parent,
+        });
       });
 
   /// `jira_create_ticket_with_json` — POST `issue` with merged fields JSON.

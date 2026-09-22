@@ -611,6 +611,7 @@ void _testUpdateFieldEngine() {
         jsonDecode(result),
         '✅ Updated customfield_10001\n'
         '✅ Updated customfield_10002\n'
+        '\n'
         "Updated 2 of 2 fields with name 'Story Points' for ticket PROJ-1",
       );
       final last = _lastRequest(server);

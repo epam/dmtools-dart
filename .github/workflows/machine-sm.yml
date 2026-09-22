@@ -34,7 +34,7 @@ jobs:
     # a branch ref would fail every */10 cron tick. Flip in lockstep with
     # the submodule when dmtools-agents#424 merges.
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@b105bfd1bc1d93539b561f1957e6e97466a8fe4a
+    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@1eebd58c205f2e0674494fe5667bd217f9614679
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).

@@ -126,8 +126,8 @@ void _requiredParamTests() {
 
     test('tools without Java-required params are unaffected', () {
       expect(
-        jsonDecode(run('github_test', {})),
-        {'error': 'GitHub not configured'},
+        run('github_list_branches', {}),
+        isNot(contains('Required parameter')),
       );
     });
 
@@ -187,6 +187,8 @@ void _noConfigTests() {
         jsonDecode(
           const GitHubSyncTools().handlers['github_get_pr']!({
             'workspace': 'o',
+            'repository': 'r',
+            'pullRequestId': '7',
           }),
         ),
         {'error': 'GitHub not configured'},

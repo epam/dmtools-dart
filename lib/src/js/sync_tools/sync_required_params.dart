@@ -120,15 +120,15 @@ const Map<String, List<String>> kGithubRequiredParams = {
 /// order (extracted from `GitLab.java` `@MCPParam(required = true)`).
 const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_add_inline_mr_comment': [
+    // Java also marks baseSha/headSha/startSha required, but the Dart
+    // handler resolves them from the MR's `diff_refs` server-side — they
+    // are genuinely optional here, so validation must not demand them.
     'workspace',
     'repository',
     'pullRequestId',
-    'filePath',
+    'path',
     'line',
     'text',
-    'baseSha',
-    'headSha',
-    'startSha',
   ],
   'gitlab_add_mr_comment': ['workspace', 'repository', 'pullRequestId', 'text'],
   'gitlab_add_mr_label': ['workspace', 'repository', 'pullRequestId', 'label'],
@@ -215,6 +215,9 @@ const Map<String, Map<String, List<String>>> kGithubParamAliases = {
 
 /// Alias tables for the GitLab family (Java `GitLab.java` annotations).
 const Map<String, Map<String, List<String>>> kGitlabParamAliases = {
+  'gitlab_add_inline_mr_comment': {
+    'path': ['filePath'],
+  },
   'gitlab_create_mr_note': {
     'text': ['body', 'note'],
   },
@@ -234,8 +237,14 @@ const Map<String, List<String>> kGithubAcceptedNames = {
   'github_get_pr_diff_text': ['pullRequestId'],
 };
 
-/// Dart-side accepted spellings for the GitLab family.
-const Map<String, List<String>> kGitlabAcceptedNames = {};
+/// Dart-side accepted spellings for the GitLab family: several MR tools
+/// keep a legacy `project`/`iid` calling contract alongside the Java
+/// names — accepted so those calls keep working (only the error TEXT is
+/// Java's).
+const Map<String, List<String>> kGitlabAcceptedNames = {
+  'gitlab_get_mr': ['project', 'iid'],
+  'gitlab_create_mr_note': ['project', 'iid'],
+};
 
 /// Returns the Java-style error payload for the first missing required
 /// parameter of [tool], or `null` when every requirement is satisfied.

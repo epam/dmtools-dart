@@ -272,8 +272,9 @@ void _reviewQueueHeadPreconfigTests() {
       'and keeps the failover queue', () {
     final env = (_runnerJson(
         '.dmtools/runners/fa-review.json')['params'])['envVariables'] as Map;
-    expect(env['FA_PROVIDER_TYPE'], 'zai',
-        reason: 'the queue head is glm-5.3-flash via the zai API');
+    expect(env['FA_PROVIDER_TYPE'], 'openai-completions',
+        reason: 'the queue head is glm-5.3-flash via the z.ai OpenAI-'
+            'compatible endpoint');
     final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
     expect(config['baseUrl'], 'https://api.z.ai/api/coding/paas/v4');
     expect(config['model'], 'glm-5.3-flash');

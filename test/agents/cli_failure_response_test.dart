@@ -13,6 +13,7 @@ void main() {
   boundedLogTests();
   failureSummaryTests();
   failureFallbackTests();
+  downstreamMarkerContractTests();
 }
 
 // ======================================================================
@@ -176,8 +177,7 @@ void failureFallbackTests() {
       }
     });
 
-    test(
-        'successful run without response.md cannot publish an unbounded log',
+    test('successful run without response.md cannot publish an unbounded log',
         () async {
       final tmp = await _createTempDir();
       try {
@@ -273,3 +273,43 @@ Future<Directory> _createTempDir() async {
 
 /// No-op error hook — enables the monitored execution path.
 void _noopErrorHandler(String errorMessage) {}
+
+void downstreamMarkerContractTests() {
+  group('CliAgent failure response ↔ vendored post-action contract', () {
+    test(
+        'the failed-run summary embeds a marker the pinned agents pack '
+        'classifies as interrupted', () async {
+      final tmp = await _createTempDir();
+      try {
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['exit 7']
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        final response = result['response'] as String;
+        expect(response, contains('outputs/response.md missing'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('the pinned post-action matcher still recognizes the embedded marker',
+        () {
+      // pushReworkChanges.js classifies params.response by text-sniffing
+      // (params.currentCliHasFatalError is never set by the Dart runtime).
+      // Pin both halves of the contract: the summary carries the token and
+      // the vendored matcher (agents/ submodule at the pinned SHA) lists it.
+      final matcherSource =
+          File('agents/js/pushReworkChanges.js').readAsStringSync();
+      expect(
+        matcherSource,
+        contains("text.indexOf('outputs/response.md missing')"),
+        reason: 'agents/js/pushReworkChanges.js must keep matching '
+            "'outputs/response.md missing' — the Dart runtime embeds it in "
+            'every failed-run summary so vendored post-actions retry the '
+            'run instead of announcing it as completed (gh-192)',
+      );
+    });
+  });
+}

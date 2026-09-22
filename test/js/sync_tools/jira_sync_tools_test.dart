@@ -30,6 +30,7 @@ void main() {
     _testLinkIssues();
     _testAttachFile();
     _testFieldCustomCode();
+    _testUpdateFieldEngine();
   }
 }
 
@@ -467,6 +468,189 @@ void _testFieldCustomCode() {
         'fieldName': 'Story Points',
       });
       expect(result, 'null');
+    });
+  });
+}
+
+void _testUpdateFieldEngine() {
+  group('JiraSyncTools jira_update_field engine', () {
+    setUp(() async {
+      server = JiraFixtureServer();
+      await server.start();
+      tools = JiraSyncTools();
+      configureJira(server);
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('system field PUTs the update-verb payload without resolution',
+        () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'labels',
+        'value': 'x',
+      });
+      final last = _lastRequest(server);
+      expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+      expect(
+        jsonDecode(last['body'] as String),
+        {
+          'update': {
+            'labels': [
+              {'set': 'x'},
+            ],
+          },
+        },
+      );
+      // `labels` is absent from the field listing — a name-resolution
+      // path would have answered "No fields found" instead.
+      expect(
+        jsonDecode(result),
+        "Field 'labels' updated successfully on ticket PROJ-1",
+      );
+    });
+
+    test('customfield id skips name resolution', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'customfield_10091',
+        'value': 'v',
+      });
+      final last = _lastRequest(server);
+      expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+      expect(
+        jsonDecode(result),
+        "Field 'customfield_10091' updated successfully on ticket PROJ-1",
+      );
+    });
+
+    test('empty value clears the field with a fields-null payload', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'customfield_10091',
+        'value': '',
+      });
+      final last = _lastRequest(server);
+      expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+      expect(
+        jsonDecode(last['body'] as String),
+        {
+          'fields': {'customfield_10091': null},
+        },
+      );
+      // Java clearField returns the raw PUT response.
+      final echo = jsonDecode(result) as Map<String, dynamic>;
+      expect(echo['method'], 'PUT');
+    });
+
+    test('string values are coerced to bool/int/double/JSON', () {
+      final cases = <String, dynamic>{
+        '8': 8,
+        'true': true,
+        '8.5': 8.5,
+        '{"a":1}': {
+          'a': 1,
+        },
+        '[1,2]': [1, 2],
+      };
+      cases.forEach((raw, expected) {
+        tools.dispatch('jira_update_field', {
+          'key': 'PROJ-1',
+          'field': 'customfield_10091',
+          'value': raw,
+        });
+        final body = jsonDecode(_lastRequest(server)['body'] as String)
+            as Map<String, dynamic>;
+        final update = (body['update'] as Map)['customfield_10091'] as List;
+        expect((update.single as Map)['set'], expected,
+            reason: "value '$raw'");
+      });
+      // Non-JSON text stays a string.
+      tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'customfield_10091',
+        'value': '{code:mermaid}\ngraph TD\n{code}',
+      });
+      final body =
+          jsonDecode(_lastRequest(server)['body'] as String) as Map;
+      final set = ((body['update'] as Map)['customfield_10091'] as List)
+          .single as Map;
+      expect(set['set'], '{code:mermaid}\ngraph TD\n{code}');
+    });
+
+    test('field name resolves to ALL active customfields and summarizes',
+        () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'Story Points',
+        'value': '8',
+      });
+      expect(
+        jsonDecode(result),
+        '✅ Updated customfield_10001\n'
+        '✅ Updated customfield_10002\n'
+        "Updated 2 of 2 fields with name 'Story Points' for ticket PROJ-1",
+      );
+      final last = _lastRequest(server);
+      expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+      // The coerced number — not the raw string — reaches the wire.
+      final set = ((jsonDecode(last['body'] as String) as Map)['update']
+          as Map)['customfield_10002'] as List;
+      expect((set.single as Map)['set'], 8);
+    });
+
+    test('single-match field name skips the ✅ lines', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'Dependencies',
+        'value': 'A > B',
+      });
+      expect(
+        jsonDecode(result),
+        "Field 'Dependencies' updated successfully on ticket PROJ-1",
+      );
+    });
+
+    test('unknown field name reports no matches', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'Nope Field',
+        'value': 'v',
+      });
+      expect(jsonDecode(result), "No fields found with name 'Nope Field'");
+    });
+
+    test('per-field failures produce ❌ lines and a failed summary', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-FAIL',
+        'field': 'Story Points',
+        'value': '8',
+      });
+      final decoded = jsonDecode(result) as String;
+      expect(decoded, contains('❌ Failed customfield_10001'));
+      expect(decoded, contains('❌ Failed customfield_10002'));
+      expect(
+        decoded,
+        contains(
+          "Updated 0 of 2 fields with name 'Story Points' for ticket "
+          'PROJ-FAIL (2 failed)',
+        ),
+      );
+    });
+
+    test('single-field failure through a name keeps the plain message', () {
+      final result = tools.dispatch('jira_update_field', {
+        'key': 'PROJ-FAIL',
+        'field': 'Dependencies',
+        'value': 'v',
+      });
+      expect(
+        jsonDecode(result),
+        "Failed to update field 'Dependencies' on ticket PROJ-FAIL",
+      );
     });
   });
 }

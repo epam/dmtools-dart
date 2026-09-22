@@ -23,6 +23,7 @@ void main() {
   shortLinkAuthTests();
   downloadShortLinkTests();
   uploadAttachmentTests();
+  uploadDecodeTests();
   downloadPagesTests();
   foreignHostDownloadTests();
   executorDispatchTests();
@@ -373,8 +374,14 @@ void uploadAttachmentTests() {
       expect(summary['uploaded'], ['fresh.txt']);
       expect(summary['failed'], isEmpty);
     });
+  });
+}
 
-    test('decode: a JSON string body decodes to the attachment', () async {
+/// `_decodeDioBody` branch coverage through `uploadAttachment`: dio hands
+/// non-JSON content-type bodies over as raw Strings.
+void uploadDecodeTests() {
+  group('ConfluenceClient upload decode branches', () {
+    test('a JSON string body decodes to the attachment', () async {
       final file = _tempUpload('plain.txt');
       final client = clientOnAdapter(RoutingAdapter(
         (o) => o.method == 'GET' ? '{}' : '{"id":"a2"}',
@@ -385,8 +392,7 @@ void uploadAttachmentTests() {
       expect((result['attachment'] as Map)['id'], 'a2');
     });
 
-    test('decode: a non-object JSON string yields a null attachment',
-        () async {
+    test('a non-object JSON string yields a null attachment', () async {
       final file = _tempUpload('plain.txt');
       final client = clientOnAdapter(RoutingAdapter(
         (o) => o.method == 'GET' ? '{}' : '[1,2]',
@@ -397,7 +403,7 @@ void uploadAttachmentTests() {
       expect(result['attachment'], isNull);
     });
 
-    test('decode: a non-JSON string body yields a null attachment', () async {
+    test('a non-JSON string body yields a null attachment', () async {
       final file = _tempUpload('plain.txt');
       final client = clientOnAdapter(RoutingAdapter(
         (o) => o.method == 'GET' ? '{}' : '<html>502</html>',

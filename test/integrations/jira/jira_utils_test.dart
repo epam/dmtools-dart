@@ -20,7 +20,7 @@ void main() {
     });
 
     test('non-object JSON yields null', () {
-      expect(jiraResponseErrorDetail(jsonEncode([1, 2]), ), isNull);
+      expect(jiraResponseErrorDetail(jsonEncode([1, 2])), isNull);
       expect(jiraResponseErrorDetail('"just a string"'), isNull);
     });
 
@@ -39,7 +39,13 @@ void main() {
         'first problem; second problem',
       );
     });
+  });
 
+  jiraResponseErrorDetailCombinationTests();
+}
+
+void jiraResponseErrorDetailCombinationTests() {
+  group('jiraResponseErrorDetail: errors map', () {
     test('plain field errors use "field: message"', () {
       expect(
         jiraResponseErrorDetail(jsonEncode({
@@ -73,7 +79,10 @@ void main() {
     test('non-string message entries are ignored, empty result is null', () {
       expect(
         jiraResponseErrorDetail(jsonEncode({
-          'errorMessages': [42, {'a': 1}],
+          'errorMessages': [
+            42,
+            {'a': 1}
+          ],
         })),
         isNull,
       );

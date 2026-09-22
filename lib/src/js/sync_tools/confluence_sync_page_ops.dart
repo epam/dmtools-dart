@@ -136,8 +136,7 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
     String contentId,
     bool updateIfExists,
   ) {
-    final existing = _existingByName(
-        contentId, file.uri.pathSegments.last);
+    final existing = _existingByName(contentId, file.uri.pathSegments.last);
     if (existing != null && !updateIfExists) {
       return {'status': 'skipped', 'attachment': existing};
     }

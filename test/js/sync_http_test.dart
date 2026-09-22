@@ -17,6 +17,7 @@ void main() {
   _testBuildArgs();
   _testRenderHeaderFile();
   _testParseResponse();
+  _testRawByteParseResponse();
   _testIsOk();
   if (hasPython3()) {
     _testLiveHttp();
@@ -184,7 +185,11 @@ void _testParseResponse() {
       expect(resp.body, contains('--max-time'));
     });
   });
+}
 
+/// The byte-mode twin (`_parseRawResponse`): raw `List<int>` stdout is what
+/// the default curl transport feeds [parseResponse].
+void _testRawByteParseResponse() {
   group('SyncHttpClient.parseResponse: raw byte stdout', () {
     test('splits the trailing status line off the raw bytes', () {
       final bytes = utf8.encode('<h1>Hi</h1>\n200');

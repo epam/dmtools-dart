@@ -78,8 +78,8 @@ String _updateFieldsByName(
     return jsonEncode("No fields found with name '$field'");
   }
   if (fieldIds.length == 1) {
-    return _singleFieldUpdateResult(config, key, field, fieldIds.single,
-        coerced);
+    return _singleFieldUpdateResult(
+        config, key, field, fieldIds.single, coerced);
   }
   return _multiFieldUpdateResult(config, key, field, fieldIds, coerced);
 }

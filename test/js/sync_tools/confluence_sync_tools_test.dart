@@ -283,6 +283,25 @@ void testwritetools_p2() {
     expect(summary['expectedPages'], 2);
     expect(summary['syncedPages'], contains('Page'));
   });
+
+  test('engine uploads an attachment missing from the remote listing', () {
+    // The echo attachment listing carries exists.txt/shot.png/evil.txt —
+    // a differently-named file forces the uploadAttachment engine path.
+    final dir = Directory.systemTemp.createTempSync('dmtools_sync_upl_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/index.md').writeAsStringSync('# Root\n\n![P](pic.png)');
+    File('${dir.path}/pic.png').writeAsBytesSync([9, 9, 9]);
+    final result = tools.dispatch('confluence_sync_markdown_directory', {
+      'directory': dir.path,
+      'parentId': 'root-page',
+      'space': 'ENG',
+    });
+    // index.md is the root page itself; the only expected page entry is the
+    // folder. pic.png is absent from the echo listing, so the engine's
+    // uploadAttachment path runs (and succeeds against the echo server).
+    final summary = jsonDecode(result) as Map<String, dynamic>;
+    expect(summary['expectedPages'], 1);
+  });
 }
 
 /// The `confluence_upload_attachment` policy surface (Java
@@ -302,14 +321,8 @@ void uploadPolicyTests() {
       server.stop();
     });
 
-    File tempFile(String name) {
-      final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      return File('${dir.path}/$name')..writeAsStringSync('bytes');
-    }
-
     test('skips an existing attachment unless updateIfExists', () {
-      final file = tempFile('exists.txt');
+      final file = tempUploadFile('exists.txt');
       final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
         'contentId': '42',
         'file': file.path,
@@ -327,7 +340,7 @@ void uploadPolicyTests() {
     });
 
     test('creates a new attachment and decodes the wrapper', () {
-      final file = tempFile('fresh.bin');
+      final file = tempUploadFile('fresh.bin');
       final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
         'contentId': '42',
         'file': file.path,
@@ -339,7 +352,7 @@ void uploadPolicyTests() {
     });
 
     test('reports failed when the upload POST errors', () {
-      final file = tempFile('doomed.bin');
+      final file = tempUploadFile('doomed.bin');
       final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
         'contentId': 'dt-fail',
         'file': file.path,
@@ -348,4 +361,11 @@ void uploadPolicyTests() {
       expect(result['attachment'], isNull);
     });
   });
+}
+
+/// A named upload fixture in a fresh temp directory.
+File tempUploadFile(String name) {
+  final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
+  addTearDown(() => dir.deleteSync(recursive: true));
+  return File('${dir.path}/$name')..writeAsStringSync('bytes');
 }

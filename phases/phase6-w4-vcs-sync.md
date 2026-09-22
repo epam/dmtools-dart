@@ -64,6 +64,14 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-VCS-16** required-param validation
       (`Required parameter 'X' is missing`) on every sync tool — dart
       gitlab_sync_tools.dart:256 / java MCPToolProcessor.java:358 — M
+      ◐ Partial (gh-191, 2026-09-22): shared mechanism landed in
+      `sync_required_params.dart` (`syncGuardRequired` wraps the handler
+      map: Java error text, Java declaration order, `@MCPParam` aliases
+      resolve before the check) plus full GitHub/GitLab tables extracted
+      from `GitHub.java`/`GitLab.java` (Dart legacy `project`/`iid` calls
+      stay accepted; inline-comment SHAs stay optional — Dart resolves
+      them from `diff_refs`). Remaining: jira/ado/confluence/bitrise/
+      jenkins/figma/ai tables.
 - [ ] **P6-VCS-17** `gitlab_get_mr_diff_text`: `""` on failure +
       isMRChangesError latch — dart gitlab_sync_tools.dart:203 / java
       GitLab.java:446 — S

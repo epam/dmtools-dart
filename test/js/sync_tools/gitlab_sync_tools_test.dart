@@ -92,8 +92,8 @@ void _testRequiredParams() {
   group('GitLabSyncTools required-param validation', () {
     const tools = GitLabSyncTools();
 
-    setUp(() =>
-        PropertyReader.setOverrides({'GITLAB_BASE_PATH': '', 'GITLAB_TOKEN': ''}));
+    setUp(() => PropertyReader.setOverrides(
+        {'GITLAB_BASE_PATH': '', 'GITLAB_TOKEN': ''}));
     tearDown(PropertyReader.clearOverrides);
 
     String run(String tool, Map<String, dynamic> args) =>
@@ -108,8 +108,8 @@ void _testRequiredParams() {
 
     test('a later missing param is reported by name', () {
       expect(
-        jsonDecode(run('gitlab_trigger_pipeline',
-            {'workspace': 'g', 'repository': 'r'})),
+        jsonDecode(run(
+            'gitlab_trigger_pipeline', {'workspace': 'g', 'repository': 'r'})),
         {'error': "Required parameter 'ref' is missing"},
       );
     });
@@ -145,8 +145,12 @@ void _testRequiredParams() {
 
     test('aliases satisfy the check (body → create_mr_note text)', () {
       expect(
-        run('gitlab_create_mr_note',
-            {'workspace': 'g', 'repository': 'r', 'pullRequestId': '7', 'body': 'hi'}),
+        run('gitlab_create_mr_note', {
+          'workspace': 'g',
+          'repository': 'r',
+          'pullRequestId': '7',
+          'body': 'hi'
+        }),
         isNot(contains('Required parameter')),
       );
     });

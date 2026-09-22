@@ -244,6 +244,7 @@ const Map<String, List<String>> kGithubAcceptedNames = {
 const Map<String, List<String>> kGitlabAcceptedNames = {
   'gitlab_get_mr': ['project', 'iid'],
   'gitlab_create_mr_note': ['project', 'iid'],
+  'gitlab_list_mrs': ['project'],
 };
 
 /// Returns the Java-style error payload for the first missing required

@@ -58,11 +58,11 @@ jobs:
     # submodule when dmtools-agents#424 merges (bump the submodule,
     # then repoint this ref at the new SHA).
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@46cf243f7a4ccd85a89d64d83fb6b9d519b28eb6
+    uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@dff2d08e91044bab73c20c0f810277b7b77e9a28
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: 46cf243f7a4ccd85a89d64d83fb6b9d519b28eb6
+      factory_ref: dff2d08e91044bab73c20c0f810277b7b77e9a28
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

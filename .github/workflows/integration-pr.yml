@@ -19,7 +19,9 @@ on:
 
 jobs:
   integration:
-    runs-on: ubuntu-latest
+    # Bitrise Build Hub machine pool "dmtools-ci" (Linux). GitHub Actions stays
+    # the orchestrator; only the runner changes. Fallback: ubuntu-latest.
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 20
     strategy:
       fail-fast: false

@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'sync_http_bridge.dart';
+import 'sync_retry_policy.dart';
 
 /// Response from a sync HTTP request.
 class SyncHttpResponse {
@@ -30,11 +31,25 @@ class SyncHttpResponse {
   /// The response body text (UTF-8 decoded).
   final String body;
 
-  /// Creates a response with [statusCode] and [body].
-  const SyncHttpResponse(this.statusCode, this.body);
+  /// Response headers (case-insensitive names as sent); empty when the
+  /// transport does not capture them (curl-staged helpers, older bridges).
+  final Map<String, String> headers;
+
+  /// The raw response bytes when the transport captured them (curl reads
+  /// the response file verbatim); falls back to the UTF-8 encoding of
+  /// [body] — lossy for non-UTF-8 payloads.
+  final List<int> bodyBytes;
+
+  /// Creates a response with [statusCode], [body], and optional [headers].
+  SyncHttpResponse(this.statusCode, this.body,
+      [this.headers = const <String, String>{}, List<int>? rawBytes])
+      : bodyBytes = rawBytes ?? utf8.encode(body);
 
   /// Whether the request succeeded (2xx status code).
   bool get isOk => statusCode >= 200 && statusCode < 300;
+
+  /// Whether the response is a redirect the caller must follow.
+  bool get isRedirect => statusCode >= 300 && statusCode < 400;
 }
 
 /// Synchronous HTTP client: pooled-isolate transport with a curl fallback.
@@ -84,9 +99,36 @@ class SyncHttpClient {
       _dispatch('PATCH', url, headers: headers, body: body);
 
   /// Routes a request through the pooled-isolate bridge when booted, the
-  /// curl subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
-  /// so later requests (after any event-loop turn) use the pool.
+  /// curl subprocess otherwise, retrying retryable failures per
+  /// [SyncRetryPolicy.forUrl] (gh-191, P6-JSY-18: Java `JiraClient.execute`
+  /// retries 429/502/503/504 and connection errors with backoff).
   static SyncHttpResponse _dispatch(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    String? body,
+  }) {
+    final policy = SyncRetryPolicy.forUrl(url);
+    // Java `isWaitBeforePerform` throttle before the request goes out.
+    final performDelay = policy.performDelayMs;
+    if (performDelay > 0) sleep(Duration(milliseconds: performDelay));
+    var attempt = 1;
+    while (true) {
+      final resp = _transport(method, url, headers: headers, body: body);
+      if (!policy.shouldRetry(attempt, resp.statusCode)) return resp;
+      final delayMs = resp.statusCode == 0
+          ? policy.connectionDelayMs(attempt)
+          : policy.statusDelayMs(attempt, resp.headers);
+      if (delayMs == null) return resp; // Retry-After over the cap: give up
+      sleep(Duration(milliseconds: delayMs));
+      attempt++;
+    }
+  }
+
+  /// One transport attempt: pooled-isolate bridge when booted, curl
+  /// subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
+  /// so later requests (after any event-loop turn) use the pool.
+  static SyncHttpResponse _transport(
     String method,
     String url, {
     Map<String, String>? headers,
@@ -105,12 +147,14 @@ class SyncHttpClient {
   /// Exposed for unit testing so the argument construction (method, URL,
   /// timeouts, file references) can be verified without spawning curl.
   /// Headers and the body are referenced by file path only — see the
-  /// library docs.
+  /// library docs. [headerDumpFile] enables `-D` response-header capture
+  /// for the retry policy's `Retry-After` handling.
   static List<String> buildArgs(
     String method,
     String url, {
     String? headerFile,
     String? bodyFile,
+    String? headerDumpFile,
   }) {
     final args = [
       '-s',
@@ -125,6 +169,7 @@ class SyncHttpClient {
     ];
     if (headerFile != null) args.addAll(['-H', '@$headerFile']);
     if (bodyFile != null) args.addAll(['--data-binary', '@$bodyFile']);
+    if (headerDumpFile != null) args.addAll(['-D', headerDumpFile]);
     args.add(url);
     return args;
   }
@@ -142,7 +187,9 @@ class SyncHttpClient {
   /// The `-w '\n%{http_code}'` flag appends the status code as the final line
   /// of stdout. When curl fails to connect (status code `000`), stderr is
   /// returned as the body for diagnostics; curl exit 28 (timeout expiry) is
-  /// surfaced as a distinct timeout error.
+  /// surfaced as a distinct timeout error. stdout may be a String (when the
+  /// caller passed an encoding) or raw bytes (the default transport) — raw
+  /// bytes are preserved on the response for binary downloads.
   static SyncHttpResponse parseResponse(ProcessResult result) {
     if (result.exitCode == _curlExitTimedOut) {
       return SyncHttpResponse(
@@ -150,8 +197,12 @@ class SyncHttpClient {
         'Request timed out after ${maxTimeSeconds}s (--max-time)',
       );
     }
-    final output = result.stdout as String;
-    final lines = output.split('\n');
+    final stdout = result.stdout;
+    if (stdout is! String) {
+      return _parseRawResponse(
+          stdout as List<int>, result.exitCode, result.stderr as String);
+    }
+    final lines = stdout.split('\n');
     final statusCode = int.tryParse(lines.removeLast().trim()) ?? 0;
     final responseBody = lines.join('\n');
     if (statusCode == 0) {
@@ -165,10 +216,37 @@ class SyncHttpClient {
     return SyncHttpResponse(statusCode, responseBody);
   }
 
+  /// Byte-mode twin of the string parser: splits the trailing status line
+  /// off the raw stdout and keeps the body bytes verbatim.
+  static SyncHttpResponse _parseRawResponse(
+    List<int> stdout,
+    int exitCode,
+    String stderr,
+  ) {
+    final separator = stdout.lastIndexOf(0x0A); // last \n before %{http_code}
+    if (separator < 0) return SyncHttpResponse(0, 'curl exit $exitCode');
+    final statusLine = utf8.decode(stdout.sublist(separator + 1));
+    final statusCode = int.tryParse(statusLine.trim()) ?? 0;
+    final bodyBytes = stdout.sublist(0, separator);
+    if (statusCode == 0) {
+      final diag = stderr.isEmpty
+          ? utf8.decode(bodyBytes, allowMalformed: true)
+          : stderr;
+      return SyncHttpResponse(0, 'curl exit $exitCode: $diag');
+    }
+    return SyncHttpResponse(
+      statusCode,
+      utf8.decode(bodyBytes, allowMalformed: true),
+      const {},
+      bodyBytes,
+    );
+  }
+
   /// Curl fallback transport: stages headers/body in a 0700 temp dir and
   /// spawns curl (`Process.runSync`) — used before the isolate bridge has
   /// booted, and kept as the reference transport for the staged-binary
-  /// helpers in `sync_request_helpers.dart`.
+  /// helpers in `sync_request_helpers.dart`. Response headers are captured
+  /// via `-D` so the retry policy can honor `Retry-After`.
   static SyncHttpResponse _curlRequest(
     String method,
     String url, {
@@ -185,17 +263,44 @@ class SyncHttpClient {
       if (body != null) {
         bodyFile = _stageFile(dir, 'body', body);
       }
+      final headerDumpFile = '${dir.path}/response_headers';
       final args = buildArgs(
         method,
         url,
         headerFile: headerFile,
         bodyFile: bodyFile,
+        headerDumpFile: headerDumpFile,
       );
-      final result = Process.runSync('curl', args, stdoutEncoding: utf8);
-      return parseResponse(result);
+      final result = Process.runSync('curl', args);
+      final resp = parseResponse(result);
+      return _withDumpedHeaders(resp, headerDumpFile);
     } finally {
       dir.deleteSync(recursive: true);
     }
+  }
+
+  /// Attaches the `-D` header dump to [resp] when it exists.
+  static SyncHttpResponse _withDumpedHeaders(
+    SyncHttpResponse resp,
+    String headerDumpFile,
+  ) {
+    final dump = File(headerDumpFile);
+    if (!dump.existsSync()) return resp;
+    return SyncHttpResponse(
+        resp.statusCode, resp.body, parseHeaderDump(dump), resp.bodyBytes);
+  }
+
+  /// Parses a curl `-D` dump into a name/value map (last value wins,
+  /// status lines skipped).
+  static Map<String, String> parseHeaderDump(File dump) {
+    final headers = <String, String>{};
+    for (final line in dump.readAsLinesSync()) {
+      final colon = line.indexOf(':');
+      if (colon <= 0) continue;
+      headers[line.substring(0, colon).trim()] =
+          line.substring(colon + 1).trim();
+    }
+    return headers;
   }
 
   /// Writes [content] to a file inside the private temp [dir].

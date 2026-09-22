@@ -85,8 +85,8 @@ void _testHandlerSurface() {
 void _testNoConfig() {
   test('tools return config error without GITLAB_BASE_PATH/TOKEN', () {
     PropertyReader.setOverrides({'GITLAB_BASE_PATH': '', 'GITLAB_TOKEN': ''});
-    final result = const GitLabSyncTools()
-        .handlers['gitlab_get_mr']!({'workspace': 'g', 'repository': 'r'});
+    final result = const GitLabSyncTools().handlers['gitlab_get_mr']!(
+        {'workspace': 'g', 'repository': 'r', 'pullRequestId': '7'});
     expect(jsonDecode(result), {'error': 'GitLab not configured'});
     PropertyReader.clearOverrides();
   });

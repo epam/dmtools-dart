@@ -26,10 +26,23 @@ typedef MockHttpFixture = ({
 });
 
 /// A canned-response [HttpClientAdapter] that records each served request.
+///
+/// [status] and [contentType] let individual tests serve non-200 answers
+/// and raw (non-JSON) bodies so the dio String-body decode paths run.
 class RoutingAdapter implements HttpClientAdapter {
-  RoutingAdapter(this._router);
+  RoutingAdapter(
+    this._router, {
+    this.status = 200,
+    this.contentType = 'application/json',
+  });
 
   final String Function(RequestOptions options) _router;
+
+  /// HTTP status every response carries.
+  final int status;
+
+  /// The `Content-Type` header every response carries.
+  final String contentType;
 
   /// Requests served so far, in call order.
   final List<RequestOptions> calls = [];
@@ -43,9 +56,9 @@ class RoutingAdapter implements HttpClientAdapter {
     calls.add(options);
     return ResponseBody.fromString(
       _router(options),
-      200,
+      status,
       headers: {
-        Headers.contentTypeHeader: ['application/json'],
+        Headers.contentTypeHeader: [contentType],
       },
     );
   }
@@ -103,6 +116,14 @@ MockHttpFixture mockHttpWithAuth(
   );
 }
 
+/// Builds a [ConfluenceClient] over a fully custom adapter (for tests that
+/// need non-default status codes or content types).
+ConfluenceClient clientOnAdapter(HttpClientAdapter adapter) {
+  PropertyReader.setOverrides(_testConfig);
+  final dio = Dio()..httpClientAdapter = adapter;
+  return ConfluenceClient(ConfluenceHttpClient(PropertyReader(), dio: dio));
+}
+
 /// Routes by request-path suffix, defaulting to [fallback].
 ///
 /// Paths match with `endsWith` against the full request URL, so `'/content'`
@@ -116,4 +137,73 @@ String routeByPath(
     if (options.path.endsWith(entry.key)) return entry.value;
   }
   return fallback;
+}
+
+/// A canned adapter entry: status code, optional 3xx `Location`, body.
+typedef RedirectRoute = ({int status, String? location, String body});
+
+/// A canned-response adapter that answers with real status codes and
+/// `Location` headers — exercises the 3xx redirect paths the 200-only
+/// [RoutingAdapter] cannot. Requests are matched by path suffix (same
+/// discipline as [routeByPath], so `/content/777/child/attachment` does
+/// not match a `/content/777` route).
+class RedirectAdapter implements HttpClientAdapter {
+  RedirectAdapter(this._routes);
+
+  final Map<String, RedirectRoute> _routes;
+
+  /// Requests served so far, in call order.
+  final List<RequestOptions> calls = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    calls.add(options);
+    for (final entry in _routes.entries) {
+      if (options.uri.path.endsWith(entry.key)) {
+        final route = entry.value;
+        final headers = <String, List<String>>{
+          Headers.contentTypeHeader: ['application/json'],
+          if (route.location != null) 'location': [route.location!],
+        };
+        return ResponseBody.fromString(route.body, route.status,
+            headers: headers);
+      }
+    }
+    return ResponseBody.fromString(
+      '{"error":"unrouted"}',
+      404,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// A mocked [ConfluenceClient] over a [RedirectAdapter].
+typedef RedirectConfluenceFixture = ({
+  ConfluenceClient client,
+  RedirectAdapter adapter,
+});
+
+/// Builds a [ConfluenceClient] over a [RedirectAdapter] with the standard
+/// Basic-auth Confluence config.
+RedirectConfluenceFixture mockRedirectConfluence(
+  Map<String, RedirectRoute> routes,
+) {
+  PropertyReader.setOverrides(_testConfig);
+  final adapter = RedirectAdapter(routes);
+  final dio = Dio()..httpClientAdapter = adapter;
+  return (
+    client: ConfluenceClient(
+      ConfluenceHttpClient(PropertyReader(), dio: dio),
+    ),
+    adapter: adapter,
+  );
 }

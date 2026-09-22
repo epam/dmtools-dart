@@ -30,6 +30,7 @@ void main() {
     _testLinkIssues();
     _testAttachFile();
     _testFieldCustomCode();
+    _testUpdateFieldEngine();
   }
 }
 
@@ -154,7 +155,37 @@ void _testNewWriteTools() {
     });
 
     testnewwritetools_p1();
+    testCreateTicketWithParent();
     testnewwritetools_p2();
+    testPostCommentConversion();
+  });
+}
+
+/// gh-191 / P6-JSY-09: `jira_post_comment` must convert Markdown bodies to
+/// Jira wiki markup before POSTing (Java `JiraClient.postComment` with
+/// `TextType.MARKDOWN`).
+void testPostCommentConversion() {
+  test('jira_post_comment converts markdown to Jira markup', () {
+    final body = jsonDecode(tools.dispatch('jira_post_comment', {
+      'key': 'P-1',
+      'comment': '## Done\n\n- **fixed** the bug\n\n```dart\nx();\n```',
+    }));
+    expect(body['method'], 'POST');
+    expect(body['path'], '/rest/api/latest/issue/P-1/comment');
+    final posted = jsonDecode(body['body'] as String)['body'] as String;
+    expect(
+      posted,
+      'h2. Done\n\n- *fixed* the bug\n\n{code:dart}x();{code}',
+    );
+  });
+
+  test('jira_post_comment keeps plain comments byte-for-byte', () {
+    final body = jsonDecode(tools.dispatch('jira_post_comment', {
+      'key': 'P-1',
+      'comment': 'plain text, no markup',
+    }));
+    final posted = jsonDecode(body['body'] as String)['body'] as String;
+    expect(posted, 'plain text, no markup');
   });
 }
 
@@ -186,8 +217,10 @@ void testnewwritetools_p1() {
     }));
     expect(body['path'], '/rest/api/latest/issue/P-1/assignee');
   });
+}
 
-  test('jira_create_ticket_with_parent POSTs parent key and description', () {
+void testCreateTicketWithParent() {
+  test('jira_create_ticket_with_parent embeds the fetched parent object', () {
     final body = jsonDecode(tools.dispatch('jira_create_ticket_with_parent', {
       'project': 'PROJ',
       'issueType': 'Sub-task',
@@ -198,8 +231,25 @@ void testnewwritetools_p1() {
     expect(body['method'], 'POST');
     expect(body['path'], '/rest/api/latest/issue');
     final fields = jsonDecode(body['body'] as String)['fields'];
-    expect(fields['parent'], {'key': 'EPIC-1'});
+    // Java `createTicketInProjectWithParent`: the parent ticket is fetched
+    // first and embedded as the full JSON object, not a key reference.
+    expect(fields['parent']['method'], 'GET');
+    expect(fields['parent']['path'], contains('/issue/EPIC-1'));
     expect(fields['description'], 'Details here');
+  });
+
+  test('jira_create_ticket_with_parent fails upfront on a missing parent', () {
+    final result = tools.dispatch('jira_create_ticket_with_parent', {
+      'project': 'PROJ',
+      'issueType': 'Sub-task',
+      'summary': 'Do the thing',
+      'description': 'Details here',
+      'parentKey': 'NOPE-1',
+    });
+    final body = jsonDecode(result) as Map<String, dynamic>;
+    expect(body['error'], isNotNull);
+    // No create request may reach the wire after the parent fetch fails.
+    expect(_lastRequest(server)['line'], contains('GET'));
   });
 }
 
@@ -439,5 +489,198 @@ void _testFieldCustomCode() {
       });
       expect(result, 'null');
     });
+  });
+}
+
+void _testUpdateFieldEngine() {
+  group('JiraSyncTools jira_update_field engine', () {
+    setUp(() async {
+      server = JiraFixtureServer();
+      await server.start();
+      tools = JiraSyncTools();
+      configureJira(server);
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    testupdatefield_p1();
+    testupdatefield_p2();
+    testupdatefield_p3();
+    testupdatefield_p4();
+  });
+}
+
+void testupdatefield_p1() {
+  test('system field PUTs the update-verb payload without resolution', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'labels',
+      'value': 'x',
+    });
+    final last = _lastRequest(server);
+    expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+    expect(
+      jsonDecode(last['body'] as String),
+      {
+        'update': {
+          'labels': [
+            {'set': 'x'},
+          ],
+        },
+      },
+    );
+    // `labels` is absent from the field listing — a name-resolution
+    // path would have answered "No fields found" instead.
+    expect(
+      jsonDecode(result),
+      "Field 'labels' updated successfully on ticket PROJ-1",
+    );
+  });
+
+  test('customfield id skips name resolution', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'customfield_10091',
+      'value': 'v',
+    });
+    final last = _lastRequest(server);
+    expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+    expect(
+      jsonDecode(result),
+      "Field 'customfield_10091' updated successfully on ticket PROJ-1",
+    );
+  });
+}
+
+void testupdatefield_p2() {
+  test('empty value clears the field with a fields-null payload', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'customfield_10091',
+      'value': '',
+    });
+    final last = _lastRequest(server);
+    expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+    expect(
+      jsonDecode(last['body'] as String),
+      {
+        'fields': {'customfield_10091': null},
+      },
+    );
+    // Java clearField returns the raw PUT response.
+    final echo = jsonDecode(result) as Map<String, dynamic>;
+    expect(echo['method'], 'PUT');
+  });
+
+  test('string values are coerced to bool/int/double/JSON', () {
+    final cases = <String, dynamic>{
+      '8': 8,
+      'true': true,
+      '8.5': 8.5,
+      '{"a":1}': {
+        'a': 1,
+      },
+      '[1,2]': [1, 2],
+    };
+    cases.forEach((raw, expected) {
+      tools.dispatch('jira_update_field', {
+        'key': 'PROJ-1',
+        'field': 'customfield_10091',
+        'value': raw,
+      });
+      final body = jsonDecode(_lastRequest(server)['body'] as String)
+          as Map<String, dynamic>;
+      final update = (body['update'] as Map)['customfield_10091'] as List;
+      expect((update.single as Map)['set'], expected, reason: "value '$raw'");
+    });
+    // Non-JSON text stays a string.
+    tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'customfield_10091',
+      'value': '{code:mermaid}\ngraph TD\n{code}',
+    });
+    final body = jsonDecode(_lastRequest(server)['body'] as String) as Map;
+    final set =
+        ((body['update'] as Map)['customfield_10091'] as List).single as Map;
+    expect(set['set'], '{code:mermaid}\ngraph TD\n{code}');
+  });
+}
+
+void testupdatefield_p3() {
+  test('field name resolves to ALL active customfields and summarizes', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'Story Points',
+      'value': '8',
+    });
+    expect(
+      jsonDecode(result),
+      '✅ Updated customfield_10001\n'
+      '✅ Updated customfield_10002\n'
+      '\n'
+      "Updated 2 of 2 fields with name 'Story Points' for ticket PROJ-1",
+    );
+    final last = _lastRequest(server);
+    expect(last['line'], 'PUT /rest/api/latest/issue/PROJ-1');
+    // The coerced number — not the raw string — reaches the wire.
+    final set = ((jsonDecode(last['body'] as String) as Map)['update']
+        as Map)['customfield_10002'] as List;
+    expect((set.single as Map)['set'], 8);
+  });
+
+  test('single-match field name skips the ✅ lines', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'Dependencies',
+      'value': 'A > B',
+    });
+    expect(
+      jsonDecode(result),
+      "Field 'Dependencies' updated successfully on ticket PROJ-1",
+    );
+  });
+}
+
+void testupdatefield_p4() {
+  test('unknown field name reports no matches', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'Nope Field',
+      'value': 'v',
+    });
+    expect(jsonDecode(result), "No fields found with name 'Nope Field'");
+  });
+
+  test('per-field failures produce ❌ lines and a failed summary', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-FAIL',
+      'field': 'Story Points',
+      'value': '8',
+    });
+    final decoded = jsonDecode(result) as String;
+    expect(decoded, contains('❌ Failed customfield_10001'));
+    expect(decoded, contains('❌ Failed customfield_10002'));
+    expect(
+      decoded,
+      contains(
+        "Updated 0 of 2 fields with name 'Story Points' for ticket "
+        'PROJ-FAIL (2 failed)',
+      ),
+    );
+  });
+
+  test('single-field failure through a name keeps the plain message', () {
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-FAIL',
+      'field': 'Dependencies',
+      'value': 'v',
+    });
+    expect(
+      jsonDecode(result),
+      "Failed to update field 'Dependencies' on ticket PROJ-FAIL",
+    );
   });
 }

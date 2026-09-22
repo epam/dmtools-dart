@@ -20,7 +20,11 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
+import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
 import 'tracker_github_router.dart';
+
+part 'jira_sync_http_helpers.dart';
+part 'jira_sync_field_update.dart';
 
 /// Executes `jira_*` MCP tool calls synchronously over curl subprocess.
 class JiraSyncTools {
@@ -94,8 +98,15 @@ class JiraSyncTools {
       });
 
   /// `jira_post_comment` — POST `issue/{key}/comment`.
+  ///
+  /// The comment body runs through [markdownToJiraMarkup] first: Java
+  /// `JiraClient.postComment` converts whenever
+  /// `TrackerClient.TextType == MARKDOWN` (gh-191, P6-JSY-09), and
+  /// `BasicJiraClient.getTextType()` always returns MARKDOWN for Jira.
   String _postComment(Map<String, dynamic> args) => _run((config) {
-        final body = jsonEncode({'body': _asStr(args['comment'])});
+        final body = jsonEncode(
+          {'body': markdownToJiraMarkup(_asStr(args['comment']))},
+        );
         return _postBody(
           config,
           '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
@@ -348,9 +359,10 @@ class JiraSyncTools {
         return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
       });
 
-  /// `jira_update_field` — PUT `issue/{key}` with `{fields:{field:value}}`.
+  /// `jira_update_field` — the Java `updateField` engine (body in
+  /// `jira_sync_field_update.dart`).
   String _updateField(Map<String, dynamic> args) =>
-      _putIssueFields(args, {_asStr(args['field']): args['value']});
+      _run((config) => _updateFieldFor(config, args));
 
   /// `jira_update_description` — PUT `issue/{key}` with the description.
   String _updateDescription(Map<String, dynamic> args) => _putIssueFields(
@@ -415,10 +427,23 @@ class JiraSyncTools {
   /// Java `createTicketInProjectWithParent` signature (`description` is a
   /// declared `@MCPParam`); the parent travels as `{key}` like the async
   /// [JiraClient.createTicketWithParent].
-  String _createTicketWithParent(Map<String, dynamic> args) =>
-      _postIssueCreate({
-        ..._basicCreateFields(args),
-        'parent': {'key': _asStr(args['parentKey'])},
+  /// `jira_create_ticket_with_parent` — Java
+  /// `createTicketInProjectWithParent`: the parent ticket is fetched first
+  /// (`?fields=summary`, failing upfront when it cannot be read) and the
+  /// full parent object is embedded in the create payload.
+  String _createTicketWithParent(Map<String, dynamic> args) => _run((config) {
+        final parentKey = _asStr(args['parentKey']);
+        final parent = _getJson(
+          config,
+          '${config.baseUrl}/issue/$parentKey?fields=summary',
+        );
+        if (parent == null) {
+          return _err('Failed to fetch parent ticket $parentKey');
+        }
+        return _postIssueCreate({
+          ..._basicCreateFields(args),
+          'parent': parent,
+        });
       });
 
   /// `jira_create_ticket_with_json` — POST `issue` with merged fields JSON.
@@ -607,21 +632,6 @@ class JiraSyncTools {
         .cast<Map<String, dynamic>>();
   }
 
-  /// Fetches the field listing with the Java fallback chain: GET `field`;
-  /// on failure GET `issue/createmeta` with the project filter and fields
-  /// expansion.
-  String _fieldsListing(_JiraSyncConfig config, String project) {
-    final direct = SyncHttpClient.get(
-      '${config.baseUrl}/field',
-      headers: config.headers,
-    );
-    if (direct.isOk) return direct.body;
-    final url = '${config.baseUrl}/issue/createmeta'
-        '?projectKeys=${Uri.encodeQueryComponent(project)}'
-        '&expand=projects.issuetypes.fields';
-    return SyncHttpClient.get(url, headers: config.headers).body;
-  }
-
   /// Fetches the current labels list for [key]; `null` when the fetch fails
   /// (non-2xx, malformed JSON, curl error). Callers must abort rather than
   /// PUT an empty set — the failure path is what protects existing labels.
@@ -701,99 +711,3 @@ class JiraSyncTools {
     return fields;
   }
 }
-
-/// Connection config for the sync Jira executors.
-typedef _JiraSyncConfig = ({
-  String basePath,
-  String baseUrl,
-  Map<String, String> headers
-});
-
-/// Media type for JSON request/response bodies.
-const _jsonContentType = 'application/json';
-
-/// Decodes [body] as JSON, returning it verbatim when it does not parse.
-dynamic _tryDecode(String body) {
-  try {
-    return jsonDecode(body);
-  } on FormatException {
-    return body;
-  }
-}
-
-/// Unwraps the message inside a `{"error": …}` envelope.
-String _errorOf(String errorEnvelope) =>
-    _asStr((_tryDecode(errorEnvelope) as Map?)?['error']);
-
-/// GETs a JSON object, returning `null` on failure or non-object body.
-Map<String, dynamic>? _getJson(_JiraSyncConfig config, String url) {
-  final result = _getJsonOrError(url, config);
-  return result is Map<String, dynamic> ? result : null;
-}
-
-/// GET for callers that must distinguish transport failure from an empty
-/// result: the decoded map, or an error [String] (status / malformed body).
-Object _getJsonOrError(String url, _JiraSyncConfig config) {
-  final resp = SyncHttpClient.get(url, headers: config.headers);
-  if (!resp.isOk) {
-    final decoded = _tryDecode(resp.body);
-    final detail = decoded is Map ? _asStr(decoded['error']) : '';
-    return 'fetch failed: HTTP ${resp.statusCode}'
-        '${detail.isEmpty ? '' : ': $detail'}';
-  }
-  try {
-    final decoded = jsonDecode(resp.body);
-    if (decoded is Map<String, dynamic>) return decoded;
-  } catch (_) {/* fall through to the malformed-body error */}
-  return 'fetch failed: malformed JSON response';
-}
-
-/// POSTs [body] to [url] and returns the result string.
-String _postBody(_JiraSyncConfig config, String url, String body) =>
-    _bodyOrError(
-      SyncHttpClient.post(url, headers: config.headers, body: body),
-    );
-
-/// PUTs [body] to [url] and returns the result string.
-String _putBody(_JiraSyncConfig config, String url, String body) =>
-    _bodyOrError(
-      SyncHttpClient.put(url, headers: config.headers, body: body),
-    );
-
-/// Returns the 2xx body verbatim, or the body re-encoded as a JSON string
-/// when it is not valid JSON.
-///
-/// Java parity (`GenericRequest.execute`): a 2xx body that is empty (204
-/// No Content) or plain text reaches the JS layer as the raw string —
-/// `""` for 204, the text otherwise. Re-encoding non-JSON bodies keeps
-/// the QuickJS JSON boundary yielding that same JS string. Failures
-/// (curl exit, non-2xx status) become `{"error": …}`.
-String _bodyOrError(SyncHttpResponse resp) {
-  if (resp.statusCode == 0) return _err('HTTP request failed: ${resp.body}');
-  if (!resp.isOk) return _err(_failureDetail('HTTP ${resp.statusCode}', resp));
-  if (_tryDecode(resp.body) == resp.body) return jsonEncode(resp.body);
-  return resp.body;
-}
-
-/// Formats a failure message with a short body snippet.
-String _failureDetail(String reason, SyncHttpResponse resp) {
-  final snippet =
-      resp.body.length > 120 ? resp.body.substring(0, 120) : resp.body;
-  return '$reason: $snippet';
-}
-
-/// Joins a `fields` argument (list or comma string) into a query value.
-///
-/// Defaults to `*navigable` (the Java `JiraClient` default).
-String _joinFields(dynamic fields) {
-  if (fields == null) return '*navigable';
-  if (fields is String) return fields;
-  if (fields is List) return fields.cast<String>().join(',');
-  return '*navigable';
-}
-
-/// Coerces a loosely-typed JS argument to a string.
-String _asStr(dynamic value) => value?.toString() ?? '';
-
-/// Encodes a JSON error result string.
-String _err(String message) => jsonEncode({'error': message});

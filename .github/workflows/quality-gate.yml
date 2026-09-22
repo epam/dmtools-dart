@@ -46,7 +46,7 @@ jobs:
   sm-validation:
     name: 'sm-validation (waits for the SM-dispatched Quality run)'
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04 (fallback: ubuntu-latest)
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
       conclusion: ${{ steps.wait.outputs.conclusion }}
@@ -99,7 +99,7 @@ jobs:
     # Mirror only a REAL waiter verdict: cancelled/skipped waiter (head
     # moved, draft, re-run debris) must not stamp red "did not run".
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04 (fallback: ubuntu-latest)
+    runs-on: ubuntu-24.04
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -111,7 +111,7 @@ jobs:
     name: gate
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04 (fallback: ubuntu-latest)
+    runs-on: ubuntu-24.04
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -123,7 +123,7 @@ jobs:
     name: agents-suite
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04 (fallback: ubuntu-latest)
+    runs-on: ubuntu-24.04
     steps:
       - name: Mirror the SM validation verdict
         env:

@@ -23,6 +23,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
     """Echoes request details as a JSON response."""
 
     DELETE_LOG = []
+    RETRY_HITS = {}
 
     def _send(self, encoded, content_type="application/json"):
         self.send_response(200)
@@ -44,6 +45,42 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             "headers": {k: v for k, v in self.headers.items()},
             "body": body,
         }
+        # Retry-policy fixtures (gh-191 / P6-JSY-18): the first request to a
+        # dt-retry path answers 429 with Retry-After: 0, later requests echo
+        # normally; dt-retryalways answers 429 forever (attempt-budget
+        # guard); dt-retryfail answers 503 with no retry headers.
+        if "dt-retryalways" in self.path:
+            encoded = b'{"error": "rate limited"}'
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", "0")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if "dt-retryfail" in self.path:
+            hits = EchoHandler.RETRY_HITS.get(self.path, 0)
+            EchoHandler.RETRY_HITS[self.path] = hits + 1
+            if hits == 0:
+                encoded = b'{"error": "unavailable"}'
+                self.send_response(503)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+        if "dt-retry" in self.path:
+            hits = EchoHandler.RETRY_HITS.get(self.path, 0)
+            EchoHandler.RETRY_HITS[self.path] = hits + 1
+            if hits == 0:
+                encoded = b'{"error": "rate limited"}'
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Retry-After", "0")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
         # JS source fixture for the URL-jsPath tests: serves an agent script
         # (with the action() contract) as plain text so the loader can eval
         # it — mirrors a raw.githubusercontent.com fetch.
@@ -87,6 +124,17 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             return
         if "dt-movepostfail" in self.path and self.command == "POST":
             encoded = b'{"error": "nope"}'
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        # Confluence attachment-upload failure fixture (gh-191 CRAP gate):
+        # a multipart POST under /content/dt-fail/... answers 500 so the
+        # uploadWithPolicy failure branch runs end to end.
+        if "/content/dt-fail/" in self.path and self.command == "POST":
+            encoded = b'{"error": "upload rejected"}'
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(encoded)))
@@ -160,17 +208,42 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         # Confluence content fixtures: a page GET (777) answers a page
         # object and a child listing (99) answers a results array, both
         # with storage bodies, so the format=markdown conversion runs.
+        # Page 555 answers a version object (update-with-history) and its
+        # child listing carries a titled child for the downloader.
         elif (self.command == "GET"
               and "/wiki/rest/api/content/777" in self.path
               and "/child/" not in self.path):
             payload.clear()
             payload["id"] = "777"
+            payload["title"] = "Hi Page"
             payload["body"] = {
                 "storage": {
                     "value": "<p>hi</p>",
                     "representation": "storage",
                 }
             }
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/555" in self.path
+              and "/child/" not in self.path):
+            payload.clear()
+            payload["id"] = "555"
+            payload["version"] = {"number": 3}
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/555/child/page" in self.path):
+            # Real Confluence only includes body.storage when the request
+            # asks for it via expand (gh-191 review: guards the downloader).
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            wants_body = "body.storage" in query.get("expand", [""])[0]
+            payload.clear()
+            result = {"id": "902", "title": "Child Page"}
+            if wants_body:
+                result["body"] = {
+                    "storage": {
+                        "value": "<p>kid</p>",
+                        "representation": "storage",
+                    }
+                }
+            payload["results"] = [result]
         elif self.command == "GET" and "/wiki/rest/api/content/99/child/page" in self.path:
             payload.clear()
             payload["results"] = [
@@ -184,6 +257,160 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     },
                 }
             ]
+        # Confluence title listing (Java content(title, space) →
+        # ContentResult): the default-space tools' distinctive expand list
+        # answers per the title param — 'Parent' resolves to page 555 (the
+        # get_children_by_name parent), 'Nope'/'Ghost' answer empty (not
+        # found), anything else answers two results so first-match /
+        # applyFormat order is asserted. The plain get_page expand
+        # (body.storage only) keeps the bare echo.
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content?" in self.path
+              and "body.storage%2Cbody.export_view" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            title = query.get("title", [""])[0]
+            payload.clear()
+            if title in ("Nope", "Ghost"):
+                payload["results"] = []
+            elif title == "Parent":
+                payload["results"] = [{
+                    "id": "555",
+                    "title": "Parent",
+                    "body": {
+                        "storage": {
+                            "value": "<p>parent</p>",
+                            "representation": "storage",
+                        }
+                    },
+                }]
+            else:
+                payload["results"] = [
+                    {
+                        "id": "801",
+                        "title": "Found Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>found</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                    {
+                        "id": "802",
+                        "title": "Second Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>second</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                ]
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/777/child/page" in self.path):
+            # Same expand-gating as the 555 fixture above: no body unless
+            # the caller asks for it (the page downloader must request it).
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            wants_body = "body.storage" in query.get("expand", [""])[0]
+            payload.clear()
+            result = {"id": "902", "title": "Child Page"}
+            if wants_body:
+                result["body"] = {
+                    "storage": {
+                        "value": "<p>kid</p>",
+                        "representation": "storage",
+                    }
+                }
+            payload["results"] = [result]
+        # Confluence attachment listing: two fixtures — exists.txt (the
+        # skip-existing policy) and shot.png carrying a _links.download
+        # path (the page-downloader fetches it below). evil.txt carries an
+        # absolute URL on a foreign host (localhost vs 127.0.0.1) — the
+        # downloader must fetch it WITHOUT the Confluence credentials, and
+        # /download/evil.bin answers CLEAN/LEAKED accordingly.
+        elif self.command == "GET" and "/child/attachment" in self.path:
+            port = self.server.server_address[1]
+            payload.clear()
+            payload["results"] = [
+                {"id": "a1", "title": "exists.txt"},
+                {
+                    "id": "a2",
+                    "title": "shot.png",
+                    "_links": {
+                        "download": "/download/attachments/123/shot.png"
+                    },
+                },
+                {
+                    "id": "a3",
+                    "title": "evil.txt",
+                    "_links": {
+                        "download":
+                            "http://localhost:%d/download/evil.bin" % port
+                    },
+                },
+            ]
+        if self.path.startswith("/download/evil.bin"):
+            leaked = self.headers.get("Authorization") is not None
+            self._send(b"LEAKED" if leaked else b"CLEAN",
+                       "application/octet-stream")
+            return
+        if self.path.startswith("/download/attachments/"):
+            self._send(b"PNG-fixture-bytes", "application/octet-stream")
+            return
+        # Confluence short-link redirect: /l/... answers a 302 whose
+        # Location points back at the 777 page URL (contents_by_urls must
+        # resolve it and fetch that page). /l/chain answers a chained hop
+        # (→ /dt-redir2 → page URL) so the redirect follower must track the
+        # current URL across hops instead of re-GETting the original. The
+        # dead short link answers 404 (no Location) — resolvers must
+        # degrade to null, not abort the whole call. /dt-redir answers the
+        # single-hop redirect for probes that bypass the URL-shape gate.
+        if self.path.startswith("/l/chain"):
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/x/AB12" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/wiki/x/"):
+            # Second chain hop: a wiki-shaped short link that itself
+            # redirects to the canonical page URL (the follower must GET
+            # each hop at its own URL).
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/spaces/ENG/pages/777/Hi" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/l/dead"):
+            encoded = b'{"gone": true}'
+            self.send_response(404)
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        if self.path.startswith("/l/") or self.path.startswith("/dt-redir"):
+            port = self.server.server_address[1]
+            encoded = b'{"moved": true}'
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/wiki/spaces/ENG/pages/777/Hi" % port,
+            )
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         elif (self.command == "GET" and "/pipelines?" in self.path
               and urllib.parse.parse_qs(
                   urllib.parse.urlparse(self.path).query

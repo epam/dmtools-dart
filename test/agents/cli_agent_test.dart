@@ -16,6 +16,7 @@ void main() {
   filterEnvTests();
   executeCommandsTests();
   readOutputResponseTests();
+  failureResponseTests();
   lifecycleOrderTests();
   lifecycleInputCleanupTests();
   lifecycleFolderCleanupTests();

@@ -46,11 +46,20 @@ jobs:
   sm-validation:
     name: 'sm-validation (waits for the SM-dispatched Quality run)'
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci  # Bitrise Build Hub pool "dmtools-ci" (fallback: ubuntu-latest)
     timeout-minutes: 90
     outputs:
       conclusion: ${{ steps.wait.outputs.conclusion }}
     steps:
+      - name: Ensure gh CLI (Bitrise images may not ship it)
+        run: |
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "Installing gh CLI..."
+            (type -p yum >/dev/null && sudo yum install -y gh) || \
+            (type -p apt-get >/dev/null && { curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt-get update -qq && sudo apt-get install -y gh; }) || \
+            echo "Could not install gh — will fail below if truly absent"
+          fi
+          gh --version
       - name: Wait for the dispatched Quality run on this head
         id: wait
         env:
@@ -90,7 +99,7 @@ jobs:
     # Mirror only a REAL waiter verdict: cancelled/skipped waiter (head
     # moved, draft, re-run debris) must not stamp red "did not run".
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci  # Bitrise Build Hub pool "dmtools-ci" (fallback: ubuntu-latest)
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -102,7 +111,7 @@ jobs:
     name: gate
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci  # Bitrise Build Hub pool "dmtools-ci" (fallback: ubuntu-latest)
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -114,7 +123,7 @@ jobs:
     name: agents-suite
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci  # Bitrise Build Hub pool "dmtools-ci" (fallback: ubuntu-latest)
     steps:
       - name: Mirror the SM validation verdict
         env:

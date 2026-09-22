@@ -13,10 +13,18 @@
 # head SHA) and mirrors its conclusion under the required check names.
 # The expensive matrix still runs ONLY when the SM dispatches it.
 #
-# Failure modes: SM broken / never dispatches -> the waiter times out
-# after 44 min and the mirrors go red (human signal). Dispatched run
-# red -> mirrors red. Draft PRs skip the waiter entirely (drafts cannot
-# merge anyway).
+# Debris-proof verdict (2026-09-22 — same class as the live fa flaps the
+# guest diagnosed in flutter_agent_harness#782, ported here because
+# dmtools-dart is the sibling deployment):
+#   * fetch the last 30 dispatched runs for the head, not per_page=1 —
+#     CANCELLED/SKIPPED runs (SM re-dispatch churn, concurrency cancel)
+#     are NEVER a verdict;
+#   * the NEWEST non-debris run decides: if it is still in flight, keep
+#     waiting (an in-flight rerun outranks any older green/red);
+#   * poll window 85 min (timeout 90) — self-hosted pool queues ran 4h
+#     live; the SM ticks every 10, so the window also absorbs SM lag;
+#   * mirrors skip when the waiter was cancelled/skipped (head moved /
+#     draft) — no false red "did not run" on re-run debris.
 
 name: 'SM Quality Gate'
 
@@ -39,7 +47,7 @@ jobs:
     name: 'sm-validation (waits for the SM-dispatched Quality run)'
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     outputs:
       conclusion: ${{ steps.wait.outputs.conclusion }}
     steps:
@@ -49,25 +57,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          deadline=$((SECONDS + 2640))   # 44 min — the SM ticks every 10
+          # GATE_WAIT_SECONDS / GATE_POLL_SECONDS are test seams (defaults:
+          # 85 min / 30 s) — unset in CI they reproduce the live values.
+          deadline=$((SECONDS + ${GATE_WAIT_SECONDS:-5100}))
+          poll=${GATE_POLL_SECONDS:-30}
           while [ "$SECONDS" -lt "$deadline" ]; do
-            c="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml/runs?event=workflow_dispatch&head_sha=${SHA}&per_page=1" \
-                  --jq '.workflow_runs[0].conclusion' 2>/dev/null || true)"
-            case "$c" in
-              success|failure|cancelled|timed_out|action_required|startup_failure)
-                echo "conclusion=$c" >> "$GITHUB_OUTPUT"
-                echo "SM-dispatched Quality run concluded: $c"
+            # Newest 30 dispatched runs for this head; cancelled/skipped are
+            # re-dispatch debris, never a verdict. The newest NON-debris run
+            # decides; if it is still running we keep waiting — an in-flight
+            # rerun outranks any older green/red conclusion.
+            verdict="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/quality.yml/runs?event=workflow_dispatch&head_sha=${SHA}&per_page=30" \
+              --jq '[.workflow_runs[] | select(.conclusion != "cancelled" and .conclusion != "skipped" and .status != "queued" and .status != "waiting")] | if length == 0 then empty else .[0] | if .status == "in_progress" then "RUNNING" else .conclusion end end' 2>/dev/null || true)"
+            case "$verdict" in
+              success|failure|timed_out|action_required|startup_failure|neutral)
+                echo "conclusion=$verdict" >> "$GITHUB_OUTPUT"
+                echo "SM-dispatched Quality run concluded: $verdict"
                 exit 0 ;;
-              *) sleep 30 ;;
+              RUNNING|'')
+                sleep "$poll" ;;
+              *)
+                # Unknown value — log and keep polling rather than guessing.
+                echo "unrecognized run state: $verdict"
+                sleep "$poll" ;;
             esac
           done
-          echo "::error::SM-dispatched validation did not conclude within 44 min (SM tick broken or queue stalled)"
+          echo "::error::SM-dispatched validation did not conclude within 85 min (SM tick broken or queue stalled)"
           exit 1
 
   static:
     name: static
     needs: sm-validation
-    if: always()
+    # Mirror only a REAL waiter verdict: cancelled/skipped waiter (head
+    # moved, draft, re-run debris) must not stamp red "did not run".
+    if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Mirror the SM validation verdict
@@ -79,7 +101,7 @@ jobs:
   gate:
     name: gate
     needs: sm-validation
-    if: always()
+    if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Mirror the SM validation verdict
@@ -91,7 +113,7 @@ jobs:
   agents-suite:
     name: agents-suite
     needs: sm-validation
-    if: always()
+    if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Mirror the SM validation verdict

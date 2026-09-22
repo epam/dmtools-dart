@@ -246,6 +246,21 @@ void contentByUrlTests() {
       expect(contents.single['id'], '777');
     });
 
+    test('contentByUrl routes /display/ URLs through the title listing',
+        () async {
+      final f = mockConfluence((o) => routeByPath({
+            '/content': '{"results":[{"id":"801","title":"Found",'
+                '"body":{"storage":{"value":"<p>x</p>",'
+                '"representation":"storage"}}}]}',
+          }, o, fallback: '{}'));
+      final content = await f.client
+          .contentByUrl('https://conf.example.com/display/ENG/Found');
+      expect(content?['id'], '801');
+      final call = f.adapter.calls.first;
+      expect(call.queryParameters['title'], 'Found');
+      expect(call.queryParameters['spaceKey'], 'ENG');
+    });
+
     test('contentByUrl follows a short-link redirect then fetches the page',
         () async {
       final f = mockConfluence((o) {
@@ -358,7 +373,48 @@ void uploadAttachmentTests() {
       expect(summary['uploaded'], ['fresh.txt']);
       expect(summary['failed'], isEmpty);
     });
+
+    test('decode: a JSON string body decodes to the attachment', () async {
+      final file = _tempUpload('plain.txt');
+      final client = clientOnAdapter(RoutingAdapter(
+        (o) => o.method == 'GET' ? '{}' : '{"id":"a2"}',
+        contentType: 'text/plain', // dio hands the body over as a String
+      ));
+      final result = await client.uploadAttachment('42', file.path);
+      expect(result['status'], 'created');
+      expect((result['attachment'] as Map)['id'], 'a2');
+    });
+
+    test('decode: a non-object JSON string yields a null attachment',
+        () async {
+      final file = _tempUpload('plain.txt');
+      final client = clientOnAdapter(RoutingAdapter(
+        (o) => o.method == 'GET' ? '{}' : '[1,2]',
+        contentType: 'text/plain',
+      ));
+      final result = await client.uploadAttachment('42', file.path);
+      expect(result['status'], 'created');
+      expect(result['attachment'], isNull);
+    });
+
+    test('decode: a non-JSON string body yields a null attachment', () async {
+      final file = _tempUpload('plain.txt');
+      final client = clientOnAdapter(RoutingAdapter(
+        (o) => o.method == 'GET' ? '{}' : '<html>502</html>',
+        contentType: 'text/plain',
+      ));
+      final result = await client.uploadAttachment('42', file.path);
+      expect(result['status'], 'created');
+      expect(result['attachment'], isNull);
+    });
   });
+}
+
+/// A one-file upload fixture in a fresh temp directory.
+File _tempUpload(String name) {
+  final dir = Directory.systemTemp.createTempSync('dmtools_aud_');
+  addTearDown(() => dir.deleteSync(recursive: true));
+  return File('${dir.path}/$name')..writeAsStringSync('bytes');
 }
 
 /// The page downloader (real temp dirs, canned listings).

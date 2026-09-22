@@ -633,10 +633,19 @@ class ConfluenceClient {
   }
 
   /// Decodes a dio response body that may arrive as String or JSON.
+  ///
+  /// Non-JSON strings (HTML error pages from proxies, text/plain bodies)
+  /// decode to `null` rather than throwing — Java's helper catches the
+  /// parse failure and reports the upload as failed.
   Map<String, dynamic>? _decodeDioBody(Object? data) {
     if (data is Map<String, dynamic>) return data;
     if (data is String && data.isNotEmpty) {
-      final decoded = jsonDecode(data);
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(data);
+      } on FormatException {
+        return null;
+      }
       return decoded is Map<String, dynamic> ? decoded : null;
     }
     return null;

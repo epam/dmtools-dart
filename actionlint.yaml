@@ -1,0 +1,4 @@
+# Custom self-hosted runner labels (Bitrise Build Hub pools, PR #202).
+self-hosted-runner:
+  labels:
+    - bitrise-runner-dmtools-ci

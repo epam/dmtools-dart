@@ -8,8 +8,6 @@ name: Quality
 # dispatched run registers its check runs on the head SHA.
 # Main keeps its push CI (badges + history).
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 concurrency:

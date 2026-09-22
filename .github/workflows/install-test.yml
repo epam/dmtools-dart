@@ -15,11 +15,6 @@ name: Install test
 # exercise the authenticated download path and avoid API rate limits.
 
 on:
-  pull_request:
-    paths:
-      - 'install.sh'
-      - '.github/workflows/install-test.yml'
-      - '.github/workflows/release-cli.yml'
   workflow_dispatch:
     inputs:
       version:

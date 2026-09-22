@@ -13,6 +13,51 @@ import '../integrations/cli/process_output_tee.dart';
 /// The output response file name (both folders use the same file).
 const String responseFileName = 'response.md';
 
+/// Cap, in characters, of the log excerpt embedded in the response of a
+/// FAILED CLI run.
+///
+/// The extracted response is published verbatim by post-actions (PR/ticket
+/// comments, PR descriptions). A failed agent run's full session log must
+/// never leak into it — only a bounded head+tail excerpt is embedded
+/// (gh-192); the complete log stays in the run output.
+const int boundedResponseLogCap = 4000;
+
+/// Returns [log] trimmed, bounded to at most [cap] characters.
+///
+/// Logs longer than [cap] keep their first `cap ~/ 2` characters and their
+/// last `cap - cap ~/ 2` characters, joined by an explicit truncation
+/// marker — failures announce themselves at the start (command line, exit
+/// code) and their cause is usually at the end, while the middle (the full
+/// session transcript) is noise for a human reading the posted response.
+///
+/// Cut points are backed off to UTF-16 code-unit boundaries so an astral
+/// character (emoji, CJK ext-B) straddling the window edge is dropped
+/// whole instead of leaving a lone surrogate in the posted excerpt.
+String boundedLog(String log, {int cap = boundedResponseLogCap}) {
+  final text = log.trim();
+  if (text.length <= cap) return text;
+  var headEnd = cap ~/ 2;
+  if (headEnd > 0 && _isHighSurrogate(text.codeUnitAt(headEnd - 1))) {
+    headEnd--; // drop the orphaned high surrogate whole
+  }
+  var tailStart = text.length - (cap - cap ~/ 2);
+  if (tailStart < text.length && _isLowSurrogate(text.codeUnitAt(tailStart))) {
+    // The cut landed between a surrogate pair: skip the lone low half so
+    // the astral character is dropped whole, never mangled.
+    tailStart++;
+  }
+  final omitted = tailStart - headEnd;
+  if (omitted <= 0) return text;
+  return '${text.substring(0, headEnd)}\n'
+      '[... truncated $omitted character${omitted == 1 ? '' : 's'} — full '
+      'session log in the run output ...]\n'
+      '${text.substring(tailStart)}';
+}
+
+bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
+
 /// Folder preference when reading the output response.
 enum OutputFolderPreference {
   /// Check `output/` first, then `outputs/`.

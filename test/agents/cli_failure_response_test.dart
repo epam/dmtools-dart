@@ -44,6 +44,41 @@ void boundedLogTests() {
       expect(bounded, endsWith('aaaaa'));
       expect(bounded, contains('truncated'));
     });
+
+    test('returns a log of exactly cap unchanged (no marker)', () {
+      final log = 'a' * boundedResponseLogCap;
+      expect(boundedLog(log), log);
+      expect(boundedLog(log), isNot(contains('truncated')));
+    });
+
+    test('a cap+1 log keeps a marker reporting the single omitted character',
+        () {
+      final bounded = boundedLog('a' * (boundedResponseLogCap + 1));
+      expect(bounded, contains('truncated 1 character '));
+      expect(bounded, isNot(contains('1 characters')));
+    });
+
+    test('never splits a UTF-16 surrogate pair at the head boundary', () {
+      // 'aaaa' + 😀 (2 code units) straddles the head cut of cap 10.
+      final bounded = boundedLog('aaaa😀${'b' * 20}', cap: 10);
+      expect(
+        bounded.runes.every((r) => r < 0xD800 || r > 0xDFFF),
+        isTrue,
+        reason: 'excerpt must not contain lone surrogates',
+      );
+      expect(bounded.startsWith('aaaa'), isTrue);
+    });
+
+    test('never splits a UTF-16 surrogate pair at the tail boundary', () {
+      // The tail cut of cap 3 lands between 😀's surrogate pair.
+      final bounded = boundedLog('a😀b', cap: 3);
+      expect(
+        bounded.runes.every((r) => r < 0xD800 || r > 0xDFFF),
+        isTrue,
+        reason: 'excerpt must not contain lone surrogates',
+      );
+      expect(bounded.endsWith('b'), isTrue);
+    });
   });
 }
 
@@ -75,6 +110,12 @@ void failureSummaryTests() {
         final response = result['response'] as String;
         expect(response, contains('CLI command failed'));
         expect(response, contains('exit code 7'));
+        // Downstream classification contract (gh-192 review): the vendored
+        // post-actions (pushReworkChanges/developTicketAndCreatePR in the
+        // pinned agents pack) sniff params.response for established
+        // interruption markers — 'outputs/response.md missing' must appear
+        // verbatim so a failed run is retried, never announced as completed.
+        expect(response, contains('outputs/response.md missing'));
         // Head of the log survives: the failing command line.
         expect(response, contains('session.log'));
         // Tail of the log survives: the actual failure detail.
@@ -136,6 +177,64 @@ void failureFallbackTests() {
     });
 
     test(
+        'successful run without response.md cannot publish an unbounded log',
+        () async {
+      final tmp = await _createTempDir();
+      try {
+        // An agent that "succeeds" but skips the output file: the same
+        // megabyte-comment failure mode, one branch over (gh-192 review).
+        final session =
+            List.generate(400, (i) => 'session log line $i').join('\n');
+        await File('${tmp.path}/session.log').writeAsString(session);
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['cat "${tmp.path}/session.log"']
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        final response = result['response'] as String;
+        expect(response, contains('session log line 0'));
+        expect(response, contains('session log line 399'));
+        expect(response, isNot(contains('session log line 200')));
+        expect(response, contains('truncated'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test(
+        'monitored path: timeout-style failure keeps the error marker in the '
+        'excerpt head, drops the transcript middle', () async {
+      final tmp = await _createTempDir();
+      try {
+        final session =
+            List.generate(400, (i) => 'session log line $i').join('\n');
+        await File('${tmp.path}/session.log').writeAsString(session);
+        // The production rework job (pr_rework.json) configures timerJSAction,
+        // which routes execution through executeCommandsWithCallbacks — a
+        // different commandResponses format than the buffered path.
+        final result =
+            await const CliExecutionHelper().executeCommandsWithCallbacks(
+          ['cat "${tmp.path}/session.log"', 'exit 124'],
+          workingDirectory: tmp.path,
+          callbacks: const CliExecutionCallbacks(
+            errorHandler: _noopErrorHandler,
+            timerIntervalSeconds: 0,
+          ),
+        );
+        expect(result.hasFatalError, isTrue);
+        final excerpt = boundedLog(result.commandResponses);
+        // Head window survives: the monitored-path failure marker the
+        // vendored JS matches on, wherever the run's size lands it.
+        expect(excerpt, contains('Command failed (exit code 124)'));
+        expect(excerpt, contains('session log line 399'));
+        expect(excerpt, isNot(contains('session log line 200')));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test(
         'requireCliOutputFile keeps the interruption marker but bounds the log',
         () async {
       final tmp = await _createTempDir();
@@ -171,3 +270,6 @@ void failureFallbackTests() {
 Future<Directory> _createTempDir() async {
   return Directory.systemTemp.createTemp('cli_failure_response_test_');
 }
+
+/// No-op error hook — enables the monitored execution path.
+void _noopErrorHandler(String errorMessage) {}

@@ -29,17 +29,34 @@ const int boundedResponseLogCap = 4000;
 /// marker — failures announce themselves at the start (command line, exit
 /// code) and their cause is usually at the end, while the middle (the full
 /// session transcript) is noise for a human reading the posted response.
+///
+/// Cut points are backed off to UTF-16 code-unit boundaries so an astral
+/// character (emoji, CJK ext-B) straddling the window edge is dropped
+/// whole instead of leaving a lone surrogate in the posted excerpt.
 String boundedLog(String log, {int cap = boundedResponseLogCap}) {
   final text = log.trim();
   if (text.length <= cap) return text;
-  final headLength = cap ~/ 2;
-  final tailLength = cap - headLength;
-  final omitted = text.length - headLength - tailLength;
-  return '${text.substring(0, headLength)}\n'
-      '[... truncated $omitted characters — full session log in the run '
-      'output ...]\n'
-      '${text.substring(text.length - tailLength)}';
+  var headEnd = cap ~/ 2;
+  if (headEnd > 0 && _isHighSurrogate(text.codeUnitAt(headEnd - 1))) {
+    headEnd--; // drop the orphaned high surrogate whole
+  }
+  var tailStart = text.length - (cap - cap ~/ 2);
+  if (tailStart < text.length && _isLowSurrogate(text.codeUnitAt(tailStart))) {
+    // The cut landed between a surrogate pair: skip the lone low half so
+    // the astral character is dropped whole, never mangled.
+    tailStart++;
+  }
+  final omitted = tailStart - headEnd;
+  if (omitted <= 0) return text;
+  return '${text.substring(0, headEnd)}\n'
+      '[... truncated $omitted character${omitted == 1 ? '' : 's'} — full '
+      'session log in the run output ...]\n'
+      '${text.substring(tailStart)}';
 }
+
+bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
 
 /// Folder preference when reading the output response.
 enum OutputFolderPreference {

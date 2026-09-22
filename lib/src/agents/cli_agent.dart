@@ -379,14 +379,22 @@ class CliAgent {
   /// Extracts the response from the CLI result.
   ///
   /// Mirrors Java `extractResponse`: `requireCliOutputFile` turns a missing
-  /// output file into an error; the output file content is preferred;
-  /// command responses are the fallback.
+  /// output file into an error; the output file content is preferred; command
+  /// responses are the fallback for successful runs. Failed runs are a
+  /// bounded excerpt instead (see below).
   ///
-  /// Deliberate deviation from Java (gh-192): a failed run's fallback is a
-  /// [boundedLog] excerpt, not the full `commandResponses` — post-actions
-  /// publish the response verbatim as PR/ticket comments, and the full
-  /// session log of a failed agent must never be posted that way. Java
-  /// still returns the full log here; this repo intentionally does not.
+  /// Deliberate deviation from Java (gh-192): the fallbacks are [boundedLog]
+  /// excerpts, not the full `commandResponses` — post-actions publish the
+  /// response verbatim as PR/ticket comments, and a session log must never
+  /// be posted that way. Java still returns the full log here; this repo
+  /// intentionally does not.
+  ///
+  /// The failed-run summary embeds the established interruption marker
+  /// `outputs/response.md missing` verbatim: the vendored post-actions
+  /// (`pushReworkChanges` / `developTicketAndCreatePR` in the pinned agents
+  /// pack) classify responses by text-sniffing for that marker, so a failed
+  /// run is retried as interrupted — whatever exit code, and wherever the
+  /// excerpt window lands — instead of being announced as completed.
   String _extractResponse(CliExecutionResult result) {
     if (params.requireCliOutputFile && !result.hasOutputResponse) {
       return 'CLI command executed but did not produce output file:\n'
@@ -397,11 +405,14 @@ class CliAgent {
     }
     if (result.hasFatalError) {
       return 'CLI command failed (exit code ${result.lastExitCode ?? 'unknown'}) '
-          'and did not produce $responseFileName — the full session log is '
-          'excluded from this response (see the run output). Bounded excerpt:\n'
+          '— outputs/response.md missing; the full session log is excluded '
+          'from this response (see the run output). Bounded excerpt:\n'
           '${boundedLog(result.commandResponses)}';
     }
-    return result.commandResponses;
+    // Successful run without an output file: the accumulated log is the only
+    // response there is — still capped, so no CliAgent response can ever be
+    // unbounded (Java would return it in full; gh-192 review thread).
+    return boundedLog(result.commandResponses);
   }
 
   // ------------------------------------------------------------------

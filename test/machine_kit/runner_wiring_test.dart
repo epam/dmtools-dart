@@ -262,22 +262,23 @@ void _faBootPreconfigRunnerTests(String runner) {
   });
 }
 
-/// The review runner must pin its DESIGNED primary (the queue head — kimi
-/// via its openai-completions API) so the wrapper guard passes, while the
-/// queue stays wired for fa builds that consume the failover.
+/// The review runner must pin its DESIGNED primary (the queue head —
+/// zai glm-5.3-flash; parity with the dev legs since 2026-09-22, before
+/// that kimi/k3) so the wrapper guard passes, while the queue stays wired
+/// for fa builds that consume the failover.
 void _reviewQueueHeadPreconfigTests() {
   test(
-      'review runner pins its designed primary (queue head: kimi) and keeps '
-      'the failover queue', () {
+      'review runner pins its designed primary (queue head: glm-5.3-flash) '
+      'and keeps the failover queue', () {
     final env = (_runnerJson(
         '.dmtools/runners/fa-review.json')['params'])['envVariables'] as Map;
-    expect(env['FA_PROVIDER_TYPE'], 'openai-completions',
-        reason: 'the queue head is kimi via its openai-completions API');
+    expect(env['FA_PROVIDER_TYPE'], 'zai',
+        reason: 'the queue head is glm-5.3-flash via the zai API');
     final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
-    expect(config['baseUrl'], 'https://api.kimi.com/coding/v1');
-    expect(config['model'], 'k3');
-    expect(config['apiKeyEnvVar'], 'KIMI_REVIEW_KEY',
-        reason: 'the factory maps KIMI_REVIEW_KEY into the job env '
+    expect(config['baseUrl'], 'https://api.z.ai/api/coding/paas/v4');
+    expect(config['model'], 'glm-5.3-flash');
+    expect(config['apiKeyEnvVar'], 'ZAI_CODE_KEY',
+        reason: 'the factory maps ZAI_CODE_KEY into the job env '
             '(factory-teammate.yml)');
     expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue);
   });

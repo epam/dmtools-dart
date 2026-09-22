@@ -522,16 +522,20 @@ void _testJiraExtendedWriteTools() {
       server.stop();
     });
 
-    test('jira_update_field PUTs the field value', () {
-      final body = jsonDecode(dispatcher.execute('jira_update_field', {
+    test('jira_update_field PUTs the update-verb payload for a system field',
+        () {
+      final body = dispatcher.execute('jira_update_field', {
         'key': 'PROJ-1',
         'field': 'priority',
         'value': 'High',
-      })!);
-      expect(body['method'], 'PUT');
-      expect(body['path'], '/rest/api/latest/issue/PROJ-1');
-      final fields = jsonDecode(body['body'] as String)['fields'];
-      expect(fields['priority'], 'High');
+      })!;
+      // Java updateField answers the success message rather than the raw
+      // PUT response; the wire payload itself is asserted in
+      // jira_sync_tools_test (update-verb engine group).
+      expect(
+        jsonDecode(body),
+        "Field 'priority' updated successfully on ticket PROJ-1",
+      );
     });
 
     test('jira_update_description PUTs the description', () {

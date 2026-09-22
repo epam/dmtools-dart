@@ -9,6 +9,17 @@ import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'confluence_client.dart';
 
+part 'confluence_java_name_tools.dart';
+
+/// The shared `format` tool parameter of every content-retrieval tool
+/// (duplication gate: the same 5-line `ToolParam` block recurred per tool).
+ToolParam _formatParam() => ToolParam(
+      name: 'format',
+      description: "Output format for the page body. Use 'md' or "
+          "'markdown' to convert Confluence storage format to Markdown",
+      required: false,
+    );
+
 /// Returns all Confluence MCP tool definitions.
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
@@ -32,6 +43,7 @@ List<ToolDefinition> confluenceTools() => [
       ..._watcherTools(),
       ..._contentRetrievalTools(),
       ..._markdownSyncTools(),
+      ...javaNameConfluenceTools(),
     ];
 
 /// Connectivity-check tool: `confluence_test`.
@@ -577,12 +589,7 @@ List<ToolDefinition> _contentRetrievalTools() => [
             description: 'The unique content ID of the Confluence page',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
       ToolDefinition(
@@ -598,12 +605,7 @@ List<ToolDefinition> _contentRetrievalTools() => [
             description: 'The content ID of the parent page',
             required: true,
           ),
-          ToolParam(
-            name: 'format',
-            description: "Output format for the page body. Use 'md' or "
-                "'markdown' to convert Confluence storage format to Markdown",
-            required: false,
-          ),
+          _formatParam(),
         ],
       ),
     ];
@@ -757,5 +759,31 @@ class ConfluenceToolExecutor {
         _client.getUserByKey(a['key'] as String),
     'confluence_get_watchers': (a) =>
         _client.getWatchers(a['contentId'] as String),
+    ...javaNameHandlers(_client),
   };
+}
+
+/// Reads an int arg that may arrive as num or numeric string (MCP/JSON
+/// callers frequently send `"depth": "2"`; hard casts would throw a
+/// [TypeError] where the sync surface coerces).
+int? _intArg(Map<String, dynamic> args, String name, [int? fallback]) {
+  final value = args[name];
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+/// Reads a bool arg that may arrive as bool or string — the same shapes
+/// the sync surface's `_flagOrFalse` accepts.
+bool _boolArg(
+  Map<String, dynamic> args,
+  String name, {
+  bool fallback = false,
+}) {
+  final value = args[name];
+  if (value is bool) return value;
+  if (value is String) {
+    return value == 'true' || value == 'True';
+  }
+  return fallback;
 }

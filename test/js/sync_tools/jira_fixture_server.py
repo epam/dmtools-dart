@@ -13,6 +13,7 @@ serves canned Jira shapes the sync executors resolve against:
                                        createmeta fallback)
 - GET  *fields=attachment*         -> attachment fixture ('__attached' key
                                        already owns 'doc.md')
+- PUT  */issue/PROJ-FAIL           -> 400 Jira field-update failure shape
 - GET  /__last                     -> last served request "METHOD path"
 - everything else                  -> echo of method/path/headers/body
 """
@@ -37,6 +38,8 @@ FIELDS = json.dumps([
      "schema": {"type": "number"}, "active": True},
     {"id": "customfield_10002", "name": "Story Points",
      "schema": {"type": "number"}, "active": True},
+    {"id": "customfield_10500", "name": "Dependencies",
+     "schema": {"type": "string"}, "active": True},
     {"id": "priority", "name": "Priority", "active": True},
 ])
 
@@ -89,6 +92,21 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         if "/issue/createmeta" in self.path:
             self._respond(CREATE_META)
+            return
+        if self.command == "PUT" and "/issue/PROJ-FAIL" in self.path:
+            # Jira-shaped field-update failure (updateField ❌ summary path).
+            self._respond(
+                json.dumps({"errorMessages": ["Boom"],
+                            "errors": {"customfield_10001": "nope"}}),
+                status=400,
+            )
+            return
+        if self.command == "GET" and "/issue/NOPE" in self.path:
+            # Missing parent ticket (createTicketWithParent failure path).
+            self._respond(
+                json.dumps({"errorMessages": ["Issue does not exist"]}),
+                status=404,
+            )
             return
         self._respond(json.dumps({
             "method": self.command,

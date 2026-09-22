@@ -29,13 +29,26 @@ Confluence (9 items)
 - [ ] **P6-RW-05** sharepoint = Java's 2 sharing-URL tools
       (get_drive_item, download_file; `u!` base64url share id) — dart
       sharepoint_*.dart / java SharePointClient.java:89 — L
-- [ ] **P6-RW-06** confluence toolset = Java's 20 (contents_by_urls,
+- [x] **P6-RW-06** confluence toolset = Java's 20 (contents_by_urls,
       update_with_history, upload attachments, children_by_name,
       download_pages, find(_or_create), content_by_title(+space),
       user profiles, …) — dart confluence_tools.dart:40 / java
       Confluence.java:81 — L
-- [ ] **P6-RW-07** confluence read tools format=md conversion — dart
+      Verified 2026-09-21: all 15 frozen-gap confluence tools landed under
+      their Java names in both surfaces — async registry
+      (confluence_java_name_tools.dart + ConfluenceClient +
+      ConfluenceTransfer) and the JS sync bridge
+      (confluence_sync_tools.dart, 22 handlers). java_mcp_tool_gaps.txt
+      has zero confluence entries; catalog parity green. Deviations:
+      GraphQL-first search falls back to CQL only (no Dart GraphQL
+      client); download_pages walks child pages (not the full ac:link
+      graph) and contents_by_urls caps redirect chains at 5 hops.
+- [x] **P6-RW-07** confluence read tools format=md conversion — dart
       confluence_client.dart / java Confluence.java:82 — M
+      Verified 2026-09-21: format=md/markdown converts storage→Markdown on
+      content_by_title(+space), find_content(+space), contents_by_urls,
+      get_children_by_name, content_by_id and get_children_by_id in both
+      surfaces (client `_applyFormat` / sync `_applyFormat`).
 - [ ] **P6-RW-08** confluence_search = GraphQL-first + CQL fallback
       composition — dart confluence_client.dart:164 / java
       Confluence.java:193 — M

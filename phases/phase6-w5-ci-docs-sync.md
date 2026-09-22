@@ -33,8 +33,11 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-CDS-08** update_page applies `prepareBodyForConfluence`
       (`<br>`→\n, link conversion) — dart confluence_sync_tools.dart:107 /
       java Confluence.java:500 — M
-- [ ] **P6-CDS-09** update version payload includes `message` — dart
+- [x] **P6-CDS-09** update version payload includes `message` — dart
       confluence_sync_tools.dart:215 / java Confluence.java:516 — S
+      ✅ Landed (gh-191): `confluence_update_page_with_history` sends
+      `version.message` (bumped version fetched first); the plain
+      `confluence_update_page` matches Java's message-less updatePage.
 - [ ] **P6-CDS-10** format=md: YAML-macro extraction + export_view
       fallback — dart confluence_sync_tools.dart:436 / java
       Confluence.java:1049 — M

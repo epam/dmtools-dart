@@ -1,125 +1,175 @@
-// Debris-proof SM quality-gate waiter tests: drives the REAL run block
-// from .github/workflows/quality-gate.yml through a stubbed `gh` + real
-// `jq`, so the assertions pin the shipped script, not a copy.
-//
-// Bodies live in [WaiterHarness] methods — crap4dart method_size caps
-// main() at 60 lines (gate is law; the first cut of this file shipped a
-// 172-line main and red main, 2026-09-22).
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
+/// The waiter `run:` block extracted from quality-gate.yml in [setUpAll].
+late String runScript;
+
+/// The `sm-validation` job definition parsed from quality-gate.yml.
+late Map waiterJob;
+
+/// All jobs of quality-gate.yml — GitHub-shaped dynamic YAML maps.
+late Map jobs;
+
+/// Per-test scratch dir holding the `gh` shim and its fixtures.
+Directory? shimDir;
+
+final green = {'status': 'completed', 'conclusion': 'success'};
+final red = {'status': 'completed', 'conclusion': 'failure'};
+final cancelled = {'status': 'completed', 'conclusion': 'cancelled'};
+final inFlight = {'status': 'in_progress', 'conclusion': null};
+final queued = {'status': 'queued', 'conclusion': null};
+
+/// Quality-gate waiter contract tests — the dmtools-dart sibling of the fa
+/// ci-gate fix (flutter_agent_harness#782). The REAL `run:` block is
+/// extracted from the parsed workflow YAML and executed against a stubbed
+/// `gh` serving GitHub-shaped fixtures. Pins the debris-proof verdict
+/// selection: cancelled/skipped/queued runs are never a verdict, the
+/// NEWEST non-debris run decides, and an in-flight rerun outranks any
+/// older conclusion. The poll loop's test seams (GATE_WAIT_SECONDS /
+/// GATE_POLL_SECONDS) keep each case fast.
 void main() {
-  final h = WaiterHarness();
-
-  setUpAll(h.loadWorkflow);
-  setUp(h.makeTempDir);
-  tearDown(h.cleanup);
-
-  test('verdict matrix: green/red decide, debris never does', () {
-    void chk(String want, List<String> polls) {
-      final v = h.verdict(polls);
-      expect(v.code, 0, reason: 'mirrors carry the verdict');
-      expect(v.conclusion, want, reason: 'selected verdict');
-    }
-
-    chk('success', [
-      h.doc([h.green])
-    ]);
-    chk('failure', [
-      h.doc([h.red])
-    ]);
-    chk('success', [
-      h.doc([h.cancelled, h.green]),
-      h.doc([h.green])
-    ]);
-    chk('failure', [
-      h.doc([h.cancelled, h.red]),
-      h.doc([h.red])
-    ]);
-    chk('failure', [
-      h.doc([h.inFlight, h.green]),
-      h.doc([h.red])
-    ]);
-    chk('success', [
-      h.doc([h.queued, h.green]),
-      h.doc([h.green])
-    ]);
+  setUpAll(() {
+    final wf = File(
+      '${Directory.current.path}/.github/workflows/quality-gate.yml',
+    );
+    final doc = loadYaml(wf.readAsStringSync());
+    jobs = (doc['jobs'] as Map).cast<String, Map>();
+    waiterJob = jobs['sm-validation']!;
+    final steps = (waiterJob['steps'] as List).cast<Map>();
+    runScript = steps.firstWhere((s) => s['id'] == 'wait')['run'] as String;
   });
-  test('no dispatched run -> deadline error (exit 1)', () {
-    final (code, conclusion, _) =
-        h.runWaiter(['{"total_count":0,"workflow_runs":[]}']);
-    expect(code, 1, reason: 'SM broken / never dispatched = human signal');
-    expect(conclusion, isEmpty, reason: 'no verdict must be latched');
+
+  setUp(() {
+    shimDir = Directory.systemTemp.createTempSync('gate-waiter-');
   });
-  test('mirror jobs skip cancelled/skipped waiter', () {
-    for (final jobName in ['static', 'gate', 'agents-suite']) {
-      final cond = h.job(jobName)['if'] as String;
-      expect(cond, contains("needs.sm-validation.result == 'success'"));
-      expect(cond, contains("needs.sm-validation.result == 'failure'"));
-      expect(cond, isNot(contains('did not run')));
-    }
+  tearDown(() {
+    shimDir?.deleteSync(recursive: true);
   });
-  test('waiter window 85m, page 30 (debris-tolerant)', () {
-    expect(h.runScript, contains('GATE_WAIT_SECONDS:-5100'));
-    expect(h.waiterJob['timeout-minutes'], 90);
-    expect(h.runScript, contains('per_page=30'));
-    expect(h.runScript, isNot(contains('per_page=1')));
+
+  _realVerdictTests();
+  _debrisSelectionTests();
+  _workflowContractTests();
+}
+
+/// Real completed verdicts pass through; nothing is latched when the SM
+/// never dispatched a run.
+void _realVerdictTests() {
+  group('quality-gate waiter verdicts', () {
+    test('green dispatched run mirrors success', () {
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([green])
+      ]);
+      expect(code, 0, reason: 'green must exit 0');
+      expect(conclusion, 'success');
+    });
+
+    test('red dispatched run mirrors failure (real verdicts pass through)', () {
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([red])
+      ]);
+      expect(code, 0, reason: 'the waiter itself exits 0 — mirrors carry red');
+      expect(conclusion, 'failure');
+    });
+
+    test('no dispatched run at all -> deadline error (exit 1)', () {
+      final (code, conclusion, _) =
+          runWaiter(['{"total_count":0,"workflow_runs":[]}']);
+      expect(code, 1, reason: 'SM broken / never dispatched = human signal');
+      expect(conclusion, isEmpty, reason: 'no verdict must be latched');
+    });
   });
 }
 
-/// Loads the shipped waiter block and drives it against stubbed fixtures.
-class WaiterHarness {
-  late final String _runScript;
-  late final Map _waiterJob;
-  late final Map<String, Map> _jobs;
-  Directory? _shimDir;
+/// Debris-proof selection: cancelled/skipped/queued runs are never a
+/// verdict; the newest non-debris run decides and an in-flight rerun
+/// outranks any older conclusion.
+void _debrisSelectionTests() {
+  group('quality-gate waiter debris-proof selection', () {
+    test(
+        'cancelled debris over green is NOT a verdict — keeps waiting, then '
+        'green', () {
+      // Poll 1: newest is cancelled debris, older is green -> must wait.
+      // Poll 2: debris gone (list pruned) -> green decides.
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([cancelled, green]),
+        runsDoc([green]),
+      ]);
+      expect(code, 0);
+      expect(conclusion, 'success');
+    });
 
-  // GitHub-shaped run fixtures.
-  final green = {'status': 'completed', 'conclusion': 'success'};
-  final red = {'status': 'completed', 'conclusion': 'failure'};
-  final cancelled = {'status': 'completed', 'conclusion': 'cancelled'};
-  final inFlight = {'status': 'in_progress', 'conclusion': null};
-  final queued = {'status': 'queued', 'conclusion': null};
+    test('cancelled debris over red is NOT a verdict either', () {
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([cancelled, red]),
+        runsDoc([red]),
+      ]);
+      expect(code, 0);
+      expect(conclusion, 'failure');
+    });
 
-  void loadWorkflow() {
-    final wf =
-        File('${Directory.current.path}/.github/workflows/quality-gate.yml');
-    final doc = loadYaml(wf.readAsStringSync());
-    _jobs = (doc['jobs'] as Map).cast<String, Map>();
-    _waiterJob = _jobs['sm-validation']!;
-    final steps = (_waiterJob['steps'] as List).cast<Map>();
-    _runScript = steps.firstWhere((s) => s['id'] == 'wait')['run'] as String;
-  }
+    test('in-flight rerun outranks older green, then flips red', () {
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([inFlight, green]), // older green must NOT be read yet
+        runsDoc([red]), // rerun concluded red
+      ]);
+      expect(code, 0);
+      expect(conclusion, 'failure');
+    });
 
-  void makeTempDir() {
-    _shimDir = Directory.systemTemp.createTempSync('gate-waiter-');
-  }
+    test('queued runs are debris — never a verdict', () {
+      final (code, conclusion, _) = runWaiter([
+        runsDoc([queued, green]),
+        runsDoc([green]),
+      ]);
+      expect(code, 0);
+      expect(conclusion, 'success');
+    });
+  });
+}
 
-  void cleanup() {
-    _shimDir?.deleteSync(recursive: true);
-  }
+/// The structural quality-gate.yml contract: mirror guards, poll window,
+/// and the debris-tolerant page size.
+void _workflowContractTests() {
+  group('quality-gate workflow contract', () {
+    test('mirror jobs skip cancelled/skipped waiter (no false red)', () {
+      for (final jobName in ['static', 'gate', 'agents-suite']) {
+        final job = jobs[jobName]!;
+        final cond = job['if'] as String;
+        expect(cond, contains("needs.sm-validation.result == 'success'"),
+            reason: '$jobName must mirror a real success verdict');
+        expect(cond, contains("needs.sm-validation.result == 'failure'"),
+            reason: '$jobName must mirror a real failure verdict');
+        expect(cond, isNot(contains('did not run')),
+            reason: 'guard is structural, not message-level');
+      }
+    });
 
-  /// Encodes one `gh api /actions/runs` poll response.
-  String doc(List<Map> runs) => jsonEncode({
-        'total_count': runs.length,
-        'workflow_runs': [
-          for (final r in runs)
-            {'id': 1, ...r.map((k, v) => MapEntry(k.toString(), v))},
-        ],
-      });
+    test('waiter window is 85 min with a 90 min job timeout (slow pool)', () {
+      expect(runScript, contains('GATE_WAIT_SECONDS:-5100'),
+          reason: '85-min poll window, overridable only for tests');
+      expect(waiterJob['timeout-minutes'], 90);
+    });
 
-  /// Runs the real waiter script; [responses] are the JSON documents the
-  /// stubbed `gh api` returns, one per poll (last one repeats).
-  /// Returns (exitCode, conclusionOutput, stdout).
-  (int, String, String) runWaiter(List<String> responses) {
-    final dir = _shimDir!.path;
-    File('$dir/responses.txt').writeAsStringSync('${responses.join('\n')}\n');
-    // Behaves like `gh api <url> --jq <expr>`: the current fixture line is
-    // piped through the REAL jq with the expression the script passed.
-    final shim = '''
+    test('poll fetches 30 runs, not per_page=1 (debris-tolerant selection)',
+        () {
+      expect(runScript, contains('per_page=30'));
+      expect(runScript, isNot(contains('per_page=1')));
+    });
+  });
+}
+
+/// Runs the real waiter script; [responses] are the JSON documents the
+/// stubbed `gh api` returns, one per poll (last one repeats). Returns
+/// (exitCode, conclusionOutput, stdout).
+(int, String, String) runWaiter(List<String> responses) {
+  final dir = shimDir!.path;
+  File('$dir/responses.txt').writeAsStringSync('${responses.join('\n')}\n');
+  // Behaves like `gh api <url> --jq <expr>`: the current fixture line is
+  // piped through the REAL jq with the expression the script passed.
+  final shim = '''
 #!/bin/sh
 d="\$(dirname "\$0")"
 i="\$(cat "\$d/cursor" 2>/dev/null || echo 0)"
@@ -133,21 +183,17 @@ while [ \$# -gt 1 ]; do
 done
 if [ -n "\$expr" ]; then printf '%s' "\$line" | jq -r "\$expr"; else printf '%s' "\$line"; fi
 ''';
-    File('$dir/gh').writeAsStringSync(shim);
-    Process.runSync('chmod', ['+x', '$dir/gh']);
-    final out = File('$dir/github_output');
-    final r = Process.runSync('bash', [
-      '-c',
-      'export PATH="$dir:\$PATH" GITHUB_REPOSITORY=a/b SHA=deadbeef '
-          'GITHUB_OUTPUT="${out.path}" GATE_WAIT_SECONDS=6 GATE_POLL_SECONDS=1\n'
-          'SECONDS=0\n'
-          '$_runScript'
-    ]);
-    final conclusion = _readConclusion(out);
-    return (r.exitCode, conclusion, r.stdout.toString());
-  }
-
-  String _readConclusion(File out) => out.existsSync()
+  File('$dir/gh').writeAsStringSync(shim);
+  Process.runSync('chmod', ['+x', '$dir/gh']);
+  final out = File('$dir/github_output');
+  final r = Process.runSync('bash', [
+    '-c',
+    'export PATH="$dir:\$PATH" GITHUB_REPOSITORY=a/b SHA=deadbeef '
+        'GITHUB_OUTPUT="${out.path}" GATE_WAIT_SECONDS=6 GATE_POLL_SECONDS=1\n'
+        'SECONDS=0\n'
+        '$runScript'
+  ]);
+  final conclusion = out.existsSync()
       ? (out.readAsStringSync().trim().isEmpty
           ? ''
           : out
@@ -158,15 +204,14 @@ if [ -n "\$expr" ]; then printf '%s' "\$line" | jq -r "\$expr"; else printf '%s'
               .first
               .trim())
       : '';
-
-  /// Drives one waiter scenario; [polls] feed the stubbed gh (last repeats).
-  /// Async shape keeps the call sites one line inside each test closure.
-  ({int code, String conclusion}) verdict(List<String> polls) {
-    final (code, conclusion, _) = runWaiter(polls);
-    return (code: code, conclusion: conclusion);
-  }
-
-  Map job(String name) => _jobs[name]!;
-  String get runScript => _runScript;
-  Map get waiterJob => _waiterJob;
+  return (r.exitCode, conclusion, r.stdout.toString());
 }
+
+/// Builds the `gh api` runs-list document for [runs].
+String runsDoc(List<Map> runs) => jsonEncode({
+      'total_count': runs.length,
+      'workflow_runs': [
+        for (final r in runs)
+          {'id': 1, ...r.map((k, v) => MapEntry(k.toString(), v))},
+      ],
+    });

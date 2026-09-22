@@ -29,6 +29,7 @@ import '../../config/property_reader_getters.dart';
 import 'gitlab_release_assets.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
+import 'sync_required_params.dart';
 
 /// Connection config for the sync GitLab client.
 typedef _GitlabConfig = ({String baseUrl, Map<String, String> headers});
@@ -49,7 +50,12 @@ class GitLabSyncTools {
 
   /// GitLab tool executors keyed by MCP tool name.
   Map<String, String Function(Map<String, dynamic> args)> get handlers =>
-      _gitlabHandlers;
+      syncGuardRequired(
+        _gitlabHandlers,
+        kGitlabRequiredParams,
+        kGitlabParamAliases,
+        kGitlabAcceptedNames,
+      );
 }
 
 /// Wraps [fns] so each public handler resolves config (or reports that

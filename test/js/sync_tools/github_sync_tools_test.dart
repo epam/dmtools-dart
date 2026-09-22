@@ -83,6 +83,8 @@ void _noConfigTests() {
         jsonDecode(
           const GitHubSyncTools().handlers['github_get_pr']!({
             'workspace': 'o',
+            'repository': 'r',
+            'pullRequestId': '7',
           }),
         ),
         {'error': 'GitHub not configured'},
@@ -125,7 +127,6 @@ void _fixturePrTools() {
 
   fixtureprtools_p1();
   fixtureprtools_p2();
-  fixtureprtools_p3();
 }
 
 void fixtureprtools_p1() {
@@ -200,6 +201,14 @@ void fixtureprtools_p2() {
       'commit_title': 'Merge it',
       'commit_message': 'Closes #1',
     });
+  });
+
+  test('github_list_branches hits the branches endpoint', () {
+    tools.handlers['github_list_branches']!({
+      'workspace': 'o',
+      'repository': 'r',
+    });
+    expect(fx.requests.single, 'GET /repos/o/r/branches?per_page=100&page=1');
   });
 }
 
@@ -784,16 +793,5 @@ void fixturereleasetools_p3() {
       ),
       {'error': startsWith('Release asset file not found:')},
     );
-  });
-}
-
-// Branch fixtures (split from the PR pages for the size limit).
-void fixtureprtools_p3() {
-  test('github_list_branches hits the branches endpoint', () {
-    tools.handlers['github_list_branches']!({
-      'workspace': 'o',
-      'repository': 'r',
-    });
-    expect(fx.requests.single, 'GET /repos/o/r/branches?per_page=100&page=1');
   });
 }

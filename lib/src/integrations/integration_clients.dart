@@ -53,7 +53,10 @@ class IntegrationClients {
   /// The shared Confluence client (built on first access).
   ConfluenceClient confluence() => _cached(
         'confluence',
-        () => ConfluenceClient(ConfluenceHttpClient(PropertyReader())),
+        () => ConfluenceClient(
+          ConfluenceHttpClient(PropertyReader()),
+          defaultSpace: PropertyReader().getConfluenceDefaultSpace(),
+        ),
       );
 
   /// The shared Azure DevOps client (built on first access).

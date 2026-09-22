@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'jira_http_client.dart';
 import 'jira_utils.dart';
+import 'markdown_to_jira_markup.dart';
 
 part 'jira_agile_client.dart';
 part 'jira_attachment_client.dart';
@@ -158,10 +159,14 @@ class JiraClient {
   }
 
   /// `jira_post_comment` — POST `/rest/api/latest/issue/{key}/comment`.
+  ///
+  /// The body is converted Markdown → Jira wiki markup first (Java
+  /// `postComment` under the default MARKDOWN text type; the JS-bridge
+  /// surface applies the same conversion, so both stay shape-identical).
   Future<void> postComment(String key, String comment) async {
     await _http.post(
       'issue/$key/comment',
-      body: jsonEncode({'body': comment}),
+      body: jsonEncode({'body': markdownToJiraMarkup(comment)}),
     );
   }
 
@@ -428,14 +433,18 @@ class JiraClient {
 
   /// `jira_post_comment_if_not_exists` — POST comment only if absent.
   ///
-  /// Fetches existing comments and compares each plain-text body to
-  /// [comment]; posts only when no match is found. Returns `true` when a
-  /// comment was posted, `false` when it already existed.
+  /// Fetches existing comments and compares each body to [comment] **and**
+  /// its converted `markdownToJiraMarkup` form (what `postComment` stores);
+  /// posts only when no match is found. Returns `true` when a comment was
+  /// posted, `false` when it already existed.
   Future<bool> postCommentIfNotExists(String key, String comment) async {
+    final converted = markdownToJiraMarkup(comment);
     final existing = await getComments(key);
     for (final c in existing) {
       final body = c['body'];
-      if (body is String && body == comment) return false;
+      if (body is String && (body == comment || body == converted)) {
+        return false;
+      }
     }
     await postComment(key, comment);
     return true;

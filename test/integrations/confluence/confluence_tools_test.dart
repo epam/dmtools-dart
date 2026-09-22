@@ -182,10 +182,11 @@ class _SpyConfluenceClient extends ConfluenceClient {
   Future<Map<String, dynamic>> createPage(
     String spaceKey,
     String title,
-    String body,
-  ) {
+    String body, {
+    String? parentId,
+  }) {
     calls.add('createPage:$spaceKey:$title:$body');
-    return super.createPage(spaceKey, title, body);
+    return super.createPage(spaceKey, title, body, parentId: parentId);
   }
 
   @override
@@ -267,4 +268,20 @@ const _expectedToolOrder = [
   'confluence_content_by_id',
   'confluence_get_children_by_id',
   'confluence_sync_markdown_directory',
+  // gh-191: the Java-named gap-snapshot tools.
+  'confluence_content_by_title',
+  'confluence_content_by_title_and_space',
+  'confluence_contents_by_urls',
+  'confluence_download_pages',
+  'confluence_find_content',
+  'confluence_find_content_by_title_and_space',
+  'confluence_find_or_create',
+  'confluence_get_children_by_name',
+  'confluence_get_content_attachments',
+  'confluence_get_current_user_profile',
+  'confluence_get_user_profile_by_id',
+  'confluence_search_content_by_text',
+  'confluence_update_page_with_history',
+  'confluence_upload_attachment',
+  'confluence_upload_attachments',
 ];

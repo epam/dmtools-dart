@@ -19,10 +19,18 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-03** `jira_move_to_status` param is `statusName` in Java (Dart
       reads `status`; no-match returns null not error) — dart
       jira_sync_tools.dart:212 / java JiraClient.java:3083 — S
-- [ ] **P6-JSY-04** `jira_update_field` must PUT `{update:{field:[{set:v}]}}`
+- [x] **P6-JSY-04** `jira_update_field` must PUT `{update:{field:[{set:v}]}}`
       with `""`→clearField, coerceFieldValue (bool/int/long/double/JSON),
       field-name→ALL customfield ids, per-field PUT + ✅/❌ summary — dart
       jira_sync_tools.dart:212-225 / java JiraClient.java:2379-2481 — L
+      ✅ Landed (gh-191): `_updateField` ports the Java engine — `""`
+      clears via `{fields:{field:null}}`, `coerceJiraFieldValue`
+      (jira_utils.dart) coerces strings, system/`customfield_*` ids PUT
+      update-verb directly, other names resolve ALL active customfields
+      (`findAllJiraFieldsByName` + active filter, best-match fallback)
+      with per-field PUTs and the `✅`/`❌` summary; embedded Jira error
+      objects fail updates via `jiraResponseErrorDetail`. Multi-option
+      value normalization stays P6-INT-03 scope.
 - [ ] **P6-JSY-05** `jira_update_description` body must be
       `{update:{description:[{set}]}}` — dart jira_sync_tools.dart:238 /
       java JiraClient.java:1435 — S
@@ -35,9 +43,18 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-08** transitions URL needs `?expand=transitions.fields`;
       return List not envelope — dart jira_sync_tools.dart:244 / java
       JiraClient.java:3068 — S
-- [ ] **P6-JSY-09** `jira_post_comment` must convert markdown→Jira markup
+- [x] **P6-JSY-09** `jira_post_comment` must convert markdown→Jira markup
       (TextType MARKDOWN) — dart jira_sync_tools.dart:83 / java
       JiraClient.java:1033 + MarkdownToJiraConverter — M
+      ✅ Landed (gh-191): `markdownToJiraMarkup` ports the Java converter's
+      markdown branch line-for-line (validated against the Java test
+      corpus via jsoup probe) + the mixed/HTML branch via package:html;
+      `_postComment` converts unless args['markup'] is set. Shared from
+      `lib/src/integrations/jira/markdown_to_jira_markup.dart` so
+      `JiraClient.postComment` (MCP surface) converts identically, and
+      `postCommentIfNotExists` compares both the raw and converted text
+      against stored comments (review fix: raw-vs-converted mismatch
+      duplicate-posted Markdown comments on every rerun).
 - [ ] **P6-JSY-10** cloud search must check errorMessages (throw) and send
       maxResults when JIRA_MAX_SEARCH_RESULTS set — dart
       jira_sync_tools.dart:108 / java JiraClient.java:494,674 — M
@@ -46,9 +63,13 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
       jira_sync_tools.dart:128 / java JiraClient.java:550-594,1855 — S
 - [ ] **P6-JSY-12** search jql param aliases `searchQueryJQL`, `query` —
       dart jira_sync_tools.dart:100 / java JiraClient.java:463 — S
-- [ ] **P6-JSY-13** `jira_create_ticket_with_parent` must fetch the parent
+- [x] **P6-JSY-13** `jira_create_ticket_with_parent` must fetch the parent
       ticket and embed the full object (fail upfront on missing parent) —
       dart jira_sync_tools.dart:297 / java JiraClient.java:1140 — M
+      ✅ Landed (gh-191): `_createTicketWithParent` GETs
+      `issue/{parentKey}?fields=summary` first and embeds the full parent
+      object in the create payload; an unreadable parent fails upfront
+      with `Failed to fetch parent ticket …` and no create request.
 - [ ] **P6-JSY-14** create always sets description (even `""`) — dart
       jira_sync_tools.dart:584 / java JiraClient.java:1185 — S
 - [ ] **P6-JSY-15** create errors must surface Java's
@@ -59,7 +80,13 @@ note: W6 error contract (P6-BRG-02) must land first; non-error items may start i
 - [ ] **P6-JSY-17** `jira_execute_request` missing from sync handlers (runs
       any path/URL with auth, returns raw string) — dart
       sync_tool_dispatcher.dart:80 / java JiraClient.java:2649 — M
-- [ ] **P6-JSY-18** retry policy: 429/503 backoff (RetryPolicy,
+- [x] **P6-JSY-18** retry policy: 429/503 backoff (RetryPolicy,
       Cloud-tuned), `JIRA_WAIT_BEFORE_PERFORM` + `SLEEP_TIME_REQUEST`, 60s
       connect — dart sync_http_client.dart:38 / java
       JiraClient.java:168-193,2742 — M
+      ✅ Landed (gh-191): `sync_retry_policy.dart` ports `RetryPolicy`
+      (exponential+jitter, Retry-After / X-RateLimit-Reset, 200ms
+      connection schedule) + `forJiraCloud` tuning; `JIRA_WAIT_BEFORE_
+      PERFORM` / `SLEEP_TIME_REQUEST` (300ms default) throttle each
+      perform. Note: connect budget stays 10s by design (sync-path
+      fails-fast; documented deviation from the Java 60s).

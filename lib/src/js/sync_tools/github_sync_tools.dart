@@ -19,6 +19,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
+import 'sync_required_params.dart';
 import 'github_pr_comments.dart';
 import 'github_release_assets.dart';
 import 'github_workflow_logs.dart';
@@ -48,11 +49,17 @@ class GitHubSyncTools {
   /// storage) plus the issue-tracker family ([GitHubIssueSyncTools], Java
   /// `GitHubIssues.java`) and the CI/PR-activity tools
   /// ([GitHubCiSyncTools]) merged in.
-  Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-        ..._agentHandlers,
-        ...const GitHubIssueSyncTools().handlers,
-        ...const GitHubCiSyncTools().handlers,
-      };
+  Map<String, String Function(Map<String, dynamic> args)> get handlers =>
+      syncGuardRequired(
+        {
+          ..._agentHandlers,
+          ...const GitHubIssueSyncTools().handlers,
+          ...const GitHubCiSyncTools().handlers,
+        },
+        kGithubRequiredParams,
+        kGithubParamAliases,
+        kGithubAcceptedNames,
+      );
 
   /// The agent-suite handler surface owned by this class.
   Map<String, String Function(Map<String, dynamic> args)> get _agentHandlers =>

@@ -100,9 +100,13 @@ final class SyncHttpBridge {
     }))));
     final response = utf8.decode(_responses.take(), allowMalformed: true);
     final decoded = jsonDecode(response) as Map<String, dynamic>;
+    final rawHeaders = decoded['headers'] as Map<String, dynamic>?;
     return SyncHttpResponse(
       decoded['status'] as int,
       decoded['body'] as String,
+      rawHeaders == null
+          ? const <String, String>{}
+          : rawHeaders.map((k, v) => MapEntry(k, '$v')),
     );
   }
 
@@ -174,12 +178,17 @@ Future<void> _serveOne(
       request.add(bytes);
     }
     final response = await request.close().timeout(budget);
+    final headers = <String, String>{};
+    response.headers.forEach((name, values) {
+      headers[name] = values.join(', ');
+    });
     final bytes = await response
         .fold<BytesBuilder>(BytesBuilder(), (b, d) => b..add(d))
         .timeout(budget);
     responses.put(Uint8List.fromList(utf8.encode(jsonEncode({
       'status': response.statusCode,
       'body': utf8.decode(bytes.toBytes(), allowMalformed: true),
+      'headers': headers,
     }))));
   } on TimeoutException {
     responses.put(Uint8List.fromList(utf8.encode(jsonEncode({

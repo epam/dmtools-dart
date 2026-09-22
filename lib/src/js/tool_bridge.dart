@@ -32,14 +32,21 @@ import 'sync_tool_dispatcher.dart';
 class ToolBridge {
   final ToolRegistry _registry;
   final String? _workingDirectory;
+  final String? _consolePrefix;
 
   /// Creates a bridge backed by [registry].
   ///
   /// Relative file paths in tool calls resolve against [workingDirectory]
-  /// (defaults to [Directory.current]).
-  ToolBridge({required ToolRegistry registry, String? workingDirectory})
-      : _registry = registry,
-        _workingDirectory = workingDirectory;
+  /// (defaults to [Directory.current]). [consolePrefix] is prepended to
+  /// every `console.*` line (worker log attribution on the `runAsync`
+  /// pool); null keeps the default unprefixed output.
+  ToolBridge({
+    required ToolRegistry registry,
+    String? workingDirectory,
+    String? consolePrefix,
+  })  : _registry = registry,
+        _workingDirectory = workingDirectory,
+        _consolePrefix = consolePrefix;
 
   /// The single tool dispatcher shared by every call through this bridge.
   ///
@@ -74,7 +81,7 @@ class ToolBridge {
     runtime.registerHostFunction('__executeToolViaJavaHost', _dispatchToolCall);
     runtime.registerHostFunction('__fileReadHost', _fileReadHost);
     runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
-    _registerConsole(runtime);
+    _registerConsole(runtime, _consolePrefix);
     runtime.eval(_hostFunctionBootstrap, filename: '<host_functions>');
   }
 
@@ -656,19 +663,20 @@ const _successJson = '{"success":true}';
 ///
 /// Host functions print synchronously to Dart's stdout/stderr and return
 /// JS `undefined`, so `console.log(...)` calls chain as no-ops.
-void _registerConsole(QuickjsRuntime runtime) {
+void _registerConsole(QuickjsRuntime runtime, String? prefix) {
   runtime.registerHostFunction(
-      '__consoleLog', (argsJson) => _printTo(stdout, argsJson));
+      '__consoleLog', (argsJson) => _printTo(stdout, argsJson, prefix));
   runtime.registerHostFunction(
-      '__consoleWarn', (argsJson) => _printTo(stderr, argsJson));
+      '__consoleWarn', (argsJson) => _printTo(stderr, argsJson, prefix));
   runtime.registerHostFunction(
-      '__consoleError', (argsJson) => _printTo(stderr, argsJson));
+      '__consoleError', (argsJson) => _printTo(stderr, argsJson, prefix));
   runtime.eval(_consoleBootstrap, filename: '<console>');
 }
 
 /// Prints one console line and signals JS `undefined` (Dart `null`).
-String? _printTo(IOSink sink, String argsJson) {
-  sink.writeln(_consoleArg(argsJson));
+String? _printTo(IOSink sink, String argsJson, String? prefix) {
+  final line = _consoleArg(argsJson);
+  sink.writeln(prefix == null ? line : '$prefix$line');
   return null;
 }
 

@@ -112,6 +112,12 @@ gates:
       # settings object would diverge from the parity surface.
       - paths: ['lib/src/js/sync_retry_policy.dart']
         max_params: 8
+      # EngineSpec carries the independent dimensions of one engine wiring
+      # (params bundle, registry, wrappers filter, working/script dirs,
+      # console attribution, direct params) shared verbatim by the main
+      # engine and runAsync workers (#224); named params are the API.
+      - paths: ['lib/src/js/engine_factory.dart']
+        max_params: 10
   # Detect duplicated code blocks.
   duplication:
     enabled: true

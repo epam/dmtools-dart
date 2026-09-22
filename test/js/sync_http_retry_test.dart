@@ -246,8 +246,11 @@ void retryIntegrationTests() {
           SyncHttpClient.get('http://127.0.0.1:${server.port}/dt-retryfail/b');
       stopwatch.stop();
       expect(resp.statusCode, 200);
-      // First attempt pays the 1s base backoff before the retry.
-      expect(stopwatch.elapsedMilliseconds, greaterThanOrEqualTo(900));
+      // First attempt pays the 1s base backoff before the retry. The
+      // jittered delay ranges 850–1150 ms (±jitterFactor/2), so the
+      // assertion uses the true minimum minus a small stopwatch tolerance
+      // instead of a value inside the jitter band (flake-proof).
+      expect(stopwatch.elapsedMilliseconds, greaterThanOrEqualTo(800));
     });
 
     test('persistent 429 exhausts the attempt budget and surfaces 429', () {

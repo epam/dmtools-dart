@@ -154,13 +154,42 @@ List<Map<String, dynamic>> jsonDecodeList(String body) {
 /// Jira system (non-custom) field names that must never be resolved through
 /// the field-name → customfield mapping (Java `JiraClient.SYSTEM_FIELDS`).
 const systemJiraFields = {
-  'summary', 'description', 'status', 'assignee', 'reporter', 'creator',
-  'created', 'updated', 'resolution', 'priority', 'issuetype', 'project',
-  'labels', 'comment', 'attachment', 'worklog', 'timetracking',
-  'aggregatetimeestimate', 'aggregatetimespent', 'aggregateprogress',
-  'workratio', 'security', 'issuerestriction', 'thumbnail', 'timespent',
-  'timeestimate', 'duedate', 'environment', 'components', 'versions',
-  'fixversions', 'subtasks', 'parent', 'issuelinks', 'watches', 'votes',
+  'summary',
+  'description',
+  'status',
+  'assignee',
+  'reporter',
+  'creator',
+  'created',
+  'updated',
+  'resolution',
+  'priority',
+  'issuetype',
+  'project',
+  'labels',
+  'comment',
+  'attachment',
+  'worklog',
+  'timetracking',
+  'aggregatetimeestimate',
+  'aggregatetimespent',
+  'aggregateprogress',
+  'workratio',
+  'security',
+  'issuerestriction',
+  'thumbnail',
+  'timespent',
+  'timeestimate',
+  'duedate',
+  'environment',
+  'components',
+  'versions',
+  'fixversions',
+  'subtasks',
+  'parent',
+  'issuelinks',
+  'watches',
+  'votes',
 };
 
 /// Extracts the project key from a ticket key (`PROJ-123` → `PROJ`).
@@ -181,27 +210,39 @@ Object? coerceJiraFieldValue(Object? value) {
   if (value is! String) return value;
   final str = value.trim();
   if (str.isEmpty) return value;
+  return _coerceBoolOrNumber(str) ?? _coerceJsonStructure(str) ?? value;
+}
+
+/// Bool/int/double forms of [str] (Java `coerceFieldValue` scalar cases),
+/// or `null` when the string is neither.
+Object? _coerceBoolOrNumber(String str) {
   switch (str.toLowerCase()) {
     case 'true':
       return true;
     case 'false':
       return false;
   }
-  final intValue = int.tryParse(str);
-  if (intValue != null) return intValue;
-  final doubleValue = double.tryParse(str);
-  if (doubleValue != null) return doubleValue;
-  if ((str.startsWith('{') && str.endsWith('}')) ||
-      (str.startsWith('[') && str.endsWith(']'))) {
-    try {
-      final decoded = jsonDecode(str);
-      if (decoded is Map || decoded is List) return decoded;
-    } on FormatException {
-      // Fall through: not JSON, keep the original string.
-    }
-  }
-  return value;
+  return int.tryParse(str) ?? double.tryParse(str);
 }
+
+/// The JSON object/array [str] decodes to, or `null` when the string does
+/// not have the shape of, or fails to parse entirely as, a JSON structure.
+Object? _coerceJsonStructure(String str) {
+  if (!_isJsonStructureShape(str)) return null;
+  try {
+    final decoded = jsonDecode(str);
+    if (decoded is Map) return decoded;
+    if (decoded is List) return decoded;
+  } on FormatException {
+    // Fall through: not JSON, keep the original string.
+  }
+  return null;
+}
+
+/// Whether [str] is wrapped like a JSON object or array.
+bool _isJsonStructureShape(String str) =>
+    (str.startsWith('{') && str.endsWith('}')) ||
+    (str.startsWith('[') && str.endsWith(']'));
 
 /// Collects Jira field-update errors from a response body — the joined
 /// `errorMessages` and `errors` entries (`Field customfield_X: …` for

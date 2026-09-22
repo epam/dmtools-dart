@@ -27,7 +27,7 @@ run-name: >-
 
 on:
   issues:
-    types: [assigned, labeled]
+    types: [assigned]  # dev leg only — review/rework are SM dispatches
   workflow_dispatch:
     inputs:
       issue:

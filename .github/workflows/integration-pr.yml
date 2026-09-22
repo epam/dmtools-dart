@@ -14,7 +14,6 @@ name: Integration (PR)
 # Fork PRs do not receive secrets, so the matrix fails there by design —
 # maintainers can re-run via workflow_dispatch on the branch.
 on:
-  pull_request:
   workflow_dispatch:
 
 jobs:

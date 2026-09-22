@@ -23,6 +23,7 @@ void main() {
   if (hasPython3()) {
     _testReadTools();
     _testWriteTools();
+    uploadPolicyTests();
   }
 }
 
@@ -281,5 +282,70 @@ void testwritetools_p2() {
     final summary = jsonDecode(result) as Map<String, dynamic>;
     expect(summary['expectedPages'], 2);
     expect(summary['syncedPages'], contains('Page'));
+  });
+}
+
+/// The `confluence_upload_attachment` policy surface (Java
+/// `AttachmentHelper.uploadAttachment`): skip-existing, overwrite, create,
+/// and the upload-failure contract.
+void uploadPolicyTests() {
+  group('ConfluenceSyncTools upload policy', () {
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides(_config(server.port));
+      tools = ConfluenceSyncTools(PropertyReader());
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    File tempFile(String name) {
+      final dir = Directory.systemTemp.createTempSync('dmtools_upl_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      return File('${dir.path}/$name')..writeAsStringSync('bytes');
+    }
+
+    test('skips an existing attachment unless updateIfExists', () {
+      final file = tempFile('exists.txt');
+      final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': '42',
+        'file': file.path,
+      })) as Map<String, dynamic>;
+      expect(result['status'], 'skipped');
+      expect((result['attachment'] as Map)['id'], 'a1');
+
+      final updated =
+          jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': '42',
+        'file': file.path,
+        'updateIfExists': true,
+      })) as Map<String, dynamic>;
+      expect(updated['status'], 'updated');
+    });
+
+    test('creates a new attachment and decodes the wrapper', () {
+      final file = tempFile('fresh.bin');
+      final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': '42',
+        'file': file.path,
+      })) as Map<String, dynamic>;
+      expect(result['status'], 'created');
+      // The echo server answers the multipart POST with its echo envelope;
+      // the wrapper's `results` array wins over the bare object.
+      expect(result['attachment'], isNotNull);
+    });
+
+    test('reports failed when the upload POST errors', () {
+      final file = tempFile('doomed.bin');
+      final result = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+        'contentId': 'dt-fail',
+        'file': file.path,
+      })) as Map<String, dynamic>;
+      expect(result['status'], 'failed');
+      expect(result['attachment'], isNull);
+    });
   });
 }

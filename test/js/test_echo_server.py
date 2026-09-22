@@ -130,6 +130,17 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(encoded)
             return
+        # Confluence attachment-upload failure fixture (gh-191 CRAP gate):
+        # a multipart POST under /content/dt-fail/... answers 500 so the
+        # uploadWithPolicy failure branch runs end to end.
+        if "/content/dt-fail/" in self.path and self.command == "POST":
+            encoded = b'{"error": "upload rejected"}'
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         # Java-parity fixtures for 2xx-with-empty-body responses: a
         # transitions POST (dt-move) and a ticket DELETE (dt-del) answer
         # 204 No Content. The sync layer must hand JS the empty string /

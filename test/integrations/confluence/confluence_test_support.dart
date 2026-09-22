@@ -26,10 +26,23 @@ typedef MockHttpFixture = ({
 });
 
 /// A canned-response [HttpClientAdapter] that records each served request.
+///
+/// [status] and [contentType] let individual tests serve non-200 answers
+/// and raw (non-JSON) bodies so the dio String-body decode paths run.
 class RoutingAdapter implements HttpClientAdapter {
-  RoutingAdapter(this._router);
+  RoutingAdapter(
+    this._router, {
+    this.status = 200,
+    this.contentType = 'application/json',
+  });
 
   final String Function(RequestOptions options) _router;
+
+  /// HTTP status every response carries.
+  final int status;
+
+  /// The `Content-Type` header every response carries.
+  final String contentType;
 
   /// Requests served so far, in call order.
   final List<RequestOptions> calls = [];
@@ -43,9 +56,9 @@ class RoutingAdapter implements HttpClientAdapter {
     calls.add(options);
     return ResponseBody.fromString(
       _router(options),
-      200,
+      status,
       headers: {
-        Headers.contentTypeHeader: ['application/json'],
+        Headers.contentTypeHeader: [contentType],
       },
     );
   }
@@ -101,6 +114,14 @@ MockHttpFixture mockHttpWithAuth(
     http: ConfluenceHttpClient(PropertyReader(), dio: dio),
     adapter: adapter,
   );
+}
+
+/// Builds a [ConfluenceClient] over a fully custom adapter (for tests that
+/// need non-default status codes or content types).
+ConfluenceClient clientOnAdapter(HttpClientAdapter adapter) {
+  PropertyReader.setOverrides(_testConfig);
+  final dio = Dio()..httpClientAdapter = adapter;
+  return ConfluenceClient(ConfluenceHttpClient(PropertyReader(), dio: dio));
 }
 
 /// Routes by request-path suffix, defaulting to [fallback].

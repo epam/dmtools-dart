@@ -72,33 +72,65 @@ String _updateFieldsByName(
   Object? coerced,
 ) {
   final listing = _fieldsListing(config, jiraProjectKeyOf(key));
-  final matches = findAllJiraFieldsByName(field, listing);
+  final fieldIds =
+      _resolveActiveFieldIds(findAllJiraFieldsByName(field, listing));
+  if (fieldIds.isEmpty) {
+    return jsonEncode("No fields found with name '$field'");
+  }
+  if (fieldIds.length == 1) {
+    return _singleFieldUpdateResult(config, key, field, fieldIds.single,
+        coerced);
+  }
+  return _multiFieldUpdateResult(config, key, field, fieldIds, coerced);
+}
+
+/// The active customfield ids among [matches] (Java
+/// `getAllFieldCustomCodes`), falling back to the best-match single field
+/// when none is active. Empty when [matches] itself is empty.
+List<String> _resolveActiveFieldIds(List<JiraFieldCandidate> matches) {
   final fieldIds = [
     for (final f in matches)
       if (f.active) f.id,
   ];
-  if (fieldIds.isEmpty) {
-    final best = selectBestJiraField(matches);
-    if (best == null) {
-      return jsonEncode("No fields found with name '$field'");
-    }
-    fieldIds.add(best.id);
-  }
+  if (fieldIds.isNotEmpty) return fieldIds;
+  final best = selectBestJiraField(matches);
+  return best == null ? const [] : [best.id];
+}
+
+/// The single-field outcome: Java's success/failure sentence without the
+/// per-field ✅/❌ lines.
+String _singleFieldUpdateResult(
+  _JiraSyncConfig config,
+  String key,
+  String field,
+  String fieldId,
+  Object? coerced,
+) {
+  final failure = _performFieldUpdate(config, key, fieldId, coerced);
+  return jsonEncode(failure == null
+      ? "Field '$field' updated successfully on ticket $key"
+      : "Failed to update field '$field' on ticket $key");
+}
+
+/// The multi-field outcome: one `✅`/`❌` line per field, then the Java
+/// `Updated N of M fields …` tail (with the failed count when non-zero).
+String _multiFieldUpdateResult(
+  _JiraSyncConfig config,
+  String key,
+  String field,
+  List<String> fieldIds,
+  Object? coerced,
+) {
   final results = StringBuffer();
   var successCount = 0;
   for (final fieldId in fieldIds) {
     final failure = _performFieldUpdate(config, key, fieldId, coerced);
     if (failure == null) {
       successCount++;
-      if (fieldIds.length > 1) results.write('✅ Updated $fieldId\n');
-    } else if (fieldIds.length > 1) {
+      results.write('✅ Updated $fieldId\n');
+    } else {
       results.write('❌ Failed $fieldId: $failure\n');
     }
-  }
-  if (fieldIds.length == 1) {
-    return jsonEncode(successCount == 1
-        ? "Field '$field' updated successfully on ticket $key"
-        : "Failed to update field '$field' on ticket $key");
   }
   results.write('\nUpdated $successCount of ${fieldIds.length} fields '
       "with name '$field' for ticket $key");

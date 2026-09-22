@@ -136,11 +136,22 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
     String contentId,
     bool updateIfExists,
   ) {
-    final name = file.uri.pathSegments.last;
-    final existing = _existingByName(contentId, name);
+    final existing = _existingByName(
+        contentId, file.uri.pathSegments.last);
     if (existing != null && !updateIfExists) {
       return {'status': 'skipped', 'attachment': existing};
     }
+    return _uploadForPolicy(contentId, existing, file);
+  }
+
+  /// Upload tail shared by the create/update policy paths: picks the
+  /// endpoint suffix (existing attachments PUT to their `/data` endpoint),
+  /// POSTs the multipart body, and labels the outcome.
+  Map<String, dynamic> _uploadForPolicy(
+    String contentId,
+    Map<String, dynamic>? existing,
+    File file,
+  ) {
     final suffix = existing != null
         ? '/child/attachment/${existing['id']}/data'
         : '/child/attachment';
@@ -151,16 +162,20 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
     if (result.statusCode == 0 || !result.isOk) {
       return {'status': 'failed', 'attachment': null};
     }
-    final decoded = syncTryDecode(result.body);
-    final attachment = decoded is Map && decoded['results'] is List
-        ? (decoded['results'] as List).firstOrNull
-        : decoded is Map<String, dynamic>
-            ? decoded
-            : null;
     return {
       'status': existing != null ? 'updated' : 'created',
-      'attachment': attachment,
+      'attachment': _uploadedAttachment(result.body),
     };
+  }
+
+  /// The attachment object of an upload response body (Java takes
+  /// `results[0]` of the wrapper, else the decoded object itself).
+  static Map<String, dynamic>? _uploadedAttachment(String body) {
+    final decoded = syncTryDecode(body);
+    if (decoded is Map && decoded['results'] is List) {
+      return (decoded['results'] as List).firstOrNull;
+    }
+    return decoded is Map<String, dynamic> ? decoded : null;
   }
 
   /// The existing attachment object with [name] on [contentId], if any.

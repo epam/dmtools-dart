@@ -572,18 +572,7 @@ class ConfluenceClient {
   Future<Map<String, dynamic>?> contentByUrl(String urlString) async {
     final parsed = Uri.tryParse(urlString);
     if (parsed == null) return null;
-    var uri = parsed;
-    var ref = resolveConfluencePageUrl(uri);
-    var hops = 0;
-    while (ref is ConfluenceRedirectRef && hops < 5) {
-      hops++;
-      final location = await _resolveRedirect(uri);
-      if (location == null) return null;
-      final next = Uri.tryParse(location);
-      if (next == null) return null;
-      uri = next;
-      ref = resolveConfluencePageUrl(uri);
-    }
+    final ref = await _resolveRef(parsed);
     if (ref is ConfluencePageIdRef) return getPageById(ref.id);
     if (ref is ConfluenceDisplayRef) {
       final listing = await contentByTitleAndSpace(ref.title, ref.space);
@@ -591,6 +580,26 @@ class ConfluenceClient {
       return contents.isEmpty ? null : contents.first;
     }
     return null;
+  }
+
+  /// Resolves [uri] through short-link redirect hops (max 5, Java parity):
+  /// each 3xx `Location` is followed and re-classified until a direct
+  /// page-id / display ref (or an unknown shape) remains. Returns `null`
+  /// when a hop fails or the hop budget is exhausted.
+  Future<ConfluencePageRef?> _resolveRef(Uri uri) async {
+    var current = uri;
+    var ref = resolveConfluencePageUrl(current);
+    var hops = 0;
+    while (ref is ConfluenceRedirectRef && hops < 5) {
+      hops++;
+      final location = await _resolveRedirect(current);
+      if (location == null) return null;
+      final next = Uri.tryParse(location);
+      if (next == null) return null;
+      current = next;
+      ref = resolveConfluencePageUrl(current);
+    }
+    return ref is ConfluenceRedirectRef ? null : ref;
   }
 
   /// Follows one 3xx hop for [uri], returning the `Location` URL, or `null`

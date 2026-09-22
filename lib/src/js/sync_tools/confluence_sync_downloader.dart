@@ -61,29 +61,48 @@ class _PageDownloader {
         const <Map<String, dynamic>>[];
     final baseHost = Uri.tryParse(_config.rootUrl)?.host;
     for (final attachment in results) {
-      final links = attachment['_links'];
-      final downloadPath = links is Map ? links['download'] : null;
-      if (downloadPath is! String || downloadPath.isEmpty) continue;
-      // `_links.download` is relative to the site root (`/download/…`).
-      final url = downloadPath.startsWith('http')
-          ? downloadPath
-          : '${_config.rootUrl}$downloadPath';
-      // `_links.download` is server-controlled content: the Confluence
-      // credentials never travel to a foreign host.
-      var headers = _config.headers;
-      if (downloadPath.startsWith('http') &&
-          Uri.tryParse(downloadPath)?.host != baseHost) {
-        headers = {...headers}..removeWhere(
-            (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
-          );
-      }
-      final resp = SyncHttpClient.get(url, headers: headers);
-      if (!resp.isOk) continue;
-      final dir = Directory('${_output.path}/$pageFolder-attachments')
-        ..createSync(recursive: true);
-      File('${dir.path}/${_sanitize(attachment['title']?.toString() ?? 'file')}')
-          .writeAsBytesSync(resp.bodyBytes);
+      final downloadPath = _attachmentDownloadPath(attachment);
+      if (downloadPath == null) continue;
+      _downloadOneAttachment(attachment, downloadPath, baseHost, pageFolder);
     }
+  }
+
+  /// The `_links.download` path of [attachment]; `null` when absent or
+  /// empty.
+  static String? _attachmentDownloadPath(Map<String, dynamic> attachment) {
+    final links = attachment['_links'];
+    final downloadPath = links is Map ? links['download'] : null;
+    return downloadPath is String && downloadPath.isNotEmpty
+        ? downloadPath
+        : null;
+  }
+
+  /// Fetches and writes one attachment next to its page.
+  void _downloadOneAttachment(
+    Map<String, dynamic> attachment,
+    String downloadPath,
+    String? baseHost,
+    String pageFolder,
+  ) {
+    // `_links.download` is relative to the site root (`/download/…`).
+    final url = downloadPath.startsWith('http')
+        ? downloadPath
+        : '${_config.rootUrl}$downloadPath';
+    // `_links.download` is server-controlled content: the Confluence
+    // credentials never travel to a foreign host.
+    var headers = _config.headers;
+    if (downloadPath.startsWith('http') &&
+        Uri.tryParse(downloadPath)?.host != baseHost) {
+      headers = {...headers}..removeWhere(
+          (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
+        );
+    }
+    final resp = SyncHttpClient.get(url, headers: headers);
+    if (!resp.isOk) return;
+    final dir = Directory('${_output.path}/$pageFolder-attachments')
+      ..createSync(recursive: true);
+    File('${dir.path}/${_sanitize(attachment['title']?.toString() ?? 'file')}')
+        .writeAsBytesSync(resp.bodyBytes);
   }
 
   /// Filesystem-safe file name from a page title.

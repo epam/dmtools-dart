@@ -17,6 +17,7 @@ void main() {
   markdownCodeBlockTests();
   htmlBranchTests();
   htmlInlineAndEntityTests();
+  topLevelInlineRunTests();
   mixedBranchTests();
   preserverTests();
 }
@@ -205,6 +206,53 @@ void htmlInlineAndEntityTests() {
       expect(
         markdownToJiraMarkup('![Screenshot|width=300](img.png)'),
         '!Screenshot|width=300!(img.png)',
+      );
+    });
+  });
+}
+
+/// The Java walker's special top-level inline runs (Java
+/// `convertHtmlToJiraMarkdown` special cases): sibling `<b>`/`<i>` chains,
+/// `<strong>`+`<ul>` heading pairs, and whitespace-trimmed chain members.
+void topLevelInlineRunTests() {
+  group('markdownToJiraMarkup: HTML top-level inline runs', () {
+    test('sibling <b> chain merges into one paragraph (2+ items)', () {
+      const html = '<b>First</b><b>Second</b>';
+      expect(markdownToJiraMarkup(html), '*First* *Second*');
+    });
+
+    test('sibling <i> chain with leading whitespace trims members', () {
+      const html = '<i> First</i><i>Second</i>';
+      expect(markdownToJiraMarkup(html), '_First_ _Second_');
+    });
+
+    test('top-level <strong>+<ul> becomes a heading + bullets block', () {
+      const html = '<strong>Given</strong><ul><li>a page</li></ul>';
+      expect(markdownToJiraMarkup(html), '# *Given*\n* a page');
+    });
+
+    test('multi-line <code> restores as a {code:java} block', () {
+      const html = '<code>line1\nline2</code>';
+      expect(markdownToJiraMarkup(html), '{code:java}line1\nline2{code}');
+    });
+
+    test('<pre><code> keeps an explicit language class', () {
+      const html = '<pre><code class="python">x = 1</code></pre>';
+      expect(markdownToJiraMarkup(html), '{code:python}x = 1{code}');
+    });
+
+    test('unclosed <code> without a class reaches the DOM code path', () {
+      // The preserver's regex needs a closing </code>; an unclosed span
+      // survives to the DOM walker, whose default language is java.
+      expect(markdownToJiraMarkup('<code>x = 1'), '{{x = 1}}');
+      expect(markdownToJiraMarkup('<code class="">y = 2'), '{{y = 2}}');
+      expect(markdownToJiraMarkup('<code class="python">z = 3'), '{{z = 3}}');
+    });
+
+    test('unclosed <code> in a <pre> uses the class language', () {
+      expect(
+        markdownToJiraMarkup('<pre><code class="python">x = 1</pre>'),
+        '{code:python}\nx = 1\n{code}',
       );
     });
   });

@@ -184,7 +184,65 @@ void _testParseResponse() {
       expect(resp.body, contains('--max-time'));
     });
   });
+
+  group('SyncHttpClient.parseResponse: raw byte stdout', () {
+    test('splits the trailing status line off the raw bytes', () {
+      final bytes = utf8.encode('<h1>Hi</h1>\n200');
+      final resp = SyncHttpClient.parseResponse(_rawResult(bytes));
+      expect(resp.statusCode, 200);
+      expect(resp.body, '<h1>Hi</h1>');
+      expect(resp.bodyBytes, utf8.encode('<h1>Hi</h1>'));
+    });
+
+    test('decodes non-ASCII body bytes without a charset', () {
+      final bytes = utf8.encode('{"a":"ü"}\n201');
+      final resp = SyncHttpClient.parseResponse(_rawResult(bytes));
+      expect(resp.statusCode, 201);
+      expect(resp.body, '{"a":"ü"}');
+    });
+
+    test('no newline separator surfaces the curl exit code', () {
+      final resp = SyncHttpClient.parseResponse(
+        _rawResult(utf8.encode('garbage'), exitCode: 7),
+      );
+      expect(resp.statusCode, 0);
+      expect(resp.body, 'curl exit 7');
+    });
+
+    test('status 000 reports stderr as the diagnostic', () {
+      final resp = SyncHttpClient.parseResponse(_rawResult(
+        utf8.encode('\n000'),
+        stderr: 'Connection refused',
+        exitCode: 7,
+      ));
+      expect(resp.statusCode, 0);
+      expect(resp.body, 'curl exit 7: Connection refused');
+    });
+
+    test('status 000 with empty stderr falls back to the body', () {
+      final resp = SyncHttpClient.parseResponse(
+        _rawResult(utf8.encode('boom\n000'), exitCode: 7),
+      );
+      expect(resp.statusCode, 0);
+      expect(resp.body, 'curl exit 7: boom');
+    });
+
+    test('non-UTF-8 body bytes survive as bytes (allowMalformed)', () {
+      final bytes = <int>[0xff, 0xfe, 0x0a, 0x32, 0x30, 0x30];
+      final resp = SyncHttpClient.parseResponse(_rawResult(bytes));
+      expect(resp.statusCode, 200);
+      expect(resp.bodyBytes, <int>[0xff, 0xfe]);
+    });
+  });
 }
+
+/// A [ProcessResult] whose stdout is raw bytes (the default curl transport).
+ProcessResult _rawResult(
+  List<int> stdout, {
+  String stderr = '',
+  int exitCode = 0,
+}) =>
+    ProcessResult(0, exitCode, stdout, stderr);
 
 void _testIsOk() {
   group('SyncHttpResponse.isOk', () {

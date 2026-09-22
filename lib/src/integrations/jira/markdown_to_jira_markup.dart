@@ -32,12 +32,26 @@ import 'package:html/parser.dart' show parse;
 String markdownToJiraMarkup(String? input) {
   if (input == null || input.trim().isEmpty) return '';
   if (_containsOnlyHtmlEntities(input)) return decodeHtmlEntities(input);
+  return switch (_classifyInput(input)) {
+    _InputKind.mixed => _convertMixedContent(input),
+    _InputKind.html => _convertHtmlToJiraMarkup(input),
+    _InputKind.markdown => _convertMarkdownToJiraMarkup(input),
+  };
+}
+
+/// Which converter branch an input routes to (the Java
+/// `hasMarkdown`×`hasHtml` dispatch, extracted for testability).
+enum _InputKind { markdown, html, mixed }
+
+/// Classifies [input] by its content markers: both Markdown and HTML
+/// markers → [._InputKind.mixed], HTML only → [._InputKind.html],
+/// otherwise Markdown.
+_InputKind _classifyInput(String input) {
   final hasMarkdown =
       input.contains('#') || input.contains('```') || input.contains('* ');
   final hasHtml = containsHtmlTags(input);
-  if (hasMarkdown && hasHtml) return _convertMixedContent(input);
-  if (hasHtml) return _convertHtmlToJiraMarkup(input);
-  return _convertMarkdownToJiraMarkup(input);
+  if (hasMarkdown && hasHtml) return _InputKind.mixed;
+  return hasHtml ? _InputKind.html : _InputKind.markdown;
 }
 
 /// Marker a `<code>` span is swapped for while the surrounding body is

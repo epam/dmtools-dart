@@ -35,7 +35,7 @@ jobs:
     # ~17 min serial to ~5-6 min (fixed per-shard overhead ~3 min +
     # suite/4). Each shard uploads its partial lcov + test count; the
     # gate job merges them.
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     strategy:
       fail-fast: false
       matrix:

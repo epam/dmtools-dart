@@ -33,7 +33,7 @@ permissions:
 jobs:
   version-and-tag:
     name: version and tag
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     outputs:
       version: ${{ steps.new_version.outputs.version }}
@@ -197,7 +197,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, platform: linux, arch: x64 }
+          - { os: bitrise-runner-dmtools-ci, platform: linux, arch: x64 }  # Bitrise pool (probe #229)
           # Free arm64 runners for public repos — closes the "no prebuilt
           # binary for linux-arm64" installer hole (native compile must run
           # on the target arch: dart compile exe has no cross-compile).
@@ -334,7 +334,7 @@ jobs:
       needs.version-and-tag.outputs.skip != 'true' &&
       needs.version-and-tag.result == 'success' &&
       needs.build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

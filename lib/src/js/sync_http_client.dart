@@ -102,6 +102,16 @@ class SyncHttpClient {
   /// curl subprocess otherwise, retrying retryable failures per
   /// [SyncRetryPolicy.forUrl] (gh-191, P6-JSY-18: Java `JiraClient.execute`
   /// retries 429/502/503/504 and connection errors with backoff).
+  /// Public dispatch used by the `fetch` compat transport (engine_factory);
+  /// the verb-specific statics delegate here.
+  static SyncHttpResponse dispatch(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    String? body,
+  }) =>
+      _dispatch(method, url, headers: headers, body: body);
+
   static SyncHttpResponse _dispatch(
     String method,
     String url, {

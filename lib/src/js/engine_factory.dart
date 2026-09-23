@@ -19,6 +19,7 @@ import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'require_loader.dart';
+import 'sync_http_client.dart';
 import 'tool_bridge.dart';
 import 'tool_wrapper_generator.dart';
 
@@ -151,8 +152,39 @@ void _installNodeCompatIfEnabled(QuickjsRuntime rt, EngineSpec spec) {
         final sink = (level == 'warn' || level == 'error') ? stderr : stdout;
         sink.writeln(prefix == null ? message : '$prefix$message');
       },
+      httpFetch: _syncFetch,
+      scriptPath: spec.scriptDirectory == null
+          ? null
+          : '${spec.scriptDirectory}/__jsr_job__.js',
     ),
   );
+}
+
+/// The `fetch` transport: routes through the same pooled sync HTTP client
+/// the tools use ([SyncHttpClient]); status `0` (transport failure) maps
+/// to Node's `fetch failed`.
+String? _syncFetch(String requestJson) {
+  final request = jsonDecode(requestJson) as Map<String, dynamic>;
+  final method = (request['method'] as String? ?? 'GET').toUpperCase();
+  final url = request['url'] as String? ?? '';
+  final headers = (request['headers'] as Map<String, dynamic>? ?? const {})
+      .map((k, v) => MapEntry(k, '$v'));
+  final body = request['body'] as String?;
+  try {
+    final resp = SyncHttpClient.dispatch(
+      method,
+      url,
+      headers: headers,
+      body: body,
+    );
+    return jsonEncode({
+      'status': resp.statusCode,
+      'headers': resp.headers,
+      'body': resp.body,
+    });
+  } catch (e) {
+    return jsonEncode({'error': '$e'});
+  }
 }
 
 /// Sets the `require` base directory from the top-level script path.

@@ -39,6 +39,7 @@ class JsRunConfig {
     this.extraGlobals,
     this.contextParams,
     this.pool,
+    this.httpFetch,
   });
 
   /// Restricts generated wrappers to the named integrations.
@@ -65,6 +66,11 @@ class JsRunConfig {
   /// [AsyncJobPool.instance]). Only consulted when `jobParams` carries
   /// `parallelWorkers >= 2`; tests boot a private pool and pass it here.
   final AsyncJobPool? pool;
+
+  /// Alternate `fetch` transport for the node/js compat layer on the
+  /// main engine (JSON in, JSON out). Defaults to the pooled
+  /// [SyncHttpClient]; see [EngineSpec.httpFetch].
+  final String? Function(String requestJson)? httpFetch;
 }
 
 /// A resolved script source: the [code] plus the [filename] used for eval
@@ -242,6 +248,7 @@ class JsJobRunner {
         registry: registry,
         integrationFilter: config.integrationFilter,
         workingDirectory: workingDirectory,
+        httpFetch: config.httpFetch,
       ),
     );
   }

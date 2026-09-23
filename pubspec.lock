@@ -253,10 +253,10 @@ packages:
     dependency: "direct main"
     description:
       name: quickjs_runtime
-      sha256: acceb1da1d13f09e8686c807346b2d7cddc581a2f60fdc41c15fe70d880f0d1b
+      sha256: "5445b7db222dcee97ae5d4b62b854f210f39cd87c26ea57635f45e13d54a1493"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.2"
+    version: "0.3.3"
   shelf:
     dependency: transitive
     description:

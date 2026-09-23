@@ -14,7 +14,7 @@ dependencies:
   dio: ^5.4.0
   html: ^0.15.5
   native_synchronization: ^0.3.1
-  quickjs_runtime: ^0.3.2 # hosted on pub.dev
+  quickjs_runtime: ^0.3.3 # hosted on pub.dev
 
 dev_dependencies:
   test: ^1.24.0

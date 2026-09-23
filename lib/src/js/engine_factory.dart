@@ -37,6 +37,7 @@ class EngineSpec {
     this.scriptDirectory,
     this.consolePrefix,
     this.directParams,
+    this.httpFetch,
   });
 
   /// Injected as `params.jobParams` (ignored when [directParams] is set).
@@ -72,6 +73,14 @@ class EngineSpec {
   /// main engine composed — JSON round-tripped); when set, [jobParams] /
   /// [ticket] / [contextParams] / [extraGlobals] are ignored for `params`.
   final Map<String, dynamic>? directParams;
+
+  /// Alternate `fetch` transport for the node/js compat layer
+  /// (`String? Function(String requestJson)` — JSON in, JSON out).
+  /// Defaults to the pooled [SyncHttpClient] transport. Only applied to
+  /// engines wired directly with this spec: worker isolates receive the
+  /// default transport because closures cannot cross a `SendPort`
+  /// (dispatch contexts are JSON-marshaled).
+  final String? Function(String requestJson)? httpFetch;
 }
 
 /// Builds the flattened `params` object the script sees.
@@ -155,7 +164,7 @@ NodeCompatHandle? _installNodeCompatIfEnabled(
         final sink = (level == 'warn' || level == 'error') ? stderr : stdout;
         sink.writeln(prefix == null ? message : '$prefix$message');
       },
-      httpFetch: _syncFetch,
+      httpFetch: spec.httpFetch ?? _syncFetch,
       // dmtools is a headless CLI: "setTimeout as sleep" must behave like
       // Node, so timers drain in block mode (bounded by the jsr defaults:
       // maxTimerCallbacks per pass + maxTimerDrainWallClock). The returned

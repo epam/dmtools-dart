@@ -62,7 +62,7 @@ jobs:
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: f7fac02fb11aa1cb5d202e260e67ca12cc15ee68
+      factory_ref: 83e7f960cf80f9461f430e7e13be4d79df78cd63
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

@@ -253,8 +253,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "feat/node-sync-fetch"
-      resolved-ref: "2c784016abb0f1c512f3e8ecaa1e037f95f45ad9"
+      ref: "feat/timers-events-microtasks"
+      resolved-ref: "038746ea37fdeb118a5f3f2a23785db02ee2c823"
       url: "https://github.com/IstiN/quickjs_runtime.git"
     source: git
     version: "0.2.0"

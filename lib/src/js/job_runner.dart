@@ -110,7 +110,8 @@ class JsJobRunner {
     final rt = QuickjsRuntime();
     try {
       final reg = cfg.registry ?? createDefaultToolRegistry();
-      _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
+      final compat =
+          _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
       if (_parallelWorkers(jobParams) >= 2) {
         _wireAsyncPool(
           rt,
@@ -124,7 +125,11 @@ class JsJobRunner {
       setScriptDirectory(rt, scriptPath);
       final loaded = _loadJavaScriptCode(scriptPath);
       _evalScript(rt, loaded.code, loaded.filename);
-      return _callAction(rt);
+      final result = _callAction(rt);
+      // nodeCompat scripts may register timers (setTimeout-as-sleep etc.);
+      // block-mode drain (dmtools default) settles them like Node would.
+      compat?.drainTimers();
+      return result;
     } finally {
       rt.close();
     }
@@ -219,7 +224,7 @@ class JsJobRunner {
   /// that the direct `file_read` global (returning the raw content string,
   /// as testRunner.js requires) takes precedence over the wrapper that
   /// dispatches through `executeToolViaJava` with an `{content: …}` shape.
-  void _wireRuntime(
+  NodeCompatHandle? _wireRuntime(
     QuickjsRuntime rt,
     ToolRegistry registry,
     Map<String, dynamic> jobParams,
@@ -227,7 +232,7 @@ class JsJobRunner {
     String? workingDirectory,
     JsRunConfig config,
   ) {
-    wireEngine(
+    return wireEngine(
       rt,
       EngineSpec(
         jobParams: jobParams,

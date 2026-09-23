@@ -95,7 +95,7 @@ Map<String, dynamic> buildParamsMap({
 
 /// Wires job context, require loader, tool wrappers, and host functions on
 /// [rt] per [spec].
-void wireEngine(QuickjsRuntime rt, EngineSpec spec) {
+NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
   final params = spec.directParams ??
       buildParamsMap(
         jobParams: spec.jobParams,
@@ -122,7 +122,7 @@ void wireEngine(QuickjsRuntime rt, EngineSpec spec) {
     workingDirectory: spec.workingDirectory,
     consolePrefix: spec.consolePrefix,
   ).registerOn(rt);
-  _installNodeCompatIfEnabled(rt, spec);
+  return _installNodeCompatIfEnabled(rt, spec);
 }
 
 /// Installs the opt-in node/js compat layer when the job's `jobParams`
@@ -139,11 +139,14 @@ void wireEngine(QuickjsRuntime rt, EngineSpec spec) {
 /// latin-1 approximations, not script-faithful) and a console sink
 /// mirroring the product console split — `log/info/debug/trace` to
 /// stdout, `warn/error` to stderr, worker prefix preserved.
-void _installNodeCompatIfEnabled(QuickjsRuntime rt, EngineSpec spec) {
+NodeCompatHandle? _installNodeCompatIfEnabled(
+  QuickjsRuntime rt,
+  EngineSpec spec,
+) {
   final jobParams = (spec.directParams?['jobParams'] as Map?) ?? spec.jobParams;
-  if (jobParams['nodeCompat'] != true) return;
+  if (jobParams['nodeCompat'] != true) return null;
   final prefix = spec.consolePrefix;
-  installNodeCompat(
+  return installNodeCompat(
     rt,
     NodeCompatConfig(
       utf8Encode: utf8.encode,
@@ -153,6 +156,12 @@ void _installNodeCompatIfEnabled(QuickjsRuntime rt, EngineSpec spec) {
         sink.writeln(prefix == null ? message : '$prefix$message');
       },
       httpFetch: _syncFetch,
+      // dmtools is a headless CLI: "setTimeout as sleep" must behave like
+      // Node, so timers drain in block mode (bounded by the jsr defaults:
+      // maxTimerCallbacks per pass + maxTimerDrainWallClock). The returned
+      // handle is drained by the job runner / async pool after each script
+      // or dispatched job completes.
+      timerDrain: TimerDrainMode.block,
       scriptPath: spec.scriptDirectory == null
           ? null
           : '${spec.scriptDirectory}/__jsr_job__.js',

@@ -75,7 +75,7 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
   );
   final runtime = QuickjsRuntime();
   try {
-    wireEngine(
+    final compat = wireEngine(
       runtime,
       EngineSpec(
         directParams: request.context['params'] as Map<String, dynamic>?,
@@ -84,12 +84,19 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
         consolePrefix: '[jsr:$workerId] ',
       ),
     );
-    return runAsyncJobOnRuntime(
+    final result = runAsyncJobOnRuntime(
       runtime,
       jobId: request.jobId,
       fnSource: request.fnSource,
       argsJson: request.argsJson,
     );
+    // dispatched fns can register timers; drain them once the job settles
+    try {
+      compat?.drainTimers();
+    } catch (_) {
+      // a timer drain failure must not mask the job's own result/error
+    }
+    return result;
   } catch (e) {
     return AsyncJobEnvelope(
       jobId: request.jobId,

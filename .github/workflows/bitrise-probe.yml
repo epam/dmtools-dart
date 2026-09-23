@@ -1,0 +1,32 @@
+name: Bitrise runner probe
+
+# Probe (owner 2026-09-23): does the Bitrise Build Hub pool used by the Java
+# repo (github.com/epam/dm.ai .github/workflows/unit-tests.yml) pick up jobs
+# from THIS repo too? If the runner group is org-scoped, this job runs on the
+# bitrise machine; if it is scoped to dm.ai only, the job stays queued forever
+# (no matching runner) — either answer is the result of the experiment.
+# Mirrors the Java label exactly: bitrise-runner-dmtools-ci
+# (= Bitrise auto-label "bitrise-runner-<pool>" for pool "dmtools-ci").
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Wake-up probe (bitrise-runner-dmtools-ci)
+    runs-on: bitrise-runner-dmtools-ci
+    timeout-minutes: 10
+    steps:
+      - name: I am awake
+        run: |
+          echo "🎉 The Bitrise runner picked up this job."
+          echo "runner: ${RUNNER_NAME:-unknown}"
+          echo "os:     ${RUNNER_OS:-?}/${RUNNER_ARCH:-?}"
+          uname -a || true
+      - name: Tooling snapshot
+        run: |
+          echo "cpu: $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo ?)"
+          free -h 2>/dev/null || vm_stat 2>/dev/null | head -3 || true
+          which docker java python3 2>/dev/null || true

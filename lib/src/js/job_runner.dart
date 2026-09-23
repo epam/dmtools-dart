@@ -24,7 +24,6 @@ import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'async_job_pool.dart';
-import 'async_prelude.dart';
 import 'engine_factory.dart';
 import 'sync_http_client.dart';
 

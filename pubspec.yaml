@@ -17,7 +17,7 @@ dependencies:
   quickjs_runtime:
     git:
       url: https://github.com/IstiN/quickjs_runtime.git
-      ref: main
+      ref: feat/async-engine-pool
 
 dev_dependencies:
   test: ^1.24.0

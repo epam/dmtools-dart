@@ -81,7 +81,6 @@ export 'src/integrations/kb/kb_client.dart';
 export 'src/integrations/kb/kb_tools.dart';
 export 'src/integrations/mermaid/mermaid_tools.dart';
 export 'src/js/async_job_pool.dart';
-export 'src/js/async_prelude.dart';
 export 'src/js/engine_factory.dart';
 export 'src/js/job_runner.dart';
 export 'src/js/sync_http_client.dart';

@@ -14,10 +14,7 @@ dependencies:
   dio: ^5.4.0
   html: ^0.15.5
   native_synchronization: ^0.3.1
-  quickjs_runtime:
-    git:
-      url: https://github.com/IstiN/quickjs_runtime.git
-      ref: feat/timers-events-microtasks # TODO: flip to main when jsr PRs #5/#7/#8 merge
+  quickjs_runtime: ^0.3.2 # hosted on pub.dev
 
 dev_dependencies:
   test: ^1.24.0

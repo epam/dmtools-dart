@@ -27,6 +27,13 @@ on:
         default: true
 
 
+permissions:
+  contents: write         # checkout + silent update-branch pushes
+  issues: write           # labels + close-issue safety net
+  pull-requests: write    # update-branch + merge
+  checks: write           # bridge-free validation stamps (factory #510)
+  actions: write          # workflow_dispatch on the teammate workflow
+
 jobs:
   sm:
     # Pinned to the immutable SHA the `agents` submodule pins — the branch
@@ -34,13 +41,16 @@ jobs:
     # a branch ref would fail every */10 cron tick. Flip in lockstep with
     # the submodule when dmtools-agents#424 merges.
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@83e7f960cf80f9461f430e7e13be4d79df78cd63
+    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@68d98b0461944c6f48a7699e0eb35d5344bfeed6
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: 83e7f960cf80f9461f430e7e13be4d79df78cd63
+      factory_ref: 68d98b0461944c6f48a7699e0eb35d5344bfeed6
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
+      # Bridge-free mode (factory #510): the tick stamps the three required
+      # protection checks itself — the sm-validation bridge is deleted.
+      validation-checks: '["agents-suite","static","gate"]'
       # Manual ticks default to dry; cron ticks run live.
       dryRun: ${{ github.event.inputs.dryRun || 'false' }}
       # #687: the workflow token — silent branch updates (pushes trigger

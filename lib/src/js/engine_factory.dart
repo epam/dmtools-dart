@@ -13,6 +13,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
@@ -120,6 +121,38 @@ void wireEngine(QuickjsRuntime rt, EngineSpec spec) {
     workingDirectory: spec.workingDirectory,
     consolePrefix: spec.consolePrefix,
   ).registerOn(rt);
+  _installNodeCompatIfEnabled(rt, spec);
+}
+
+/// Installs the opt-in node/js compat layer when the job's `jobParams`
+/// carry `nodeCompat: true` — Java `JobJavaScriptBridge` parity
+/// (`params.jobParams.nodeCompat === true`, default-off). Runs LAST in
+/// [wireEngine] so the compat `require` captures the loader's `require`
+/// as its fallback and the compat `console` replaces the product console.
+///
+/// Because every engine — main and `runAsync` worker alike — is wired
+/// through [wireEngine], dispatched functions see the same compat surface
+/// as the main script (Java installs it in the worker bridges too).
+///
+/// Hooks: real UTF-8 codecs from `dart:convert` (the package defaults are
+/// latin-1 approximations, not script-faithful) and a console sink
+/// mirroring the product console split — `log/info/debug/trace` to
+/// stdout, `warn/error` to stderr, worker prefix preserved.
+void _installNodeCompatIfEnabled(QuickjsRuntime rt, EngineSpec spec) {
+  final jobParams = (spec.directParams?['jobParams'] as Map?) ?? spec.jobParams;
+  if (jobParams['nodeCompat'] != true) return;
+  final prefix = spec.consolePrefix;
+  installNodeCompat(
+    rt,
+    NodeCompatConfig(
+      utf8Encode: utf8.encode,
+      utf8Decode: utf8.decode,
+      consoleSink: (level, message) {
+        final sink = (level == 'warn' || level == 'error') ? stderr : stdout;
+        sink.writeln(prefix == null ? message : '$prefix$message');
+      },
+    ),
+  );
 }
 
 /// Sets the `require` base directory from the top-level script path.

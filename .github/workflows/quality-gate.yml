@@ -51,7 +51,7 @@ jobs:
     # comes and stamps a false red "did not run" on every pin PR (live:
     # dart #221 — four red jobs, zero real checks run).
     if: ${{ !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'chore:pin') }}
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 90
     outputs:
       conclusion: ${{ steps.wait.outputs.conclusion }}
@@ -104,7 +104,7 @@ jobs:
     # Mirror only a REAL waiter verdict: cancelled/skipped waiter (head
     # moved, draft, re-run debris) must not stamp red "did not run".
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -116,7 +116,7 @@ jobs:
     name: gate
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - name: Mirror the SM validation verdict
         env:
@@ -128,7 +128,7 @@ jobs:
     name: agents-suite
     needs: sm-validation
     if: always() && (needs.sm-validation.result == 'success' || needs.sm-validation.result == 'failure')
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - name: Mirror the SM validation verdict
         env:

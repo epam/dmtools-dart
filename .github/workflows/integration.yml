@@ -12,7 +12,7 @@ on:
 
 jobs:
   integration:
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 30
     strategy:
       fail-fast: false

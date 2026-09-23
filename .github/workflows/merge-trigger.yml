@@ -44,7 +44,7 @@ permissions:
 
 jobs:
   merge-trigger:
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     # Same-repo guard: PRs from forks must not trigger merges.
     if: >-

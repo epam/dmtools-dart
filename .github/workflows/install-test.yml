@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+        os: [bitrise-runner-dmtools-ci, macos-15-intel, macos-latest, windows-latest]  # linux leg on Bitrise (probe #229)
 
     steps:
       - uses: actions/checkout@v4

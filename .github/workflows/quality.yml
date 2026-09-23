@@ -20,7 +20,7 @@ jobs:
   static:
     # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
     # finish in ~2 min and fail the pipeline early on style/type errors.
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
@@ -35,7 +35,7 @@ jobs:
     # ~17 min serial to ~5-6 min (fixed per-shard overhead ~3 min +
     # suite/4). Each shard uploads its partial lcov + test count; the
     # gate job merges them.
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +110,7 @@ jobs:
     # from the shards, then the crap4dart gates and the badges. Required
     # status check — a red shard fails this job through `needs`.
     needs: [static, test]
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
@@ -191,7 +191,7 @@ jobs:
   agents-suite:
     # Runs in parallel with the test shards — both are required merge checks
     # and the suite hard-gates on its own, so serializing only adds wall time.
-    runs-on: ubuntu-24.04
+    runs-on: bitrise-runner-dmtools-ci
     steps:
       - uses: actions/checkout@v4
         with:

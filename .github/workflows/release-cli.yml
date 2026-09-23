@@ -33,7 +33,7 @@ permissions:
 jobs:
   version-and-tag:
     name: version and tag
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     outputs:
       version: ${{ steps.new_version.outputs.version }}
@@ -334,7 +334,7 @@ jobs:
       needs.version-and-tag.outputs.skip != 'true' &&
       needs.version-and-tag.result == 'success' &&
       needs.build.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

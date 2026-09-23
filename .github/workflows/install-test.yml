@@ -28,7 +28,7 @@ jobs:
   syntax:
     name: install.sh syntax and lint
     # Bitrise Build Hub pool "dmtools-ci" (fallback: ubuntu-latest)
-    runs-on: ubuntu-latest
+    runs-on: bitrise-runner-dmtools-ci
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

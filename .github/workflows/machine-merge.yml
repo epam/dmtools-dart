@@ -35,9 +35,9 @@ jobs:
       github.event.action != 'labeled' ||
       contains(github.event.label.name, 'ai_') ||
       contains(github.event.label.name, 'pr_approved')
-    uses: IstiN/dmtools-agents/.github/workflows/factory-merge.yml@d7d7308b8b4a8a279988ab07d9d7602325914ce3
+    uses: IstiN/dmtools-agents/.github/workflows/factory-merge.yml@ee66f4e5c462206401dee9c010e25e640854cbe9
     with:
-      factory_ref: d7d7308b8b4a8a279988ab07d9d7602325914ce3
+      factory_ref: ee66f4e5c462206401dee9c010e25e640854cbe9
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
       ci_workflow: quality.yml

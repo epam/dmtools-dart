@@ -43,6 +43,7 @@ class ConfluenceHttpClient extends BaseHttpClient {
       dio: dio ?? BaseHttpClient.createDefaultDio(),
       basePath: basePath,
       authValue: '$authType $token',
+      apiVersion: reader.getConfluenceApiVersion(),
     );
   }
 
@@ -50,7 +51,46 @@ class ConfluenceHttpClient extends BaseHttpClient {
     required super.dio,
     required super.basePath,
     required String authValue,
+    this.apiVersion = 'v1',
   }) : _authValue = authValue;
+
+  /// Confluence REST API version for content reads: `v1` (default) or `v2`.
+  ///
+  /// `v2` is required when authenticating with Atlassian granular/scoped API
+  /// tokens (the legacy v1 content endpoints return 401 scope-mismatch under
+  /// such tokens). Sourced from `CONFLUENCE_API_VERSION`.
+  /// Java parity: `Confluence.apiVersion`.
+  final String apiVersion;
+
+  /// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
+  /// Java parity: `Confluence.isApiV2`.
+  bool get isApiV2 => apiVersion.toLowerCase() == 'v2';
+
+  /// Builds a Confluence v2 REST URL: `{siteRoot}/wiki/api/v2/...`.
+  ///
+  /// [basePath] may already end with `/wiki` (direct site URL, e.g.
+  /// `https://org.atlassian.net/wiki`) or omit it (the granular-token gateway
+  /// `https://api.atlassian.com/ex/confluence/{cloudId}`). Normalize so the
+  /// `/wiki` segment appears exactly once. Used when [isApiV2] is true.
+  /// Java parity: `Confluence.pathV2`.
+  String buildUrlV2(String path) {
+    final root = basePath.endsWith('/wiki')
+        ? basePath.substring(0, basePath.length - '/wiki'.length)
+        : basePath;
+    return '$root/wiki/api/v2/$path';
+  }
+
+  /// Performs a GET request against the Confluence v2 API.
+  ///
+  /// Mirrors [get] but routes through [buildUrlV2].
+  Future<String> getV2(String path, {Map<String, dynamic>? queryParams}) async {
+    final response = await dio.get<String>(
+      buildUrlV2(path),
+      queryParameters: queryParams,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
 
   @override
   Map<String, String> get authHeaders => {

@@ -330,6 +330,18 @@ extension PropertyReaderGetters on PropertyReader {
   /// Default Confluence space key. Key: `CONFLUENCE_DEFAULT_SPACE`.
   String? getConfluenceDefaultSpace() => getValue('CONFLUENCE_DEFAULT_SPACE');
 
+  /// Confluence REST API version for content reads: `v1` (default) uses the
+  /// classic `{basePath}/rest/api/...` endpoints; `v2` uses
+  /// `{basePath}/wiki/api/v2/...`, which is required when authenticating with
+  /// Atlassian granular/scoped API tokens (the legacy v1 content endpoints
+  /// return 401 scope-mismatch under such tokens).
+  /// Key: `CONFLUENCE_API_VERSION`, default: `v1`.
+  /// Java parity: `PropertyReader.getConfluenceApiVersion`.
+  String getConfluenceApiVersion() {
+    final v = getValue('CONFLUENCE_API_VERSION');
+    return (v != null && v.trim().isNotEmpty) ? v.trim().toLowerCase() : 'v1';
+  }
+
   // --- ADO ---
 
   /// Azure DevOps organization. Key: `ADO_ORGANIZATION`.

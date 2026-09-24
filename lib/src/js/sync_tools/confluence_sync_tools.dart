@@ -23,6 +23,7 @@ import 'sync_request_helpers.dart';
 
 part 'confluence_sync_page_ops.dart';
 part 'confluence_sync_downloader.dart';
+part 'confluence_sync_tools_helpers.dart';
 
 /// Confluence executors: `confluence_*` tool name → JSON result.
 class ConfluenceSyncTools {
@@ -84,7 +85,25 @@ class ConfluenceSyncTools {
         'Accept': syncJsonContentType,
         'Content-Type': syncJsonContentType,
       },
+      apiVersion: _reader.getConfluenceApiVersion(),
     );
+  }
+
+  /// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
+  /// Granular/scoped tokens require the v2 API; legacy v1 content endpoints
+  /// 401 under them. Java parity: `Confluence.isApiV2`.
+  bool _isApiV2(_Conf config) => config.apiVersion.toLowerCase() == 'v2';
+
+  /// Confluence v2 REST base URL: `{siteRoot}/wiki/api/v2`.
+  ///
+  /// [rootUrl] may already end with `/wiki` (direct site URL) or omit it (the
+  /// granular-token gateway `https://api.atlassian.com/ex/confluence/{id}`).
+  /// Normalize so `/wiki` appears exactly once. Java parity: `Confluence.pathV2`.
+  String _baseUrlV2(_Conf config) {
+    final root = config.rootUrl.endsWith('/wiki')
+        ? config.rootUrl.substring(0, config.rootUrl.length - '/wiki'.length)
+        : config.rootUrl;
+    return '$root/wiki/api/v2';
   }
 
   /// `confluence_search` — GET `content/search?cql={cql}`.
@@ -129,10 +148,20 @@ class ConfluenceSyncTools {
   }
 
   /// `confluence_content_by_id` — GET `content/{id}` with the standard
-  /// expand list.
+  /// expand list (v1), or `pages/{id}?body-format=storage` (v2; required for
+  /// granular/scoped tokens). The v2 response is shape-compatible (`id`,
+  /// `title`, `body.storage.value`).
   String _contentById(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final id = syncAsStr(args['contentId']);
+      if (_isApiV2(config)) {
+        final body = syncBodyOrError(
+          SyncHttpClient.get(
+              '${_baseUrlV2(config)}/pages/$id?body-format=storage',
+              headers: config.headers),
+        );
+        return _applyFormat(body, args['format']);
+      }
       final body = syncBodyOrError(
         _contentGet(config, '$id?expand=$_contentExpand'),
       );
@@ -153,10 +182,16 @@ class ConfluenceSyncTools {
   /// [id], validates the envelope, applies `format=md`, and encodes.
   String _childrenPayload(_Conf config, String id, Map<String, dynamic> args) {
     final format = syncAsStr(args['format']);
-    final resp = _contentGet(
-      config,
-      '$id/child/page?limit=100&expand=$_contentExpand',
-    );
+    // v2: GET /wiki/api/v2/pages?parent-id={id} (granular/scoped tokens).
+    // The v2 list response carries the same `results` array shape.
+    final resp = _isApiV2(config)
+        ? SyncHttpClient.get(
+            '${_baseUrlV2(config)}/pages?parent-id=$id&limit=100&body-format=storage',
+            headers: config.headers)
+        : _contentGet(
+            config,
+            '$id/child/page?limit=100&expand=$_contentExpand',
+          );
     final results = _childrenResults(syncBodyOrError(resp));
     if (results == null) {
       return syncErr('Unexpected children response for $id');
@@ -513,6 +548,7 @@ typedef _Conf = ({
   String rootUrl,
   String baseUrl,
   Map<String, String> headers,
+  String apiVersion,
 });
 
 /// Error payload returned when Confluence config is incomplete.
@@ -669,103 +705,4 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
     ref = resolveConfluencePageUrl(next);
   }
   return (ref: ref, url: current);
-}
-
-/// GETs [url] with the resolved config's auth headers and returns the body
-/// verbatim (the shared tail of the read-only handlers).
-String _syncGetBody(_Conf config, String url) =>
-    syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
-
-/// The local [path] as a `Directory`, `null` when it does not exist (the
-/// shared guard of the directory-consuming handlers).
-Directory? _existingDir(String path) {
-  final dir = Directory(path);
-  return dir.existsSync() ? dir : null;
-}
-
-/// GETs `content/{suffix}` with the resolved config's auth headers.
-SyncHttpResponse _contentGet(_Conf config, String suffix) =>
-    SyncHttpClient.get('${config.baseUrl}/content/$suffix',
-        headers: config.headers);
-
-/// Builds the `content` request payload shared by page create/update
-/// (Java wire format: [id]/version keys appear only when given).
-Map<String, dynamic> _contentPayload({
-  String? id,
-  required String title,
-  required String parentId,
-  required String body,
-  required String space,
-  Map<String, dynamic>? version,
-}) =>
-    {
-      if (id != null) 'id': id,
-      'type': 'page',
-      'title': title,
-      'ancestors': [
-        {'id': parentId},
-      ],
-      'space': {'key': space},
-      if (version != null) 'version': version,
-      'body': {
-        'storage': {'value': body, 'representation': 'storage'},
-      },
-    };
-
-/// GETs `content/{contentId}?expand=version`.
-SyncHttpResponse _versionResponse(_Conf config, String contentId) =>
-    SyncHttpClient.get(
-      '${config.baseUrl}/content/$contentId?expand=version',
-      headers: config.headers,
-    );
-
-/// Reads `version.number` from a `?expand=version` response; `null` when
-/// the response failed or carries no numeric version.
-int? _versionNumberOf(SyncHttpResponse resp) {
-  if (!resp.isOk) return null;
-  final decoded = syncTryDecode(resp.body);
-  if (decoded is! Map) return null;
-  final version = decoded['version'];
-  if (version is Map && version['number'] is num) {
-    return (version['number'] as num).toInt();
-  }
-  return null;
-}
-
-/// The `results` page list of a children response; `null` when the body is
-/// not a results object.
-List<Map<String, dynamic>>? _childrenResults(String body) {
-  final decoded = syncTryDecode(body);
-  if (decoded is! Map || decoded['results'] is! List) return null;
-  return (decoded['results'] as List)
-      .whereType<Map>()
-      .map(Map<String, dynamic>.from)
-      .toList();
-}
-
-/// Whether [format] requests Markdown conversion (Java `isMarkdownFormat`).
-bool _isMarkdownFormat(dynamic format) {
-  final f = format?.toString().toLowerCase() ?? '';
-  return f == 'md' || f == 'markdown';
-}
-
-/// Applies the Java `applyFormat` contract to a JSON response body string:
-/// converts `body.storage.value` to Markdown when requested.
-String _applyFormat(String body, dynamic format) {
-  if (!_isMarkdownFormat(format)) return body;
-  final decoded = syncTryDecode(body);
-  if (decoded is! Map<String, dynamic>) return body;
-  _convertStorageToMarkdown(decoded);
-  return jsonEncode(decoded);
-}
-
-/// Converts one content object's storage body to Markdown, in place.
-void _convertStorageToMarkdown(Map<String, dynamic> content) {
-  final body = content['body'];
-  if (body is! Map) return;
-  final storage = body['storage'];
-  if (storage is! Map || storage['value'] is! String) return;
-  body.remove('export_view'); // large, redundant once Markdown is returned
-  storage['value'] = confluenceStorageToMarkdown(storage['value'] as String);
-  storage['representation'] = 'markdown';
 }

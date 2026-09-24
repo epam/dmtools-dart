@@ -27,30 +27,18 @@ import 'tool_wrapper_generator.dart';
 class EngineSpec {
   /// Creates an engine specification.
   const EngineSpec({
-    this.jobParams = const {},
-    this.ticket,
-    this.contextParams,
-    this.extraGlobals,
+    this.context = const EngineContext(),
     this.registry,
     this.integrationFilter,
     this.workingDirectory,
     this.scriptDirectory,
     this.consolePrefix,
-    this.directParams,
     this.httpFetch,
   });
 
-  /// Injected as `params.jobParams` (ignored when [directParams] is set).
-  final Map<String, dynamic> jobParams;
-
-  /// Injected as `params.ticket` when non-null.
-  final Map<String, dynamic>? ticket;
-
-  /// Extra `params.*` entries (Java `.with()` bindings).
-  final Map<String, dynamic>? contextParams;
-
-  /// Extra top-level JS globals set after `params`.
-  final Map<String, dynamic>? extraGlobals;
+  /// The `params` composition for the script (Java `.with()` bindings,
+  /// `params.jobParams` / `params.ticket`).
+  final EngineContext context;
 
   /// Tool registry; defaults to the full catalog when null.
   final ToolRegistry? registry;
@@ -69,11 +57,6 @@ class EngineSpec {
   /// null keeps the default unprefixed output.
   final String? consolePrefix;
 
-  /// Pre-composed `params` object (worker jobs receive the exact map the
-  /// main engine composed — JSON round-tripped); when set, [jobParams] /
-  /// [ticket] / [contextParams] / [extraGlobals] are ignored for `params`.
-  final Map<String, dynamic>? directParams;
-
   /// Alternate `fetch` transport for the node/js compat layer
   /// (`String? Function(String requestJson)` — JSON in, JSON out).
   /// Defaults to the pooled [SyncHttpClient] transport. Only applied to
@@ -81,6 +64,43 @@ class EngineSpec {
   /// default transport because closures cannot cross a `SendPort`
   /// (dispatch contexts are JSON-marshaled).
   final String? Function(String requestJson)? httpFetch;
+}
+
+/// The `params` composition inputs of an [EngineSpec].
+class EngineContext {
+  /// Creates a context from the job-composition fields.
+  const EngineContext({
+    this.jobParams = const {},
+    this.ticket,
+    this.contextParams,
+    this.extraGlobals,
+    this.directParams,
+  });
+
+  /// Pre-composed `params` object (worker jobs receive the exact map the
+  /// main engine composed — JSON round-tripped); the composition fields
+  /// are ignored.
+  const EngineContext.direct(Map<String, dynamic> params)
+      : directParams = params,
+        jobParams = const {},
+        ticket = null,
+        contextParams = null,
+        extraGlobals = null;
+
+  /// Injected as `params.jobParams` (ignored in [EngineContext.direct]).
+  final Map<String, dynamic> jobParams;
+
+  /// Injected as `params.ticket` when non-null.
+  final Map<String, dynamic>? ticket;
+
+  /// Extra `params.*` entries (Java `.with()` bindings).
+  final Map<String, dynamic>? contextParams;
+
+  /// Extra top-level JS globals set after `params`.
+  final Map<String, dynamic>? extraGlobals;
+
+  /// Pre-composed `params` object; non-null in [EngineContext.direct].
+  final Map<String, dynamic>? directParams;
 }
 
 /// Builds the flattened `params` object the script sees.
@@ -105,15 +125,16 @@ Map<String, dynamic> buildParamsMap({
 /// Wires job context, require loader, tool wrappers, and host functions on
 /// [rt] per [spec].
 NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
-  final params = spec.directParams ??
+  final ctx = spec.context;
+  final params = ctx.directParams ??
       buildParamsMap(
-        jobParams: spec.jobParams,
-        ticket: spec.ticket,
-        contextParams: spec.contextParams,
-        extraGlobals: spec.extraGlobals,
+        jobParams: ctx.jobParams,
+        ticket: ctx.ticket,
+        contextParams: ctx.contextParams,
+        extraGlobals: ctx.extraGlobals,
       );
   rt.setGlobal('params', params);
-  _injectExtraGlobals(rt, spec.extraGlobals);
+  _injectExtraGlobals(rt, ctx.extraGlobals);
   installRequireLoader(rt);
   final registry = spec.registry ?? createDefaultToolRegistry();
   rt.eval(
@@ -152,7 +173,8 @@ NodeCompatHandle? _installNodeCompatIfEnabled(
   QuickjsRuntime rt,
   EngineSpec spec,
 ) {
-  final jobParams = (spec.directParams?['jobParams'] as Map?) ?? spec.jobParams;
+  final ctx = spec.context;
+  final jobParams = (ctx.directParams?['jobParams'] as Map?) ?? ctx.jobParams;
   if (jobParams['nodeCompat'] != true) return null;
   final prefix = spec.consolePrefix;
   return installNodeCompat(

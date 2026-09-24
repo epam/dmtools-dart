@@ -91,7 +91,12 @@ void main() {
 
   setUp(() {
     rt = QuickjsRuntime();
-    wireEngine(rt, const EngineSpec(jobParams: {'nodeCompat': true}));
+    wireEngine(
+      rt,
+      const EngineSpec(
+        context: EngineContext(jobParams: {'nodeCompat': true}),
+      ),
+    );
   });
   tearDown(() => rt.close());
 

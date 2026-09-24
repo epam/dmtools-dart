@@ -78,7 +78,9 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
     final compat = wireEngine(
       runtime,
       EngineSpec(
-        directParams: request.context['params'] as Map<String, dynamic>?,
+        context: EngineContext.direct(
+          request.context['params'] as Map<String, dynamic>,
+        ),
         workingDirectory: request.context['workingDirectory'] as String?,
         scriptDirectory: request.context['scriptDirectory'] as String?,
         consolePrefix: '[jsr:$workerId] ',

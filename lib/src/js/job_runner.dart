@@ -241,10 +241,12 @@ class JsJobRunner {
     return wireEngine(
       rt,
       EngineSpec(
-        jobParams: jobParams,
-        ticket: ticket,
-        contextParams: config.contextParams,
-        extraGlobals: config.extraGlobals,
+        context: EngineContext(
+          jobParams: jobParams,
+          ticket: ticket,
+          contextParams: config.contextParams,
+          extraGlobals: config.extraGlobals,
+        ),
         registry: registry,
         integrationFilter: config.integrationFilter,
         workingDirectory: workingDirectory,

@@ -183,7 +183,7 @@ void _timersProtocolTest() {
     final handle = wireEngine(
       rt,
       EngineSpec(
-        jobParams: const {'nodeCompat': true},
+        context: EngineContext(jobParams: const {'nodeCompat': true}),
         httpFetch: cannedFetch,
         // the fixture's timer family runs under the same drain mode the
         // product uses (block — headless CLI, "setTimeout as sleep")

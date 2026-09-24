@@ -19,6 +19,11 @@
 /// - the host-function helpers ([dispatchAsyncJob]/[waitAsyncJob]) and the
 ///   `runAsync`/`AsyncJob` prelude used by `JsJobRunner`.
 ///
+/// v1 limits: no per-job timeouts; dead workers complete their pending
+/// jobs with an error envelope; worker engines do NOT carry the
+/// `runAsync` prelude — nested `runAsync` inside a dispatched fn is a
+/// `ReferenceError` (the prelude is installed on the main engine only).
+///
 /// Each worker is a full parallel engine on its own isolate. QuickJS
 /// engines are never shared across isolates — one engine per isolate,
 /// always.
@@ -187,6 +192,15 @@ class AsyncJobPool {
 /// `__jsrDispatchHost` implementation: parses the JS call, snapshots the
 /// current overrides, dispatches, and answers with the JSON job id — or a
 /// `{'__jsError': …}` sentinel the prelude rethrows.
+///
+/// This adapter-owned copy intentionally mirrors the host-function half of
+/// `AsyncEnginePool` in `quickjs_runtime` (same `__jsrDispatchHost` /
+/// `__jsrWaitHost` names, same `{'ok, result, error'}` envelope and
+/// `__jsError` sentinel). It lives here because the package variant only
+/// supports pool-level dispatch contexts while the adapter needs per-run
+/// script dir / params / PropertyReader overrides — keep it in lockstep
+/// with the package's `asyncJobPrelude`; the pinning test in
+/// `test/js/async_prelude_contract_test.dart` fails loudly on drift.
 String dispatchAsyncJob(
   AsyncJobPool pool,
   String argsJson, {

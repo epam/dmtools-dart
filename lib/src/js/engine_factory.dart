@@ -23,6 +23,12 @@ import 'sync_http_client.dart';
 import 'tool_bridge.dart';
 import 'tool_wrapper_generator.dart';
 
+/// Virtual filename anchoring the script directory surface for the
+/// nodeCompat layer; the loader base and the nodeCompat install site must
+/// agree on it (a divergence silently breaks relative `require` in
+/// nodeCompat jobs).
+const String _jsrVirtualJobFile = '__jsr_job__.js';
+
 /// Everything needed to wire one QuickJS engine for a job context.
 class EngineSpec {
   /// Creates an engine specification.
@@ -145,7 +151,7 @@ NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
     // `__setScriptDirectory` expects a file path and derives its directory
     // (JS `scriptDirOf`); workers receive the directory already, so anchor
     // it with a virtual job file name.
-    setScriptDirectory(rt, '${spec.scriptDirectory}/__jsr_job__.js');
+    setScriptDirectory(rt, '${spec.scriptDirectory}/$_jsrVirtualJobFile');
   }
   ToolBridge(
     registry: registry,
@@ -195,7 +201,7 @@ NodeCompatHandle? _installNodeCompatIfEnabled(
       timerDrain: TimerDrainMode.block,
       scriptPath: spec.scriptDirectory == null
           ? null
-          : '${spec.scriptDirectory}/__jsr_job__.js',
+          : '${spec.scriptDirectory}/$_jsrVirtualJobFile',
     ),
   );
 }

@@ -19,7 +19,7 @@ import 'dart:isolate';
 
 import 'package:dmtools/src/js/engine_factory.dart';
 import 'package:dmtools/src/js/sync_http_bridge.dart';
-import 'package:quickjs_runtime/src/quickjs_runtime.dart';
+import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'package:test/test.dart';
 
 /// Server isolate entry: binds, reports the port, serves until killed.

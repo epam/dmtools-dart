@@ -20,41 +20,63 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  String writeScript(String body) {
-    final f = File('${tmp.path}/job.js');
-    f.writeAsStringSync(body);
-    return f.path;
-  }
+  test(
+    'setTimeout-as-sleep chain settles before runScript returns',
+    () => _setTimeoutChainTest(tmp),
+  );
+  test(
+    'events + timers fire through the real engine',
+    () => _eventsTimersTest(tmp),
+  );
+  test(
+    'without nodeCompat timers are absent (ReferenceError, like before)',
+    () => _noNodeCompatTest(tmp),
+  );
+}
 
-  String outPath(String name) => '${tmp.path}/$name';
-  bool wrote(String name) => File(outPath(name)).existsSync();
+String _writeScript(Directory tmp, String body) {
+  final f = File('${tmp.path}/job.js');
+  f.writeAsStringSync(body);
+  return f.path;
+}
 
-  test('setTimeout-as-sleep chain settles before runScript returns', () {
-    final path = writeScript('''
+String _outPath(Directory tmp, String name) => '${tmp.path}/$name';
+
+bool _wrote(Directory tmp, String name) =>
+    File(_outPath(tmp, name)).existsSync();
+
+void _setTimeoutChainTest(Directory tmp) {
+  final path = _writeScript(tmp, '''
 function action(params) {
   setTimeout(function () {
-    file_write({ path: ${jsonEncode(outPath('later.txt'))}, content: 'later' });
+    file_write({ path: ${jsonEncode(_outPath(tmp, 'later.txt'))}, content: 'later' });
     setTimeout(function () {
-      file_write({ path: ${jsonEncode(outPath('much-later.txt'))}, content: 'much later' });
+      file_write({ path: ${jsonEncode(_outPath(tmp, 'much-later.txt'))}, content: 'much later' });
     }, 10);
   }, 10);
   return { started: true };
 }
 ''');
-    final result = JsJobRunner().runScript(
-      scriptPath: path,
-      jobParams: {'nodeCompat': true},
-    );
-    expect(jsonDecode(result!)['started'], true);
-    expect(wrote('later.txt'), isTrue,
-        reason: 'block-mode drain settles the 10ms timer');
-    expect(wrote('much-later.txt'), isTrue,
-        reason: 'timers registered inside timer callbacks fire too');
-  });
+  final result = JsJobRunner().runScript(
+    scriptPath: path,
+    jobParams: {'nodeCompat': true},
+  );
+  expect(jsonDecode(result!)['started'], true);
+  expect(
+    _wrote(tmp, 'later.txt'),
+    isTrue,
+    reason: 'block-mode drain settles the 10ms timer',
+  );
+  expect(
+    _wrote(tmp, 'much-later.txt'),
+    isTrue,
+    reason: 'timers registered inside timer callbacks fire too',
+  );
+}
 
-  test('events + timers fire through the real engine', () {
-    final base = outPath('tick-');
-    final path = writeScript('''
+void _eventsTimersTest(Directory tmp) {
+  final base = _outPath(tmp, 'tick-');
+  final path = _writeScript(tmp, '''
 var EventEmitter = require('events');
 var ee = new EventEmitter();
 ee.on('tick', function (v) {
@@ -66,31 +88,34 @@ function action(params) {
   return { registered: ee.listenerCount('tick') };
 }
 ''');
-    final result = JsJobRunner().runScript(
-      scriptPath: path,
-      jobParams: {'nodeCompat': true},
-    );
-    expect(jsonDecode(result!)['registered'], 1);
-    expect(wrote('tick-1.txt'), isTrue,
-        reason: 'immediate fired during the drain');
-    expect(wrote('tick-2.txt'), isTrue, reason: 'due timeout fired too');
-  });
+  final result = JsJobRunner().runScript(
+    scriptPath: path,
+    jobParams: {'nodeCompat': true},
+  );
+  expect(jsonDecode(result!)['registered'], 1);
+  expect(
+    _wrote(tmp, 'tick-1.txt'),
+    isTrue,
+    reason: 'immediate fired during the drain',
+  );
+  expect(_wrote(tmp, 'tick-2.txt'), isTrue, reason: 'due timeout fired too');
+}
 
-  test('without nodeCompat timers are absent (ReferenceError, like before)',
-      () {
-    final path = writeScript('''
+void _noNodeCompatTest(Directory tmp) {
+  final path = _writeScript(tmp, '''
 function action(params) {
   setTimeout(function () {}, 0);
   return { ok: true };
 }
 ''');
-    expect(
-      () => JsJobRunner().runScript(
-        scriptPath: path,
-        jobParams: {},
+  expect(
+    () => JsJobRunner().runScript(scriptPath: path, jobParams: {}),
+    throwsA(
+      isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        contains('setTimeout'),
       ),
-      throwsA(isA<StateError>()
-          .having((e) => e.message, 'message', contains('setTimeout'))),
-    );
-  });
+    ),
+  );
 }

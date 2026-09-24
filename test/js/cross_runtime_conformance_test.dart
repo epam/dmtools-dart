@@ -152,61 +152,74 @@ void main() {
 
   tearDown(() => pool.dispose());
 
-  test('conformance script produces the identical cross-runtime result', () {
-    final runner = JsJobRunner();
-    final result = runner.runScript(
-      scriptPath: 'test/fixtures/cross_runtime_conformance.js',
-      jobParams: const {'parallelWorkers': 2, 'nodeCompat': true},
-      config: JsRunConfig(pool: pool, httpFetch: cannedFetch),
-    );
-    final decoded = jsonDecode(result!) as Map<String, dynamic>;
-    expect(decoded, equals(expected));
-  });
+  test(
+    'conformance script produces the identical cross-runtime result',
+    () => _conformanceResultTest(pool),
+  );
+  test(
+    'timers protocol through the product engine factory',
+    _timersProtocolTest,
+  );
+  test(
+    'knobs off: the same script fails (no runAsync, no console)',
+    () => _knobsOffTest(pool),
+  );
+}
 
-  test('timers protocol through the product engine factory', () {
-    final rt = QuickjsRuntime();
-    try {
-      final handle = wireEngine(
-        rt,
-        EngineSpec(
-          jobParams: const {'nodeCompat': true},
-          httpFetch: cannedFetch,
-          // the fixture's timer family runs under the same drain mode the
-          // product uses (block — headless CLI, "setTimeout as sleep")
-        ),
-      );
-      rt.setGlobal('params', {
-        'jobParams': {'nodeCompat': true},
-      });
-      final errors = <String?>[];
-      rt.eval(
-        File('test/fixtures/cross_runtime_conformance.js').readAsStringSync(),
-        filename: 'cross_runtime_conformance.js',
-        errMsg: errors,
-      );
-      if (errors.isNotEmpty) throw StateError(errors.first!);
-      rt.eval('actionTimers(params)', errMsg: errors);
-      if (errors.isNotEmpty) throw StateError(errors.first!);
-      final stats = handle!.drainTimers();
-      expect(stats, isNotNull);
-      expect(
-        jsonDecode(rt.eval('globalThis.__timersOut')!) as Map<String, dynamic>,
-        equals(expectedTimers),
-      );
-    } finally {
-      rt.close();
-    }
-  });
+void _conformanceResultTest(AsyncJobPool pool) {
+  final runner = JsJobRunner();
+  final result = runner.runScript(
+    scriptPath: 'test/fixtures/cross_runtime_conformance.js',
+    jobParams: const {'parallelWorkers': 2, 'nodeCompat': true},
+    config: JsRunConfig(pool: pool, httpFetch: cannedFetch),
+  );
+  final decoded = jsonDecode(result!) as Map<String, dynamic>;
+  expect(decoded, equals(expected));
+}
 
-  test('knobs off: the same script fails (no runAsync, no console)', () {
-    final runner = JsJobRunner();
-    expect(
-      () => runner.runScript(
-        scriptPath: 'test/fixtures/cross_runtime_conformance.js',
-        jobParams: const {},
-        config: JsRunConfig(pool: pool),
+void _timersProtocolTest() {
+  final rt = QuickjsRuntime();
+  try {
+    final handle = wireEngine(
+      rt,
+      EngineSpec(
+        jobParams: const {'nodeCompat': true},
+        httpFetch: cannedFetch,
+        // the fixture's timer family runs under the same drain mode the
+        // product uses (block — headless CLI, "setTimeout as sleep")
       ),
-      throwsA(anything),
     );
-  });
+    rt.setGlobal('params', {
+      'jobParams': {'nodeCompat': true},
+    });
+    final errors = <String?>[];
+    rt.eval(
+      File('test/fixtures/cross_runtime_conformance.js').readAsStringSync(),
+      filename: 'cross_runtime_conformance.js',
+      errMsg: errors,
+    );
+    if (errors.isNotEmpty) throw StateError(errors.first!);
+    rt.eval('actionTimers(params)', errMsg: errors);
+    if (errors.isNotEmpty) throw StateError(errors.first!);
+    final stats = handle!.drainTimers();
+    expect(stats, isNotNull);
+    expect(
+      jsonDecode(rt.eval('globalThis.__timersOut')!) as Map<String, dynamic>,
+      equals(expectedTimers),
+    );
+  } finally {
+    rt.close();
+  }
+}
+
+void _knobsOffTest(AsyncJobPool pool) {
+  final runner = JsJobRunner();
+  expect(
+    () => runner.runScript(
+      scriptPath: 'test/fixtures/cross_runtime_conformance.js',
+      jobParams: const {},
+      config: JsRunConfig(pool: pool),
+    ),
+    throwsA(anything),
+  );
 }

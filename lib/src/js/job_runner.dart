@@ -23,10 +23,9 @@ import 'dart:io';
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
 import 'package:quickjs_runtime/quickjs_runtime.dart';
-import 'require_loader.dart';
+import 'async_job_pool.dart';
+import 'engine_factory.dart';
 import 'sync_http_client.dart';
-import 'tool_bridge.dart';
-import 'tool_wrapper_generator.dart';
 
 /// Optional configuration for [JsJobRunner.runScript].
 ///
@@ -39,6 +38,8 @@ class JsRunConfig {
     this.registry,
     this.extraGlobals,
     this.contextParams,
+    this.pool,
+    this.httpFetch,
   });
 
   /// Restricts generated wrappers to the named integrations.
@@ -60,6 +61,16 @@ class JsRunConfig {
   /// Null-valued entries must be omitted by the caller (Java's
   /// `JSONObject.put(key, null)` removes the key).
   final Map<String, dynamic>? contextParams;
+
+  /// Worker pool for `runAsync(fn, args)` (defaults to
+  /// [AsyncJobPool.instance]). Only consulted when `jobParams` carries
+  /// `parallelWorkers >= 2`; tests boot a private pool and pass it here.
+  final AsyncJobPool? pool;
+
+  /// Alternate `fetch` transport for the node/js compat layer on the
+  /// main engine (JSON in, JSON out). Defaults to the pooled
+  /// [SyncHttpClient]; see [EngineSpec.httpFetch].
+  final String? Function(String requestJson)? httpFetch;
 }
 
 /// A resolved script source: the [code] plus the [filename] used for eval
@@ -105,26 +116,75 @@ class JsJobRunner {
     final rt = QuickjsRuntime();
     try {
       final reg = cfg.registry ?? createDefaultToolRegistry();
-      _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
-      _setScriptDirectory(rt, scriptPath);
+      final compat =
+          _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
+      if (_parallelWorkers(jobParams) >= 2) {
+        _wireAsyncPool(
+          rt,
+          scriptPath: scriptPath,
+          jobParams: jobParams,
+          ticket: ticket,
+          workingDirectory: workingDirectory,
+          cfg: cfg,
+        );
+      }
+      setScriptDirectory(rt, scriptPath);
       final loaded = _loadJavaScriptCode(scriptPath);
       _evalScript(rt, loaded.code, loaded.filename);
-      return _callAction(rt);
+      final result = _callAction(rt);
+      // nodeCompat scripts may register timers (setTimeout-as-sleep etc.);
+      // block-mode drain (dmtools default) settles them like Node would.
+      compat?.drainTimers();
+      return result;
     } finally {
       rt.close();
     }
   }
 
-  /// Sets the `require` base directory from the top-level script path.
+  /// Effective `parallelWorkers` knob (0 when absent or non-numeric).
   ///
-  /// Java `setCurrentScriptDirectory` parity: the last `/`-separated
-  /// parent, or `''` when there is none — applied verbatim even when the
-  /// "path" is inline code.
-  void _setScriptDirectory(QuickjsRuntime rt, String scriptPath) {
-    rt.eval(
-      '__setScriptDirectory(${jsonEncode(scriptPath)})',
-      filename: '<set_script_dir>',
+  /// Values >= 2 wire the `runAsync` API onto the engine; everything else
+  /// keeps the default sequential surface (default-off, zero deviation).
+  int _parallelWorkers(Map<String, dynamic> jobParams) {
+    final value = jobParams['parallelWorkers'];
+    return value is num ? value.toInt() : 0;
+  }
+
+  /// Wires the `runAsync` host functions and prelude onto [rt].
+  ///
+  /// Uses [JsRunConfig.pool], defaulting to [AsyncJobPool.instance]. When
+  /// the pool is not booted, `runAsync(...)` throws a clear JS error on
+  /// first use (dispatch sentinel) instead of failing the engine wiring.
+  void _wireAsyncPool(
+    QuickjsRuntime rt, {
+    required String scriptPath,
+    required Map<String, dynamic> jobParams,
+    required Map<String, dynamic>? ticket,
+    required String? workingDirectory,
+    required JsRunConfig cfg,
+  }) {
+    final pool = cfg.pool ?? AsyncJobPool.instance;
+    final params = buildParamsMap(
+      jobParams: jobParams,
+      ticket: ticket,
+      contextParams: cfg.contextParams,
+      extraGlobals: cfg.extraGlobals,
     );
+    final scriptDirectory = jsDirectoryOf(scriptPath);
+    rt.registerHostFunction('__jsrDispatchHost', (argsJson) {
+      return dispatchAsyncJob(
+        pool,
+        argsJson,
+        scriptDirectory: scriptDirectory,
+        workingDirectory: workingDirectory,
+        params: params,
+      );
+    });
+    rt.registerHostFunction(
+      '__jsrWaitHost',
+      (argsJson) => waitAsyncJob(pool, argsJson),
+    );
+    rt.eval(asyncJobPrelude, filename: '<async_prelude>');
   }
 
   /// Evaluates the script source, surfacing JS exceptions.
@@ -164,11 +224,13 @@ class JsJobRunner {
   /// Wires up job context, require loader, tool wrappers, and host
   /// functions on [rt].
   ///
+  /// Delegates to [wireEngine] — the shared wiring used verbatim by the
+  /// `runAsync` worker engines, so both paths stay behaviorally identical.
   /// Host functions are registered **after** the generated tool wrappers so
   /// that the direct `file_read` global (returning the raw content string,
   /// as testRunner.js requires) takes precedence over the wrapper that
   /// dispatches through `executeToolViaJava` with an `{content: …}` shape.
-  void _wireRuntime(
+  NodeCompatHandle? _wireRuntime(
     QuickjsRuntime rt,
     ToolRegistry registry,
     Map<String, dynamic> jobParams,
@@ -176,62 +238,21 @@ class JsJobRunner {
     String? workingDirectory,
     JsRunConfig config,
   ) {
-    _injectContext(
+    return wireEngine(
       rt,
-      jobParams,
-      ticket,
-      config.contextParams,
-      config.extraGlobals,
+      EngineSpec(
+        context: EngineContext(
+          jobParams: jobParams,
+          ticket: ticket,
+          contextParams: config.contextParams,
+          extraGlobals: config.extraGlobals,
+        ),
+        registry: registry,
+        integrationFilter: config.integrationFilter,
+        workingDirectory: workingDirectory,
+        httpFetch: config.httpFetch,
+      ),
     );
-    _injectExtraGlobals(rt, config.extraGlobals);
-    installRequireLoader(rt);
-    final wrappers = _buildWrappers(registry, config.integrationFilter);
-    rt.eval(wrappers, filename: '<tool_wrappers>');
-    ToolBridge(registry: registry, workingDirectory: workingDirectory)
-        .registerOn(rt);
-  }
-
-  /// Injects `params` into the JS global scope.
-  ///
-  /// Java `JavaScriptExecutor.execute()` parity: the `params` the script
-  /// sees is ONE flattened map — `jobParams`, `ticket`, `response` and
-  /// every `.with(key, value)` binding (inputFolderPath, workingDirectory,
-  /// customParams, initiator, …) are members of that same object
-  /// (`parameters` → single JSONObject → `params`). Scripts read
-  /// `params.inputFolderPath` / `params.customParams` directly, so the
-  /// extra globals must land inside `params` too (they ALSO stay top-level
-  /// — a superset that keeps both access styles working).
-  void _injectContext(
-    QuickjsRuntime rt,
-    Map<String, dynamic> jobParams,
-    Map<String, dynamic>? ticket,
-    Map<String, dynamic>? contextParams,
-    Map<String, dynamic>? extraGlobals,
-  ) {
-    rt.setGlobal('params', {
-      'jobParams': jobParams,
-      if (ticket != null) 'ticket': ticket,
-      ...?contextParams,
-      ...?extraGlobals,
-    });
-  }
-
-  /// Sets each [extraGlobals] entry as a top-level JS global on [rt].
-  void _injectExtraGlobals(
-    QuickjsRuntime rt,
-    Map<String, dynamic>? extraGlobals,
-  ) {
-    if (extraGlobals == null) return;
-    for (final entry in extraGlobals.entries) {
-      rt.setGlobal(entry.key, entry.value);
-    }
-  }
-
-  /// Generates tool wrappers, optionally narrowed by integration.
-  String _buildWrappers(ToolRegistry registry, Set<String>? filter) {
-    final source = filter == null ? registry : ToolRegistry()
-      ..registerAll(registry.toolsForIntegrations(filter));
-    return const ToolWrapperGenerator().generate(source);
   }
 
   // ── Script source resolution (Java loadJavaScriptCode parity) ─────────

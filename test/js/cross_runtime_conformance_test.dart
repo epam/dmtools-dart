@@ -156,7 +156,7 @@ void main() {
     final runner = JsJobRunner();
     final result = runner.runScript(
       scriptPath:
-          File('test/fixtures/cross_runtime_conformance.js').absolute.path,
+          'test/fixtures/cross_runtime_conformance.js',
       jobParams: const {'parallelWorkers': 2, 'nodeCompat': true},
       config: JsRunConfig(pool: pool, httpFetch: cannedFetch),
     );
@@ -204,7 +204,7 @@ void main() {
     expect(
       () => runner.runScript(
         scriptPath:
-            File('test/fixtures/cross_runtime_conformance.js').absolute.path,
+            'test/fixtures/cross_runtime_conformance.js',
         jobParams: const {},
         config: JsRunConfig(pool: pool),
       ),

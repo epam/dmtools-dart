@@ -40,8 +40,10 @@ class ConfluenceClient {
 
   /// `confluence_test` — connectivity check via GET `user/current`.
   ///
-  /// Returns `success: true` with the user profile on success, or
-  /// `success: false` with the error message on failure.
+  /// `user/current` is not part of the granular/scoped-token catalog and 401s
+  /// under Atlassian API tokens with scopes (and when `CONFLUENCE_API_VERSION`
+  /// is `v2`). Fall back to a space listing (`GET space?limit=1`), which scoped
+  /// tokens can authorize. Java parity: `Confluence.testConnection`.
   Future<Map<String, dynamic>> testConnection() async {
     try {
       final body = await _http.get('user/current');
@@ -51,6 +53,24 @@ class ConfluenceClient {
         'message': 'Confluence connection successful',
         'user': user['displayName'] ?? '',
         'email': user['email'] ?? '',
+      };
+    } on Object {
+      return _testConnectionViaSpaceListing();
+    }
+  }
+
+  /// Health-check fallback for scoped tokens: list one space.
+  Future<Map<String, dynamic>> _testConnectionViaSpaceListing() async {
+    try {
+      final body = await _http.get('space', queryParams: {'limit': '1'});
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final results = json['results'] as List<dynamic>?;
+      return {
+        'success': true,
+        'message': 'Confluence connection successful (via space listing; '
+            'user/current unavailable with this token)',
+        'user': 'scoped-token',
+        'spacesVisible': results?.length ?? 0,
       };
     } on Object catch (e) {
       return {
@@ -222,6 +242,16 @@ class ConfluenceClient {
   /// Returns the page with [id] including its storage body, export view,
   /// ancestors, and version (the Java `contentById` expand list).
   Future<Map<String, dynamic>> getPageById(String id) async {
+    if (_http.isApiV2) {
+      // Confluence v2 API: GET /wiki/api/v2/pages/{id}?body-format=storage.
+      // Response JSON is compatible with the v1 page shape (id, title,
+      // body.storage.value). Required for granular/scoped tokens.
+      final body = await _http.getV2(
+        'pages/$id',
+        queryParams: {'body-format': 'storage'},
+      );
+      return jsonDecode(body) as Map<String, dynamic>;
+    }
     final body = await _http.get(
       'content/$id',
       queryParams: {
@@ -284,8 +314,20 @@ class ConfluenceClient {
   /// `confluence_get_content_children` — GET `content/{id}/child/page`.
   ///
   /// Returns the direct child pages of the page with [id].
-  Future<List<Map<String, dynamic>>> getContentChildren(String id) =>
-      _getList('content/$id/child/page');
+  ///
+  /// Under `CONFLUENCE_API_VERSION=v2` uses `GET /wiki/api/v2/pages?parent-id=`,
+  /// which granular/scoped tokens can authorize (the legacy v1 child endpoint
+  /// 401s under them). Java parity: `Confluence.getChildrenOfContentById`.
+  Future<List<Map<String, dynamic>>> getContentChildren(String id) {
+    if (_http.isApiV2) {
+      return _getListV2('pages', queryParams: {
+        'parent-id': id,
+        'limit': '100',
+        'body-format': 'storage',
+      });
+    }
+    return _getList('content/$id/child/page');
+  }
 
   /// `confluence_move_page` — PUT `content/{pageId}/move`.
   ///
@@ -678,6 +720,17 @@ class ConfluenceClient {
     Map<String, dynamic>? queryParams,
   }) async {
     final body = await _http.get(path, queryParams: queryParams);
+    return _resultList(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// [_getList] against the Confluence v2 API (used when [isApiV2]).
+  ///
+  /// v2 list responses carry the same `results` array shape.
+  Future<List<Map<String, dynamic>>> _getListV2(
+    String path, {
+    Map<String, dynamic>? queryParams,
+  }) async {
+    final body = await _http.getV2(path, queryParams: queryParams);
     return _resultList(jsonDecode(body) as Map<String, dynamic>);
   }
 

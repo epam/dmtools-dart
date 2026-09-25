@@ -41,11 +41,11 @@ jobs:
     # a branch ref would fail every */10 cron tick. Flip in lockstep with
     # the submodule when dmtools-agents#424 merges.
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@6a6a231cc5e67734c3cb1598dcfd3366e1baa646
+    uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@d99fc8c0ab678e8bba3ccf7545b7a58d29d7cbaa
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: 6a6a231cc5e67734c3cb1598dcfd3366e1baa646
+      factory_ref: d99fc8c0ab678e8bba3ccf7545b7a58d29d7cbaa
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
       # Bridge-free mode (factory #510): the tick stamps the three required

@@ -15,6 +15,7 @@ import 'dart:io';
 import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../agents/teammate_job.dart';
+import '../compile/agent_pack_compiler.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/job_runner.dart';
@@ -79,6 +80,7 @@ class CliDispatcher {
     '--list-jobs': (_) => _printJobs(),
     'doctor': (_) => _runDoctor(),
     'run': _runJob,
+    'compile': _runCompile,
     'list': _listTools,
     'interactive': (_) => _interactiveStub(),
     'i': (_) => _interactiveStub(),
@@ -109,6 +111,130 @@ class CliDispatcher {
     _writer(DoctorCommand(reader: _reader).run());
     return 0;
   }
+
+  /// Builds a versioned agent pack (zip + manifest + sha256) — dm.ai #595.
+  ///
+  /// Mirrors the Java `CompileCommand`: parses `entry.json` plus
+  /// `--agent-root` / `--version` / `--versions-file` / `--out` /
+  /// `--source-commit` and delegates to [AgentPackCompiler].
+  int _runCompile(List<String> rest) {
+    final guardExit = _compileGuardExit(rest);
+    if (guardExit != null) return guardExit;
+    final agentName = _stripJsonExtension(_basename(rest.first));
+    final agentRoot =
+        _optionValue(rest, '--agent-root') ?? _dirname(rest.first);
+    final version = _resolveCompileVersion(rest, agentName);
+    if (version == null) {
+      _writer(
+          'Error: --version <semver> or --versions-file versions.json is required');
+      return 1;
+    }
+    try {
+      final result = AgentPackCompiler(agentRoot).compile(
+          File(rest.first),
+          version,
+          _optionValue(rest, '--source-commit') ??
+              _detectSourceCommit(agentRoot),
+          Directory(_optionValue(rest, '--out') ?? 'dist'));
+      _printCompileResult(agentName, version, result);
+      return 0;
+    } on AgentPackException catch (e) {
+      _writer('Error: ${e.message}');
+      return 1;
+    }
+  }
+
+  /// Handles the help/usage and missing-entry guard cases; returns the exit
+  /// code to short-circuit with, or `null` to proceed with the build.
+  int? _compileGuardExit(List<String> rest) {
+    if (rest.isEmpty || rest.first == '--help' || rest.first == '-h') {
+      _writer(_compileUsage);
+      return rest.isEmpty ? 1 : 0;
+    }
+    if (!File(rest.first).existsSync()) {
+      _writer('Error: entry config not found: ${rest.first}');
+      return 1;
+    }
+    return null;
+  }
+
+  /// Version precedence: explicit `--version`, else the agent's versions.json entry.
+  String? _resolveCompileVersion(List<String> rest, String agentName) =>
+      _optionValue(rest, '--version') ??
+      _versionFromFile(_optionValue(rest, '--versions-file'), agentName);
+
+  /// Prints the successful compile summary.
+  void _printCompileResult(
+      String agentName, String version, PackResult result) {
+    _writer('Agent pack built successfully:');
+    _writer('  agent:    $agentName');
+    _writer('  version:  $version');
+    _writer('  files:    ${result.fileCount}');
+    _writer('  zip:      ${result.zipFile.path}');
+    _writer('  manifest: ${result.manifestFile.path}');
+    _writer('  sha256:   ${result.shaFile.path}');
+  }
+
+  static const String _compileUsage = '''
+Usage: dmtools compile <entry.json> [options]
+
+Build a versioned, self-contained agent pack (zip + manifest + sha256).
+
+Options:
+  --agent-root <dir>             Agents checkout root (default: entry.json's directory)
+  --version <semver>             Pack version (required unless --versions-file)
+  --versions-file versions.json  Per-agent versions map
+  --out <dir>                    Output directory (default: ./dist)
+  --source-commit <sha>          Source commit (default: git rev-parse HEAD)
+''';
+
+  /// Reads the agent's version from a `versions.json` map; `null` when absent.
+  String? _versionFromFile(String? versionsFile, String agentName) {
+    if (versionsFile == null) return null;
+    final file = File(versionsFile);
+    if (!file.existsSync()) return null;
+    try {
+      final decoded = jsonDecode(file.readAsStringSync());
+      if (decoded is Map<String, dynamic>) {
+        final version = decoded[agentName];
+        return version is String ? version : null;
+      }
+    } on FormatException {
+      return null;
+    }
+    return null;
+  }
+
+  /// Best-effort source commit: `git rev-parse HEAD` in the agent root.
+  String _detectSourceCommit(String agentRoot) {
+    try {
+      final result = Process.runSync('git', ['rev-parse', 'HEAD'],
+          workingDirectory: agentRoot);
+      final out = (result.stdout as String).trim();
+      if (result.exitCode == 0 && out.isNotEmpty) return out;
+    } on Object {
+      // fall through — git unavailable or not a repo
+    }
+    return 'unknown';
+  }
+
+  String? _optionValue(List<String> args, String flag) {
+    for (var i = 0; i < args.length - 1; i++) {
+      if (args[i] == flag) return args[i + 1];
+    }
+    return null;
+  }
+
+  String _basename(String path) => path.replaceAll('\\', '/').split('/').last;
+
+  String _dirname(String path) {
+    final idx = path.replaceAll('\\', '/').lastIndexOf('/');
+    return idx >= 0 ? path.substring(0, idx) : '.';
+  }
+
+  String _stripJsonExtension(String fileName) => fileName.endsWith('.json')
+      ? fileName.substring(0, fileName.length - '.json'.length)
+      : fileName;
 
   /// Runs a job: resolve config → parse name/params → execute → print result.
   ///

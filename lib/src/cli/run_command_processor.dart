@@ -14,6 +14,7 @@ import 'dart:io';
 import 'config_merger.dart';
 import 'encoding_detector.dart';
 import 'job_registry.dart';
+import '../pack/agent_pack_resolver.dart';
 
 /// Processes `dmtools run` command arguments into resolved config JSON.
 class RunCommandProcessor {
@@ -39,6 +40,16 @@ class RunCommandProcessor {
     }
     final target = args[1];
     final runArgs = _extractRunArgs(args.sublist(2));
+
+    // dm.ai #579: a versioned agent pack (local .zip or https URL) — resolve to
+    // the unpacked, verified cache and run the entry config from there.
+    final packResolver = AgentPackResolver();
+    if (packResolver.isPack(target)) {
+      final pack = packResolver.resolve(target);
+      return _processConfigFile(pack.entryFile.path, runArgs,
+          packRoot: pack.packRoot);
+    }
+
     if (target.endsWith('.js')) {
       return _processJsFile(target, runArgs);
     }
@@ -147,7 +158,12 @@ class RunCommandProcessor {
   // ------------------------------------------------------------------
 
   /// Loads, resolves and merges a JSON config file.
-  String _processConfigFile(String path, _RunArgs runArgs) {
+  ///
+  /// When [packRoot] is set (running from an agent pack, dm.ai #579), the
+  /// resolved config's repo-relative path references are rewritten to absolute
+  /// paths inside the unpacked pack so the agent runs with no repo checkout.
+  String _processConfigFile(String path, _RunArgs runArgs,
+      {Directory? packRoot}) {
     final file = File(path);
     if (!file.existsSync()) {
       throw ArgumentError('Config file not found: $path');
@@ -155,6 +171,9 @@ class RunCommandProcessor {
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
     config = _ParentConfigResolver().resolve(config, file.parent.path);
+    if (packRoot != null) {
+      AgentPackResolver().rewritePathsToPackRoot(config, packRoot);
+    }
     config = _applyEncodedConfig(config, runArgs.encodedConfig);
     _injectParams(config, runArgs.overrides);
     return jsonEncode(config);

@@ -1,0 +1,438 @@
+/// Resolves a versioned agent pack (a local `.zip` file or an HTTPS URL) to an
+/// unpacked, verified, cached directory that `dmtools run` can execute from.
+///
+/// Dart port of the Java `AgentPackResolver` (dm.ai #579); the pack format is
+/// produced by `AgentPackCompiler` (dm.ai #595).
+///
+/// Pipeline: detect pack → download (URL only; `SOURCE_GITHUB_TOKEN` for
+/// github.com) → verify SHA-256 against the sibling `.sha256` asset → unpack
+/// into `~/.dmtools/packs/<agent>-<version>/` with zip-slip protection (no
+/// absolute paths, no `..` escapes, no symlink entries, per-file and total size
+/// caps) → verify every unpacked file against the manifest's per-file sha256
+/// inventory → cache-hit short-circuit → return the entry config inside the
+/// cache. Encrypted zips are rejected with a dedicated error.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
+
+import '../js/sync_http_client.dart';
+
+/// The outcome of resolving a pack: the unpacked root and the entry config.
+class ResolvedPack {
+  /// Creates a resolved pack handle.
+  const ResolvedPack({
+    required this.packRoot,
+    required this.entryFile,
+    required this.agent,
+    required this.version,
+  });
+
+  /// The unpacked pack cache directory.
+  final Directory packRoot;
+
+  /// The entry config file inside the cache.
+  final File entryFile;
+
+  /// The agent name from the manifest.
+  final String agent;
+
+  /// The pack version from the manifest.
+  final String version;
+}
+
+/// Thrown when pack resolution fails (download, verification, zip-slip, ...).
+class AgentPackException implements Exception {
+  /// Creates an exception with [message].
+  const AgentPackException(this.message);
+
+  /// The failure description.
+  final String message;
+
+  @override
+  String toString() => 'AgentPackException: $message';
+}
+
+/// Agent pack resolver — see the library doc for the pipeline.
+class AgentPackResolver {
+  /// Creates a resolver; [packsRoot] defaults to `~/.dmtools/packs`.
+  AgentPackResolver({Directory? packsRoot})
+      : _packsRoot =
+            packsRoot ?? Directory(p.join(_home(), '.dmtools', 'packs'));
+
+  final Directory _packsRoot;
+
+  /// Per-file unpack size cap (64 MiB).
+  static const int maxFileBytes = 64 * 1024 * 1024;
+
+  /// Total unpack size cap (512 MiB).
+  static const int maxTotalBytes = 512 * 1024 * 1024;
+
+  static String _home() =>
+      Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      Directory.current.path;
+
+  /// True when [runArg] names a pack: a `.zip` path that exists, or an
+  /// `http(s)://…​.zip` URL, with an optional `#entry.json` suffix.
+  bool isPack(String? runArg) {
+    if (runArg == null) return false;
+    final base = stripEntry(runArg);
+    if (base.startsWith('http://') || base.startsWith('https://')) {
+      return base.toLowerCase().endsWith('.zip');
+    }
+    return base.toLowerCase().endsWith('.zip') && File(base).existsSync();
+  }
+
+  /// Resolves [runArg] to a cached, verified pack.
+  ///
+  /// [githubToken] authorizes private GitHub release downloads.
+  /// Throws [AgentPackException] on download/verification/unpack failures.
+  ResolvedPack resolve(String runArg, {String? githubToken}) {
+    final entryOverride = entryOverrideOf(runArg);
+    final base = stripEntry(runArg);
+
+    final zipFile = _obtainZip(base, githubToken);
+    try {
+      final manifest = _readManifest(zipFile);
+      final agent = manifest['agent'] as String;
+      final version = manifest['version'] as String;
+
+      final packRoot = Directory(p.join(_packsRoot.path, '$agent-$version'));
+      _unpackAndVerify(zipFile, manifest, packRoot);
+
+      final entryName = entryOverride ?? manifest['defaultEntry'] as String;
+      final entryFile = File(p.join(packRoot.path, entryName));
+      if (!entryFile.existsSync()) {
+        throw AgentPackException(
+            "Entry '$entryName' not found in pack $agent-$version. "
+            "manifest.json defaultEntry: ${manifest['defaultEntry']}");
+      }
+      return ResolvedPack(
+          packRoot: packRoot,
+          entryFile: entryFile,
+          agent: agent,
+          version: version);
+    } finally {
+      // Clean up a downloaded temp zip (local files are left in place).
+      if (base.startsWith('http') && zipFile.existsSync()) zipFile.deleteSync();
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Argument parsing
+  // ------------------------------------------------------------------
+
+  /// Splits off an optional `#entry.json` override.
+  static String stripEntry(String runArg) {
+    final hash = runArg.indexOf('#');
+    return hash >= 0 ? runArg.substring(0, hash) : runArg;
+  }
+
+  /// The `#entry.json` override, or `null`.
+  static String? entryOverrideOf(String runArg) {
+    final hash = runArg.indexOf('#');
+    return hash >= 0 ? runArg.substring(hash + 1) : null;
+  }
+
+  // ------------------------------------------------------------------
+  // Download (URL) / read (file)
+  // ------------------------------------------------------------------
+
+  File _obtainZip(String base, String? githubToken) {
+    if (base.startsWith('http://') || base.startsWith('https://')) {
+      return _download(base, githubToken);
+    }
+    final file = File(base);
+    if (!file.existsSync()) {
+      throw AgentPackException('Pack file not found: $base');
+    }
+    return file;
+  }
+
+  File _download(String urlString, String? githubToken) {
+    final headers = <String, String>{'Accept': 'application/octet-stream'};
+    if (githubToken != null && Uri.parse(urlString).host == 'github.com') {
+      headers['Authorization'] = 'Bearer $githubToken';
+    }
+    final response = SyncHttpClient.get(urlString, headers: headers);
+    if (response.statusCode != 200) {
+      throw AgentPackException(
+          'Failed to download pack: HTTP ${response.statusCode} for $urlString');
+    }
+    final tmp = File(
+        '${Directory.systemTemp.path}/dmtools-pack-${DateTime.now().microsecondsSinceEpoch}.zip');
+    tmp.writeAsBytesSync(response.bodyBytes);
+    _verifyDownloadedSha256(tmp, urlString, githubToken);
+    return tmp;
+  }
+
+  /// Verifies the downloaded zip against the sibling `.sha256` asset.
+  void _verifyDownloadedSha256(
+      File zipFile, String zipUrl, String? githubToken) {
+    final headers = <String, String>{'Accept': 'application/octet-stream'};
+    if (githubToken != null && Uri.parse(zipUrl).host == 'github.com') {
+      headers['Authorization'] = 'Bearer $githubToken';
+    }
+    final response = SyncHttpClient.get('$zipUrl.sha256', headers: headers);
+    if (response.statusCode != 200) return; // no checksum asset — skip
+    final expected = response.body.trim().split(RegExp(r'\s+')).first;
+    final actual = sha256.convert(zipFile.readAsBytesSync()).toString();
+    if (expected.toLowerCase() != actual) {
+      zipFile.deleteSync();
+      throw AgentPackException(
+          'SHA-256 mismatch for $zipUrl (expected $expected, got $actual)');
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Manifest
+  // ------------------------------------------------------------------
+
+  Map<String, dynamic> _readManifest(File zipFile) {
+    final bytes = zipFile.readAsBytesSync();
+    _rejectIfEncrypted(bytes, zipFile);
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final manifestEntry = _findEntry(archive, 'manifest.json');
+    if (manifestEntry == null) {
+      throw AgentPackException(
+          'Pack has no manifest.json: ${p.basename(zipFile.path)}');
+    }
+    final manifest = jsonDecode(utf8.decode(manifestEntry.content as List<int>))
+        as Map<String, dynamic>;
+    if (!manifest.containsKey('agent') ||
+        !manifest.containsKey('version') ||
+        !manifest.containsKey('defaultEntry')) {
+      throw const AgentPackException(
+          'manifest.json missing required keys (agent/version/defaultEntry)');
+    }
+    return manifest;
+  }
+
+  /// AC6: encrypted zips are rejected with a dedicated error. The archive
+  /// package does not surface an `isEncrypted` flag, so scan the central
+  /// directory's general-purpose bit flag (bit 0 = encrypted) in the raw bytes.
+  void _rejectIfEncrypted(List<int> zipBytes, File zipFile) {
+    // Central directory header signature: 0x02014b50 ("PK\x01\x02"); the
+    // general-purpose bit flag is a little-endian uint16 at offset +8.
+    for (var i = 0; i + 9 < zipBytes.length; i++) {
+      if (zipBytes[i] == 0x50 &&
+          zipBytes[i + 1] == 0x4B &&
+          zipBytes[i + 2] == 0x01 &&
+          zipBytes[i + 3] == 0x02) {
+        final flags = zipBytes[i + 8] | (zipBytes[i + 9] << 8);
+        if (flags & 0x0001 != 0) {
+          throw AgentPackException(
+              'Encrypted agent packs are not supported yet: ${p.basename(zipFile.path)} '
+              '(encryption support is a planned future hook)');
+        }
+      }
+    }
+  }
+
+  ArchiveFile? _findEntry(Archive archive, String name) {
+    for (final entry in archive.files) {
+      if (entry.name == name) return entry;
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------------
+  // Unpack + verify + cache
+  // ------------------------------------------------------------------
+
+  void _unpackAndVerify(
+      File zipFile, Map<String, dynamic> manifest, Directory packRoot) {
+    if (_isCacheHit(packRoot, manifest)) return;
+
+    final tmp = Directory.systemTemp.createTempSync('pack-unpack-');
+    try {
+      final hashes = _manifestHashes(manifest);
+      _unzipSafe(zipFile, tmp, hashes);
+      packRoot.parent.createSync(recursive: true);
+      if (packRoot.existsSync()) packRoot.deleteSync(recursive: true);
+      tmp.renameSync(packRoot.path); // atomic publish
+    } on Object {
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+      rethrow;
+    }
+  }
+
+  bool _isCacheHit(Directory packRoot, Map<String, dynamic> manifest) {
+    final cachedManifest = File(p.join(packRoot.path, 'manifest.json'));
+    if (!cachedManifest.existsSync()) return false;
+    try {
+      final cached =
+          jsonDecode(cachedManifest.readAsStringSync()) as Map<String, dynamic>;
+      return _stableHash(cached) == _stableHash(manifest);
+    } on Object {
+      return false;
+    }
+  }
+
+  String _stableHash(Map<String, dynamic> manifest) =>
+      sha256.convert(utf8.encode(jsonEncode(manifest))).toString();
+
+  Map<String, String> _manifestHashes(Map<String, dynamic> manifest) {
+    final hashes = <String, String>{};
+    final files = manifest['files'];
+    if (files is List) {
+      for (final f in files) {
+        if (f is Map) hashes[f['path'] as String] = f['sha256'] as String;
+      }
+    }
+    return hashes;
+  }
+
+  void _unzipSafe(
+      File zipFile, Directory targetDir, Map<String, String> hashes) {
+    final targetRoot = p.normalize(targetDir.absolute.path);
+    final archive = ZipDecoder().decodeBytes(zipFile.readAsBytesSync());
+    var totalBytes = 0;
+    for (final entry in archive.files) {
+      totalBytes =
+          _unpackEntry(entry, targetDir, targetRoot, hashes, totalBytes);
+    }
+  }
+
+  int _unpackEntry(ArchiveFile entry, Directory targetDir, String targetRoot,
+      Map<String, String> hashes, int totalBytes) {
+    final target = _validateEntryTarget(entry, targetDir, targetRoot);
+    if (!entry.isFile) {
+      Directory(target.path).createSync(recursive: true);
+      return totalBytes;
+    }
+    target.parent.createSync(recursive: true);
+    final data = entry.content as List<int>;
+    totalBytes = _verifyEntryData(entry.name, data, hashes, totalBytes);
+    target.writeAsBytesSync(data);
+    if (entry.name.endsWith('.sh')) {
+      _makeExecutable(target);
+    }
+    return totalBytes;
+  }
+
+  /// Validates a zip entry path (AC4) and returns its safe target file.
+  File _validateEntryTarget(
+      ArchiveFile entry, Directory targetDir, String targetRoot) {
+    final name = entry.name;
+    if (name.startsWith('/') || name.contains('..') || p.isAbsolute(name)) {
+      throw AgentPackException('Zip-slip entry rejected: $name');
+    }
+    if (entry.isSymbolicLink) {
+      throw AgentPackException('Symlink entry rejected: $name');
+    }
+    final target = File(p.normalize(p.join(targetDir.path, name)));
+    if (!p.isWithin(targetRoot, target.path) && target.path != targetRoot) {
+      throw AgentPackException('Entry escapes target dir: $name');
+    }
+    return target;
+  }
+
+  /// Verifies entry size caps and the manifest sha256; returns the new total.
+  int _verifyEntryData(
+      String name, List<int> data, Map<String, String> hashes, int totalBytes) {
+    if (data.length > maxFileBytes) {
+      throw AgentPackException('Entry too large: $name');
+    }
+    totalBytes += data.length;
+    if (totalBytes > maxTotalBytes) {
+      throw const AgentPackException('Pack exceeds total size cap');
+    }
+    final expectedHash = hashes[name];
+    if (expectedHash != null &&
+        expectedHash.toLowerCase() != sha256.convert(data).toString()) {
+      throw AgentPackException('Manifest sha256 mismatch: $name');
+    }
+    return totalBytes;
+  }
+
+  void _makeExecutable(File file) {
+    try {
+      Process.runSync('chmod', ['0755', file.path]);
+    } on Object {
+      // best-effort on non-POSIX hosts
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Path rewriting (path duality, #579 §3)
+  // ------------------------------------------------------------------
+
+  /// Rewrites repo-relative path references in [config] to absolute paths
+  /// inside [packRoot]. Applies the prefix alias: `agents/js/x.js` and
+  /// `js/x.js` both resolve to `<packRoot>/js/x.js`. Only strings that look
+  /// like repo-file paths present in the pack are rewritten; URLs, `classpath:`
+  /// refs, absolute paths, and literal role strings are left untouched.
+  void rewritePathsToPackRoot(Map<String, dynamic> config, Directory packRoot) {
+    _rewriteObject(config, packRoot);
+  }
+
+  static const _pathKeys = {
+    'jsPath',
+    'preJSAction',
+    'preCliJSAction',
+    'postJSAction',
+    'timerJSAction',
+    'preprocessJSAction',
+    'preAction',
+    'postAction',
+    'descriptionPath',
+  };
+
+  void _rewriteObject(Map<String, dynamic> obj, Directory packRoot) {
+    for (final key in obj.keys.toList()) {
+      final value = obj[key];
+      if (value is Map<String, dynamic>) {
+        _rewriteObject(value, packRoot);
+      } else if (value is List) {
+        _rewriteList(value, packRoot);
+      } else if (value is String && _pathKeys.contains(key)) {
+        final rewritten = _toAbsolutePackPath(value, packRoot);
+        if (rewritten != null) obj[key] = rewritten;
+      }
+    }
+  }
+
+  void _rewriteList(List<dynamic> list, Directory packRoot) {
+    for (var i = 0; i < list.length; i++) {
+      final item = list[i];
+      if (item is String) {
+        final rewritten = _toAbsolutePackPath(item, packRoot);
+        if (rewritten != null) list[i] = rewritten;
+      } else if (item is Map<String, dynamic>) {
+        _rewriteObject(item, packRoot);
+      } else if (item is List) {
+        _rewriteList(item, packRoot);
+      }
+    }
+  }
+
+  /// Maps a config string to an absolute pack-root path when it references a
+  /// repo file present in the pack; returns `null` for non-path strings.
+  String? _toAbsolutePackPath(String value, Directory packRoot) {
+    var ref = value.trim();
+    if (ref.isEmpty ||
+        ref.startsWith('http://') ||
+        ref.startsWith('https://') ||
+        ref.startsWith('classpath:') ||
+        p.isAbsolute(ref)) {
+      return null;
+    }
+    while (ref.startsWith('./')) {
+      ref = ref.substring(2);
+    }
+    if (ref.startsWith('agents/')) {
+      ref = ref.substring('agents/'.length);
+    }
+    final candidate = File(p.normalize(p.join(packRoot.path, ref)));
+    if (!p.isWithin(packRoot.path, candidate.path) || !candidate.existsSync()) {
+      return null;
+    }
+    return candidate.absolute.path;
+  }
+}

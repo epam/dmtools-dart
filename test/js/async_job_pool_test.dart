@@ -29,6 +29,7 @@ void main() {
   _registerWorkerModuleTests(fixture);
   _registerPoolDispatchTests(fixture);
   _registerPoolErrorTests(fixture);
+  _registerDrainPolicyTests(fixture);
 }
 
 /// Shared fixtures for one test run (temp dir + booted worker pool).
@@ -331,5 +332,48 @@ void _registerPoolErrorTests(_Fixture f) {
         contains('no live workers'),
       )),
     );
+  });
+}
+
+/// Timer-drain error policy (epam/dmtools-dart#243): the MAIN engine
+/// propagates a drain failure — the script's timer chain is part of the
+/// run's contract (side-effect timers, setTimeout-as-sleep). A WORKER
+/// swallows it with a log line: the dispatched fn's own result/error IS
+/// the job and must not be masked by a late timer callback.
+void _registerDrainPolicyTests(_Fixture f) {
+  test('main engine: a throwing timer callback fails the whole run', () {
+    expect(
+      () => f.runScript(
+        '''
+function action(params) {
+  setTimeout(function () { throw new Error('drain-boom'); }, 0);
+  return 'ok';
+}
+''',
+        jobParams: const {'nodeCompat': true, 'parallelWorkers': 2},
+      ),
+      throwsA(predicate(
+        (e) => e.toString().contains('drain-boom'),
+        'error mentioning drain-boom',
+      )),
+    );
+  });
+
+  test('worker: a throwing late timer does not mask the fn result', () {
+    final result = f.runScript(
+      '''
+function action(params) {
+  return runAsync(
+    function () {
+      setTimeout(function () { throw new Error('late-boom'); }, 0);
+      return 42;
+    },
+    null
+  ).wait();
+}
+''',
+      jobParams: const {'nodeCompat': true, 'parallelWorkers': 2},
+    );
+    expect(result, '42');
   });
 }

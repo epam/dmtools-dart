@@ -134,6 +134,12 @@ class JsJobRunner {
       final result = _callAction(rt);
       // nodeCompat scripts may register timers (setTimeout-as-sleep etc.);
       // block-mode drain (dmtools default) settles them like Node would.
+      // DRAIN-ERROR POLICY (epam/dmtools-dart#243): the MAIN engine
+      // deliberately propagates a drain failure — for a script the timer
+      // chain IS part of the run's contract (side-effect timers, sleep
+      // pattern), and silently dropping callbacks would report success
+      // with lost effects. Worker dispatches swallow-with-a-log instead
+      // (async_job_pool.dart): there the fn's return value is the job.
       compat?.drainTimers();
       return result;
     } finally {

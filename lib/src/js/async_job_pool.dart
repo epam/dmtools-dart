@@ -35,6 +35,8 @@
 /// an error envelope).
 library;
 
+import 'dart:io';
+
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 
 import '../config/property_reader.dart';
@@ -90,11 +92,17 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
       fnSource: request.fnSource,
       argsJson: request.argsJson,
     );
-    // dispatched fns can register timers; drain them once the job settles
+    // dispatched fns can register timers; drain them once the job settles.
+    // DRAIN-ERROR POLICY (epam/dmtools-dart#243): a worker swallows a drain
+    // failure — with a log line — because the dispatched function's own
+    // result/error IS the job and must not be masked by a late timer
+    // callback. The MAIN engine deliberately propagates instead (see
+    // JsJobRunner): there the timer chain is part of the run's contract.
     try {
       compat?.drainTimers();
-    } catch (_) {
-      // a timer drain failure must not mask the job's own result/error
+    } catch (e) {
+      stderr.writeln('[jsr:$workerId] timer drain failed (envelope '
+          'unchanged): $e');
     }
     return result;
   } catch (e) {

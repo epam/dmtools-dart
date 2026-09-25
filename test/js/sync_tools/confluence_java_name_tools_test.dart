@@ -52,6 +52,7 @@ void main() {
   searchToolTests();
   updateToolTests();
   contentsByUrlsTests();
+  contentsByUrlsMarkdownTests();
   uploadAttachmentToolTests();
   uploadAttachmentsToolTests();
   downloadPagesToolTests();
@@ -288,13 +289,17 @@ void contentsByUrlsTests() {
       expect(results.first['id'], '777');
     });
 
-    test('contents_by_urls converts storage on request', () {
+    test('contents_by_urls resolves display URLs via title+space', () {
       final base = 'http://127.0.0.1:${server.port}';
       final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
-        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
-        'format': 'md',
+        'urlStrings': ['$base/wiki/display/ENG/Hi'],
       })) as List;
-      expect(results.single['body']['storage']['value'], 'hi');
+      // The /display/{space}/{title} shape routes through the title+space
+      // lookup (Java contentByUrl display-ref branch) and returns the page
+      // the server lists for that title.
+      expect(results, hasLength(1));
+      expect(results.single['id'], '801');
+      expect(results.single['title'], 'Found Page');
     });
 
     test('contents_by_urls follows chained short links', () {
@@ -320,6 +325,20 @@ void contentsByUrlsTests() {
       // continuing); the healthy URL still resolves.
       expect(results, hasLength(1));
       expect(results.single['id'], '777');
+    });
+  });
+}
+
+/// `confluence_contents_by_urls` Markdown conversion of the resolved pages.
+void contentsByUrlsMarkdownTests() {
+  group('confluence update/URL/upload tools', () {
+    test('contents_by_urls converts storage on request', () {
+      final base = 'http://127.0.0.1:${server.port}';
+      final results = jsonDecode(tools.dispatch('confluence_contents_by_urls', {
+        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'format': 'md',
+      })) as List;
+      expect(results.single['body']['storage']['value'], 'hi');
     });
   });
 }

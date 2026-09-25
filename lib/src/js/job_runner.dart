@@ -150,7 +150,10 @@ class JsJobRunner {
     return value is num ? value.toInt() : 0;
   }
 
-  /// Wires the `runAsync` host functions and prelude onto [rt].
+  /// Wires the `runAsync` / `AsyncJob` surface onto [rt] by delegating
+  /// to [AsyncJobPool.attachMainRuntime] (quickjs_runtime owns the
+  /// `__jsr*` host functions and the prelude — no adapter duplicate,
+  /// epam/dmtools-dart#242).
   ///
   /// Uses [JsRunConfig.pool], defaulting to [AsyncJobPool.instance]. When
   /// the pool is not booted, `runAsync(...)` throws a clear JS error on
@@ -170,21 +173,12 @@ class JsJobRunner {
       contextParams: cfg.contextParams,
       extraGlobals: cfg.extraGlobals,
     );
-    final scriptDirectory = jsDirectoryOf(scriptPath);
-    rt.registerHostFunction('__jsrDispatchHost', (argsJson) {
-      return dispatchAsyncJob(
-        pool,
-        argsJson,
-        scriptDirectory: scriptDirectory,
-        workingDirectory: workingDirectory,
-        params: params,
-      );
-    });
-    rt.registerHostFunction(
-      '__jsrWaitHost',
-      (argsJson) => waitAsyncJob(pool, argsJson),
+    pool.attachMainRuntime(
+      rt,
+      scriptDirectory: jsDirectoryOf(scriptPath),
+      workingDirectory: workingDirectory,
+      params: params,
     );
-    rt.eval(asyncJobPrelude, filename: '<async_prelude>');
   }
 
   /// Evaluates the script source, surfacing JS exceptions.

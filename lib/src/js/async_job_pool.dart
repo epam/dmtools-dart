@@ -15,9 +15,9 @@
 ///   cache ([wireEngine]/[EngineSpec]);
 /// - the per-dispatch context: params/working-directory/script-directory
 ///   of the calling engine run plus a [PropertyReader] overrides snapshot
-///   (mirrors Java ThreadLocal overrides);
-/// - the host-function helpers ([dispatchAsyncJob]/[waitAsyncJob]) and the
-///   `runAsync`/`AsyncJob` prelude used by `JsJobRunner`.
+///   (mirrors Java ThreadLocal overrides), captured through the
+///   `quickjs_runtime` per-runtime `dispatchContext` provider
+///   ([AsyncJobPool.attachMainRuntime]; epam/dmtools-dart#242);
 ///
 /// Each worker is a full parallel engine on its own isolate. QuickJS
 /// engines are never shared across isolates — one engine per isolate,
@@ -34,8 +34,6 @@
 /// failure-path semantics (dead workers complete their unwaited jobs with
 /// an error envelope).
 library;
-
-import 'dart:convert';
 
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 
@@ -172,6 +170,34 @@ class AsyncJobPool {
   /// fire-and-forget job work. Waiting twice for the same job throws.
   AsyncJobEnvelope wait(int jobId) => _pool.wait(jobId);
 
+  /// Wires the `runAsync` / `AsyncJob` surface onto [runtime] — full
+  /// delegation to `quickjs_runtime` (host functions + prelude), no
+  /// adapter-owned `__jsr*` duplicate (epam/dmtools-dart#242; needs the
+  /// per-runtime `dispatchContext` from quickjs_runtime 0.3.4).
+  ///
+  /// The dispatch context provider runs synchronously inside the
+  /// `runAsync` host call: it snapshots [scriptDirectory],
+  /// [workingDirectory], the composed [params] map and the CURRENT
+  /// [PropertyReader] overrides (Java ThreadLocal overrides parity) at
+  /// dispatch time — exactly the snapshot the deleted
+  /// `dispatchAsyncJob` used to build inline.
+  void attachMainRuntime(
+    QuickjsRuntime runtime, {
+    required String scriptDirectory,
+    String? workingDirectory,
+    required Map<String, dynamic> params,
+  }) {
+    _pool.attachMainRuntime(
+      runtime,
+      dispatchContext: () => {
+        'scriptDirectory': scriptDirectory,
+        'workingDirectory': workingDirectory,
+        'params': params,
+        'overrides': PropertyReader.getOverrides(),
+      },
+    );
+  }
+
   /// Asks every worker to exit (in-flight jobs finish first) and resets
   /// the pool; a fresh [boot] revives it.
   void dispose() => _pool.dispose();
@@ -182,57 +208,4 @@ class AsyncJobPool {
   /// bridge is disposed by the worker's own `finally`, so the test VM does
   /// not leak the child isolate.
   void killWorkerForTest(int workerId) => _pool.killWorkerForTest(workerId);
-}
-
-/// `__jsrDispatchHost` implementation: parses the JS call, snapshots the
-/// current overrides, dispatches, and answers with the JSON job id — or a
-/// `{'__jsError': …}` sentinel the prelude rethrows.
-String dispatchAsyncJob(
-  AsyncJobPool pool,
-  String argsJson, {
-  required String scriptDirectory,
-  String? workingDirectory,
-  required Map<String, dynamic> params,
-}) {
-  try {
-    final args = jsonDecode(argsJson);
-    if (args is! List || args.length < 2 || args[0] is! String) {
-      return jsonEncode({
-        '__jsError': 'runAsync expects (function, args) — '
-            'got ${args is List ? args.length : 'non-array'} arguments',
-      });
-    }
-    final second = args[1];
-    final jobId = pool.dispatch(
-      fnSource: args[0] as String,
-      argsJson: second is String ? second : jsonEncode(second),
-      scriptDirectory: scriptDirectory,
-      workingDirectory: workingDirectory,
-      params: params,
-      overrides: PropertyReader.getOverrides(),
-    );
-    return jsonEncode(jobId);
-  } catch (e) {
-    return jsonEncode({'__jsError': 'runAsync dispatch failed: $e'});
-  }
-}
-
-/// `__jsrWaitHost` implementation: blocks on the pool until [argsJson]'s
-/// job completes, then answers with the JS envelope JSON — or a
-/// `{'__jsError': …}` sentinel.
-String waitAsyncJob(AsyncJobPool pool, String argsJson) {
-  try {
-    final id = jsonDecode(argsJson);
-    if (id is! int) {
-      return jsonEncode({'__jsError': 'AsyncJob.wait expects a job id'});
-    }
-    final envelope = pool.wait(id);
-    return jsonEncode({
-      'ok': envelope.ok,
-      'result': envelope.decodedResult,
-      'error': envelope.error,
-    });
-  } catch (e) {
-    return jsonEncode({'__jsError': 'AsyncJob.wait failed: $e'});
-  }
 }

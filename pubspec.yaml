@@ -10,10 +10,12 @@ environment:
   sdk: ^3.5.0
 
 dependencies:
+  archive: ^3.6.1
   crypto: ^3.0.7
   dio: ^5.4.0
   html: ^0.15.5
   native_synchronization: ^0.3.1
+  path: ^1.9.0
   quickjs_runtime: ^0.3.3 # hosted on pub.dev
 
 dev_dependencies:

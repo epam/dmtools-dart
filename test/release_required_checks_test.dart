@@ -41,22 +41,20 @@ void main() {
 
   group('release-cli stamps the branch-protection-required contexts', () {
     test('stamped context set is exactly {static, gate, agents-suite}', () {
-      final stampLoop =
-          RegExp(r'for ctx in (.+?); do').firstMatch(workflow);
+      final stampLoop = RegExp(r'for ctx in (.+?); do').firstMatch(workflow);
       expect(stampLoop, isNotNull,
           reason: '$_workflowPath must stamp the required check-runs via '
               'a `for ctx in <names>; do` loop (dm.ai release.yml pattern)');
-      final stamped =
-          stampLoop!.group(1)!.trim().split(RegExp(r'\s+')).toSet();
+      final stamped = stampLoop!.group(1)!.trim().split(RegExp(r'\s+')).toSet();
       expect(stamped, _requiredContexts,
-          reason: 'branch protection on main requires {${_requiredContexts.join(', ')}}; '
+          reason:
+              'branch protection on main requires {${_requiredContexts.join(', ')}}; '
               'stamping {${stamped.join(', ')}} leaves the push rejected '
               'with "N of M required status checks are expected" (gh-261)');
     });
 
     test('the retired `quality` aggregate is no longer stamped', () {
-      final stampLoop =
-          RegExp(r'for ctx in (.+?); do').firstMatch(workflow)!;
+      final stampLoop = RegExp(r'for ctx in (.+?); do').firstMatch(workflow)!;
       expect(stampLoop.group(1), isNot(contains('quality')),
           reason: 'no workflow has produced a `quality` check-run since '
               '#187 renamed the aggregate to `gate` — stamping it cannot '
@@ -76,10 +74,8 @@ void main() {
   });
 
   group('push retry loop cannot loop on protection declines', () {
-    test('a rebase is followed by a re-stamp (new SHA has no check-runs)',
-        () {
-      final callCount =
-          'stamp_required_checks'.allMatches(workflow).length;
+    test('a rebase is followed by a re-stamp (new SHA has no check-runs)', () {
+      final callCount = 'stamp_required_checks'.allMatches(workflow).length;
       expect(callCount, greaterThanOrEqualTo(3),
           reason: 'the stamp helper must be defined and invoked before the '
               'first push, and re-invoked inside the retry loop');
@@ -99,8 +95,8 @@ void main() {
 
     test('a protection decline aborts instead of rebasing', () {
       final lines = workflow.split('\n');
-      final declineGuard = lines
-          .indexWhere((l) => l.contains('protected branch hook declined'));
+      final declineGuard =
+          lines.indexWhere((l) => l.contains('protected branch hook declined'));
       final rebaseLine = lines.indexWhere((l) => l.contains('git rebase '));
       expect(declineGuard, greaterThanOrEqualTo(0),
           reason: 'the push output must be inspected for the protection '

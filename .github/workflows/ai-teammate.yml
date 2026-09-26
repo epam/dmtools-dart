@@ -64,11 +64,11 @@ jobs:
     # submodule when dmtools-agents#424 merges (bump the submodule,
     # then repoint this ref at the new SHA).
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@ac8b718e8bad30ec37281c8d331661df1b08d1ec
+    uses: IstiN/dmtools-agents/.github/workflows/factory-teammate.yml@7dd967a05b8e7a455971a3eadae114e6ff63eca1
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: ac8b718e8bad30ec37281c8d331661df1b08d1ec
+      factory_ref: 7dd967a05b8e7a455971a3eadae114e6ff63eca1
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}

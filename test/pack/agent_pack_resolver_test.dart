@@ -716,8 +716,7 @@ void pathRewriteEdgeRefTests() {
       };
       resolver.rewritePathsToPackRoot(config, pack.packRoot);
       final params = config['params'] as Map<String, dynamic>;
-      expect(
-          params['cliPrompts'],
+      expect(params['cliPrompts'],
           equals(['', 'http://example.com/x.js', absolute, '../outside.txt']));
     });
   });

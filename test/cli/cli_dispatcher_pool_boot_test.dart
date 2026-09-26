@@ -116,9 +116,12 @@ function action(params) {
 
 void _testBootFailure() {
   group('run: engine-worker pool boot failure (gh-241)', () {
+    final errorLines = <String>[];
     setUp(() {
+      errorLines.clear();
       _dispatcher = CliDispatcher(
         writer: _lines.add,
+        errorWriter: errorLines.add,
         propertyReader: PropertyReader(basePath: _tmp.path),
         isTty: () => false,
         asyncPool: _ExplodingPool(),
@@ -143,6 +146,22 @@ function action(params) {
         0,
       );
       expect(_lines.last, contains('not booted'));
+    });
+
+    test('the degraded boot is reported on the error channel', () async {
+      expect(
+        await _runPoolJob(
+          'function action(params) { return typeof runAsync; }',
+          const {'parallelWorkers': 2},
+        ),
+        0,
+      );
+      expect(errorLines, hasLength(1));
+      expect(errorLines.single, contains('engine-worker pool boot failed'));
+      expect(errorLines.single, contains('isolate quota exhausted'));
+      // stdout stays machine-parseable: the runAsync surface is wired
+      // (dispatch fails only on first use) and no warning lines mix in.
+      expect(_lines, ['"function"']);
     });
   });
 }

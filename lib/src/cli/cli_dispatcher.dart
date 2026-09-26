@@ -42,18 +42,23 @@ class CliDispatcher {
   /// no-argument behaviour (interactive stub on a terminal, help
   /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
   /// `runAsync` jobs (defaults to [AsyncJobPool.instance]); a test seam
-  /// mirroring [JsRunConfig.pool].
+  /// mirroring [JsRunConfig.pool]. [errorWriter] receives diagnostics that
+  /// must stay off the machine-parsed stdout (defaults to
+  /// `stderr.writeln`); a test seam like [writer].
   CliDispatcher({
     void Function(String line)? writer,
+    void Function(String line)? errorWriter,
     PropertyReader? propertyReader,
     bool Function()? isTty,
     AsyncJobPool? asyncPool,
   })  : _writer = writer ?? print,
+        _errorWriter = errorWriter ?? stderr.writeln,
         _reader = propertyReader ?? PropertyReader(),
         _isTty = isTty ?? _stdoutIsTty,
         _asyncPool = asyncPool;
 
   final void Function(String line) _writer;
+  final void Function(String line) _errorWriter;
   final PropertyReader _reader;
   final bool Function() _isTty;
 
@@ -338,7 +343,7 @@ Options:
     try {
       await pool.boot();
     } catch (e) {
-      stderr.writeln('dmtools: engine-worker pool boot failed '
+      _errorWriter('dmtools: engine-worker pool boot failed '
           '(runAsync will report an error on first use): $e');
     }
     return pool;

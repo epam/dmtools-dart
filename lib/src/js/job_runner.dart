@@ -64,7 +64,9 @@ class JsRunConfig {
 
   /// Worker pool for `runAsync(fn, args)` (defaults to
   /// [AsyncJobPool.instance]). Only consulted when `jobParams` carries
-  /// `parallelWorkers >= 2`; tests boot a private pool and pass it here.
+  /// `parallelWorkers >= 2`. The CLI dispatcher boots the pool it passes
+  /// here (gh-241: the shared instance, lazily, just before the JS run);
+  /// tests boot a private pool and pass it here.
   final AsyncJobPool? pool;
 
   /// Alternate `fetch` transport for the node/js compat layer on the

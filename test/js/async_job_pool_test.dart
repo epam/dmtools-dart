@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/src/config/property_reader.dart';
 import 'package:dmtools/src/js/async_job_pool.dart';
 import 'package:dmtools/src/js/job_runner.dart';
 import 'package:test/test.dart';
@@ -230,6 +231,25 @@ function action(params) {
       'marker': 'async-marker',
       'content': 'worker-tool-ok',
     });
+  });
+
+  test('worker engines see overrides snapshotted at dispatch time', () {
+    addTearDown(PropertyReader.clearOverrides);
+    final result = f.runScript('''
+function action(params) {
+    set_env_variable('CLI_ALLOWED_COMMANDS', 'printenv');
+    set_env_variable('MARKER', 'dispatch-time-value');
+    return runAsync(function() {
+        return cli_execute_command({command: 'printenv MARKER'});
+    }, null).wait();
+}
+''');
+    // Both `set_env_variable` calls run AFTER the pool was wired onto the
+    // engine: `printenv` leaves the whitelist and MARKER enters the child
+    // env only if the worker sees an override map captured at DISPATCH
+    // time (dispatchContext provider), not at attach time
+    // (epam/dmtools-dart#242 — Java ThreadLocal overrides parity).
+    expect(jsonDecode(result!), 'dispatch-time-value');
   });
 }
 

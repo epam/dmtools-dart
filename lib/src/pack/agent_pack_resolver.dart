@@ -567,11 +567,7 @@ class AgentPackResolver {
   /// repo file present in the pack; returns `null` for non-path strings.
   String? _toAbsolutePackPath(String value, Directory packRoot) {
     var ref = value.trim();
-    if (ref.isEmpty ||
-        ref.startsWith('http://') ||
-        ref.startsWith('https://') ||
-        ref.startsWith('classpath:') ||
-        p.isAbsolute(ref)) {
+    if (_isNonPathRef(ref)) {
       return null;
     }
     while (ref.startsWith('./')) {
@@ -586,4 +582,13 @@ class AgentPackResolver {
     }
     return candidate.absolute.path;
   }
+
+  /// True when [ref] is not a repo-relative path (empty, an absolute or
+  /// `http(s)`/`classpath:` reference) and must be left untouched.
+  bool _isNonPathRef(String ref) =>
+      ref.isEmpty ||
+      ref.startsWith('http://') ||
+      ref.startsWith('https://') ||
+      ref.startsWith('classpath:') ||
+      p.isAbsolute(ref);
 }

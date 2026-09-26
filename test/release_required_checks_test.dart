@@ -36,6 +36,11 @@ String _read(String path) {
 }
 
 void main() {
+  _stampSetGuards();
+  _retryLoopGuards();
+}
+
+void _stampSetGuards() {
   final workflow = _read(_workflowPath);
   final quality = _read(_qualityPath);
 
@@ -72,6 +77,10 @@ void main() {
       }
     });
   });
+}
+
+void _retryLoopGuards() {
+  final workflow = _read(_workflowPath);
 
   group('push retry loop cannot loop on protection declines', () {
     test('a rebase is followed by a re-stamp (new SHA has no check-runs)', () {

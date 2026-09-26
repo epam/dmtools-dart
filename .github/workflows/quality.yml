@@ -22,6 +22,18 @@ jobs:
     # finish in ~2 min and fail the pipeline early on style/type errors.
     runs-on: bitrise-runner-dmtools-ci
     steps:
+      - name: Runner disk hygiene
+        # Bitrise pool machines accumulate per-run workdirs; twice on
+        # 2026-09-26 a full disk killed agents-suite mid-run. Drop stale
+        # dirs (>1 day) before checkout. Never touches the current
+        # workspace; fresh mtimes protect concurrently running jobs.
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
         with:
@@ -43,6 +55,18 @@ jobs:
     env:
       TOTAL_SHARDS: 4
     steps:
+      - name: Runner disk hygiene
+        # Bitrise pool machines accumulate per-run workdirs; twice on
+        # 2026-09-26 a full disk killed agents-suite mid-run. Drop stale
+        # dirs (>1 day) before checkout. Never touches the current
+        # workspace; fresh mtimes protect concurrently running jobs.
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
       - uses: actions/checkout@v4
         with:
           # agents/ — the machine-wiring tests (test/machine_kit/) resolve
@@ -112,6 +136,18 @@ jobs:
     needs: [static, test]
     runs-on: bitrise-runner-dmtools-ci
     steps:
+      - name: Runner disk hygiene
+        # Bitrise pool machines accumulate per-run workdirs; twice on
+        # 2026-09-26 a full disk killed agents-suite mid-run. Drop stale
+        # dirs (>1 day) before checkout. Never touches the current
+        # workspace; fresh mtimes protect concurrently running jobs.
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
         with:
@@ -193,6 +229,18 @@ jobs:
     # and the suite hard-gates on its own, so serializing only adds wall time.
     runs-on: bitrise-runner-dmtools-ci
     steps:
+      - name: Runner disk hygiene
+        # Bitrise pool machines accumulate per-run workdirs; twice on
+        # 2026-09-26 a full disk killed agents-suite mid-run. Drop stale
+        # dirs (>1 day) before checkout. Never touches the current
+        # workspace; fresh mtimes protect concurrently running jobs.
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
       - uses: actions/checkout@v4
         with:
           submodules: true # agents/ = pinned IstiN/dmtools-agents (L4 suite)

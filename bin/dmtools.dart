@@ -11,9 +11,11 @@ Future<void> main(List<String> args) async {
   // Must complete while the event loop is alive: once a QuickJS host
   // callback blocks the main isolate, Isolate.spawn can no longer progress.
   await SyncHttpBridge.shared.boot();
-  // runAsync engine workers (epam/dmtools-dart#224). Tests boot private
-  // pools instead (JsRunConfig.pool); an unbooted pool surfaces a clear
-  // JS error from runAsync rather than failing engine wiring.
-  await AsyncJobPool.instance.boot();
+  // The engine-worker pool (runAsync) boots lazily in CliDispatcher, just
+  // before a job whose resolved config sets parallelWorkers >= 2 — the
+  // same event-loop-alive guarantee, zero cost for every other command
+  // (epam/dmtools-dart#241). Tests boot private pools instead
+  // (JsRunConfig.pool); an unbooted pool surfaces a clear JS error from
+  // runAsync rather than failing engine wiring.
   exit(await CliDispatcher().dispatch(args));
 }

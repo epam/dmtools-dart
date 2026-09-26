@@ -62,14 +62,15 @@ File buildPack(String agentName, String version) {
   write('js/main.js', "var u = require('./common/util.js');\n");
   write('instructions/common/guide.md', '# Guide\n');
   final entry = write(
-      '$agentName.json',
-      jsonEncode({
-        'name': 'TestAgent',
-        'params': {
-          'jsPath': 'agents/js/main.js',
-          'cliPrompts': ['agents/instructions/common/guide.md'],
-        },
-      }));
+    '$agentName.json',
+    jsonEncode({
+      'name': 'TestAgent',
+      'params': {
+        'jsPath': 'agents/js/main.js',
+        'cliPrompts': ['agents/instructions/common/guide.md'],
+      },
+    }),
+  );
   final outDir = Directory.systemTemp.createTempSync('dist_');
   return AgentPackCompiler(agentRoot.path)
       .compile(entry, version, 'abc123', outDir)
@@ -92,8 +93,9 @@ File buildMalicious(String evilEntry) {
   final archive = Archive()
     ..addFile(ArchiveFile('manifest.json', manifestBytes.length, manifestBytes))
     ..addFile(ArchiveFile(evilEntry, 3, utf8.encode('bad')));
-  final zip =
-      File('${Directory.systemTemp.createTempSync('evil_').path}/evil.zip');
+  final zip = File(
+    '${Directory.systemTemp.createTempSync('evil_').path}/evil.zip',
+  );
   zip.writeAsBytesSync(ZipEncoder().encode(archive)!);
   return zip;
 }
@@ -130,11 +132,17 @@ void localResolutionTests() {
       expect(pack.entryFile.existsSync(), isTrue);
       expect(pack.entryFile.path, endsWith('my_agent.json'));
       expect(
-          File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(), isTrue);
-      expect(File(p.join(pack.packRoot.path, 'js/common/util.js')).existsSync(),
-          isTrue);
-      expect(File(p.join(pack.packRoot.path, 'agents/js/main.js')).existsSync(),
-          isFalse);
+        File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(p.join(pack.packRoot.path, 'js/common/util.js')).existsSync(),
+        isTrue,
+      );
+      expect(
+        File(p.join(pack.packRoot.path, 'agents/js/main.js')).existsSync(),
+        isFalse,
+      );
     });
 
     test('second resolve of the same version is a cache hit', () {
@@ -156,18 +164,20 @@ void entryOverrideTests() {
       // custom.json is the parent of my_agent.json, so it lands in the closure.
       write('js/main.js', '// main\n');
       write(
-          'custom.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {'jsPath': 'agents/js/main.js'}
-          }));
+        'custom.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {'jsPath': 'agents/js/main.js'},
+        }),
+      );
       final entry = write(
-          'my_agent.json',
-          jsonEncode({
-            'name': 'X',
-            'parent': {'path': 'agents/custom.json'},
-            'params': <String, dynamic>{},
-          }));
+        'my_agent.json',
+        jsonEncode({
+          'name': 'X',
+          'parent': {'path': 'agents/custom.json'},
+          'params': <String, dynamic>{},
+        }),
+      );
       final outDir = Directory.systemTemp.createTempSync('dist_');
       final zip = AgentPackCompiler(agentRoot.path)
           .compile(entry, '1.0.0', 'abc', outDir)
@@ -181,9 +191,11 @@ void entryOverrideTests() {
       final zip = buildPack('my_agent', '1.0.0');
       expect(
         () => resolver.resolve('${zip.path}#missing.json'),
-        throwsA(isA<AgentPackException>()
-            .having((e) => e.message, 'message', contains('missing.json'))
-            .having((e) => e.message, 'message', contains('defaultEntry'))),
+        throwsA(
+          isA<AgentPackException>()
+              .having((e) => e.message, 'message', contains('missing.json'))
+              .having((e) => e.message, 'message', contains('defaultEntry')),
+        ),
       );
     });
   });
@@ -195,17 +207,25 @@ void zipSlipTests() {
     test('rejects ../ escape entries before unpacking', () {
       final zip = buildMalicious('../evil.sh');
       expect(
-          () => resolver.resolve(zip.path), throwsA(isA<AgentPackException>()));
-      expect(Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
-          isFalse);
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>()),
+      );
+      expect(
+        Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
+        isFalse,
+      );
     });
 
     test('rejects absolute-path entries before unpacking', () {
       final zip = buildMalicious('/abs/evil.sh');
       expect(
-          () => resolver.resolve(zip.path), throwsA(isA<AgentPackException>()));
-      expect(Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
-          isFalse);
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>()),
+      );
+      expect(
+        Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
+        isFalse,
+      );
     });
   });
 }
@@ -216,13 +236,19 @@ void manifestTests() {
     test('fails when the pack has no manifest.json', () {
       final archive = Archive()
         ..addFile(ArchiveFile('x.txt', 2, utf8.encode('hi')));
-      final zip =
-          File('${Directory.systemTemp.createTempSync('nomani_').path}/n.zip')
-            ..writeAsBytesSync(ZipEncoder().encode(archive)!);
+      final zip = File(
+        '${Directory.systemTemp.createTempSync('nomani_').path}/n.zip',
+      )..writeAsBytesSync(ZipEncoder().encode(archive)!);
       expect(
-          () => resolver.resolve(zip.path),
-          throwsA(isA<AgentPackException>()
-              .having((e) => e.message, 'message', contains('manifest.json'))));
+        () => resolver.resolve(zip.path),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('manifest.json'),
+          ),
+        ),
+      );
     });
   });
 }
@@ -230,20 +256,24 @@ void manifestTests() {
 /// Builds a zip from [manifest] plus [extraFiles] (name → bytes); [modes]
 /// overrides the unix mode of individual entries.
 File buildZipWithManifest(
-    Map<String, dynamic> manifest, Map<String, List<int>> extraFiles,
-    {Map<String, int> modes = const {}}) {
+  Map<String, dynamic> manifest,
+  Map<String, List<int>> extraFiles, {
+  Map<String, int> modes = const {},
+}) {
   final manifestBytes = utf8.encode(jsonEncode(manifest));
   final archive = Archive()
     ..addFile(
-        ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
+      ArchiveFile('manifest.json', manifestBytes.length, manifestBytes),
+    );
   for (final entry in extraFiles.entries) {
     final file = ArchiveFile(entry.key, entry.value.length, entry.value);
     final mode = modes[entry.key];
     if (mode != null) file.mode = mode;
     archive.addFile(file);
   }
-  final zip =
-      File('${Directory.systemTemp.createTempSync('zip_').path}/pack.zip');
+  final zip = File(
+    '${Directory.systemTemp.createTempSync('zip_').path}/pack.zip',
+  );
   zip.writeAsBytesSync(ZipEncoder().encode(archive)!);
   return zip;
 }
@@ -253,41 +283,56 @@ File buildZipWithManifest(
 void manifestIdentityTests() {
   group('AgentPackResolver manifest identity', () {
     Map<String, dynamic> manifest(String agent, String version) => {
-          'agent': agent,
-          'version': version,
-          'defaultEntry': 'a.json',
-          'files': [
-            {'path': 'a.json', 'sha256': sha256Of('{}')},
-          ],
-        };
+      'agent': agent,
+      'version': version,
+      'defaultEntry': 'a.json',
+      'files': [
+        {'path': 'a.json', 'sha256': sha256Of('{}')},
+      ],
+    };
 
     test('rejects an agent with a path separator', () {
-      final zip = buildZipWithManifest(
-          manifest('../evil', '1.0.0'), {'a.json': utf8.encode('{}')});
+      final zip = buildZipWithManifest(manifest('../evil', '1.0.0'), {
+        'a.json': utf8.encode('{}'),
+      });
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('Unsafe manifest agent'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unsafe manifest agent'),
+          ),
+        ),
       );
     });
 
     test('rejects a dots-only version (..)', () {
-      final zip = buildZipWithManifest(
-          manifest('ok_agent', '..'), {'a.json': utf8.encode('{}')});
+      final zip = buildZipWithManifest(manifest('ok_agent', '..'), {
+        'a.json': utf8.encode('{}'),
+      });
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('Unsafe manifest version'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('Unsafe manifest version'),
+          ),
+        ),
       );
     });
 
     test('rejects an empty agent and illegal characters', () {
       for (final bad in ['', 'a/b', 'a\\b', 'a b', r'a$b']) {
-        final zip = buildZipWithManifest(
-            manifest(bad, '1.0.0'), {'a.json': utf8.encode('{}')});
-        expect(() => resolver.resolve(zip.path),
-            throwsA(isA<AgentPackException>()),
-            reason: 'agent "$bad" must be rejected');
+        final zip = buildZipWithManifest(manifest(bad, '1.0.0'), {
+          'a.json': utf8.encode('{}'),
+        });
+        expect(
+          () => resolver.resolve(zip.path),
+          throwsA(isA<AgentPackException>()),
+          reason: 'agent "$bad" must be rejected',
+        );
       }
     });
   });
@@ -306,8 +351,13 @@ void entryContainmentTests() {
       }, {});
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('escapes the pack root'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('escapes the pack root'),
+          ),
+        ),
       );
     });
 
@@ -315,8 +365,13 @@ void entryContainmentTests() {
       final zip = buildPack('my_agent', '1.0.0');
       expect(
         () => resolver.resolve('${zip.path}#../escape.json'),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('escapes the pack root'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('escapes the pack root'),
+          ),
+        ),
       );
     });
   });
@@ -327,38 +382,49 @@ void entryContainmentTests() {
 void manifestInventoryTests() {
   group('AgentPackResolver manifest inventory', () {
     test('rejects a zip entry not listed in the manifest', () {
-      final zip = buildZipWithManifest({
-        'agent': 'ok_agent',
-        'version': '1.0.0',
-        'defaultEntry': 'a.json',
-        'files': <dynamic>[],
-      }, {
-        'a.json': utf8.encode('{}'),
-        'sneaky.sh': utf8.encode('echo hi'),
-      });
+      final zip = buildZipWithManifest(
+        {
+          'agent': 'ok_agent',
+          'version': '1.0.0',
+          'defaultEntry': 'a.json',
+          'files': <dynamic>[],
+        },
+        {'a.json': utf8.encode('{}'), 'sneaky.sh': utf8.encode('echo hi')},
+      );
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>().having((e) => e.message, 'message',
-            contains('not listed in manifest inventory'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('not listed in manifest inventory'),
+          ),
+        ),
       );
     });
 
     test('rejects a manifest-listed file missing from the zip', () {
-      final zip = buildZipWithManifest({
-        'agent': 'ok_agent',
-        'version': '1.0.0',
-        'defaultEntry': 'a.json',
-        'files': [
-          {'path': 'a.json', 'sha256': sha256Of('{}')},
-          {'path': 'ghost.js', 'sha256': sha256Of('x')},
-        ],
-      }, {
-        'a.json': utf8.encode('{}'),
-      });
+      final zip = buildZipWithManifest(
+        {
+          'agent': 'ok_agent',
+          'version': '1.0.0',
+          'defaultEntry': 'a.json',
+          'files': [
+            {'path': 'a.json', 'sha256': sha256Of('{}')},
+            {'path': 'ghost.js', 'sha256': sha256Of('x')},
+          ],
+        },
+        {'a.json': utf8.encode('{}')},
+      );
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('missing from the zip'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('missing from the zip'),
+          ),
+        ),
       );
     });
   });
@@ -371,16 +437,18 @@ void stagingTests() {
       final parent = Directory.systemTemp.createTempSync('staging_parent_');
       try {
         final local = AgentPackResolver(
-            packsRoot: Directory(p.join(parent.path, 'packs')));
+          packsRoot: Directory(p.join(parent.path, 'packs')),
+        );
         final pack = local.resolve(buildPack('my_agent', '3.0.0').path);
         expect(pack.packRoot.path, startsWith(parent.path));
         expect(
-            Directory(p.join(parent.path, 'packs', 'my_agent-3.0.0'))
-                .existsSync(),
-            isTrue);
-        final leftovers = parent
-            .listSync()
-            .where((e) => p.basename(e.path).startsWith('.pack-unpack-'));
+          Directory(p.join(parent.path, 'packs', 'my_agent-3.0.0'))
+              .existsSync(),
+          isTrue,
+        );
+        final leftovers = parent.listSync().where(
+          (e) => p.basename(e.path).startsWith('.pack-unpack-'),
+        );
         expect(leftovers, isEmpty, reason: 'staging dir renamed away');
       } finally {
         parent.deleteSync(recursive: true);
@@ -391,9 +459,12 @@ void stagingTests() {
       final parent = Directory.systemTemp.createTempSync('staging_parent_');
       try {
         final local = AgentPackResolver(
-            packsRoot: Directory(p.join(parent.path, 'packs')));
-        expect(() => local.resolve(buildMalicious('../evil.sh').path),
-            throwsA(isA<AgentPackException>()));
+          packsRoot: Directory(p.join(parent.path, 'packs')),
+        );
+        expect(
+          () => local.resolve(buildMalicious('../evil.sh').path),
+          throwsA(isA<AgentPackException>()),
+        );
         final leftovers = parent
             .listSync(recursive: true)
             .where((e) => p.basename(e.path).startsWith('.pack-unpack-'));
@@ -435,12 +506,17 @@ void _packServerEntry(List<Object?> init) {
 
 /// Starts the loopback pack server in a separate isolate.
 Future<({int port, ReceivePort authInbox, Isolate isolate})> startPackServer(
-    List<int> zipBytes,
-    {String? sha256Body}) async {
+  List<int> zipBytes, {
+  String? sha256Body,
+}) async {
   final readyInbox = ReceivePort();
   final authInbox = ReceivePort();
-  final isolate = await Isolate.spawn(_packServerEntry,
-      [readyInbox.sendPort, authInbox.sendPort, zipBytes, sha256Body]);
+  final isolate = await Isolate.spawn(_packServerEntry, [
+    readyInbox.sendPort,
+    authInbox.sendPort,
+    zipBytes,
+    sha256Body,
+  ]);
   final port = await readyInbox.first as int;
   readyInbox.close();
   return (port: port, authInbox: authInbox, isolate: isolate);
@@ -450,32 +526,39 @@ Future<({int port, ReceivePort authInbox, Isolate isolate})> startPackServer(
 /// token scoping). Served by a loopback [HttpServer] in a separate isolate.
 void remoteDownloadTests() {
   group('AgentPackResolver remote download', () {
-    test('missing .sha256 sidecar skips verification and still resolves',
-        () async {
-      final zipBytes = buildPack('remote_agent', '2.0.0').readAsBytesSync();
-      final server = await startPackServer(zipBytes);
-      try {
-        final pack = resolver.resolve(
+    test(
+      'missing .sha256 sidecar skips verification and still resolves',
+      () async {
+        final zipBytes = buildPack('remote_agent', '2.0.0').readAsBytesSync();
+        final server = await startPackServer(zipBytes);
+        try {
+          final pack = resolver.resolve(
             'http://127.0.0.1:${server.port}/pack.zip',
-            githubToken: 'secret-token');
-        expect(pack.agent, 'remote_agent');
-        expect(pack.entryFile.existsSync(), isTrue);
-        final auth = await server.authInbox.first;
-        expect(auth, isNull,
-            reason: 'the bearer token is only sent to github.com');
-      } finally {
-        server.authInbox.close();
-        server.isolate.kill();
-      }
-    });
+            githubToken: 'secret-token',
+          );
+          expect(pack.agent, 'remote_agent');
+          expect(pack.entryFile.existsSync(), isTrue);
+          final auth = await server.authInbox.first;
+          expect(
+            auth,
+            isNull,
+            reason: 'the bearer token is only sent to github.com',
+          );
+        } finally {
+          server.authInbox.close();
+          server.isolate.kill();
+        }
+      },
+    );
 
     test('matching .sha256 sidecar verifies and resolves', () async {
       final zipBytes = buildPack('remote_agent', '2.1.0').readAsBytesSync();
       final sidecar = '${sha256.convert(zipBytes)}  pack.zip';
       final server = await startPackServer(zipBytes, sha256Body: sidecar);
       try {
-        final pack =
-            resolver.resolve('http://127.0.0.1:${server.port}/pack.zip');
+        final pack = resolver.resolve(
+          'http://127.0.0.1:${server.port}/pack.zip',
+        );
         expect(pack.agent, 'remote_agent');
         expect(pack.version, '2.1.0');
       } finally {
@@ -486,13 +569,20 @@ void remoteDownloadTests() {
 
     test('mismatching .sha256 sidecar fails with a checksum error', () async {
       final zipBytes = buildPack('remote_agent', '2.2.0').readAsBytesSync();
-      final server =
-          await startPackServer(zipBytes, sha256Body: '${'0' * 64}  pack.zip');
+      final server = await startPackServer(
+        zipBytes,
+        sha256Body: '${'0' * 64}  pack.zip',
+      );
       try {
         expect(
           () => resolver.resolve('http://127.0.0.1:${server.port}/pack.zip'),
-          throwsA(isA<AgentPackException>().having(
-              (e) => e.message, 'message', contains('SHA-256 mismatch'))),
+          throwsA(
+            isA<AgentPackException>().having(
+              (e) => e.message,
+              'message',
+              contains('SHA-256 mismatch'),
+            ),
+          ),
         );
       } finally {
         server.authInbox.close();
@@ -512,8 +602,11 @@ void cacheReverifyTests() {
       final mainJs = File(p.join(first.packRoot.path, 'js/main.js'))
         ..writeAsStringSync('// tampered\n');
       final second = resolver.resolve(zip.path);
-      expect(mainJs.readAsStringSync(), contains("require('./common/util.js')"),
-          reason: 'tampered cache is re-unpacked');
+      expect(
+        mainJs.readAsStringSync(),
+        contains("require('./common/util.js')"),
+        reason: 'tampered cache is re-unpacked',
+      );
       expect(second.packRoot.path, first.packRoot.path);
     });
 
@@ -523,8 +616,9 @@ void cacheReverifyTests() {
       File(p.join(first.packRoot.path, 'js/common/util.js')).deleteSync();
       resolver.resolve(zip.path);
       expect(
-          File(p.join(first.packRoot.path, 'js/common/util.js')).existsSync(),
-          isTrue);
+        File(p.join(first.packRoot.path, 'js/common/util.js')).existsSync(),
+        isTrue,
+      );
     });
   });
 }
@@ -535,42 +629,43 @@ void execBitTests() {
   group('AgentPackResolver exec bit', () {
     test('restores +x for a non-.sh entry with an owner-exec mode', () {
       final tool = utf8.encode('#!/bin/sh\necho hi\n');
-      final zip = buildZipWithManifest({
-        'agent': 'tool_agent',
-        'version': '1.0.0',
-        'defaultEntry': 'a.json',
-        'files': [
-          {'path': 'a.json', 'sha256': sha256Of('{}')},
-          {'path': 'bin/tool', 'sha256': sha256.convert(tool).toString()},
-        ],
-      }, {
-        'a.json': utf8.encode('{}'),
-        'bin/tool': tool,
-      }, modes: {
-        'bin/tool': 0x1ED, // 0755
-      });
+      final zip = buildZipWithManifest(
+        {
+          'agent': 'tool_agent',
+          'version': '1.0.0',
+          'defaultEntry': 'a.json',
+          'files': [
+            {'path': 'a.json', 'sha256': sha256Of('{}')},
+            {'path': 'bin/tool', 'sha256': sha256.convert(tool).toString()},
+          ],
+        },
+        {'a.json': utf8.encode('{}'), 'bin/tool': tool},
+        modes: {
+          'bin/tool': 0x1ED, // 0755
+        },
+      );
       final pack = resolver.resolve(zip.path);
-      final mode =
-          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
+          .mode;
       expect(mode & 0x40, isNonZero, reason: 'owner-exec bit restored');
     });
 
     test('does not chmod plain 0644 entries', () {
-      final zip = buildZipWithManifest({
-        'agent': 'tool_agent',
-        'version': '1.0.0',
-        'defaultEntry': 'a.json',
-        'files': [
-          {'path': 'a.json', 'sha256': sha256Of('{}')},
-          {'path': 'bin/tool', 'sha256': sha256Of('tool')},
-        ],
-      }, {
-        'a.json': utf8.encode('{}'),
-        'bin/tool': utf8.encode('tool'),
-      });
+      final zip = buildZipWithManifest(
+        {
+          'agent': 'tool_agent',
+          'version': '1.0.0',
+          'defaultEntry': 'a.json',
+          'files': [
+            {'path': 'a.json', 'sha256': sha256Of('{}')},
+            {'path': 'bin/tool', 'sha256': sha256Of('tool')},
+          ],
+        },
+        {'a.json': utf8.encode('{}'), 'bin/tool': utf8.encode('tool')},
+      );
       final pack = resolver.resolve(zip.path);
-      final mode =
-          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
+          .mode;
       expect(mode & 0x40, 0, reason: '0644 entries stay non-executable');
     });
   });
@@ -588,8 +683,13 @@ void manifestCastTests() {
       }, {});
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>()
-            .having((e) => e.message, 'message', contains('must be a string'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('must be a string'),
+          ),
+        ),
       );
     });
 
@@ -602,8 +702,13 @@ void manifestCastTests() {
       }, {});
       expect(
         () => resolver.resolve(zip.path),
-        throwsA(isA<AgentPackException>()
-            .having((e) => e.message, 'message', contains('defaultEntry'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('defaultEntry'),
+          ),
+        ),
       );
     });
   });
@@ -613,26 +718,33 @@ void manifestCastTests() {
 /// signature scan false-positives on stored payloads).
 void encryptionScanTests() {
   group('AgentPackResolver encryption scan', () {
-    test(r'a stored payload containing PK\x01\x02 bytes is not "encrypted"',
-        () {
-      final payload = [0x50, 0x4B, 0x01, 0x02, ...utf8.encode('data')];
-      final zip = buildZipWithManifest({
-        'agent': 'data_agent',
-        'version': '1.0.0',
-        'defaultEntry': 'a.json',
-        'files': [
-          {'path': 'a.json', 'sha256': sha256Of('{}')},
-          {'path': 'data.bin', 'sha256': sha256.convert(payload).toString()},
-        ],
-      }, {
-        'a.json': utf8.encode('{}'),
-        'data.bin': payload,
-      });
-      final pack = resolver.resolve(zip.path);
-      expect(pack.agent, 'data_agent');
-      expect(File(p.join(pack.packRoot.path, 'data.bin')).readAsBytesSync(),
-          payload);
-    });
+    test(
+      r'a stored payload containing PK\x01\x02 bytes is not "encrypted"',
+      () {
+        final payload = [0x50, 0x4B, 0x01, 0x02, ...utf8.encode('data')];
+        final zip = buildZipWithManifest(
+          {
+            'agent': 'data_agent',
+            'version': '1.0.0',
+            'defaultEntry': 'a.json',
+            'files': [
+              {'path': 'a.json', 'sha256': sha256Of('{}')},
+              {
+                'path': 'data.bin',
+                'sha256': sha256.convert(payload).toString(),
+              },
+            ],
+          },
+          {'a.json': utf8.encode('{}'), 'data.bin': payload},
+        );
+        final pack = resolver.resolve(zip.path);
+        expect(pack.agent, 'data_agent');
+        expect(
+          File(p.join(pack.packRoot.path, 'data.bin')).readAsBytesSync(),
+          payload,
+        );
+      },
+    );
   });
 }
 
@@ -653,14 +765,17 @@ void pathRewriteTests() {
       };
       resolver.rewritePathsToPackRoot(config, pack.packRoot);
       final params = config['params'] as Map<String, dynamic>;
-      expect(params['jsPath'],
-          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+      expect(
+        params['jsPath'],
+        File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path,
+      );
       final prompts = params['cliPrompts'] as List;
       expect(
-          prompts[0],
-          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-              .absolute
-              .path);
+        prompts[0],
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
+      );
       expect(prompts[1], 'Senior Developer Engineer'); // untouched literal
     });
   });
@@ -680,33 +795,39 @@ void pathRewriteNestedTests() {
           'cliPrompts': [
             'agents/instructions/common/guide.md',
             {'descriptionPath': './instructions/common/guide.md'},
-            [
-              './js/main.js',
-            ],
+            ['./js/main.js'],
           ],
         },
       };
       resolver.rewritePathsToPackRoot(config, pack.packRoot);
       final params = config['params'] as Map<String, dynamic>;
-      expect(params['jsPath'],
-          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
-      expect(params['preJSAction'],
-          File(p.join(pack.packRoot.path, 'js/common/util.js')).absolute.path);
+      expect(
+        params['jsPath'],
+        File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path,
+      );
+      expect(
+        params['preJSAction'],
+        File(p.join(pack.packRoot.path, 'js/common/util.js')).absolute.path,
+      );
       final prompts = params['cliPrompts'] as List;
       expect(
-          prompts[0],
-          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-              .absolute
-              .path);
+        prompts[0],
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
+      );
       final nestedMap = prompts[1] as Map<String, dynamic>;
       expect(
-          nestedMap['descriptionPath'],
-          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-              .absolute
-              .path);
+        nestedMap['descriptionPath'],
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
+      );
       final nestedList = prompts[2] as List;
-      expect(nestedList[0],
-          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+      expect(
+        nestedList[0],
+        File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path,
+      );
     });
   });
 }
@@ -730,26 +851,29 @@ void pathRewriteUntouchedTests() {
       expect(params['timerJSAction'], 'classpath:js/timer.js');
     });
 
-    test('leaves empty, plain-http, absolute, and pack-escaping refs untouched',
-        () {
-      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
-      final outside =
-          File(p.join(Directory.systemTemp.path, 'outside.js')).absolute.path;
-      final config = <String, dynamic>{
-        'params': {
-          'jsPath': '', // empty ref
-          'postJSAction': 'http://example.com/x.js', // plain http URL
-          'preJSAction': outside, // absolute path outside the pack
-          // ../ escape: normalizes outside the pack root — traversal guard.
-          'timerJSAction': '../outside.js',
-        },
-      };
-      resolver.rewritePathsToPackRoot(config, pack.packRoot);
-      final params = config['params'] as Map<String, dynamic>;
-      expect(params['jsPath'], '');
-      expect(params['postJSAction'], 'http://example.com/x.js');
-      expect(params['preJSAction'], outside);
-      expect(params['timerJSAction'], '../outside.js');
-    });
+    test(
+      'leaves empty, plain-http, absolute, and pack-escaping refs untouched',
+      () {
+        final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+        final outside = File(p.join(Directory.systemTemp.path, 'outside.js'))
+            .absolute
+            .path;
+        final config = <String, dynamic>{
+          'params': {
+            'jsPath': '', // empty ref
+            'postJSAction': 'http://example.com/x.js', // plain http URL
+            'preJSAction': outside, // absolute path outside the pack
+            // ../ escape: normalizes outside the pack root — traversal guard.
+            'timerJSAction': '../outside.js',
+          },
+        };
+        resolver.rewritePathsToPackRoot(config, pack.packRoot);
+        final params = config['params'] as Map<String, dynamic>;
+        expect(params['jsPath'], '');
+        expect(params['postJSAction'], 'http://example.com/x.js');
+        expect(params['preJSAction'], outside);
+        expect(params['timerJSAction'], '../outside.js');
+      },
+    );
   });
 }

@@ -16,7 +16,7 @@ dependencies:
   html: ^0.15.5
   native_synchronization: ^0.3.1
   path: ^1.9.0
-  quickjs_runtime: ^0.3.3 # hosted on pub.dev
+  quickjs_runtime: ^0.3.4 # hosted on pub.dev; 0.3.4 = per-runtime dispatchContext (gh-242)
 
 dev_dependencies:
   test: ^1.24.0

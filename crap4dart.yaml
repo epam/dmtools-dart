@@ -15,11 +15,7 @@ crap:
   # Enable CRAP analysis; when false, "analyze" exits immediately.
   enabled: true
   # Maximum allowed CRAP score; higher scores fail the run.
-  # Owner decision 2026-09-26: raised 8.0 -> 11.0 to unblock the merge
-  # train (AgentPackResolver._toAbsolutePackPath at 10.04 — hardened
-  # traversal guard, branch-coverage gap in sharded CI). Revisit: bring
-  # back toward 8.0 once the method is fully covered.
-  threshold: 11.0
+  threshold: 8.0
   # Run the test suite to generate coverage before analyzing.
   run_tests: false
   # Count branches inside lambdas towards the enclosing method's

@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/dmtools.dart';
+import 'package:dmtools/src/compile/agent_pack_compiler.dart'
+    hide AgentPackException;
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:test/test.dart';
 
@@ -148,6 +150,7 @@ void _testConfigFileResolution() {
   });
 
   _testParentResolution();
+  _testParentPackResolution();
 }
 
 void _testParentResolution() {
@@ -259,4 +262,88 @@ void _testPackTokenWiring() {
       }
     });
   });
+}
+
+/// `parent.path` pointing at an agent pack (local .zip / URL / registry ref):
+/// the parent is unpacked, its own chain resolved inside the pack, and its
+/// pack-relative paths rewritten to absolute cache paths before the merge.
+void _testParentPackResolution() {
+  group('parent-config from agent pack', () {
+    test('local pack zip parent merges and rewrites paths to the cache', () {
+      final zip = _buildParentPack();
+      final packsRoot = Directory('${_tmp.path}/packs');
+      final resolver = AgentPackResolver(packsRoot: packsRoot);
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "params":{"fromChild":"yes"}
+      }''');
+      final json = jsonDecode(RunCommandProcessor(packResolver: resolver)
+          .process(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['fromParent'], 'yes');
+      expect(json['params']['fromChild'], 'yes');
+      final jsPath = json['params']['jsPath'] as String;
+      expect(jsPath.startsWith(packsRoot.path), isTrue,
+          reason: 'parent jsPath is rewritten into the pack cache: $jsPath');
+      expect(File(jsPath).existsSync(), isTrue);
+    });
+
+    test('pack parent with #entry override uses the overridden entry', () {
+      final zip = _buildParentPack(withAltEntry: true);
+      final packsRoot = Directory('${_tmp.path}/packs');
+      final resolver = AgentPackResolver(packsRoot: packsRoot);
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
+      }''');
+      final json = jsonDecode(RunCommandProcessor(packResolver: resolver)
+          .process(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['altEntry'], 'yes');
+      expect(json['params']['fromParent'], isNull,
+          reason: 'the default entry config is not loaded');
+    });
+
+    test('non-pack parent paths still resolve from the filesystem', () {
+      _writeFile('parent.json', '{"params":{"k":"p"}}');
+      _writeFile('child.json',
+          '{"name":"child","parent":{"path":"parent.json"}}');
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['k'], 'p');
+    });
+  });
+}
+
+/// Builds a real parent pack zip with `js/helper.js` and an entry config.
+File _buildParentPack({bool withAltEntry = false}) {
+  final agentRoot = Directory('${_tmp.path}/parent_agent_root')
+    ..createSync(recursive: true);
+  File('${agentRoot.path}/js/helper.js')
+    ..createSync(recursive: true)
+    ..writeAsStringSync('// helper\n');
+  final params = <String, dynamic>{
+    'jsPath': 'agents/js/helper.js',
+    'fromParent': 'yes',
+  };
+  final entryMap = <String, dynamic>{
+    'name': 'ParentAgent',
+    if (withAltEntry)
+      // Referencing alt.json via parent pulls it into the pack closure, so
+      // the `#alt.json` entry override has a file to load.
+      'parent': {'path': 'agents/alt.json'},
+    'params': params,
+  };
+  final entry = File('${agentRoot.path}/parent_agent.json')
+    ..writeAsStringSync(jsonEncode(entryMap));
+  if (withAltEntry) {
+    File('${agentRoot.path}/alt.json')
+        .writeAsStringSync(jsonEncode({
+      'name': 'ParentAgent',
+      'params': {'altEntry': 'yes'},
+    }));
+  }
+  final dist = Directory('${_tmp.path}/parent_dist')
+    ..createSync(recursive: true);
+  return AgentPackCompiler(agentRoot.path)
+      .compile(entry, '1.0.0', 'deadbeef', dist)
+      .zipFile;
 }

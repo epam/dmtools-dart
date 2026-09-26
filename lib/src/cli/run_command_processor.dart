@@ -179,7 +179,8 @@ class RunCommandProcessor {
     }
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
-    config = _ParentConfigResolver().resolve(config, file.parent.path);
+    config = _ParentConfigResolver(packResolver: _packResolver)
+        .resolve(config, file.parent.path);
     if (packRoot != null) {
       AgentPackResolver().rewritePathsToPackRoot(config, packRoot);
     }
@@ -236,6 +237,12 @@ class _RunArgs {
 /// onto its resolved parent while honouring `"override"` and `"merge"`
 /// directives.
 class _ParentConfigResolver {
+  /// Creates a resolver; [packResolver] is a test seam for pack parents.
+  _ParentConfigResolver({AgentPackResolver? packResolver})
+      : _packResolver = packResolver ?? AgentPackResolver();
+
+  final AgentPackResolver _packResolver;
+
   /// Resolves [child] by walking up its parent chain.
   ///
   /// [configDir] is the directory of the file that [child] was loaded from;
@@ -261,8 +268,23 @@ class _ParentConfigResolver {
     );
   }
 
-  /// Loads the parent file and recursively resolves it.
+  /// Loads the parent config (filesystem path or agent pack ref) and
+  /// recursively resolves it.
   Map<String, dynamic> _loadAndResolve(String parentPath, String configDir) {
+    if (_packResolver.isPack(parentPath)) {
+      // Pack ref (local .zip / http(s) URL / <agent>@<version|latest>):
+      // resolve to the unpacked cache, load the entry config from there,
+      // resolve the parent's own chain inside the pack, and rewrite its
+      // pack-relative paths to absolute cache paths so they keep working
+      // after the merge with a child that may live in another pack or repo.
+      final pack = _packResolver.resolve(parentPath,
+          githubToken: PropertyReader().getGithubToken());
+      final json = jsonDecode(pack.entryFile.readAsStringSync())
+          as Map<String, dynamic>;
+      final config = resolve(json, pack.entryFile.parent.path);
+      _packResolver.rewritePathsToPackRoot(config, pack.packRoot);
+      return config;
+    }
     final file = File('$configDir/$parentPath');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
     return resolve(json, file.parent.path);

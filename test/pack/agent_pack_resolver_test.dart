@@ -37,6 +37,7 @@ void main() {
   stagingTests();
   remoteDownloadTests();
   remoteSha256VerificationTests();
+  registryRefTests();
   cacheReverifyTests();
   execBitTests();
   manifestCastTests();
@@ -758,4 +759,143 @@ void pathRewriteUntouchedTests() {
       },
     );
   });
+}
+
+/// Registry refs: `<agent>@<version|latest>` resolved from a flat registry
+/// (env `DMTOOLS_PACK_REGISTRY`) serving `catalog.json` plus
+/// `<agent>-<version>.zip` (+ `.sha256`).
+void registryRefTests() {
+  group('AgentPackResolver registry refs', () {
+    test('isRegistryRef requires a configured registry and the @ form', () {
+      final noRegistry =
+          AgentPackResolver(packsRoot: packsRoot, registryBaseUrl: '');
+      expect(noRegistry.isRegistryRef('my_agent@1.0.0'), isFalse,
+          reason: 'no registry configured');
+      expect(noRegistry.isPack('my_agent@1.0.0'), isFalse);
+
+      final withRegistry = AgentPackResolver(
+          packsRoot: packsRoot, registryBaseUrl: 'http://localhost:1');
+      expect(withRegistry.isRegistryRef('my_agent@1.0.0'), isTrue);
+      expect(withRegistry.isRegistryRef('my_agent@latest'), isTrue);
+      expect(withRegistry.isPack('my_agent@latest'), isTrue);
+      // Never a pack: bare names, files, paths.
+      expect(withRegistry.isRegistryRef('my_agent'), isFalse);
+      expect(withRegistry.isRegistryRef('my_agent.json'), isFalse);
+      expect(withRegistry.isRegistryRef('./my_agent@1.0.0'), isFalse);
+      expect(withRegistry.isRegistryRef('agents/my_agent@1.0.0'), isFalse);
+      expect(withRegistry.isRegistryRef('@latest'), isFalse);
+      expect(withRegistry.isRegistryRef('my_agent@'), isFalse);
+    });
+
+    test('explicit @version downloads <agent>-<version>.zip', () async {
+      final zipBytes = buildPack('my_agent', '1.2.0').readAsBytesSync();
+      final server = await startRegistryServer({
+        '/my_agent-1.2.0.zip': zipBytes,
+        '/my_agent-1.2.0.zip.sha256':
+            utf8.encode('${sha256.convert(zipBytes)}  my_agent-1.2.0.zip'),
+        '/catalog.json': utf8.encode(jsonEncode({'my_agent': '1.2.0'})),
+      });
+      try {
+        final r = AgentPackResolver(
+            packsRoot: packsRoot,
+            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+        final pack = r.resolve('my_agent@1.2.0');
+        expect(pack.agent, 'my_agent');
+        expect(pack.version, '1.2.0');
+        expect(File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(),
+            isTrue);
+      } finally {
+        server.isolate.kill();
+      }
+    });
+
+    test('@latest resolves the version from catalog.json', () async {
+      final zipBytes = buildPack('latest_agent', '2.0.0').readAsBytesSync();
+      final server = await startRegistryServer({
+        '/latest_agent-2.0.0.zip': zipBytes,
+        '/latest_agent-2.0.0.zip.sha256':
+            utf8.encode('${sha256.convert(zipBytes)}'),
+        '/catalog.json': utf8.encode(jsonEncode({
+          'agents': {'latest_agent': '2.0.0'} // nested catalog shape
+        })),
+      });
+      try {
+        final r = AgentPackResolver(
+            packsRoot: packsRoot,
+            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+        final pack = r.resolve('latest_agent@latest');
+        expect(pack.agent, 'latest_agent');
+        expect(pack.version, '2.0.0');
+      } finally {
+        server.isolate.kill();
+      }
+    });
+
+    test('@latest with an unknown agent fails naming the agent', () async {
+      final server = await startRegistryServer({
+        '/catalog.json': utf8.encode(jsonEncode({'other_agent': '1.0.0'})),
+      });
+      try {
+        final r = AgentPackResolver(
+            packsRoot: packsRoot,
+            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+        expect(
+          () => r.resolve('unknown_agent@latest'),
+          throwsA(isA<AgentPackException>().having(
+              (e) => e.message, 'message', contains('unknown_agent'))),
+        );
+      } finally {
+        server.isolate.kill();
+      }
+    });
+
+    test('@version with a mismatching .sha256 fails the checksum', () async {
+      final zipBytes = buildPack('hash_agent', '1.0.0').readAsBytesSync();
+      final server = await startRegistryServer({
+        '/hash_agent-1.0.0.zip': zipBytes,
+        '/hash_agent-1.0.0.zip.sha256': utf8.encode('${'0' * 64}  x.zip'),
+      });
+      try {
+        final r = AgentPackResolver(
+            packsRoot: packsRoot,
+            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+        expect(
+          () => r.resolve('hash_agent@1.0.0'),
+          throwsA(isA<AgentPackException>().having(
+              (e) => e.message, 'message', contains('SHA-256 mismatch'))),
+        );
+      } finally {
+        server.isolate.kill();
+      }
+    });
+  });
+}
+
+/// Isolate entry: serves a path→bytes map, 404 for anything else.
+void _registryServerEntry(List<Object?> init) {
+  final readyPort = init[0] as SendPort;
+  final files = init[1] as Map<String, List<int>>;
+  HttpServer.bind(InternetAddress.loopbackIPv4, 0).then((server) {
+    readyPort.send(server.port);
+    server.listen((request) {
+      final body = files[request.uri.path];
+      if (body == null) {
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        request.response.add(body);
+      }
+      request.response.close();
+    });
+  });
+}
+
+/// Starts the loopback registry server in a separate isolate.
+Future<({int port, Isolate isolate})> startRegistryServer(
+    Map<String, List<int>> files) async {
+  final readyInbox = ReceivePort();
+  final isolate = await Isolate.spawn(
+      _registryServerEntry, [readyInbox.sendPort, files]);
+  final port = await readyInbox.first as int;
+  readyInbox.close();
+  return (port: port, isolate: isolate);
 }

@@ -64,12 +64,26 @@ class AgentPackException implements Exception {
 
 /// Agent pack resolver — see the library doc for the pipeline.
 class AgentPackResolver {
-  /// Creates a resolver; [packsRoot] defaults to `~/.dmtools/packs`.
-  AgentPackResolver({Directory? packsRoot})
+  /// Creates a resolver; [packsRoot] defaults to `~/.dmtools/packs`, and the
+  /// registry base URL to the `DMTOOLS_PACK_REGISTRY` env var (read lazily on
+  /// first use). Pass [registryBaseUrl] to pin the registry explicitly (tests);
+  /// an empty string disables the registry hermetically.
+  AgentPackResolver({Directory? packsRoot, String? registryBaseUrl})
       : _packsRoot =
-            packsRoot ?? Directory(p.join(_home(), '.dmtools', 'packs'));
+            packsRoot ?? Directory(p.join(_home(), '.dmtools', 'packs')),
+        _registryBaseUrl = registryBaseUrl,
+        _registryLookedUp = registryBaseUrl != null;
 
   final Directory _packsRoot;
+
+  /// The configured registry base URL (env `DMTOOLS_PACK_REGISTRY`), lazily
+  /// resolved and cached; `null` when no registry is configured.
+  String? _registryBaseUrl;
+  bool _registryLookedUp = false;
+
+  /// Matches `<agent>@<version|latest>` (never a path, URL, or `.json` file).
+  static final RegExp _registryRef =
+      RegExp(r'^([A-Za-z0-9_-]+)@(latest|[A-Za-z0-9][A-Za-z0-9._-]*)$');
 
   /// Per-file unpack size cap (64 MiB).
   static const int maxFileBytes = 64 * 1024 * 1024;
@@ -82,16 +96,36 @@ class AgentPackResolver {
       Platform.environment['USERPROFILE'] ??
       Directory.current.path;
 
-  /// True when [runArg] names a pack: a `.zip` path that exists, or an
-  /// `http(s)://…​.zip` URL, with an optional `#entry.json` suffix.
+  /// The configured registry base URL with any trailing slash stripped, or
+  /// `null` when no registry is configured.
+  String? get _registry {
+    if (!_registryLookedUp) {
+      _registryLookedUp = true;
+      _registryBaseUrl = Platform.environment['DMTOOLS_PACK_REGISTRY'];
+    }
+    final url = _registryBaseUrl?.trim();
+    if (url == null || url.isEmpty) return null;
+    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+  }
+
+  /// True when [runArg] names a pack: a `.zip` path that exists, an
+  /// `http(s)://…​.zip` URL, or a registry ref `<agent>@<version|latest>`
+  /// (when a registry is configured), with an optional `#entry.json` suffix.
   bool isPack(String? runArg) {
     if (runArg == null) return false;
     final base = stripEntry(runArg);
+    if (isRegistryRef(base)) return true;
     if (base.startsWith('http://') || base.startsWith('https://')) {
       return base.toLowerCase().endsWith('.zip');
     }
     return base.toLowerCase().endsWith('.zip') && File(base).existsSync();
   }
+
+  /// True when [base] (entry-stripped) is a registry ref `<agent>@<version|latest>`
+  /// and a registry is configured. The `@` form is required so bare agent/job
+  /// names and plain `.json` files are never mistaken for packs.
+  bool isRegistryRef(String base) =>
+      _registry != null && _registryRef.hasMatch(base);
 
   /// Resolves [runArg] to a cached, verified pack.
   ///
@@ -99,7 +133,13 @@ class AgentPackResolver {
   /// Throws [AgentPackException] on download/verification/unpack failures.
   ResolvedPack resolve(String runArg, {String? githubToken}) {
     final entryOverride = entryOverrideOf(runArg);
-    final base = stripEntry(runArg);
+    var base = stripEntry(runArg);
+
+    // Registry ref (<agent>@<version|latest>) → concrete zip URL via the registry.
+    if (isRegistryRef(base)) {
+      base = _resolveRegistryZipUrl(base);
+      stderr.writeln("Resolved registry ref '${stripEntry(runArg)}' -> $base");
+    }
 
     final zipFile = _obtainZip(base, githubToken);
     try {
@@ -145,6 +185,54 @@ class AgentPackResolver {
   static String? entryOverrideOf(String runArg) {
     final hash = runArg.indexOf('#');
     return hash >= 0 ? runArg.substring(hash + 1) : null;
+  }
+
+  // ------------------------------------------------------------------
+  // Registry refs: <agent>@<version|latest> (env DMTOOLS_PACK_REGISTRY)
+  // ------------------------------------------------------------------
+
+  /// Maps a registry ref to the concrete pack zip URL. For `@latest` the
+  /// version is looked up in the registry's `catalog.json`; an explicit
+  /// `@version` is used as-is. Layout: `<registry>/<agent>-<version>.zip`
+  /// (with the sibling `.sha256` verified later by the normal download path).
+  String _resolveRegistryZipUrl(String ref) {
+    final m = _registryRef.firstMatch(ref);
+    if (m == null) throw AgentPackException('Not a registry ref: $ref');
+    final agent = m.group(1)!;
+    final versionToken = m.group(2)!;
+    final registry = _registry!;
+    final version = versionToken == 'latest'
+        ? _fetchLatestVersion(registry, agent)
+        : versionToken;
+    return '$registry/$agent-$version.zip';
+  }
+
+  /// Reads the latest published version of [agent] from the registry's
+  /// `catalog.json`. Accepts either a flat map `{"agent": "version"}` or a
+  /// nested `{"agents": {"agent": "version"}}` shape.
+  String _fetchLatestVersion(String registry, String agent) {
+    final catalogUrl = '$registry/catalog.json';
+    final response = SyncHttpClient.get(catalogUrl);
+    if (response.statusCode != 200) {
+      throw AgentPackException('Failed to read registry catalog: '
+          'HTTP ${response.statusCode} for $catalogUrl');
+    }
+    final catalog = jsonDecode(response.body);
+    String? version;
+    if (catalog is Map) {
+      final direct = catalog[agent];
+      if (direct is String) version = direct;
+      final agents = catalog['agents'];
+      if ((version == null || version.isEmpty) && agents is Map) {
+        final nested = agents[agent];
+        if (nested is String) version = nested;
+      }
+    }
+    if (version == null || version.isEmpty) {
+      throw AgentPackException(
+          "Agent '$agent' not found in registry catalog $catalogUrl");
+    }
+    return version;
   }
 
   // ------------------------------------------------------------------

@@ -25,6 +25,14 @@ jobs:
           echo "runner: ${RUNNER_NAME:-unknown}"
           echo "os:     ${RUNNER_OS:-?}/${RUNNER_ARCH:-?}"
           uname -a || true
+      - name: Disk forensics
+        run: |
+          echo "=== df:"; df -h / || true
+          echo "=== _work usage:"; du -sh "$RUNNER_WORKSPACE/.."/* 2>/dev/null | sort -rh | head -15 || true
+          echo "=== _tool:"; du -sh "$RUNNER_WORKSPACE/../_tool" 2>/dev/null || true
+          echo "=== home caches:"; du -sh ~/.gradle ~/.pub-cache ~/.dart-tool ~/.npm ~/.docker 2>/dev/null | sort -rh || true
+          echo "=== home top10:"; du -sh ~/* 2>/dev/null | sort -rh | head -10 || true
+          echo "=== docker:"; docker system df 2>/dev/null || echo "no docker"
       - name: Tooling snapshot
         run: |
           echo "cpu: $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo ?)"

@@ -585,7 +585,7 @@ class AgentPackResolver {
 
   /// True when [ref] is not a repo-relative path (empty, an absolute or
   /// `http(s)`/`classpath:` reference) and must be left untouched.
-  bool _isNonPathRef(String ref) =>
+  static bool _isNonPathRef(String ref) =>
       ref.isEmpty ||
       ref.startsWith('http://') ||
       ref.startsWith('https://') ||

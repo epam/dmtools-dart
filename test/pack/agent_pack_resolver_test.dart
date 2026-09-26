@@ -40,6 +40,8 @@ void main() {
   manifestCastTests();
   encryptionScanTests();
   pathRewriteTests();
+  pathRewriteNestedTests();
+  pathRewriteUntouchedTests();
 }
 
 late Directory agentRoot;
@@ -634,7 +636,8 @@ void encryptionScanTests() {
   });
 }
 
-/// Path rewriting (path duality, AC5).
+/// Path rewriting (path duality, AC5): repo-relative refs become
+/// absolute pack-root paths.
 void pathRewriteTests() {
   group('AgentPackResolver.rewritePathsToPackRoot', () {
     test('rewrites agents/ and plain paths to absolute pack paths', () {
@@ -660,7 +663,12 @@ void pathRewriteTests() {
               .path);
       expect(prompts[1], 'Senior Developer Engineer'); // untouched literal
     });
+  });
+}
 
+/// Path rewriting of `./`-prefixed refs and nested list/map shapes.
+void pathRewriteNestedTests() {
+  group('AgentPackResolver.rewritePathsToPackRoot nested shapes', () {
     test('normalizes ./-prefixed and nested list shapes to the pack root', () {
       final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
       final config = <String, dynamic>{
@@ -700,7 +708,14 @@ void pathRewriteTests() {
       expect(nestedList[0],
           File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
     });
+  });
+}
 
+/// Refs that must never be rewritten: URLs, classpath refs, literal
+/// strings, absolute paths, and anything escaping the pack root
+/// (traversal guard).
+void pathRewriteUntouchedTests() {
+  group('AgentPackResolver.rewritePathsToPackRoot untouched refs', () {
     test('leaves URLs and classpath refs untouched', () {
       final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
       final config = <String, dynamic>{

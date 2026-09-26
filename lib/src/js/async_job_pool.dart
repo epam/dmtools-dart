@@ -43,8 +43,7 @@ import '../config/property_reader.dart';
 import 'engine_factory.dart';
 import 'sync_http_bridge.dart';
 
-export 'package:quickjs_runtime/quickjs_runtime.dart'
-    show AsyncJobEnvelope, asyncJobPrelude, asyncWorkerBootstrap;
+export 'package:quickjs_runtime/quickjs_runtime.dart' show AsyncJobEnvelope;
 
 /// Worker body: warm per-worker HTTP bridge, fresh wired engine per job.
 ///

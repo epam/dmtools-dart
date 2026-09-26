@@ -104,14 +104,15 @@ class AgentPackResolver {
     final zipFile = _obtainZip(base, githubToken);
     try {
       final manifest = _readManifest(zipFile);
-      final agent = manifest['agent'] as String;
-      final version = manifest['version'] as String;
+      final agent = _manifestString(manifest, 'agent');
+      final version = _manifestString(manifest, 'version');
       _validateManifestIdentity(agent, version);
 
       final packRoot = Directory(p.join(_packsRoot.path, '$agent-$version'));
       _unpackAndVerify(zipFile, manifest, packRoot);
 
-      final entryName = entryOverride ?? manifest['defaultEntry'] as String;
+      final entryName =
+          entryOverride ?? _manifestString(manifest, 'defaultEntry');
       _validateEntryName(entryName, packRoot);
       final entryFile = File(p.join(packRoot.path, entryName));
       if (!entryFile.existsSync()) {
@@ -227,6 +228,17 @@ class AgentPackResolver {
     return manifest;
   }
 
+  /// Reads a manifest string key, failing with a clean [AgentPackException]
+  /// (not a bare `TypeError`) when the value is missing or not a string.
+  static String _manifestString(Map<String, dynamic> manifest, String key) {
+    final value = manifest[key];
+    if (value is! String) {
+      throw AgentPackException('manifest.json "$key" must be a string '
+          '(got ${value.runtimeType})');
+    }
+    return value;
+  }
+
   /// Allowed charset for manifest `agent`/`version` — these untrusted strings
   /// build the cache path, so slashes and dot-only segments are refused
   /// (cache-path traversal guard; also shields the recursive delete).
@@ -261,25 +273,65 @@ class AgentPackResolver {
   }
 
   /// AC6: encrypted zips are rejected with a dedicated error. The archive
-  /// package does not surface an `isEncrypted` flag, so scan the central
-  /// directory's general-purpose bit flag (bit 0 = encrypted) in the raw bytes.
+  /// package does not surface an `isEncrypted` flag, so walk the central
+  /// directory (located via the End Of Central Directory record) and check
+  /// each header's general-purpose bit flag (bit 0 = encrypted). Walking real
+  /// headers — instead of scanning raw bytes for the signature — avoids
+  /// false positives from stored payloads that merely contain "PK\x01\x02".
   void _rejectIfEncrypted(List<int> zipBytes, File zipFile) {
-    // Central directory header signature: 0x02014b50 ("PK\x01\x02"); the
-    // general-purpose bit flag is a little-endian uint16 at offset +8.
-    for (var i = 0; i + 9 < zipBytes.length; i++) {
-      if (zipBytes[i] == 0x50 &&
-          zipBytes[i + 1] == 0x4B &&
-          zipBytes[i + 2] == 0x01 &&
-          zipBytes[i + 3] == 0x02) {
-        final flags = zipBytes[i + 8] | (zipBytes[i + 9] << 8);
-        if (flags & 0x0001 != 0) {
-          throw AgentPackException(
-              'Encrypted agent packs are not supported yet: ${p.basename(zipFile.path)} '
-              '(encryption support is a planned future hook)');
-        }
+    for (final flags in _centralDirectoryFlags(zipBytes)) {
+      if (flags & 0x0001 != 0) {
+        throw AgentPackException(
+            'Encrypted agent packs are not supported yet: ${p.basename(zipFile.path)} '
+            '(encryption support is a planned future hook)');
       }
     }
   }
+
+  /// Yields the general-purpose bit flag of every central-directory header.
+  /// Yields nothing when the EOCD record or a header signature is missing —
+  /// a corrupt zip then fails in the decoder with its own error.
+  Iterable<int> _centralDirectoryFlags(List<int> bytes) sync* {
+    final eocd = _findEocd(bytes);
+    if (eocd < 0) return;
+    final count = _uint16(bytes, eocd + 10);
+    var offset = _uint32(bytes, eocd + 16);
+    for (var i = 0; i < count && offset + 46 <= bytes.length; i++) {
+      if (_uint32(bytes, offset) != _centralHeaderSignature) return;
+      yield _uint16(bytes, offset + 8);
+      offset += 46 +
+          _uint16(bytes, offset + 28) + // file name length
+          _uint16(bytes, offset + 30) + // extra field length
+          _uint16(bytes, offset + 32); // comment length
+    }
+  }
+
+  /// Central directory header signature ("PK\x01\x02" little-endian).
+  static const int _centralHeaderSignature = 0x02014b50;
+
+  /// End Of Central Directory record signature ("PK\x05\x06" little-endian).
+  static const int _eocdSignature = 0x06054b50;
+
+  /// Locates the EOCD record in the trailing comment window (22 bytes fixed
+  /// + up to 65535 bytes of zip comment); -1 when absent.
+  int _findEocd(List<int> bytes) {
+    final earliest = bytes.length > 65558 ? bytes.length - 65558 : 0;
+    for (var i = bytes.length - 22; i >= earliest; i--) {
+      if (_uint32(bytes, i) == _eocdSignature) return i;
+    }
+    return -1;
+  }
+
+  /// Little-endian uint16 at [offset].
+  static int _uint16(List<int> b, int offset) =>
+      b[offset] | (b[offset + 1] << 8);
+
+  /// Little-endian uint32 at [offset].
+  static int _uint32(List<int> b, int offset) =>
+      b[offset] |
+      (b[offset + 1] << 8) |
+      (b[offset + 2] << 16) |
+      (b[offset + 3] << 24);
 
   ArchiveFile? _findEntry(Archive archive, String name) {
     for (final entry in archive.files) {
@@ -332,10 +384,26 @@ class AgentPackResolver {
     try {
       final cached =
           jsonDecode(cachedManifest.readAsStringSync()) as Map<String, dynamic>;
-      return _stableHash(cached) == _stableHash(manifest);
+      if (_stableHash(cached) != _stableHash(manifest)) return false;
+      return _cachedFilesIntact(packRoot, manifest);
     } on Object {
       return false;
     }
+  }
+
+  /// Re-verifies every manifest-listed cached file (existence + sha256). A
+  /// manifest match alone would execute whatever tampered or corrupted bytes
+  /// are on disk, so a mismatch falls back to a fresh unpack.
+  bool _cachedFilesIntact(Directory packRoot, Map<String, dynamic> manifest) {
+    for (final entry in _manifestHashes(manifest).entries) {
+      final file = File(p.join(packRoot.path, entry.key));
+      if (!file.existsSync()) return false;
+      if (sha256.convert(file.readAsBytesSync()).toString() !=
+          entry.value.toLowerCase()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   String _stableHash(Map<String, dynamic> manifest) =>
@@ -383,7 +451,10 @@ class AgentPackResolver {
     final data = entry.content as List<int>;
     totalBytes = _verifyEntryData(entry.name, data, hashes, totalBytes);
     target.writeAsBytesSync(data);
-    if (entry.name.endsWith('.sh')) {
+    // Java `restoreExecBit` parity: `.sh` entries OR any entry whose unix
+    // mode carries the owner-exec bit (0o100), so packed non-.sh
+    // executables keep +x.
+    if (entry.name.endsWith('.sh') || (entry.mode & 0x40) != 0) {
       _makeExecutable(target);
     }
     return totalBytes;

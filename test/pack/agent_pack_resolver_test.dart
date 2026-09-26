@@ -35,6 +35,10 @@ void main() {
   manifestInventoryTests();
   stagingTests();
   remoteDownloadTests();
+  cacheReverifyTests();
+  execBitTests();
+  manifestCastTests();
+  encryptionScanTests();
   pathRewriteTests();
 }
 
@@ -221,15 +225,20 @@ void manifestTests() {
   });
 }
 
-/// Builds a zip from [manifest] plus [extraFiles] (name → bytes).
+/// Builds a zip from [manifest] plus [extraFiles] (name → bytes); [modes]
+/// overrides the unix mode of individual entries.
 File buildZipWithManifest(
-    Map<String, dynamic> manifest, Map<String, List<int>> extraFiles) {
+    Map<String, dynamic> manifest, Map<String, List<int>> extraFiles,
+    {Map<String, int> modes = const {}}) {
   final manifestBytes = utf8.encode(jsonEncode(manifest));
   final archive = Archive()
     ..addFile(
         ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
   for (final entry in extraFiles.entries) {
-    archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+    final file = ArchiveFile(entry.key, entry.value.length, entry.value);
+    final mode = modes[entry.key];
+    if (mode != null) file.mode = mode;
+    archive.addFile(file);
   }
   final zip =
       File('${Directory.systemTemp.createTempSync('zip_').path}/pack.zip');
@@ -396,17 +405,23 @@ void stagingTests() {
 
 /// Loopback pack server entry point. Runs in its own isolate because
 /// [SyncHttpClient] blocks the caller isolate (curl subprocess) — an
-/// in-isolate server could never answer. Serves 404 for `.sha256`, the pack
-/// bytes otherwise, and reports the zip request's Authorization header.
+/// in-isolate server could never answer. Serves [sha256Body] for `.sha256`
+/// (404 when null), the pack bytes otherwise, and reports the zip request's
+/// Authorization header.
 void _packServerEntry(List<Object?> init) {
   final readyPort = init[0] as SendPort;
   final authPort = init[1] as SendPort;
   final zipBytes = init[2] as List<int>;
+  final sha256Body = init[3] as String?;
   HttpServer.bind(InternetAddress.loopbackIPv4, 0).then((server) {
     readyPort.send(server.port);
     server.listen((request) {
       if (request.uri.path.endsWith('.sha256')) {
-        request.response.statusCode = HttpStatus.notFound;
+        if (sha256Body == null) {
+          request.response.statusCode = HttpStatus.notFound;
+        } else {
+          request.response.write(sha256Body);
+        }
       } else {
         authPort.send(request.headers.value('authorization'));
         request.response.add(zipBytes);
@@ -416,31 +431,205 @@ void _packServerEntry(List<Object?> init) {
   });
 }
 
-/// Remote download behavior (PR #249 review: missing `.sha256` handling,
+/// Starts the loopback pack server in a separate isolate.
+Future<({int port, ReceivePort authInbox, Isolate isolate})> startPackServer(
+    List<int> zipBytes,
+    {String? sha256Body}) async {
+  final readyInbox = ReceivePort();
+  final authInbox = ReceivePort();
+  final isolate = await Isolate.spawn(_packServerEntry,
+      [readyInbox.sendPort, authInbox.sendPort, zipBytes, sha256Body]);
+  final port = await readyInbox.first as int;
+  readyInbox.close();
+  return (port: port, authInbox: authInbox, isolate: isolate);
+}
+
+/// Remote download behavior (PR #249 review: `.sha256` match/mismatch/404,
 /// token scoping). Served by a loopback [HttpServer] in a separate isolate.
 void remoteDownloadTests() {
   group('AgentPackResolver remote download', () {
     test('missing .sha256 sidecar skips verification and still resolves',
         () async {
       final zipBytes = buildPack('remote_agent', '2.0.0').readAsBytesSync();
-      final readyInbox = ReceivePort();
-      final authInbox = ReceivePort();
-      final server = await Isolate.spawn(_packServerEntry,
-          [readyInbox.sendPort, authInbox.sendPort, zipBytes]);
+      final server = await startPackServer(zipBytes);
       try {
-        final port = await readyInbox.first as int;
-        final pack = resolver.resolve('http://127.0.0.1:$port/pack.zip',
+        final pack = resolver.resolve(
+            'http://127.0.0.1:${server.port}/pack.zip',
             githubToken: 'secret-token');
         expect(pack.agent, 'remote_agent');
         expect(pack.entryFile.existsSync(), isTrue);
-        final auth = await authInbox.first;
+        final auth = await server.authInbox.first;
         expect(auth, isNull,
             reason: 'the bearer token is only sent to github.com');
       } finally {
-        readyInbox.close();
-        authInbox.close();
-        server.kill();
+        server.authInbox.close();
+        server.isolate.kill();
       }
+    });
+
+    test('matching .sha256 sidecar verifies and resolves', () async {
+      final zipBytes = buildPack('remote_agent', '2.1.0').readAsBytesSync();
+      final sidecar = '${sha256.convert(zipBytes)}  pack.zip';
+      final server = await startPackServer(zipBytes, sha256Body: sidecar);
+      try {
+        final pack =
+            resolver.resolve('http://127.0.0.1:${server.port}/pack.zip');
+        expect(pack.agent, 'remote_agent');
+        expect(pack.version, '2.1.0');
+      } finally {
+        server.authInbox.close();
+        server.isolate.kill();
+      }
+    });
+
+    test('mismatching .sha256 sidecar fails with a checksum error', () async {
+      final zipBytes = buildPack('remote_agent', '2.2.0').readAsBytesSync();
+      final server =
+          await startPackServer(zipBytes, sha256Body: '${'0' * 64}  pack.zip');
+      try {
+        expect(
+          () => resolver.resolve('http://127.0.0.1:${server.port}/pack.zip'),
+          throwsA(isA<AgentPackException>().having(
+              (e) => e.message, 'message', contains('SHA-256 mismatch'))),
+        );
+      } finally {
+        server.authInbox.close();
+        server.isolate.kill();
+      }
+    });
+  });
+}
+
+/// Cache-hit re-verification (PR #249 review suggestion: a manifest match
+/// alone must not execute tampered bytes).
+void cacheReverifyTests() {
+  group('AgentPackResolver cache re-verification', () {
+    test('a tampered cached file triggers a fresh unpack', () {
+      final zip = buildPack('my_agent', '1.0.0');
+      final first = resolver.resolve(zip.path);
+      final mainJs = File(p.join(first.packRoot.path, 'js/main.js'))
+        ..writeAsStringSync('// tampered\n');
+      final second = resolver.resolve(zip.path);
+      expect(mainJs.readAsStringSync(), contains("require('./common/util.js')"),
+          reason: 'tampered cache is re-unpacked');
+      expect(second.packRoot.path, first.packRoot.path);
+    });
+
+    test('a deleted cached file triggers a fresh unpack', () {
+      final zip = buildPack('my_agent', '1.0.0');
+      final first = resolver.resolve(zip.path);
+      File(p.join(first.packRoot.path, 'js/common/util.js')).deleteSync();
+      resolver.resolve(zip.path);
+      expect(
+          File(p.join(first.packRoot.path, 'js/common/util.js')).existsSync(),
+          isTrue);
+    });
+  });
+}
+
+/// Exec-bit restore parity with Java `restoreExecBit` (PR #249 review
+/// suggestion: not only `.sh`).
+void execBitTests() {
+  group('AgentPackResolver exec bit', () {
+    test('restores +x for a non-.sh entry with an owner-exec mode', () {
+      final tool = utf8.encode('#!/bin/sh\necho hi\n');
+      final zip = buildZipWithManifest({
+        'agent': 'tool_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': [
+          {'path': 'a.json', 'sha256': sha256Of('{}')},
+          {'path': 'bin/tool', 'sha256': sha256.convert(tool).toString()},
+        ],
+      }, {
+        'a.json': utf8.encode('{}'),
+        'bin/tool': tool,
+      }, modes: {
+        'bin/tool': 0x1ED, // 0755
+      });
+      final pack = resolver.resolve(zip.path);
+      final mode =
+          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      expect(mode & 0x40, isNonZero, reason: 'owner-exec bit restored');
+    });
+
+    test('does not chmod plain 0644 entries', () {
+      final zip = buildZipWithManifest({
+        'agent': 'tool_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': [
+          {'path': 'a.json', 'sha256': sha256Of('{}')},
+          {'path': 'bin/tool', 'sha256': sha256Of('tool')},
+        ],
+      }, {
+        'a.json': utf8.encode('{}'),
+        'bin/tool': utf8.encode('tool'),
+      });
+      final pack = resolver.resolve(zip.path);
+      final mode =
+          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      expect(mode & 0x40, 0, reason: '0644 entries stay non-executable');
+    });
+  });
+}
+
+/// Typed manifest reads (PR #249 review suggestion: no bare TypeError).
+void manifestCastTests() {
+  group('AgentPackResolver manifest casts', () {
+    test('a non-string agent fails with a clean AgentPackException', () {
+      final zip = buildZipWithManifest({
+        'agent': 123,
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': <dynamic>[],
+      }, {});
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>()
+            .having((e) => e.message, 'message', contains('must be a string'))),
+      );
+    });
+
+    test('a non-string defaultEntry fails with a clean AgentPackException', () {
+      final zip = buildZipWithManifest({
+        'agent': 'ok_agent',
+        'version': '1.0.0',
+        'defaultEntry': 42,
+        'files': <dynamic>[],
+      }, {});
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>()
+            .having((e) => e.message, 'message', contains('defaultEntry'))),
+      );
+    });
+  });
+}
+
+/// Encrypted-zip detection accuracy (PR #249 review suggestion: raw
+/// signature scan false-positives on stored payloads).
+void encryptionScanTests() {
+  group('AgentPackResolver encryption scan', () {
+    test(r'a stored payload containing PK\x01\x02 bytes is not "encrypted"',
+        () {
+      final payload = [0x50, 0x4B, 0x01, 0x02, ...utf8.encode('data')];
+      final zip = buildZipWithManifest({
+        'agent': 'data_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': [
+          {'path': 'a.json', 'sha256': sha256Of('{}')},
+          {'path': 'data.bin', 'sha256': sha256.convert(payload).toString()},
+        ],
+      }, {
+        'a.json': utf8.encode('{}'),
+        'data.bin': payload,
+      });
+      final pack = resolver.resolve(zip.path);
+      expect(pack.agent, 'data_agent');
+      expect(File(p.join(pack.packRoot.path, 'data.bin')).readAsBytesSync(),
+          payload);
     });
   });
 }

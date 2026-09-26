@@ -95,11 +95,12 @@ jobs:
           # re-run dispatch finds the files already at NEW_VERSION. The tag
           # and build below are what matter then.
           # [skip ci] is load-bearing: the temp-branch force-push (and the
-          # eventual main push) would otherwise trigger the real quality /
-          # agents-suite suites on the release SHA — branch protection then
-          # sees them in_progress alongside the API-created success runs and
-          # rejects the push ("2 of 2 required status checks have not
-          # succeeded"; live: release-cli failure at v0.1.17 attempt 1).
+          # eventual main push) would otherwise trigger the real static /
+          # gate / agents-suite suites on the release SHA — branch
+          # protection then sees them in_progress alongside the API-created
+          # success runs and rejects the push ("3 of 3 required status
+          # checks have not succeeded"; live: release-cli failure at
+          # v0.1.17 attempt 1).
           git commit -m "chore: bump version to $NEW_VERSION [skip ci]" \
             || echo "version already at $NEW_VERSION — nothing to commit"
 
@@ -145,43 +146,69 @@ jobs:
         # Java dm.ai release.yml pattern, ported 1:1:
         #  1. PAT credentials (gh-63 family: the checkout's App token —
         #     github-actions[bot] — cannot push to the protected main);
-        #  2. push the SHA to a temp branch first, then CREATE the two
-        #     required check-runs ("quality", "agents-suite") via the API
-        #     as success for that SHA — branch protection is satisfied
-        #     without re-running the suites (every commit already on main
-        #     passed them; re-running only opens a non-fast-forward race);
+        #  2. push the SHA to a temp branch first, then CREATE the required
+        #     check-runs via the API as success for that SHA — branch
+        #     protection is satisfied without re-running the suites (every
+        #     commit already on main passed them; re-running only opens a
+        #     non-fast-forward race). gh-261: main requires the quality.yml
+        #     trio {static, gate, agents-suite} since #187 renamed the old
+        #     `quality` aggregate to `gate` + `static` — stamping the dead
+        #     name failed every push with "2 of 3 required status checks
+        #     are expected" (runs 34/35/36). Lockstep with quality.yml job
+        #     names is guarded by test/release_required_checks_test.dart.
         #  3. push main with rebase-retry (3 attempts) in case main moved
-        #     between checkout and here.
+        #     between checkout and here; a protection decline is NOT a
+        #     moved-main race, so it aborts with the real cause instead.
         env:
           SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
           GH_TOKEN: ${{ github.token }} # gh api check-run creation
         run: |
           bash machine-kit/scripts/install-source-git-credentials.sh
           NEW_VERSION="${{ steps.new_version.outputs.version }}"
-          SHA=$(git rev-parse HEAD)
+
+          # Stamp the required contexts as success on the current HEAD.
+          # A rebase creates a NEW SHA whose check-runs do not exist, so
+          # the loop calls this again after every rebase.
+          stamp_required_checks() {
+            local sha
+            sha="$(git rev-parse HEAD)"
+            for ctx in static gate agents-suite; do
+              gh api -X POST "repos/${{ github.repository }}/check-runs" \
+                -f name="$ctx" \
+                -f head_sha="$sha" \
+                -f status=completed \
+                -f conclusion=success \
+                -f output_title="Passed by release-cli (pattern: dm.ai release.yml)" \
+                -f output_summary="Required check created by the release workflow for the version-bump commit; the suites gate every commit that reaches main via PR." \
+                >/dev/null
+            done
+          }
 
           # Temp branch is disposable: force-push over a stale one left by a
           # failed earlier attempt (non-fast-forward rejection), delete it
           # after the main push lands so the next run starts clean.
           git push --force origin "HEAD:refs/heads/release-temp-v$NEW_VERSION"
 
-          for ctx in quality agents-suite; do
-            gh api -X POST "repos/${{ github.repository }}/check-runs" \
-              -f name="$ctx" \
-              -f head_sha="$SHA" \
-              -f status=completed \
-              -f conclusion=success \
-              -f output_title="Passed by release-cli (pattern: dm.ai release.yml)" \
-              -f output_summary="Required check created by the release workflow for the version-bump commit; the suites gate every commit that reaches main via PR." \
-              >/dev/null
-          done
+          stamp_required_checks
 
           for attempt in 1 2 3; do
-            if git push origin "HEAD:${{ github.ref_name }}"; then break; fi
+            if push_out="$(git push origin "HEAD:${{ github.ref_name }}" 2>&1)"; then
+              printf '%s\n' "$push_out"
+              break
+            fi
+            printf '%s\n' "$push_out"
+            # GH006 "protected branch hook declined" is branch protection
+            # rejecting the SHA — rebasing cannot fix it (gh-261: the old
+            # loop misread it as "main moved" and burned all 3 attempts).
+            if printf '%s\n' "$push_out" | grep -q 'protected branch hook declined'; then
+              echo "::error::push to ${{ github.ref_name }} rejected by branch protection — the stamp_required_checks set has drifted from the required contexts; see .github/workflows/release-cli.yml and test/release_required_checks_test.dart"
+              exit 1
+            fi
             [ "$attempt" -eq 3 ] && { echo "::error::push to ${{ github.ref_name }} failed after 3 attempts"; exit 1; }
             echo "Push rejected (${{ github.ref_name }} moved) — rebasing, attempt $attempt"
             git fetch origin "${{ github.ref_name }}"
             git rebase "origin/${{ github.ref_name }}"
+            stamp_required_checks
           done
           git push origin "v$NEW_VERSION"
           git push origin --delete "refs/heads/release-temp-v$NEW_VERSION" || true

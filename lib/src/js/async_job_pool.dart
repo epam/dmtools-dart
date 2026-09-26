@@ -23,10 +23,13 @@
 /// engines are never shared across isolates — one engine per isolate,
 /// always.
 ///
-/// Boot discipline: `bin/dmtools.dart` boots [instance] in `main()`
-/// before any JS runs (`Isolate.spawn` cannot progress while the spawning
-/// isolate is blocked in an FFI callback); tests boot private pools and
-/// must call [dispose] in teardown.
+/// Boot discipline: spawning must complete while the event loop is alive
+/// (`Isolate.spawn` cannot progress once the spawning isolate is blocked
+/// in an FFI callback) and before the job's JS runs. The CLI satisfies it
+/// by booting [instance] lazily in `CliDispatcher`, just before a job
+/// whose resolved config sets `parallelWorkers >= 2` — every other
+/// command pays nothing (epam/dmtools-dart#241). Tests boot private pools
+/// and must call [dispose] in teardown.
 ///
 /// No timeouts in v1: a dispatched function that never returns blocks its
 /// caller forever, exactly like a main-script infinite loop would. See
@@ -130,7 +133,8 @@ class AsyncJobPool {
   /// Default worker count for the CLI pool.
   static const int defaultWorkerCount = 4;
 
-  /// Process-wide pool used by the CLI (`bin/dmtools.dart` boots it).
+  /// Process-wide pool used by the CLI — booted lazily by `CliDispatcher`
+  /// when a job enables `runAsync` (epam/dmtools-dart#241).
   static final AsyncJobPool instance = AsyncJobPool();
 
   /// Number of engine isolates this pool boots.

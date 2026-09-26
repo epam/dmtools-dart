@@ -40,6 +40,8 @@ void main() {
   manifestCastTests();
   encryptionScanTests();
   pathRewriteTests();
+  pathRewriteEdgeRefTests();
+  pathRewriteNestedTests();
 }
 
 late Directory agentRoot;
@@ -673,6 +675,77 @@ void pathRewriteTests() {
       final params = config['params'] as Map<String, dynamic>;
       expect(params['postJSAction'], 'https://github.com/u/r/blob/main/x.js');
       expect(params['timerJSAction'], 'classpath:js/timer.js');
+    });
+  });
+}
+
+/// Path rewriting of edge-case refs (./ prefixes, non-path strings).
+void pathRewriteEdgeRefTests() {
+  group('AgentPackResolver.rewritePathsToPackRoot edge refs', () {
+    test('strips ./ prefixes before resolving pack paths', () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final config = <String, dynamic>{
+        'params': {
+          'jsPath': './js/main.js',
+          'descriptionPath': './agents/instructions/common/guide.md',
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      expect(params['jsPath'],
+          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+      expect(
+          params['descriptionPath'],
+          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+              .absolute
+              .path);
+    });
+
+    test('leaves non-path strings untouched', () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final absolute = p.join(pack.packRoot.path, 'js/main.js');
+      final config = <String, dynamic>{
+        'params': {
+          'cliPrompts': [
+            '',
+            'http://example.com/x.js',
+            absolute,
+            '../outside.txt',
+          ],
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      expect(
+          params['cliPrompts'],
+          equals(['', 'http://example.com/x.js', absolute, '../outside.txt']));
+    });
+  });
+}
+
+/// Path rewriting of nested containers (maps and lists inside lists).
+void pathRewriteNestedTests() {
+  group('AgentPackResolver.rewritePathsToPackRoot nested containers', () {
+    test('rewrites maps and lists nested inside a list', () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final config = <String, dynamic>{
+        'params': {
+          'cliPrompts': [
+            {'jsPath': 'agents/js/main.js'},
+            ['agents/instructions/common/guide.md'],
+          ],
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      final prompts = params['cliPrompts'] as List;
+      expect((prompts[0] as Map<String, dynamic>)['jsPath'],
+          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+      expect(prompts[1], [
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
+      ]);
     });
   });
 }

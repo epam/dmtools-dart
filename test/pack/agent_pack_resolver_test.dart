@@ -661,6 +661,46 @@ void pathRewriteTests() {
       expect(prompts[1], 'Senior Developer Engineer'); // untouched literal
     });
 
+    test('normalizes ./-prefixed and nested list shapes to the pack root', () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final config = <String, dynamic>{
+        'params': {
+          'jsPath': './js/main.js',
+          'preJSAction': './agents/js/common/util.js',
+          // List values recurse: a nested map and a nested list inside a
+          // path-key list must be rewritten too (string items stay direct).
+          'cliPrompts': [
+            'agents/instructions/common/guide.md',
+            {'descriptionPath': './instructions/common/guide.md'},
+            [
+              './js/main.js',
+            ],
+          ],
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      expect(params['jsPath'],
+          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+      expect(params['preJSAction'],
+          File(p.join(pack.packRoot.path, 'js/common/util.js')).absolute.path);
+      final prompts = params['cliPrompts'] as List;
+      expect(
+          prompts[0],
+          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+              .absolute
+              .path);
+      final nestedMap = prompts[1] as Map<String, dynamic>;
+      expect(
+          nestedMap['descriptionPath'],
+          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+              .absolute
+              .path);
+      final nestedList = prompts[2] as List;
+      expect(nestedList[0],
+          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path);
+    });
+
     test('leaves URLs and classpath refs untouched', () {
       final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
       final config = <String, dynamic>{
@@ -673,6 +713,28 @@ void pathRewriteTests() {
       final params = config['params'] as Map<String, dynamic>;
       expect(params['postJSAction'], 'https://github.com/u/r/blob/main/x.js');
       expect(params['timerJSAction'], 'classpath:js/timer.js');
+    });
+
+    test('leaves empty, plain-http, absolute, and pack-escaping refs untouched',
+        () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final outside =
+          File(p.join(Directory.systemTemp.path, 'outside.js')).absolute.path;
+      final config = <String, dynamic>{
+        'params': {
+          'jsPath': '', // empty ref
+          'postJSAction': 'http://example.com/x.js', // plain http URL
+          'preJSAction': outside, // absolute path outside the pack
+          // ../ escape: normalizes outside the pack root — traversal guard.
+          'timerJSAction': '../outside.js',
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      expect(params['jsPath'], '');
+      expect(params['postJSAction'], 'http://example.com/x.js');
+      expect(params['preJSAction'], outside);
+      expect(params['timerJSAction'], '../outside.js');
     });
   });
 }

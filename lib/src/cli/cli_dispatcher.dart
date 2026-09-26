@@ -18,6 +18,7 @@ import '../agents/teammate_job.dart';
 import '../compile/agent_pack_compiler.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
+import '../js/async_job_pool.dart';
 import '../js/job_runner.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
@@ -39,18 +40,26 @@ class CliDispatcher {
   /// `dmtools.env`, then the process environment — like the tracker-hub
   /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
   /// no-argument behaviour (interactive stub on a terminal, help
-  /// otherwise).
+  /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
+  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]); a test seam
+  /// mirroring [JsRunConfig.pool].
   CliDispatcher({
     void Function(String line)? writer,
     PropertyReader? propertyReader,
     bool Function()? isTty,
+    AsyncJobPool? asyncPool,
   })  : _writer = writer ?? print,
         _reader = propertyReader ?? PropertyReader(),
-        _isTty = isTty ?? _stdoutIsTty;
+        _isTty = isTty ?? _stdoutIsTty,
+        _asyncPool = asyncPool;
 
   final void Function(String line) _writer;
   final PropertyReader _reader;
   final bool Function() _isTty;
+
+  /// Engine-worker pool booted lazily for `runAsync` jobs; `null` selects
+  /// [AsyncJobPool.instance]. Test seam, mirroring [JsRunConfig.pool].
+  final AsyncJobPool? _asyncPool;
 
   static bool _stdoutIsTty() => stdout.hasTerminal;
 
@@ -290,19 +299,49 @@ Options:
   }
 
   /// Runs a jsrunner job via [JsJobRunner] with `jsPath` and `jobParams`.
-  int _executeJsRunner(Map<String, dynamic> params) {
+  ///
+  /// Boots the engine-worker pool first when the job enables `runAsync`
+  /// (`jobParams.parallelWorkers >= 2`) — gh-241: lazily, so only parallel
+  /// jobs pay for the isolates, and while the event loop is still alive:
+  /// spawning must complete before the QuickJS host callbacks block this
+  /// isolate in FFI.
+  Future<int> _executeJsRunner(Map<String, dynamic> params) async {
     final jsPath = params['jsPath'] as String?;
     if (jsPath == null) {
       _writer('Error: jsrunner requires a jsPath in params');
       return 1;
     }
     final jobParams = params['jobParams'] as Map<String, dynamic>? ?? const {};
+    final pool = await _prepareAsyncPool(jobParams);
     final result = const JsJobRunner().runScript(
       scriptPath: jsPath,
       jobParams: jobParams,
+      config: pool == null ? null : JsRunConfig(pool: pool),
     );
     _writer(result ?? 'undefined');
     return 0;
+  }
+
+  /// The pool to hand to [JsJobRunner] for a run with [jobParams]: `null`
+  /// when the job keeps the `runAsync` surface off (`parallelWorkers < 2`,
+  /// the default). Otherwise the injected test pool or
+  /// [AsyncJobPool.instance], booted before the JS run.
+  ///
+  /// A boot failure degrades to a stderr warning: the command proceeds
+  /// with the unbooted pool and `runAsync` surfaces the documented clear
+  /// JS error on first use — the constrained-environment failure must not
+  /// brick the whole run (gh-241).
+  Future<AsyncJobPool?> _prepareAsyncPool(
+      Map<String, dynamic> jobParams) async {
+    if (!JsJobRunner.needsAsyncPool(jobParams)) return null;
+    final pool = _asyncPool ?? AsyncJobPool.instance;
+    try {
+      await pool.boot();
+    } catch (e) {
+      stderr.writeln('dmtools: engine-worker pool boot failed '
+          '(runAsync will report an error on first use): $e');
+    }
+    return pool;
   }
 
   int _listTools(List<String> rest) {

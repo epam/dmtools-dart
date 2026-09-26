@@ -5,12 +5,17 @@
 /// produced by `AgentPackCompiler` (dm.ai #595).
 ///
 /// Pipeline: detect pack → download (URL only; `SOURCE_GITHUB_TOKEN` for
-/// github.com) → verify SHA-256 against the sibling `.sha256` asset → unpack
-/// into `~/.dmtools/packs/<agent>-<version>/` with zip-slip protection (no
-/// absolute paths, no `..` escapes, no symlink entries, per-file and total size
-/// caps) → verify every unpacked file against the manifest's per-file sha256
-/// inventory → cache-hit short-circuit → return the entry config inside the
-/// cache. Encrypted zips are rejected with a dedicated error.
+/// github.com) → verify SHA-256 against the sibling `.sha256` asset (a missing
+/// sidecar skips verification with a loud warning, per the Java reference) →
+/// validate the manifest `agent`/`version` (strict charset — they build the
+/// cache path) → unpack into a staging dir on the cache's own filesystem and
+/// atomically rename into `~/.dmtools/packs/<agent>-<version>/` with zip-slip
+/// protection (no absolute paths, no `..` escapes, no symlink entries, per-file
+/// and total size caps) → verify every unpacked file against the manifest's
+/// per-file sha256 inventory (unlisted zip entries and manifest-listed files
+/// absent from the zip are both rejected) → cache-hit short-circuit → return
+/// the entry config inside the cache (the entry name is containment-checked
+/// against the pack root). Encrypted zips are rejected with a dedicated error.
 library;
 
 import 'dart:convert';
@@ -101,11 +106,13 @@ class AgentPackResolver {
       final manifest = _readManifest(zipFile);
       final agent = manifest['agent'] as String;
       final version = manifest['version'] as String;
+      _validateManifestIdentity(agent, version);
 
       final packRoot = Directory(p.join(_packsRoot.path, '$agent-$version'));
       _unpackAndVerify(zipFile, manifest, packRoot);
 
       final entryName = entryOverride ?? manifest['defaultEntry'] as String;
+      _validateEntryName(entryName, packRoot);
       final entryFile = File(p.join(packRoot.path, entryName));
       if (!entryFile.existsSync()) {
         throw AgentPackException(
@@ -179,7 +186,14 @@ class AgentPackResolver {
       headers['Authorization'] = 'Bearer $githubToken';
     }
     final response = SyncHttpClient.get('$zipUrl.sha256', headers: headers);
-    if (response.statusCode != 200) return; // no checksum asset — skip
+    if (response.statusCode != 200) {
+      // Java parity (AgentPackResolver logs a warning): an absent sidecar
+      // means "no checksum published" — verification is skipped, not failed,
+      // but the skip is announced loudly so it shows up in run logs.
+      stderr.writeln('WARNING: no .sha256 checksum asset for $zipUrl '
+          '(HTTP ${response.statusCode}) — skipping download integrity check');
+      return;
+    }
     final expected = response.body.trim().split(RegExp(r'\s+')).first;
     final actual = sha256.convert(zipFile.readAsBytesSync()).toString();
     if (expected.toLowerCase() != actual) {
@@ -211,6 +225,39 @@ class AgentPackResolver {
           'manifest.json missing required keys (agent/version/defaultEntry)');
     }
     return manifest;
+  }
+
+  /// Allowed charset for manifest `agent`/`version` — these untrusted strings
+  /// build the cache path, so slashes and dot-only segments are refused
+  /// (cache-path traversal guard; also shields the recursive delete).
+  static final RegExp _safeSegment = RegExp(r'^[A-Za-z0-9._-]+$');
+
+  /// A segment made only of dots (`.` / `..` / `...`) is a traversal vector.
+  static final RegExp _dotsOnly = RegExp(r'^\.+$');
+
+  /// Rejects unsafe manifest `agent`/`version` values BEFORE any cache path
+  /// is built from them.
+  void _validateManifestIdentity(String agent, String version) {
+    for (final pair in {'agent': agent, 'version': version}.entries) {
+      final value = pair.value;
+      if (value.isEmpty ||
+          !_safeSegment.hasMatch(value) ||
+          _dotsOnly.hasMatch(value)) {
+        throw AgentPackException('Unsafe manifest ${pair.key}: "$value" '
+            '(allowed: [A-Za-z0-9._-], no dot-only segments)');
+      }
+    }
+  }
+
+  /// Containment-checks an entry-config name (a `#entry` CLI override or the
+  /// manifest `defaultEntry`) against [packRoot], so a hostile or careless
+  /// value cannot point the run at a file outside the unpacked pack.
+  void _validateEntryName(String entryName, Directory packRoot) {
+    final root = p.normalize(packRoot.absolute.path);
+    final target = p.normalize(p.join(root, entryName));
+    if (p.isAbsolute(entryName) || !p.isWithin(root, target)) {
+      throw AgentPackException('Entry escapes the pack root: $entryName');
+    }
   }
 
   /// AC6: encrypted zips are rejected with a dedicated error. The archive
@@ -249,17 +296,34 @@ class AgentPackResolver {
       File zipFile, Map<String, dynamic> manifest, Directory packRoot) {
     if (_isCacheHit(packRoot, manifest)) return;
 
-    final tmp = Directory.systemTemp.createTempSync('pack-unpack-');
+    // Stage the unpack next to the cache (same filesystem) so the publish
+    // rename stays atomic — a Directory.systemTemp staging dir fails with
+    // EXDEV whenever /tmp and $HOME are different mounts.
+    final staging = _packsRoot.parent..createSync(recursive: true);
+    final tmp = staging.createTempSync('.pack-unpack-');
     try {
       final hashes = _manifestHashes(manifest);
       _unzipSafe(zipFile, tmp, hashes);
       packRoot.parent.createSync(recursive: true);
-      if (packRoot.existsSync()) packRoot.deleteSync(recursive: true);
+      _deleteWithinPacksRoot(packRoot);
       tmp.renameSync(packRoot.path); // atomic publish
     } on Object {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
       rethrow;
     }
+  }
+
+  /// Recursive-delete guard: refuses to delete anything that is not inside
+  /// the pack cache root, so the re-unpack cleanup can never be aimed at an
+  /// existing directory outside it.
+  void _deleteWithinPacksRoot(Directory dir) {
+    final root = p.normalize(_packsRoot.absolute.path);
+    final target = p.normalize(dir.absolute.path);
+    if (!p.isWithin(root, target)) {
+      throw AgentPackException(
+          'Refusing to delete outside the pack cache root: ${dir.path}');
+    }
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
   }
 
   bool _isCacheHit(Directory packRoot, Map<String, dynamic> manifest) {
@@ -292,10 +356,19 @@ class AgentPackResolver {
       File zipFile, Directory targetDir, Map<String, String> hashes) {
     final targetRoot = p.normalize(targetDir.absolute.path);
     final archive = ZipDecoder().decodeBytes(zipFile.readAsBytesSync());
+    final seen = <String>{};
     var totalBytes = 0;
     for (final entry in archive.files) {
+      if (entry.isFile) seen.add(entry.name);
       totalBytes =
           _unpackEntry(entry, targetDir, targetRoot, hashes, totalBytes);
+    }
+    // The manifest is the source of truth in both directions: every listed
+    // file must actually be present in the zip.
+    final missing = hashes.keys.where((name) => !seen.contains(name)).toList();
+    if (missing.isNotEmpty) {
+      throw AgentPackException(
+          'Manifest files missing from the zip: ${missing.join(', ')}');
     }
   }
 
@@ -342,6 +415,13 @@ class AgentPackResolver {
     totalBytes += data.length;
     if (totalBytes > maxTotalBytes) {
       throw const AgentPackException('Pack exceeds total size cap');
+    }
+    // The manifest inventory is the source of truth: a file entry it does
+    // not list is rejected (fail loudly) rather than extracted unverified.
+    // `manifest.json` is exempt — it IS the inventory.
+    if (name != 'manifest.json' && !hashes.containsKey(name)) {
+      throw AgentPackException(
+          'Zip entry not listed in manifest inventory: $name');
     }
     final expectedHash = hashes[name];
     if (expectedHash != null &&

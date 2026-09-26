@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dmtools/src/compile/agent_pack_compiler.dart'
     hide AgentPackException;
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
@@ -28,6 +30,11 @@ void main() {
   entryOverrideTests();
   zipSlipTests();
   manifestTests();
+  manifestIdentityTests();
+  entryContainmentTests();
+  manifestInventoryTests();
+  stagingTests();
+  remoteDownloadTests();
   pathRewriteTests();
 }
 
@@ -62,6 +69,10 @@ File buildPack(String agentName, String version) {
       .compile(entry, version, 'abc123', outDir)
       .zipFile;
 }
+
+/// SHA-256 hex digest of [content] (manifest inventory helper).
+String sha256Of(String content) =>
+    sha256.convert(utf8.encode(content)).toString();
 
 /// Builds a zip with a hostile entry for zip-slip tests.
 File buildMalicious(String evilEntry) {
@@ -206,6 +217,230 @@ void manifestTests() {
           () => resolver.resolve(zip.path),
           throwsA(isA<AgentPackException>()
               .having((e) => e.message, 'message', contains('manifest.json'))));
+    });
+  });
+}
+
+/// Builds a zip from [manifest] plus [extraFiles] (name → bytes).
+File buildZipWithManifest(
+    Map<String, dynamic> manifest, Map<String, List<int>> extraFiles) {
+  final manifestBytes = utf8.encode(jsonEncode(manifest));
+  final archive = Archive()
+    ..addFile(
+        ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
+  for (final entry in extraFiles.entries) {
+    archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+  }
+  final zip =
+      File('${Directory.systemTemp.createTempSync('zip_').path}/pack.zip');
+  zip.writeAsBytesSync(ZipEncoder().encode(archive)!);
+  return zip;
+}
+
+/// Manifest `agent`/`version` validation (PR #249 review: cache-path
+/// traversal + recursive-delete hazard).
+void manifestIdentityTests() {
+  group('AgentPackResolver manifest identity', () {
+    Map<String, dynamic> manifest(String agent, String version) => {
+          'agent': agent,
+          'version': version,
+          'defaultEntry': 'a.json',
+          'files': [
+            {'path': 'a.json', 'sha256': sha256Of('{}')},
+          ],
+        };
+
+    test('rejects an agent with a path separator', () {
+      final zip = buildZipWithManifest(
+          manifest('../evil', '1.0.0'), {'a.json': utf8.encode('{}')});
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>().having(
+            (e) => e.message, 'message', contains('Unsafe manifest agent'))),
+      );
+    });
+
+    test('rejects a dots-only version (..)', () {
+      final zip = buildZipWithManifest(
+          manifest('ok_agent', '..'), {'a.json': utf8.encode('{}')});
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>().having(
+            (e) => e.message, 'message', contains('Unsafe manifest version'))),
+      );
+    });
+
+    test('rejects an empty agent and illegal characters', () {
+      for (final bad in ['', 'a/b', 'a\\b', 'a b', r'a$b']) {
+        final zip = buildZipWithManifest(
+            manifest(bad, '1.0.0'), {'a.json': utf8.encode('{}')});
+        expect(() => resolver.resolve(zip.path),
+            throwsA(isA<AgentPackException>()),
+            reason: 'agent "$bad" must be rejected');
+      }
+    });
+  });
+}
+
+/// Containment of the entry config (`#entry` override / `defaultEntry`)
+/// against the pack root (PR #249 review).
+void entryContainmentTests() {
+  group('AgentPackResolver entry containment', () {
+    test('rejects a defaultEntry that escapes the pack root', () {
+      final zip = buildZipWithManifest({
+        'agent': 'ok_agent',
+        'version': '1.0.0',
+        'defaultEntry': '../escape.json',
+        'files': <dynamic>[],
+      }, {});
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>().having(
+            (e) => e.message, 'message', contains('escapes the pack root'))),
+      );
+    });
+
+    test('rejects a #entry override that escapes the pack root', () {
+      final zip = buildPack('my_agent', '1.0.0');
+      expect(
+        () => resolver.resolve('${zip.path}#../escape.json'),
+        throwsA(isA<AgentPackException>().having(
+            (e) => e.message, 'message', contains('escapes the pack root'))),
+      );
+    });
+  });
+}
+
+/// The manifest inventory as source of truth, both directions (PR #249
+/// review: unlisted zip entries were extracted unverified).
+void manifestInventoryTests() {
+  group('AgentPackResolver manifest inventory', () {
+    test('rejects a zip entry not listed in the manifest', () {
+      final zip = buildZipWithManifest({
+        'agent': 'ok_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': <dynamic>[],
+      }, {
+        'a.json': utf8.encode('{}'),
+        'sneaky.sh': utf8.encode('echo hi'),
+      });
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>().having((e) => e.message, 'message',
+            contains('not listed in manifest inventory'))),
+      );
+    });
+
+    test('rejects a manifest-listed file missing from the zip', () {
+      final zip = buildZipWithManifest({
+        'agent': 'ok_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': [
+          {'path': 'a.json', 'sha256': sha256Of('{}')},
+          {'path': 'ghost.js', 'sha256': sha256Of('x')},
+        ],
+      }, {
+        'a.json': utf8.encode('{}'),
+      });
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(isA<AgentPackException>().having(
+            (e) => e.message, 'message', contains('missing from the zip'))),
+      );
+    });
+  });
+}
+
+/// Same-filesystem staging for the atomic publish (PR #249 review: EXDEV).
+void stagingTests() {
+  group('AgentPackResolver unpack staging', () {
+    test('stages next to the packs root and leaves no temp dir behind', () {
+      final parent = Directory.systemTemp.createTempSync('staging_parent_');
+      try {
+        final local = AgentPackResolver(
+            packsRoot: Directory(p.join(parent.path, 'packs')));
+        final pack = local.resolve(buildPack('my_agent', '3.0.0').path);
+        expect(pack.packRoot.path, startsWith(parent.path));
+        expect(
+            Directory(p.join(parent.path, 'packs', 'my_agent-3.0.0'))
+                .existsSync(),
+            isTrue);
+        final leftovers = parent
+            .listSync()
+            .where((e) => p.basename(e.path).startsWith('.pack-unpack-'));
+        expect(leftovers, isEmpty, reason: 'staging dir renamed away');
+      } finally {
+        parent.deleteSync(recursive: true);
+      }
+    });
+
+    test('cleans up the staging dir when the unpack fails', () {
+      final parent = Directory.systemTemp.createTempSync('staging_parent_');
+      try {
+        final local = AgentPackResolver(
+            packsRoot: Directory(p.join(parent.path, 'packs')));
+        expect(() => local.resolve(buildMalicious('../evil.sh').path),
+            throwsA(isA<AgentPackException>()));
+        final leftovers = parent
+            .listSync(recursive: true)
+            .where((e) => p.basename(e.path).startsWith('.pack-unpack-'));
+        expect(leftovers, isEmpty, reason: 'failed unpack cleans staging');
+      } finally {
+        parent.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+/// Loopback pack server entry point. Runs in its own isolate because
+/// [SyncHttpClient] blocks the caller isolate (curl subprocess) — an
+/// in-isolate server could never answer. Serves 404 for `.sha256`, the pack
+/// bytes otherwise, and reports the zip request's Authorization header.
+void _packServerEntry(List<Object?> init) {
+  final readyPort = init[0] as SendPort;
+  final authPort = init[1] as SendPort;
+  final zipBytes = init[2] as List<int>;
+  HttpServer.bind(InternetAddress.loopbackIPv4, 0).then((server) {
+    readyPort.send(server.port);
+    server.listen((request) {
+      if (request.uri.path.endsWith('.sha256')) {
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        authPort.send(request.headers.value('authorization'));
+        request.response.add(zipBytes);
+      }
+      request.response.close();
+    });
+  });
+}
+
+/// Remote download behavior (PR #249 review: missing `.sha256` handling,
+/// token scoping). Served by a loopback [HttpServer] in a separate isolate.
+void remoteDownloadTests() {
+  group('AgentPackResolver remote download', () {
+    test('missing .sha256 sidecar skips verification and still resolves',
+        () async {
+      final zipBytes = buildPack('remote_agent', '2.0.0').readAsBytesSync();
+      final readyInbox = ReceivePort();
+      final authInbox = ReceivePort();
+      final server = await Isolate.spawn(_packServerEntry,
+          [readyInbox.sendPort, authInbox.sendPort, zipBytes]);
+      try {
+        final port = await readyInbox.first as int;
+        final pack = resolver.resolve('http://127.0.0.1:$port/pack.zip',
+            githubToken: 'secret-token');
+        expect(pack.agent, 'remote_agent');
+        expect(pack.entryFile.existsSync(), isTrue);
+        final auth = await authInbox.first;
+        expect(auth, isNull,
+            reason: 'the bearer token is only sent to github.com');
+      } finally {
+        readyInbox.close();
+        authInbox.close();
+        server.kill();
+      }
     });
   });
 }

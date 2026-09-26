@@ -14,12 +14,18 @@ import 'dart:io';
 import 'config_merger.dart';
 import 'encoding_detector.dart';
 import 'job_registry.dart';
+import '../config/property_reader.dart';
+import '../config/property_reader_getters.dart';
 import '../pack/agent_pack_resolver.dart';
 
 /// Processes `dmtools run` command arguments into resolved config JSON.
 class RunCommandProcessor {
-  /// Creates a run-command processor.
-  const RunCommandProcessor();
+  /// Creates a run-command processor. [packResolver] is a test seam for the
+  /// agent-pack path (dm.ai #579).
+  const RunCommandProcessor({AgentPackResolver? packResolver})
+      : _packResolver = packResolver;
+
+  final AgentPackResolver? _packResolver;
 
   /// Processes run command args and returns resolved config JSON.
   ///
@@ -43,9 +49,12 @@ class RunCommandProcessor {
 
     // dm.ai #579: a versioned agent pack (local .zip or https URL) — resolve to
     // the unpacked, verified cache and run the entry config from there.
-    final packResolver = AgentPackResolver();
+    final packResolver = _packResolver ?? AgentPackResolver();
     if (packResolver.isPack(target)) {
-      final pack = packResolver.resolve(target);
+      // SOURCE_GITHUB_TOKEN authorizes private GitHub release downloads —
+      // the same PropertyReader chain every other integration reads.
+      final pack = packResolver.resolve(target,
+          githubToken: PropertyReader().getGithubToken());
       return _processConfigFile(pack.entryFile.path, runArgs,
           packRoot: pack.packRoot);
     }

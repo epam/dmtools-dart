@@ -1,0 +1,105 @@
+# Bitrise vm-pool storage-stall probe.
+#
+# Why: 5/5 agent legs on the dmtools-ci Bitrise pool died on read-only git hangs
+# (622-637s) with an alive runner process — a storage-level stall invisible to
+# the runner service. This probe collects the evidence Bitrise support needs:
+# system snapshot + a live capture loop that catches D-state processes and I/O
+# pressure at the moment of a stall.
+#
+# Triggers: manual (workflow_dispatch) and every 30 min. Concurrency-capped so
+# at most one probe runs; it is read-only diagnostics (no writes beyond a
+# scratch clone + log) and does not block agent legs.
+name: Bitrise Pool Probe
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,37 * * * *'
+
+concurrency:
+  group: bitrise-pool-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: bitrise-runner-dmtools-ci
+    timeout-minutes: 45
+    steps:
+      - name: System snapshot
+        run: |
+          mkdir -p probe-logs
+          {
+            echo "=== uname / virt ==="
+            uname -a; systemd-detect-virt 2>/dev/null || true
+            echo "=== uptime / load ==="
+            uptime; cat /proc/loadavg
+            echo "=== cpu ==="
+            nproc; grep -m1 'model name' /proc/cpuinfo
+            echo "=== memory ==="
+            free -h
+            echo "=== disk usage ==="
+            df -hT | grep -vE '^(tmpfs|devtmpfs|overlay on /(proc|sys|dev))'
+            echo "=== inodes ==="
+            df -i | grep -vE '^(tmpfs|devtmpfs)'
+            echo "=== block devices ==="
+            lsblk 2>/dev/null || cat /proc/partitions
+            echo "=== mounts (non-virtual) ==="
+            findmnt -rn -o TARGET,SOURCE,FSTYPE | grep -vE 'cgroup|proc|sysfs|devpts|mqueue|shm|run/user' || mount
+            echo "=== network/fs clients ==="
+            findmnt -rn -t nfs,nfs4,cifs,fuse.sshfs,fuse,9p,ceph,glusterfs 2>/dev/null || echo "none"
+            echo "=== PSI pressure (cpu io mem) ==="
+            for f in /proc/pressure/*; do echo "--- $f"; cat "$f"; done
+            echo "=== vmstat 1x5 ==="
+            vmstat 1 5 2>/dev/null || cat /proc/vmstat | grep -E 'pgscan|pgsteal|io_'
+            echo "=== iostat 1x5 ==="
+            (command -v iostat >/dev/null && iostat -xz 1 5) || { echo "(no sysstat) /proc/diskstats:"; cat /proc/diskstats; }
+            echo "=== D-state processes ==="
+            ps -eo pid,ppid,state,wchan:40,comm | awk '$3 ~ /^D/ {print} END {if (NR==0) print "(none)"}'
+            echo "=== kernel log tail (errors) ==="
+            (dmesg -T 2>/dev/null || journalctl -k --no-pager -n 200 2>/dev/null || sudo -n dmesg -T 2>/dev/null || echo "(kernel log restricted)") | grep -viE '^\s*$' | tail -120
+            echo "=== journal errors since boot ==="
+            journalctl -p err --no-pager -n 60 2>/dev/null || echo "(journal restricted)"
+            echo "=== runner dir fs ==="
+            df -h "$RUNNER_WORKSPACE" 2>/dev/null || df -h /home/ubuntu
+            echo "=== env hints ==="
+            echo "RUNNER_NAME=$RUNNER_NAME"; echo "ImageOS=$ImageOS"; echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+          } 2>&1 | tee probe-logs/00-system-snapshot.log
+
+      - name: Live stall capture (30 min loop)
+        run: |
+          git clone --depth 50 --no-tags https://github.com/epam/dmtools-dart probe-repo 2>&1 | tail -2
+          cd probe-repo
+          LOG=../probe-logs/01-live-capture.log
+          : > "$LOG"
+          for i in $(seq 1 60); do
+            ts=$(date -u +%H:%M:%S)
+            t0=$(date +%s%N)
+            timeout 10 git status --porcelain=v2 -b >/dev/null 2>&1
+            rc=$?
+            t1=$(date +%s%N)
+            ms=$(( (t1 - t0) / 1000000 ))
+            dstate=$(ps -eo state,comm | awk '$1 ~ /^D/ {printf "%s:%s ", $1, $2}')
+            psi=$(awk '{printf "%s=%s ", FILENAME, $4}' /proc/pressure/io 2>/dev/null | tr -d '/proc/pressure/io')
+            load=$(cut -d' ' -f1 /proc/loadavg)
+            echo "[$ts] git_status=${ms}ms rc=$rc load=$load psi_io_some10s={$psi} D:{$dstate}" | tee -a "$LOG"
+            if [ $rc -ne 0 ] && [ $ms -ge 9999 ]; then
+              echo "[$ts] *** STALL DETECTED — dumping diagnostics ***" | tee -a "$LOG"
+              {
+                echo "--- dmesg tail"; dmesg -T 2>/dev/null | tail -40 || journalctl -k --no-pager -n 100 2>/dev/null
+                echo "--- all D-state"; ps -eo pid,ppid,state,wchan:40,comm,args | awk '$3 ~ /^D/' 
+                echo "--- hung task stacks"; for p in $(ps -eo pid,state | awk '$2 ~ /^D/ {print $1}'); do echo "pid $p:"; cat /proc/$p/stack 2>/dev/null || echo "(no perm)"; done
+                echo "--- diskstats"; cat /proc/diskstats
+                echo "--- df"; df -hT | grep -v tmpfs
+              } >> "$LOG" 2>&1
+              sleep 5
+            fi
+            sleep 20
+          done
+
+      - name: Upload probe logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitrise-pool-probe-${{ github.run_id }}
+          path: probe-logs/
+          retention-days: 7

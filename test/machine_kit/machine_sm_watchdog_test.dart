@@ -193,11 +193,12 @@ void _teammateStubContract() {
     test('issue-number expressions fall back to the dispatch input', () {
       expect(
         yaml.contains(
-            'ai-teammate-issue-${r'${{ github.event.issue.number || github.event.inputs.issue }}'}'),
+            'github.event.issue.number || github.event.inputs.issue'),
         isTrue,
         reason: 'dispatched runs carry no issue event payload — the '
             'concurrency group (and every other issue-number expression) '
-            'must fall back to github.event.inputs.issue',
+            'must fall back to github.event.inputs.issue (and, per #544/#687, '
+            'to the pr input for PR-anchored runs)',
       );
     });
 

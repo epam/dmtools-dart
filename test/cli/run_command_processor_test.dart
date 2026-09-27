@@ -44,32 +44,20 @@ void _testJobNameMode() {
     });
 
     test('injects CLI overrides into params', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--model',
-        'gpt-4',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--model', 'gpt-4'])) as Map;
       expect(json['params']['model'], 'gpt-4');
     });
 
     test('parses JSON-array override values', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--list',
-        '[1,2]',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--list', '[1,2]'])) as Map;
       expect(json['params']['list'], [1, 2]);
     });
 
     test('parses JSON-object override values', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--obj',
-        '{"a":"b"}',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--obj', '{"a":"b"}'])) as Map;
       expect(json['params']['obj'], {'a': 'b'});
     });
 
@@ -91,29 +79,21 @@ void _testJsFileMode() {
     });
 
     test('injects overrides into jobParams', () {
-      final json = jsonDecode(_run([
-        'run',
-        'script.js',
-        '--key',
-        'val',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'script.js', '--key', 'val'])) as Map;
       expect(json['params']['jobParams']['key'], 'val');
     });
 
     test('injects JSON-array override into jobParams', () {
-      final json = jsonDecode(_run([
-        'run',
-        'script.js',
-        '--items',
-        '[1,2,3]',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'script.js', '--items', '[1,2,3]'])) as Map;
       expect(json['params']['jobParams']['items'], [1, 2, 3]);
     });
 
     test('applies base64-encoded config', () {
-      final encoded = base64.encode(utf8.encode(
-        '{"params":{"jobParams":{"extra":"data"}}}',
-      ));
+      final encoded = base64.encode(
+        utf8.encode('{"params":{"jobParams":{"extra":"data"}}}'),
+      );
       final json = jsonDecode(_run(['run', 'script.js', encoded])) as Map;
       expect(json['params']['jobParams']['extra'], 'data');
     });
@@ -138,12 +118,8 @@ void _testConfigFileResolution() {
 
     test('injects CLI overrides on top of file config', () {
       _writeFile('job.json', '{"name":"job","params":{"a":"1"}}');
-      final json = jsonDecode(_run([
-        'run',
-        '${_tmp.path}/job.json',
-        '--b',
-        '2',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', '${_tmp.path}/job.json', '--b', '2'])) as Map;
       expect(json['params']['a'], '1');
       expect(json['params']['b'], '2');
     });
@@ -235,8 +211,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': 'test-token-123'});
       try {
         expect(
-          () => RunCommandProcessor(packResolver: resolver)
-              .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, 'test-token-123');
@@ -252,8 +229,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': ''});
       try {
         expect(
-          () => RunCommandProcessor(packResolver: resolver)
-              .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, isNot('test-token-123'));
@@ -278,13 +256,21 @@ void _testParentPackResolution() {
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
         "params":{"fromChild":"yes"}
       }''');
-      final json = jsonDecode(RunCommandProcessor(packResolver: resolver)
-          .process(['run', '${_tmp.path}/child.json'])) as Map;
+      final json =
+          jsonDecode(
+                RunCommandProcessor(
+                  packResolver: resolver,
+                ).process(['run', '${_tmp.path}/child.json']),
+              )
+              as Map;
       expect(json['params']['fromParent'], 'yes');
       expect(json['params']['fromChild'], 'yes');
       final jsPath = json['params']['jsPath'] as String;
-      expect(jsPath.startsWith(packsRoot.path), isTrue,
-          reason: 'parent jsPath is rewritten into the pack cache: $jsPath');
+      expect(
+        jsPath.startsWith(packsRoot.path),
+        isTrue,
+        reason: 'parent jsPath is rewritten into the pack cache: $jsPath',
+      );
       expect(File(jsPath).existsSync(), isTrue);
     });
 
@@ -296,17 +282,27 @@ void _testParentPackResolution() {
         "name":"child",
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
       }''');
-      final json = jsonDecode(RunCommandProcessor(packResolver: resolver)
-          .process(['run', '${_tmp.path}/child.json'])) as Map;
+      final json =
+          jsonDecode(
+                RunCommandProcessor(
+                  packResolver: resolver,
+                ).process(['run', '${_tmp.path}/child.json']),
+              )
+              as Map;
       expect(json['params']['altEntry'], 'yes');
-      expect(json['params']['fromParent'], isNull,
-          reason: 'the default entry config is not loaded');
+      expect(
+        json['params']['fromParent'],
+        isNull,
+        reason: 'the default entry config is not loaded',
+      );
     });
 
     test('non-pack parent paths still resolve from the filesystem', () {
       _writeFile('parent.json', '{"params":{"k":"p"}}');
-      _writeFile('child.json',
-          '{"name":"child","parent":{"path":"parent.json"}}');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"}}',
+      );
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['params']['k'], 'p');
     });
@@ -335,15 +331,16 @@ File _buildParentPack({bool withAltEntry = false}) {
   final entry = File('${agentRoot.path}/parent_agent.json')
     ..writeAsStringSync(jsonEncode(entryMap));
   if (withAltEntry) {
-    File('${agentRoot.path}/alt.json')
-        .writeAsStringSync(jsonEncode({
-      'name': 'ParentAgent',
-      'params': {'altEntry': 'yes'},
-    }));
+    File('${agentRoot.path}/alt.json').writeAsStringSync(
+      jsonEncode({
+        'name': 'ParentAgent',
+        'params': {'altEntry': 'yes'},
+      }),
+    );
   }
   final dist = Directory('${_tmp.path}/parent_dist')
     ..createSync(recursive: true);
-  return AgentPackCompiler(agentRoot.path)
-      .compile(entry, '1.0.0', 'deadbeef', dist)
-      .zipFile;
+  return AgentPackCompiler(
+    agentRoot.path,
+  ).compile(entry, '1.0.0', 'deadbeef', dist).zipFile;
 }

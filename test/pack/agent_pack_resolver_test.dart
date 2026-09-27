@@ -130,9 +130,9 @@ void entryOverrideTests() {
         }),
       );
       final outDir = Directory.systemTemp.createTempSync('dist_');
-      final zip = AgentPackCompiler(agentRoot.path)
-          .compile(entry, '1.0.0', 'abc', outDir)
-          .zipFile;
+      final zip = AgentPackCompiler(
+        agentRoot.path,
+      ).compile(entry, '1.0.0', 'abc', outDir).zipFile;
 
       final pack = resolver.resolve('${zip.path}#custom.json');
       expect(pack.entryFile.path, endsWith('custom.json'));
@@ -209,13 +209,13 @@ void manifestTests() {
 void manifestIdentityTests() {
   group('AgentPackResolver manifest identity', () {
     Map<String, dynamic> manifest(String agent, String version) => {
-          'agent': agent,
-          'version': version,
-          'defaultEntry': 'a.json',
-          'files': [
-            {'path': 'a.json', 'sha256': sha256Of('{}')},
-          ],
-        };
+      'agent': agent,
+      'version': version,
+      'defaultEntry': 'a.json',
+      'files': [
+        {'path': 'a.json', 'sha256': sha256Of('{}')},
+      ],
+    };
 
     test('rejects an agent with a path separator', () {
       final zip = buildZipWithManifest(manifest('../evil', '1.0.0'), {
@@ -368,13 +368,14 @@ void stagingTests() {
         final pack = local.resolve(buildPack('my_agent', '3.0.0').path);
         expect(pack.packRoot.path, startsWith(parent.path));
         expect(
-          Directory(p.join(parent.path, 'packs', 'my_agent-3.0.0'))
-              .existsSync(),
+          Directory(
+            p.join(parent.path, 'packs', 'my_agent-3.0.0'),
+          ).existsSync(),
           isTrue,
         );
         final leftovers = parent.listSync().where(
-              (e) => p.basename(e.path).startsWith('.pack-unpack-'),
-            );
+          (e) => p.basename(e.path).startsWith('.pack-unpack-'),
+        );
         expect(leftovers, isEmpty, reason: 'staging dir renamed away');
       } finally {
         parent.deleteSync(recursive: true);
@@ -530,8 +531,9 @@ void execBitTests() {
         },
       );
       final pack = resolver.resolve(zip.path);
-      final mode =
-          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      final mode = FileStat.statSync(
+        p.join(pack.packRoot.path, 'bin/tool'),
+      ).mode;
       expect(mode & 0x40, isNonZero, reason: 'owner-exec bit restored');
     });
 
@@ -549,8 +551,9 @@ void execBitTests() {
         {'a.json': utf8.encode('{}'), 'bin/tool': utf8.encode('tool')},
       );
       final pack = resolver.resolve(zip.path);
-      final mode =
-          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
+      final mode = FileStat.statSync(
+        p.join(pack.packRoot.path, 'bin/tool'),
+      ).mode;
       expect(mode & 0x40, 0, reason: '0644 entries stay non-executable');
     });
   });
@@ -657,9 +660,9 @@ void pathRewriteTests() {
       final prompts = params['cliPrompts'] as List;
       expect(
         prompts[0],
-        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-            .absolute
-            .path,
+        File(
+          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
+        ).absolute.path,
       );
       expect(prompts[1], 'Senior Developer Engineer'); // untouched literal
     });
@@ -697,16 +700,16 @@ void pathRewriteNestedTests() {
       final prompts = params['cliPrompts'] as List;
       expect(
         prompts[0],
-        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-            .absolute
-            .path,
+        File(
+          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
+        ).absolute.path,
       );
       final nestedMap = prompts[1] as Map<String, dynamic>;
       expect(
         nestedMap['descriptionPath'],
-        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
-            .absolute
-            .path,
+        File(
+          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
+        ).absolute.path,
       );
       final nestedList = prompts[2] as List;
       expect(
@@ -740,8 +743,9 @@ void pathRewriteUntouchedTests() {
       'leaves empty, plain-http, absolute, and pack-escaping refs untouched',
       () {
         final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
-        final outside =
-            File(p.join(Directory.systemTemp.path, 'outside.js')).absolute.path;
+        final outside = File(
+          p.join(Directory.systemTemp.path, 'outside.js'),
+        ).absolute.path;
         final config = <String, dynamic>{
           'params': {
             'jsPath': '', // empty ref
@@ -768,14 +772,21 @@ void pathRewriteUntouchedTests() {
 void registryRefTests() {
   group('AgentPackResolver registry refs', () {
     test('isRegistryRef requires a configured registry and the @ form', () {
-      final noRegistry =
-          AgentPackResolver(packsRoot: packsRoot, registryBaseUrl: '');
-      expect(noRegistry.isRegistryRef('my_agent@1.0.0'), isFalse,
-          reason: 'no registry configured');
+      final noRegistry = AgentPackResolver(
+        packsRoot: packsRoot,
+        registryBaseUrl: '',
+      );
+      expect(
+        noRegistry.isRegistryRef('my_agent@1.0.0'),
+        isFalse,
+        reason: 'no registry configured',
+      );
       expect(noRegistry.isPack('my_agent@1.0.0'), isFalse);
 
       final withRegistry = AgentPackResolver(
-          packsRoot: packsRoot, registryBaseUrl: 'http://localhost:1');
+        packsRoot: packsRoot,
+        registryBaseUrl: 'http://localhost:1',
+      );
       expect(withRegistry.isRegistryRef('my_agent@1.0.0'), isTrue);
       expect(withRegistry.isRegistryRef('my_agent@latest'), isTrue);
       expect(withRegistry.isPack('my_agent@latest'), isTrue);
@@ -792,19 +803,23 @@ void registryRefTests() {
       final zipBytes = buildPack('my_agent', '1.2.0').readAsBytesSync();
       final server = await startRegistryServer({
         '/my_agent-1.2.0.zip': zipBytes,
-        '/my_agent-1.2.0.zip.sha256':
-            utf8.encode('${sha256.convert(zipBytes)}  my_agent-1.2.0.zip'),
+        '/my_agent-1.2.0.zip.sha256': utf8.encode(
+          '${sha256.convert(zipBytes)}  my_agent-1.2.0.zip',
+        ),
         '/catalog.json': utf8.encode(jsonEncode({'my_agent': '1.2.0'})),
       });
       try {
         final r = AgentPackResolver(
-            packsRoot: packsRoot,
-            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
         final pack = r.resolve('my_agent@1.2.0');
         expect(pack.agent, 'my_agent');
         expect(pack.version, '1.2.0');
-        expect(File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(),
-            isTrue);
+        expect(
+          File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(),
+          isTrue,
+        );
       } finally {
         server.isolate.kill();
       }
@@ -814,16 +829,20 @@ void registryRefTests() {
       final zipBytes = buildPack('latest_agent', '2.0.0').readAsBytesSync();
       final server = await startRegistryServer({
         '/latest_agent-2.0.0.zip': zipBytes,
-        '/latest_agent-2.0.0.zip.sha256':
-            utf8.encode('${sha256.convert(zipBytes)}'),
-        '/catalog.json': utf8.encode(jsonEncode({
-          'agents': {'latest_agent': '2.0.0'} // nested catalog shape
-        })),
+        '/latest_agent-2.0.0.zip.sha256': utf8.encode(
+          '${sha256.convert(zipBytes)}',
+        ),
+        '/catalog.json': utf8.encode(
+          jsonEncode({
+            'agents': {'latest_agent': '2.0.0'}, // nested catalog shape
+          }),
+        ),
       });
       try {
         final r = AgentPackResolver(
-            packsRoot: packsRoot,
-            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
         final pack = r.resolve('latest_agent@latest');
         expect(pack.agent, 'latest_agent');
         expect(pack.version, '2.0.0');
@@ -838,12 +857,18 @@ void registryRefTests() {
       });
       try {
         final r = AgentPackResolver(
-            packsRoot: packsRoot,
-            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
         expect(
           () => r.resolve('unknown_agent@latest'),
-          throwsA(isA<AgentPackException>().having(
-              (e) => e.message, 'message', contains('unknown_agent'))),
+          throwsA(
+            isA<AgentPackException>().having(
+              (e) => e.message,
+              'message',
+              contains('unknown_agent'),
+            ),
+          ),
         );
       } finally {
         server.isolate.kill();
@@ -858,12 +883,18 @@ void registryRefTests() {
       });
       try {
         final r = AgentPackResolver(
-            packsRoot: packsRoot,
-            registryBaseUrl: 'http://127.0.0.1:${server.port}');
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
         expect(
           () => r.resolve('hash_agent@1.0.0'),
-          throwsA(isA<AgentPackException>().having(
-              (e) => e.message, 'message', contains('SHA-256 mismatch'))),
+          throwsA(
+            isA<AgentPackException>().having(
+              (e) => e.message,
+              'message',
+              contains('SHA-256 mismatch'),
+            ),
+          ),
         );
       } finally {
         server.isolate.kill();
@@ -892,10 +923,13 @@ void _registryServerEntry(List<Object?> init) {
 
 /// Starts the loopback registry server in a separate isolate.
 Future<({int port, Isolate isolate})> startRegistryServer(
-    Map<String, List<int>> files) async {
+  Map<String, List<int>> files,
+) async {
   final readyInbox = ReceivePort();
-  final isolate = await Isolate.spawn(
-      _registryServerEntry, [readyInbox.sendPort, files]);
+  final isolate = await Isolate.spawn(_registryServerEntry, [
+    readyInbox.sendPort,
+    files,
+  ]);
   final port = await readyInbox.first as int;
   readyInbox.close();
   return (port: port, isolate: isolate);

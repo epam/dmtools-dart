@@ -192,8 +192,7 @@ void _teammateStubContract() {
 
     test('issue-number expressions fall back to the dispatch input', () {
       expect(
-        yaml.contains(
-            'github.event.issue.number || github.event.inputs.issue'),
+        yaml.contains('github.event.issue.number || github.event.inputs.issue'),
         isTrue,
         reason: 'dispatched runs carry no issue event payload — the '
             'concurrency group (and every other issue-number expression) '

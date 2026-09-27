@@ -77,8 +77,10 @@ jobs:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
       factory_ref: 5e2a8051b2e6a7b9da6655a16fe83b54dfceb869
-      # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: bitrise-runner-dmtools-ci
+      # GitHub-hosted: the Bitrise vm-pool volume stalls mid-job on read-only
+      # git (5/5 legs 2026-09-27, 622-637s hangs; runner stays 'healthy').
+      # Restore `runner: bitrise-runner-dmtools-ci` once Bitrise confirms the
+      # storage fix. Probe: #229.
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

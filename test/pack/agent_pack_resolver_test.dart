@@ -209,13 +209,13 @@ void manifestTests() {
 void manifestIdentityTests() {
   group('AgentPackResolver manifest identity', () {
     Map<String, dynamic> manifest(String agent, String version) => {
-      'agent': agent,
-      'version': version,
-      'defaultEntry': 'a.json',
-      'files': [
-        {'path': 'a.json', 'sha256': sha256Of('{}')},
-      ],
-    };
+          'agent': agent,
+          'version': version,
+          'defaultEntry': 'a.json',
+          'files': [
+            {'path': 'a.json', 'sha256': sha256Of('{}')},
+          ],
+        };
 
     test('rejects an agent with a path separator', () {
       final zip = buildZipWithManifest(manifest('../evil', '1.0.0'), {
@@ -373,8 +373,8 @@ void stagingTests() {
           isTrue,
         );
         final leftovers = parent.listSync().where(
-          (e) => p.basename(e.path).startsWith('.pack-unpack-'),
-        );
+              (e) => p.basename(e.path).startsWith('.pack-unpack-'),
+            );
         expect(leftovers, isEmpty, reason: 'staging dir renamed away');
       } finally {
         parent.deleteSync(recursive: true);
@@ -530,8 +530,8 @@ void execBitTests() {
         },
       );
       final pack = resolver.resolve(zip.path);
-      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
-          .mode;
+      final mode =
+          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
       expect(mode & 0x40, isNonZero, reason: 'owner-exec bit restored');
     });
 
@@ -549,8 +549,8 @@ void execBitTests() {
         {'a.json': utf8.encode('{}'), 'bin/tool': utf8.encode('tool')},
       );
       final pack = resolver.resolve(zip.path);
-      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
-          .mode;
+      final mode =
+          FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool')).mode;
       expect(mode & 0x40, 0, reason: '0644 entries stay non-executable');
     });
   });
@@ -740,9 +740,8 @@ void pathRewriteUntouchedTests() {
       'leaves empty, plain-http, absolute, and pack-escaping refs untouched',
       () {
         final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
-        final outside = File(p.join(Directory.systemTemp.path, 'outside.js'))
-            .absolute
-            .path;
+        final outside =
+            File(p.join(Directory.systemTemp.path, 'outside.js')).absolute.path;
         final config = <String, dynamic>{
           'params': {
             'jsPath': '', // empty ref

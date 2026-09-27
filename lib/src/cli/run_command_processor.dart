@@ -23,7 +23,7 @@ class RunCommandProcessor {
   /// Creates a run-command processor. [packResolver] is a test seam for the
   /// agent-pack path (dm.ai #579).
   const RunCommandProcessor({AgentPackResolver? packResolver})
-    : _packResolver = packResolver;
+      : _packResolver = packResolver;
 
   final AgentPackResolver? _packResolver;
 
@@ -253,7 +253,7 @@ class _RunArgs {
 class _ParentConfigResolver {
   /// Creates a resolver; [packResolver] is a test seam for pack parents.
   _ParentConfigResolver({AgentPackResolver? packResolver})
-    : _packResolver = packResolver ?? AgentPackResolver();
+      : _packResolver = packResolver ?? AgentPackResolver();
 
   final AgentPackResolver _packResolver;
 

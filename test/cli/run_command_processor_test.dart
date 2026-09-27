@@ -211,9 +211,8 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': 'test-token-123'});
       try {
         expect(
-          () =>
-              RunCommandProcessor(packResolver: resolver)
-                  .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(packResolver: resolver)
+              .process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, 'test-token-123');
@@ -229,9 +228,8 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': ''});
       try {
         expect(
-          () =>
-              RunCommandProcessor(packResolver: resolver)
-                  .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(packResolver: resolver)
+              .process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, isNot('test-token-123'));

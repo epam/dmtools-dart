@@ -78,7 +78,7 @@ jobs:
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
       factory_ref: 60571fed171a7b5a048c028928ca289b37b00586
       # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: ubuntu-latest
+      runner: bitrise-runner-dmtools-ci
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

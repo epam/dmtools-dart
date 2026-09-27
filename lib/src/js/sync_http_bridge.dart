@@ -90,6 +90,7 @@ final class SyncHttpBridge {
     String url, {
     Map<String, String>? headers,
     String? body,
+    bool followRedirects = false,
   }) {
     final port = _workerPort!;
     port.send(Uint8List.fromList(utf8.encode(jsonEncode({
@@ -97,6 +98,7 @@ final class SyncHttpBridge {
       'url': url,
       'headers': headers,
       'body': body,
+      'followRedirects': followRedirects,
     }))));
     final response = utf8.decode(_responses.take(), allowMalformed: true);
     final decoded = jsonDecode(response) as Map<String, dynamic>;
@@ -163,7 +165,10 @@ Future<void> _serveOne(
     final request = await client
         .openUrl(req['method'] as String, Uri.parse(req['url'] as String))
         .timeout(budget);
-    request.followRedirects = false; // curl parity: `-s` never follows
+    // curl parity: plain `-s` never follows; opt-in `-L` parity for the
+    // agent-pack downloads (GitHub Releases 302s to a signed CDN URL).
+    // dart's HttpClientRequest caps the chain at maxRedirects (5) by default.
+    request.followRedirects = req['followRedirects'] as bool? ?? false;
     // curl parity: no advertised gzip (autoUncompress is already off) and
     // caller-supplied header names keep their original case (dart would
     // otherwise lowercase them, which breaks case-sensitive peers).

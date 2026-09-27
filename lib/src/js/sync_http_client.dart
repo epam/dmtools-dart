@@ -67,8 +67,18 @@ class SyncHttpClient {
   static const maxTimeSeconds = 60;
 
   /// Performs a synchronous GET request.
-  static SyncHttpResponse get(String url, {Map<String, String>? headers}) =>
-      _dispatch('GET', url, headers: headers);
+  ///
+  /// [followRedirects] opts into 3xx following (curl `-L` /
+  /// `HttpClientRequest.followRedirects`); the default stays `false` for
+  /// curl `-s` parity. Agent-pack downloads set it — Java's
+  /// `AgentPackResolver` follows redirects, and GitHub Releases download
+  /// URLs 302 to a signed CDN URL.
+  static SyncHttpResponse get(
+    String url, {
+    Map<String, String>? headers,
+    bool followRedirects = false,
+  }) =>
+      _dispatch('GET', url, headers: headers, followRedirects: followRedirects);
 
   /// Performs a synchronous POST request.
   static SyncHttpResponse post(
@@ -109,14 +119,17 @@ class SyncHttpClient {
     String url, {
     Map<String, String>? headers,
     String? body,
+    bool followRedirects = false,
   }) =>
-      _dispatch(method, url, headers: headers, body: body);
+      _dispatch(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
 
   static SyncHttpResponse _dispatch(
     String method,
     String url, {
     Map<String, String>? headers,
     String? body,
+    bool followRedirects = false,
   }) {
     final policy = SyncRetryPolicy.forUrl(url);
     // Java `isWaitBeforePerform` throttle before the request goes out.
@@ -124,7 +137,8 @@ class SyncHttpClient {
     if (performDelay > 0) sleep(Duration(milliseconds: performDelay));
     var attempt = 1;
     while (true) {
-      final resp = _transport(method, url, headers: headers, body: body);
+      final resp = _transport(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
       if (!policy.shouldRetry(attempt, resp.statusCode)) return resp;
       final delayMs = resp.statusCode == 0
           ? policy.connectionDelayMs(attempt)
@@ -143,13 +157,16 @@ class SyncHttpClient {
     String url, {
     Map<String, String>? headers,
     String? body,
+    bool followRedirects = false,
   }) {
     final bridge = SyncHttpBridge.shared;
     if (!bridge.ready) {
       unawaited(bridge.boot());
-      return _curlRequest(method, url, headers: headers, body: body);
+      return _curlRequest(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
     }
-    return bridge.request(method, url, headers: headers, body: body);
+    return bridge.request(method, url,
+        headers: headers, body: body, followRedirects: followRedirects);
   }
 
   /// Builds the curl argument list for a request.
@@ -165,6 +182,7 @@ class SyncHttpClient {
     String? headerFile,
     String? bodyFile,
     String? headerDumpFile,
+    bool followRedirects = false,
   }) {
     final args = [
       '-s',
@@ -177,6 +195,11 @@ class SyncHttpClient {
       '--max-time',
       '$maxTimeSeconds',
     ];
+    if (followRedirects) {
+      // Java parity: AgentPackResolver sets setInstanceFollowRedirects(true)
+      // — GitHub Releases download URLs 302 to a signed CDN location.
+      args.addAll(['-L', '--max-redirs', '5']);
+    }
     if (headerFile != null) args.addAll(['-H', '@$headerFile']);
     if (bodyFile != null) args.addAll(['--data-binary', '@$bodyFile']);
     if (headerDumpFile != null) args.addAll(['-D', headerDumpFile]);
@@ -262,6 +285,7 @@ class SyncHttpClient {
     String url, {
     Map<String, String>? headers,
     String? body,
+    bool followRedirects = false,
   }) {
     final dir = Directory.systemTemp.createTempSync('dmtools_sync_');
     try {
@@ -280,6 +304,7 @@ class SyncHttpClient {
         headerFile: headerFile,
         bodyFile: bodyFile,
         headerDumpFile: headerDumpFile,
+        followRedirects: followRedirects,
       );
       // stdoutEncoding: null keeps stdout as raw bytes — binary downloads
       // (agent-pack zips) would otherwise crash the UTF-8 decode before

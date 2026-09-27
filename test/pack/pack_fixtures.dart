@@ -143,3 +143,49 @@ Future<({int port, ReceivePort authInbox, Isolate isolate})> startPackServer(
   readyInbox.close();
   return (port: port, authInbox: authInbox, isolate: isolate);
 }
+
+/// Loopback registry server entry: serves a path→bytes map, 404 for
+/// anything else. Paths under `/redirect/` answer 302 to the unprefixed
+/// path, mimicking a GitHub-Releases registry base (release download URLs
+/// redirect to a signed CDN location) so tests can prove the resolver
+/// follows redirects.
+void registryServerEntry(List<Object?> init) {
+  final readyPort = init[0] as SendPort;
+  final files = init[1] as Map<String, List<int>>;
+  HttpServer.bind(InternetAddress.loopbackIPv4, 0).then((server) {
+    readyPort.send(server.port);
+    server.listen((request) {
+      final path = request.uri.path;
+      if (path.startsWith('/redirect/')) {
+        request.response.statusCode = HttpStatus.found;
+        request.response.headers
+            .set(HttpHeaders.locationHeader, path.substring(9));
+        request.response.close();
+        return;
+      }
+      final body = files[path];
+      if (body == null) {
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        request.response.add(body);
+      }
+      request.response.close();
+    });
+  });
+}
+
+/// Starts the loopback registry server in a separate isolate (a
+/// [SyncHttpClient] call blocks the caller isolate, so an in-isolate
+/// server could never answer).
+Future<({int port, Isolate isolate})> startRegistryServer(
+  Map<String, List<int>> files,
+) async {
+  final readyInbox = ReceivePort();
+  final isolate = await Isolate.spawn(registryServerEntry, [
+    readyInbox.sendPort,
+    files,
+  ]);
+  final port = await readyInbox.first as int;
+  readyInbox.close();
+  return (port: port, isolate: isolate);
+}

@@ -4,11 +4,14 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dmtools/dmtools.dart';
 import 'package:dmtools/src/compile/agent_pack_compiler.dart'
     hide AgentPackException;
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:test/test.dart';
+
+import '../pack/pack_fixtures.dart';
 
 late Directory _tmp;
 
@@ -267,6 +270,45 @@ void _testParentPackResolution() {
         reason: 'parent jsPath is rewritten into the pack cache: $jsPath',
       );
       expect(File(jsPath).existsSync(), isTrue);
+    });
+
+    test('registry-ref parent (<agent>@latest) resolves and merges', () async {
+      final zip = _buildParentPack();
+      final zipBytes = zip.readAsBytesSync();
+      final server = await startRegistryServer({
+        '/parent_agent-1.0.0.zip': zipBytes,
+        '/parent_agent-1.0.0.zip.sha256': utf8.encode(
+          '${sha256.convert(zipBytes)}  parent_agent-1.0.0.zip',
+        ),
+        '/catalog.json': utf8.encode(jsonEncode({'parent_agent': '1.0.0'})),
+      });
+      try {
+        final packsRoot = Directory('${_tmp.path}/packs');
+        final resolver = AgentPackResolver(
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
+        _writeFile('child.json', '''{
+          "name":"child",
+          "parent":{"path":"parent_agent@latest"},
+          "params":{"fromChild":"yes"}
+        }''');
+        final json = jsonDecode(
+          RunCommandProcessor(packResolver: resolver)
+              .process(['run', '${_tmp.path}/child.json']),
+        ) as Map;
+        expect(json['params']['fromParent'], 'yes');
+        expect(json['params']['fromChild'], 'yes');
+        final jsPath = json['params']['jsPath'] as String;
+        expect(
+          jsPath.startsWith(packsRoot.path),
+          isTrue,
+          reason: 'registry parent jsPath is rewritten into the pack cache',
+        );
+        expect(File(jsPath).existsSync(), isTrue);
+      } finally {
+        server.isolate.kill();
+      }
     });
 
     test('pack parent with #entry override uses the overridden entry', () {

@@ -101,12 +101,14 @@ final class SyncHttpBridge {
     final response = utf8.decode(_responses.take(), allowMalformed: true);
     final decoded = jsonDecode(response) as Map<String, dynamic>;
     final rawHeaders = decoded['headers'] as Map<String, dynamic>?;
+    final rawBody = base64Decode(decoded['body'] as String);
     return SyncHttpResponse(
       decoded['status'] as int,
-      decoded['body'] as String,
+      utf8.decode(rawBody, allowMalformed: true),
       rawHeaders == null
           ? const <String, String>{}
           : rawHeaders.map((k, v) => MapEntry(k, '$v')),
+      rawBody,
     );
   }
 
@@ -187,17 +189,19 @@ Future<void> _serveOne(
         .timeout(budget);
     responses.put(Uint8List.fromList(utf8.encode(jsonEncode({
       'status': response.statusCode,
-      'body': utf8.decode(bytes.toBytes(), allowMalformed: true),
+      // base64 so binary payloads (agent-pack zips) survive the JSON
+      // envelope byte-verbatim — a UTF-8 string would corrupt them.
+      'body': base64Encode(bytes.toBytes()),
       'headers': headers,
     }))));
   } on TimeoutException {
     responses.put(Uint8List.fromList(utf8.encode(jsonEncode({
       'status': 0,
-      'body':
-          'Request timed out after ${SyncHttpClient.maxTimeSeconds}s (--max-time)',
+      'body': base64Encode(utf8.encode(
+          'Request timed out after ${SyncHttpClient.maxTimeSeconds}s (--max-time)')),
     }))));
   } catch (e) {
-    responses.put(Uint8List.fromList(
-        utf8.encode(jsonEncode({'status': 0, 'body': e.toString()}))));
+    responses.put(Uint8List.fromList(utf8.encode(
+        jsonEncode({'status': 0, 'body': base64Encode(utf8.encode('$e'))}))));
   }
 }

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/dmtools.dart';
+import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:test/test.dart';
 
 late Directory _tmp;
@@ -21,6 +22,7 @@ void main() {
   _testJobNameMode();
   _testJsFileMode();
   _testConfigFileResolution();
+  _testPackTokenWiring();
 }
 
 File _writeFile(String name, String content) {
@@ -202,6 +204,59 @@ void _testParentResolution() {
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['name'], 'child');
       expect(json.containsKey('parent'), isFalse);
+    });
+  });
+}
+
+/// Test seam: records the token passed to [AgentPackResolver.resolve] and
+/// stops the pack path before any download/unpack happens.
+class _RecordingPackResolver extends AgentPackResolver {
+  String? capturedToken;
+
+  @override
+  bool isPack(String? runArg) => true;
+
+  @override
+  ResolvedPack resolve(String runArg, {String? githubToken}) {
+    capturedToken = githubToken;
+    throw const AgentPackException('recording seam');
+  }
+}
+
+/// SOURCE_GITHUB_TOKEN wiring into the pack resolver (PR #249 review: the
+/// token was never passed to `resolve()`).
+void _testPackTokenWiring() {
+  group('agent-pack token wiring', () {
+    test('passes SOURCE_GITHUB_TOKEN to the pack resolver', () {
+      final resolver = _RecordingPackResolver();
+      PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': 'test-token-123'});
+      try {
+        expect(
+          () => RunCommandProcessor(packResolver: resolver)
+              .process(['run', 'pack.zip']),
+          throwsA(isA<AgentPackException>()),
+        );
+        expect(resolver.capturedToken, 'test-token-123');
+      } finally {
+        PropertyReader.clearOverrides();
+      }
+    });
+
+    test('passes no usable token when SOURCE_GITHUB_TOKEN is empty', () {
+      final resolver = _RecordingPackResolver();
+      // An empty override is accepted as-is (Java parity) and must not leak
+      // a developer's real env token into the resolver.
+      PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': ''});
+      try {
+        expect(
+          () => RunCommandProcessor(packResolver: resolver)
+              .process(['run', 'pack.zip']),
+          throwsA(isA<AgentPackException>()),
+        );
+        expect(resolver.capturedToken, isNot('test-token-123'));
+      } finally {
+        PropertyReader.clearOverrides();
+      }
     });
   });
 }

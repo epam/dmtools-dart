@@ -64,7 +64,9 @@ class JsRunConfig {
 
   /// Worker pool for `runAsync(fn, args)` (defaults to
   /// [AsyncJobPool.instance]). Only consulted when `jobParams` carries
-  /// `parallelWorkers >= 2`; tests boot a private pool and pass it here.
+  /// `parallelWorkers >= 2`. The CLI dispatcher boots the pool it passes
+  /// here (gh-241: the shared instance, lazily, just before the JS run);
+  /// tests boot a private pool and pass it here.
   final AsyncJobPool? pool;
 
   /// Alternate `fetch` transport for the node/js compat layer on the
@@ -118,7 +120,7 @@ class JsJobRunner {
       final reg = cfg.registry ?? createDefaultToolRegistry();
       final compat =
           _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
-      if (_parallelWorkers(jobParams) >= 2) {
+      if (JsJobRunner.needsAsyncPool(jobParams)) {
         _wireAsyncPool(
           rt,
           scriptPath: scriptPath,
@@ -147,11 +149,18 @@ class JsJobRunner {
     }
   }
 
+  /// Whether [jobParams] enable the `runAsync` engine-worker surface —
+  /// the single source of the `parallelWorkers >= 2` predicate, shared by
+  /// [runScript] (pool wiring) and the CLI dispatcher (lazy pool boot,
+  /// epam/dmtools-dart#241).
+  static bool needsAsyncPool(Map<String, dynamic> jobParams) =>
+      effectiveParallelWorkers(jobParams) >= 2;
+
   /// Effective `parallelWorkers` knob (0 when absent or non-numeric).
   ///
-  /// Values >= 2 wire the `runAsync` API onto the engine; everything else
+  /// Values >= 2 enable the `runAsync` API on the engine; everything else
   /// keeps the default sequential surface (default-off, zero deviation).
-  int _parallelWorkers(Map<String, dynamic> jobParams) {
+  static int effectiveParallelWorkers(Map<String, dynamic> jobParams) {
     final value = jobParams['parallelWorkers'];
     return value is num ? value.toInt() : 0;
   }

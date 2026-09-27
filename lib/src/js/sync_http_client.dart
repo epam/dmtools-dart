@@ -281,7 +281,10 @@ class SyncHttpClient {
         bodyFile: bodyFile,
         headerDumpFile: headerDumpFile,
       );
-      final result = Process.runSync('curl', args);
+      // stdoutEncoding: null keeps stdout as raw bytes — binary downloads
+      // (agent-pack zips) would otherwise crash the UTF-8 decode before
+      // parseResponse's raw-byte branch could preserve them.
+      final result = Process.runSync('curl', args, stdoutEncoding: null);
       final resp = parseResponse(result);
       return _withDumpedHeaders(resp, headerDumpFile);
     } finally {

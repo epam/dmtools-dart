@@ -130,9 +130,9 @@ void entryOverrideTests() {
         }),
       );
       final outDir = Directory.systemTemp.createTempSync('dist_');
-      final zip = AgentPackCompiler(
-        agentRoot.path,
-      ).compile(entry, '1.0.0', 'abc', outDir).zipFile;
+      final zip = AgentPackCompiler(agentRoot.path)
+          .compile(entry, '1.0.0', 'abc', outDir)
+          .zipFile;
 
       final pack = resolver.resolve('${zip.path}#custom.json');
       expect(pack.entryFile.path, endsWith('custom.json'));
@@ -368,9 +368,8 @@ void stagingTests() {
         final pack = local.resolve(buildPack('my_agent', '3.0.0').path);
         expect(pack.packRoot.path, startsWith(parent.path));
         expect(
-          Directory(
-            p.join(parent.path, 'packs', 'my_agent-3.0.0'),
-          ).existsSync(),
+          Directory(p.join(parent.path, 'packs', 'my_agent-3.0.0'))
+              .existsSync(),
           isTrue,
         );
         final leftovers = parent.listSync().where(
@@ -531,9 +530,8 @@ void execBitTests() {
         },
       );
       final pack = resolver.resolve(zip.path);
-      final mode = FileStat.statSync(
-        p.join(pack.packRoot.path, 'bin/tool'),
-      ).mode;
+      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
+          .mode;
       expect(mode & 0x40, isNonZero, reason: 'owner-exec bit restored');
     });
 
@@ -551,9 +549,8 @@ void execBitTests() {
         {'a.json': utf8.encode('{}'), 'bin/tool': utf8.encode('tool')},
       );
       final pack = resolver.resolve(zip.path);
-      final mode = FileStat.statSync(
-        p.join(pack.packRoot.path, 'bin/tool'),
-      ).mode;
+      final mode = FileStat.statSync(p.join(pack.packRoot.path, 'bin/tool'))
+          .mode;
       expect(mode & 0x40, 0, reason: '0644 entries stay non-executable');
     });
   });
@@ -660,9 +657,9 @@ void pathRewriteTests() {
       final prompts = params['cliPrompts'] as List;
       expect(
         prompts[0],
-        File(
-          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
-        ).absolute.path,
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
       );
       expect(prompts[1], 'Senior Developer Engineer'); // untouched literal
     });
@@ -700,16 +697,16 @@ void pathRewriteNestedTests() {
       final prompts = params['cliPrompts'] as List;
       expect(
         prompts[0],
-        File(
-          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
-        ).absolute.path,
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
       );
       final nestedMap = prompts[1] as Map<String, dynamic>;
       expect(
         nestedMap['descriptionPath'],
-        File(
-          p.join(pack.packRoot.path, 'instructions/common/guide.md'),
-        ).absolute.path,
+        File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+            .absolute
+            .path,
       );
       final nestedList = prompts[2] as List;
       expect(
@@ -743,9 +740,9 @@ void pathRewriteUntouchedTests() {
       'leaves empty, plain-http, absolute, and pack-escaping refs untouched',
       () {
         final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
-        final outside = File(
-          p.join(Directory.systemTemp.path, 'outside.js'),
-        ).absolute.path;
+        final outside = File(p.join(Directory.systemTemp.path, 'outside.js'))
+            .absolute
+            .path;
         final config = <String, dynamic>{
           'params': {
             'jsPath': '', // empty ref

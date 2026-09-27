@@ -211,9 +211,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': 'test-token-123'});
       try {
         expect(
-          () => RunCommandProcessor(
-            packResolver: resolver,
-          ).process(['run', 'pack.zip']),
+          () =>
+              RunCommandProcessor(packResolver: resolver)
+                  .process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, 'test-token-123');
@@ -229,9 +229,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': ''});
       try {
         expect(
-          () => RunCommandProcessor(
-            packResolver: resolver,
-          ).process(['run', 'pack.zip']),
+          () =>
+              RunCommandProcessor(packResolver: resolver)
+                  .process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, isNot('test-token-123'));
@@ -256,13 +256,10 @@ void _testParentPackResolution() {
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
         "params":{"fromChild":"yes"}
       }''');
-      final json =
-          jsonDecode(
-                RunCommandProcessor(
-                  packResolver: resolver,
-                ).process(['run', '${_tmp.path}/child.json']),
-              )
-              as Map;
+      final json = jsonDecode(
+        RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
       expect(json['params']['fromParent'], 'yes');
       expect(json['params']['fromChild'], 'yes');
       final jsPath = json['params']['jsPath'] as String;
@@ -282,13 +279,10 @@ void _testParentPackResolution() {
         "name":"child",
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
       }''');
-      final json =
-          jsonDecode(
-                RunCommandProcessor(
-                  packResolver: resolver,
-                ).process(['run', '${_tmp.path}/child.json']),
-              )
-              as Map;
+      final json = jsonDecode(
+        RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
       expect(json['params']['altEntry'], 'yes');
       expect(
         json['params']['fromParent'],
@@ -340,7 +334,7 @@ File _buildParentPack({bool withAltEntry = false}) {
   }
   final dist = Directory('${_tmp.path}/parent_dist')
     ..createSync(recursive: true);
-  return AgentPackCompiler(
-    agentRoot.path,
-  ).compile(entry, '1.0.0', 'deadbeef', dist).zipFile;
+  return AgentPackCompiler(agentRoot.path)
+      .compile(entry, '1.0.0', 'deadbeef', dist)
+      .zipFile;
 }

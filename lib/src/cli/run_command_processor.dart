@@ -189,9 +189,8 @@ class RunCommandProcessor {
     }
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
-    config = _ParentConfigResolver(
-      packResolver: _packResolver,
-    ).resolve(config, file.parent.path);
+    config = _ParentConfigResolver(packResolver: _packResolver)
+        .resolve(config, file.parent.path);
     if (packRoot != null) {
       AgentPackResolver().rewritePathsToPackRoot(config, packRoot);
     }

@@ -53,10 +53,15 @@ class RunCommandProcessor {
     if (packResolver.isPack(target)) {
       // SOURCE_GITHUB_TOKEN authorizes private GitHub release downloads —
       // the same PropertyReader chain every other integration reads.
-      final pack = packResolver.resolve(target,
-          githubToken: PropertyReader().getGithubToken());
-      return _processConfigFile(pack.entryFile.path, runArgs,
-          packRoot: pack.packRoot);
+      final pack = packResolver.resolve(
+        target,
+        githubToken: PropertyReader().getGithubToken(),
+      );
+      return _processConfigFile(
+        pack.entryFile.path,
+        runArgs,
+        packRoot: pack.packRoot,
+      );
     }
 
     if (target.endsWith('.js')) {
@@ -134,7 +139,9 @@ class RunCommandProcessor {
   /// Injects CLI overrides into `params.jobParams` of [config] (mutates in
   /// place).
   void _injectJobParams(
-      Map<String, dynamic> config, Map<String, String> overrides) {
+    Map<String, dynamic> config,
+    Map<String, String> overrides,
+  ) {
     if (overrides.isEmpty) return;
     final params = config['params'] as Map<String, dynamic>;
     final jobParams = Map<String, dynamic>.from(
@@ -171,15 +178,19 @@ class RunCommandProcessor {
   /// When [packRoot] is set (running from an agent pack, dm.ai #579), the
   /// resolved config's repo-relative path references are rewritten to absolute
   /// paths inside the unpacked pack so the agent runs with no repo checkout.
-  String _processConfigFile(String path, _RunArgs runArgs,
-      {Directory? packRoot}) {
+  String _processConfigFile(
+    String path,
+    _RunArgs runArgs, {
+    Directory? packRoot,
+  }) {
     final file = File(path);
     if (!file.existsSync()) {
       throw ArgumentError('Config file not found: $path');
     }
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
-    config = _ParentConfigResolver().resolve(config, file.parent.path);
+    config = _ParentConfigResolver(packResolver: _packResolver)
+        .resolve(config, file.parent.path);
     if (packRoot != null) {
       AgentPackResolver().rewritePathsToPackRoot(config, packRoot);
     }
@@ -194,7 +205,9 @@ class RunCommandProcessor {
 
   /// Deep-merges a decoded encoded config onto [config] (no-op when null/empty).
   Map<String, dynamic> _applyEncodedConfig(
-      Map<String, dynamic> config, String? encodedConfig) {
+    Map<String, dynamic> config,
+    String? encodedConfig,
+  ) {
     if (encodedConfig == null || encodedConfig.isEmpty) return config;
     final decoded = autoDetectAndDecode(encodedConfig);
     final override = jsonDecode(decoded) as Map<String, dynamic>;
@@ -203,7 +216,9 @@ class RunCommandProcessor {
 
   /// Injects CLI overrides into `params` of [config] (mutates in place).
   void _injectParams(
-      Map<String, dynamic> config, Map<String, String> overrides) {
+    Map<String, dynamic> config,
+    Map<String, String> overrides,
+  ) {
     if (overrides.isEmpty) return;
     final params = Map<String, dynamic>.from(
       config['params'] as Map<String, dynamic>? ?? const {},
@@ -236,6 +251,12 @@ class _RunArgs {
 /// onto its resolved parent while honouring `"override"` and `"merge"`
 /// directives.
 class _ParentConfigResolver {
+  /// Creates a resolver; [packResolver] is a test seam for pack parents.
+  _ParentConfigResolver({AgentPackResolver? packResolver})
+      : _packResolver = packResolver ?? AgentPackResolver();
+
+  final AgentPackResolver _packResolver;
+
   /// Resolves [child] by walking up its parent chain.
   ///
   /// [configDir] is the directory of the file that [child] was loaded from;
@@ -261,8 +282,25 @@ class _ParentConfigResolver {
     );
   }
 
-  /// Loads the parent file and recursively resolves it.
+  /// Loads the parent config (filesystem path or agent pack ref) and
+  /// recursively resolves it.
   Map<String, dynamic> _loadAndResolve(String parentPath, String configDir) {
+    if (_packResolver.isPack(parentPath)) {
+      // Pack ref (local .zip / http(s) URL / <agent>@<version|latest>):
+      // resolve to the unpacked cache, load the entry config from there,
+      // resolve the parent's own chain inside the pack, and rewrite its
+      // pack-relative paths to absolute cache paths so they keep working
+      // after the merge with a child that may live in another pack or repo.
+      final pack = _packResolver.resolve(
+        parentPath,
+        githubToken: PropertyReader().getGithubToken(),
+      );
+      final json =
+          jsonDecode(pack.entryFile.readAsStringSync()) as Map<String, dynamic>;
+      final config = resolve(json, pack.entryFile.parent.path);
+      _packResolver.rewritePathsToPackRoot(config, pack.packRoot);
+      return config;
+    }
     final file = File('$configDir/$parentPath');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
     return resolve(json, file.parent.path);

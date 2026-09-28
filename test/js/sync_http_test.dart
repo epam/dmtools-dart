@@ -15,6 +15,7 @@ import 'echo_server_helper.dart';
 /// `Process.runSync('curl', …)`, so a separate process is required.
 void main() {
   _testBuildArgs();
+  _testBuildArgsPayloadFiles();
   _testRenderHeaderFile();
   _testParseResponse();
   _testRawByteParseResponse();
@@ -97,6 +98,29 @@ void _testBuildArgs() {
       expect(args[args.indexOf('--max-time') + 1], '60');
     });
 
+    test('followRedirects opt-in adds -L with a redirect cap', () {
+      final args = SyncHttpClient.buildArgs(
+        'GET',
+        'http://ex.com/api',
+        followRedirects: true,
+      );
+      expect(args, contains('-L'));
+      expect(args[args.indexOf('--max-redirs') + 1], '5');
+    });
+
+    test('redirect following stays off by default (curl -s parity)', () {
+      final args = SyncHttpClient.buildArgs('GET', 'http://ex.com/api');
+      expect(args, isNot(contains('-L')));
+      expect(args, isNot(contains('--location')));
+      expect(args, isNot(contains('--max-redirs')));
+    });
+  });
+}
+
+/// `SyncHttpClient.buildArgs` — body/header file flags and URL placement
+/// (split out of [_testBuildArgs] for the loc gate).
+void _testBuildArgsPayloadFiles() {
+  group('SyncHttpClient.buildArgs payload files', () {
     test('body referenced via --data-binary @file, never inline', () {
       final args = SyncHttpClient.buildArgs(
         'POST',

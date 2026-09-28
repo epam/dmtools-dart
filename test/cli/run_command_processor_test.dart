@@ -4,9 +4,14 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dmtools/dmtools.dart';
+import 'package:dmtools/src/compile/agent_pack_compiler.dart'
+    hide AgentPackException;
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:test/test.dart';
+
+import '../pack/pack_fixtures.dart';
 
 late Directory _tmp;
 
@@ -42,32 +47,20 @@ void _testJobNameMode() {
     });
 
     test('injects CLI overrides into params', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--model',
-        'gpt-4',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--model', 'gpt-4'])) as Map;
       expect(json['params']['model'], 'gpt-4');
     });
 
     test('parses JSON-array override values', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--list',
-        '[1,2]',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--list', '[1,2]'])) as Map;
       expect(json['params']['list'], [1, 2]);
     });
 
     test('parses JSON-object override values', () {
-      final json = jsonDecode(_run([
-        'run',
-        'teammate',
-        '--obj',
-        '{"a":"b"}',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'teammate', '--obj', '{"a":"b"}'])) as Map;
       expect(json['params']['obj'], {'a': 'b'});
     });
 
@@ -89,29 +82,21 @@ void _testJsFileMode() {
     });
 
     test('injects overrides into jobParams', () {
-      final json = jsonDecode(_run([
-        'run',
-        'script.js',
-        '--key',
-        'val',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'script.js', '--key', 'val'])) as Map;
       expect(json['params']['jobParams']['key'], 'val');
     });
 
     test('injects JSON-array override into jobParams', () {
-      final json = jsonDecode(_run([
-        'run',
-        'script.js',
-        '--items',
-        '[1,2,3]',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', 'script.js', '--items', '[1,2,3]'])) as Map;
       expect(json['params']['jobParams']['items'], [1, 2, 3]);
     });
 
     test('applies base64-encoded config', () {
-      final encoded = base64.encode(utf8.encode(
-        '{"params":{"jobParams":{"extra":"data"}}}',
-      ));
+      final encoded = base64.encode(
+        utf8.encode('{"params":{"jobParams":{"extra":"data"}}}'),
+      );
       final json = jsonDecode(_run(['run', 'script.js', encoded])) as Map;
       expect(json['params']['jobParams']['extra'], 'data');
     });
@@ -136,18 +121,17 @@ void _testConfigFileResolution() {
 
     test('injects CLI overrides on top of file config', () {
       _writeFile('job.json', '{"name":"job","params":{"a":"1"}}');
-      final json = jsonDecode(_run([
-        'run',
-        '${_tmp.path}/job.json',
-        '--b',
-        '2',
-      ])) as Map;
+      final json =
+          jsonDecode(_run(['run', '${_tmp.path}/job.json', '--b', '2'])) as Map;
       expect(json['params']['a'], '1');
       expect(json['params']['b'], '2');
     });
   });
 
   _testParentResolution();
+  _testParentPackResolution();
+  _testParentPackRegistryRef();
+  _testParentPackEntryOverride();
 }
 
 void _testParentResolution() {
@@ -259,4 +243,152 @@ void _testPackTokenWiring() {
       }
     });
   });
+}
+
+/// `parent.path` pointing at an agent pack (local .zip / URL / registry ref):
+/// the parent is unpacked, its own chain resolved inside the pack, and its
+/// pack-relative paths rewritten to absolute cache paths before the merge.
+void _testParentPackResolution() {
+  group('parent-config from agent pack', () {
+    test('local pack zip parent merges and rewrites paths to the cache', () {
+      final zip = _buildParentPack();
+      final packsRoot = Directory('${_tmp.path}/packs');
+      final resolver = AgentPackResolver(packsRoot: packsRoot);
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "params":{"fromChild":"yes"}
+      }''');
+      final json = jsonDecode(
+        RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
+      expect(json['params']['fromParent'], 'yes');
+      expect(json['params']['fromChild'], 'yes');
+      final jsPath = json['params']['jsPath'] as String;
+      expect(
+        jsPath.startsWith(packsRoot.path),
+        isTrue,
+        reason: 'parent jsPath is rewritten into the pack cache: $jsPath',
+      );
+      expect(File(jsPath).existsSync(), isTrue);
+    });
+
+    test('non-pack parent paths still resolve from the filesystem', () {
+      _writeFile('parent.json', '{"params":{"k":"p"}}');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"}}',
+      );
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['k'], 'p');
+    });
+  });
+}
+
+/// Registry-ref parent (`<agent>@latest`) — split out of
+/// [_testParentPackResolution] for the loc gate.
+void _testParentPackRegistryRef() {
+  group('parent-config from agent pack (registry ref)', () {
+    test('registry-ref parent (<agent>@latest) resolves and merges', () async {
+      final zip = _buildParentPack();
+      final zipBytes = zip.readAsBytesSync();
+      final server = await startRegistryServer({
+        '/parent_agent-1.0.0.zip': zipBytes,
+        '/parent_agent-1.0.0.zip.sha256': utf8.encode(
+          '${sha256.convert(zipBytes)}  parent_agent-1.0.0.zip',
+        ),
+        '/catalog.json': utf8.encode(jsonEncode({'parent_agent': '1.0.0'})),
+      });
+      try {
+        final packsRoot = Directory('${_tmp.path}/packs');
+        final resolver = AgentPackResolver(
+          packsRoot: packsRoot,
+          registryBaseUrl: 'http://127.0.0.1:${server.port}',
+        );
+        _writeFile('child.json', '''{
+          "name":"child",
+          "parent":{"path":"parent_agent@latest"},
+          "params":{"fromChild":"yes"}
+        }''');
+        final json = jsonDecode(
+          RunCommandProcessor(packResolver: resolver)
+              .process(['run', '${_tmp.path}/child.json']),
+        ) as Map;
+        expect(json['params']['fromParent'], 'yes');
+        expect(json['params']['fromChild'], 'yes');
+        final jsPath = json['params']['jsPath'] as String;
+        expect(
+          jsPath.startsWith(packsRoot.path),
+          isTrue,
+          reason: 'registry parent jsPath is rewritten into the pack cache',
+        );
+        expect(File(jsPath).existsSync(), isTrue);
+      } finally {
+        server.isolate.kill();
+      }
+    });
+  });
+}
+
+/// Pack parent with a `#entry` override — split out of
+/// [_testParentPackResolution] for the loc gate.
+void _testParentPackEntryOverride() {
+  group('parent-config from agent pack (entry override)', () {
+    test('pack parent with #entry override uses the overridden entry', () {
+      final zip = _buildParentPack(withAltEntry: true);
+      final packsRoot = Directory('${_tmp.path}/packs');
+      final resolver = AgentPackResolver(packsRoot: packsRoot);
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
+      }''');
+      final json = jsonDecode(
+        RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
+      expect(json['params']['altEntry'], 'yes');
+      expect(
+        json['params']['fromParent'],
+        isNull,
+        reason: 'the default entry config is not loaded',
+      );
+    });
+  });
+}
+
+/// Builds a real parent pack zip with `js/helper.js` and an entry config.
+File _buildParentPack({bool withAltEntry = false}) {
+  final agentRoot = Directory('${_tmp.path}/parent_agent_root')
+    ..createSync(recursive: true);
+  File('${agentRoot.path}/js/helper.js')
+    ..createSync(recursive: true)
+    ..writeAsStringSync('// helper\n');
+  final params = <String, dynamic>{
+    'jsPath': 'agents/js/helper.js',
+    'fromParent': 'yes',
+  };
+  final entryMap = <String, dynamic>{
+    'name': 'ParentAgent',
+    if (withAltEntry)
+      // Referencing alt.json via parent pulls it into the pack closure, so
+      // the `#alt.json` entry override has a file to load.
+      'parent': {'path': 'agents/alt.json'},
+    'params': params,
+  };
+  final entry = File('${agentRoot.path}/parent_agent.json')
+    ..writeAsStringSync(jsonEncode(entryMap));
+  if (withAltEntry) {
+    File('${agentRoot.path}/alt.json').writeAsStringSync(
+      jsonEncode({
+        'name': 'ParentAgent',
+        'params': {'altEntry': 'yes'},
+      }),
+    );
+  }
+  final dist = Directory('${_tmp.path}/parent_dist')
+    ..createSync(recursive: true);
+  return AgentPackCompiler(agentRoot.path)
+      .compile(entry, '1.0.0', 'deadbeef', dist)
+      .zipFile;
 }

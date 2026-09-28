@@ -68,8 +68,7 @@ void main() {
         expect(
           match.group(2),
           _agenticWorkflowsPin,
-          reason:
-              '${entry.key} must pin the immutable SHA constant '
+          reason: '${entry.key} must pin the immutable SHA constant '
               '(got ${match.group(2)}) — bump the constant in the same '
               'PR that merges the loop change',
         );
@@ -82,8 +81,7 @@ void main() {
         expect(
           yml.contains('factory_ref'),
           isFalse,
-          reason:
-              '$entry: the frozen loop declares no factory_ref — '
+          reason: '$entry: the frozen loop declares no factory_ref — '
               'agent code resolves from the dmtools-agents release '
               'selected by vars.AGENTS_VERSION at run time',
         );
@@ -106,14 +104,12 @@ void main() {
       };
       for (final entry in declared.entries) {
         final yml = File(entry.key).readAsStringSync();
-        final activeInherit = yml
-            .split('\n')
-            .any((l) => l.trim() == 'secrets: inherit');
+        final activeInherit =
+            yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
         expect(
           activeInherit,
           isFalse,
-          reason:
-              '${entry.key}: an ACTIVE `secrets: inherit` does not '
+          reason: '${entry.key}: an ACTIVE `secrets: inherit` does not '
               'satisfy the REQUIRED named secret (live bisect run '
               '35275493724)',
         );
@@ -125,8 +121,7 @@ void main() {
         expect(
           mapped,
           entry.value,
-          reason:
-              '${entry.key} maps {${mapped.join(', ')}} but the '
+          reason: '${entry.key} maps {${mapped.join(', ')}} but the '
               'frozen loop declares {${entry.value.join(', ')}}',
         );
       }
@@ -158,8 +153,7 @@ void main() {
         expect(
           match.group(2),
           sha,
-          reason:
-              '$_teammateStub must pin the immutable SHA the agents '
+          reason: '$_teammateStub must pin the immutable SHA the agents '
               'submodule pins (got ${match.group(2)})',
         );
         final refLine = RegExp(
@@ -168,15 +162,13 @@ void main() {
         expect(
           refLine,
           isNotNull,
-          reason:
-              '$_teammateStub must pass factory_ref (the historical '
+          reason: '$_teammateStub must pass factory_ref (the historical '
               'factory declares it required)',
         );
         expect(
           refLine!.group(1),
           match.group(2),
-          reason:
-              'factory_ref must equal the uses pin — engine and '
+          reason: 'factory_ref must equal the uses pin — engine and '
               'factory must execute the same commit',
         );
       },
@@ -186,17 +178,15 @@ void main() {
       expect(
         File('agents/$_teammateFactoryPath').existsSync(),
         isTrue,
-        reason:
-            'agents/ is the submodule checkout of the pinned '
+        reason: 'agents/ is the submodule checkout of the pinned '
             'commit — $_teammateFactoryPath must exist there',
       );
     });
 
     test('secrets are explicitly mapped', () {
       final yml = File(_teammateStub).readAsStringSync();
-      final activeInherit = yml
-          .split('\n')
-          .any((l) => l.trim() == 'secrets: inherit');
+      final activeInherit =
+          yml.split('\n').any((l) => l.trim() == 'secrets: inherit');
       expect(activeInherit, isFalse, reason: 'explicit mapping required');
       final declared = _declaredTeammateSecrets();
       final secretsBlock = yml.split('secrets:').last.split('jobs:').first;
@@ -207,8 +197,7 @@ void main() {
       expect(
         mapped,
         declared,
-        reason:
-            '$_teammateStub maps {${mapped.join(', ')}} but the '
+        reason: '$_teammateStub maps {${mapped.join(', ')}} but the '
             'factory declares {${declared.join(', ')}}',
       );
     });

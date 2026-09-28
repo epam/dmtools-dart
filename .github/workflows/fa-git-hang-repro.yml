@@ -49,7 +49,7 @@ jobs:
           # git children inherit the read end.
           timeout 120 bash -c 'sleep 300 | sh -c "git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat"' && echo "LAYER2 OK" || echo "LAYER2 HUNG/FAIL rc=$?"
 
-      - name: Layer 2b — bisect: which command reads stdin
+      - name: "Layer 2b — bisect: which command reads stdin"
         run: |
           set -x
           for cmd in "git log --oneline -5" "git status" "git status | head -5" "git diff origin/main...HEAD --stat" "git branch -a"; do

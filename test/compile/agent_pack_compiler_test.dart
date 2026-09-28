@@ -21,6 +21,7 @@ void main() {
 
   closureTests();
   referenceKindTests();
+  workerSourceTests();
   manifestTests();
   scriptsTests();
   prefixNormalizationTests();
@@ -124,7 +125,13 @@ void referenceKindTests() {
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/common/commentMarkup.js'));
     });
+  });
+}
 
+/// Embedded worker sources (dmtools-agents f377609 smAsync): require() calls
+/// inside string literals must NOT enter the closure as real references.
+void workerSourceTests() {
+  group('embedded worker-source strings', () {
     test(
         'require inside an embedded worker-source string is not matched '
         '(dmtools-agents f377609 smAsync workers)', () {
@@ -141,7 +148,7 @@ void referenceKindTests() {
           "  \"    var mod = require('./common/smProvider.js');\",",
           "  '    return mod.create();',",
           "  '}'",
-          "].join('\\n');",
+          "].join('\n');",
           "var real = require('../../common/smProvider.js');",
         ].join('\n'),
       );

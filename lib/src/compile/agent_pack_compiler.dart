@@ -280,39 +280,40 @@ class AgentPackCompiler {
   /// original content. Comment stripping runs BEFORE this (stripJsComments).
   static String _maskStringLiterals(String content) {
     final chars = content.codeUnits.toList();
-    const none = 0x00;
-    const single = 0x27; // '
-    const dbl = 0x22; // "
-    const backtick = 0x60; // `
-    const backslash = 0x5c; // \
-    const newline = 0x0a;
-    var quote = none;
-    for (var i = 0; i < chars.length; i++) {
-      final c = chars[i];
-      if (quote == none) {
-        if (c == single || c == dbl || c == backtick) {
-          quote = c;
-          chars[i] = c; // keep the opening quote (regex may anchor on it)
-        }
-        continue;
+    var quote = 0;
+    var i = 0;
+    while (i < chars.length) {
+      if (quote == 0) {
+        quote = _opensLiteral(chars[i]) ? chars[i] : 0;
+        i++;
+      } else {
+        final step = _maskLiteralChar(chars, i, quote);
+        i = step.next;
+        quote = step.quote;
       }
-      // Inside a literal.
-      if (c == backslash && i + 1 < chars.length) {
-        chars[i] = 0x20; // blank the escape, skip the escaped char
-        chars[++i] = 0x20;
-        continue;
-      }
-      if (c == quote) {
-        quote = none;
-        continue; // keep the closing quote
-      }
-      if (c == newline && quote != backtick) {
-        quote = none; // unterminated single/double literal ends at EOL
-        continue;
-      }
-      chars[i] = 0x20; // blank literal contents (offset-stable)
     }
     return String.fromCharCodes(chars);
+  }
+
+  static bool _opensLiteral(int c) =>
+      c == 0x27 || c == 0x22 || c == 0x60; // ' " `
+
+  /// Masks one char inside a literal; returns the next index + quote state.
+  /// Keeps the closing quote, ends unterminated '...'/"..." at EOL.
+  static ({int next, int quote}) _maskLiteralChar(
+      List<int> chars, int i, int quote) {
+    final c = chars[i];
+    if (c == 0x5c && i + 1 < chars.length) {
+      chars[i] = 0x20; // blank the escape
+      chars[i + 1] = 0x20; // and the escaped char
+      return (next: i + 2, quote: quote);
+    }
+    if (c == quote) return (next: i + 1, quote: 0); // keep the closing quote
+    if (c == 0x0a && quote != 0x60) {
+      return (next: i + 1, quote: 0); // unterminated literal ends at EOL
+    }
+    chars[i] = 0x20; // blank literal contents (offset-stable)
+    return (next: i + 1, quote: quote);
   }
 
   /// Resolves one relative JS module reference and recurses into it.

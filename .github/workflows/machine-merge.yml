@@ -35,9 +35,11 @@ jobs:
       github.event.action != 'labeled' ||
       contains(github.event.label.name, 'ai_') ||
       contains(github.event.label.name, 'pr_approved')
-    uses: IstiN/dmtools-agents/.github/workflows/factory-merge.yml@f37760987d702ec1ff4b8cf5bfb728d2cb347334
+    # Frozen machine loop (same freeze contract as machine-sm.yml: agents
+    # resolve from dmtools-agents RELEASES by vars.AGENTS_VERSION).
+    # Guarded by test/machine_kit/factory_stub_ref_test.dart.
+    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge.yml@9aeacc76317be78d7e862decbb413aaf3899093e
     with:
-      factory_ref: f37760987d702ec1ff4b8cf5bfb728d2cb347334
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
       ci_workflow: quality.yml

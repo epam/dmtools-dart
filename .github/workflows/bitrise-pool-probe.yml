@@ -13,8 +13,9 @@ name: Bitrise Pool Probe
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '7,37 * * * *'
+  # schedule disabled 2026-09-28: VM/storage exonerated (probe #18 + 70 min
+  # of leg-13 stall-capture: PSI 0, no D-state). Re-enable when suspicion
+  # returns; manual dispatch still works.
 
 concurrency:
   group: bitrise-pool-probe

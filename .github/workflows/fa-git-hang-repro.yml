@@ -49,6 +49,14 @@ jobs:
           # git children inherit the read end.
           timeout 120 bash -c 'sleep 300 | sh -c "git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat"' && echo "LAYER2 OK" || echo "LAYER2 HUNG/FAIL rc=$?"
 
+      - name: Layer 2b — bisect: which command reads stdin
+        run: |
+          set -x
+          for cmd in "git log --oneline -5" "git status" "git status | head -5" "git diff origin/main...HEAD --stat" "git branch -a"; do
+            timeout 30 bash -c "sleep 60 | sh -c '$cmd'" >/dev/null 2>&1 \
+              && echo "OK   : $cmd" || echo "HUNG : $cmd (rc=$?)"
+          done
+
       - name: Layer 3 — fa headless (v0.1.438) running the chain via its bash tool
         env:
           ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}

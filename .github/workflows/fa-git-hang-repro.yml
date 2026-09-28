@@ -1,0 +1,76 @@
+# fa git-hang minimal reproduction on the Bitrise pool (2026-09-28).
+#
+# Legs 12/13/15 of PR-266 hung inside fa's bash tool on the command chain
+#   git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat
+# stall-capture evidence (leg 13 artifact): no D-state, PSI io/mem = 0, the
+# hung processes sat in anon_pipe_read (S) for up to an hour. The same fa
+# build (v0.1.438) runs the identical command fine on macOS locally.
+#
+# This workflow isolates the variables in layers (each step independent):
+#   1. raw chain under strace            — environmental? (git + repo + VM)
+#   2. chain with stdin = open pipe      — the fa tool wiring (stdin held
+#      open by the parent, no writer)   — reproduces fa's child env
+#   3. fa headless run (v0.1.438)        — full repro through the bash tool
+# If step 1 or 2 hangs, fa is exonerated and it is a pool/git interaction;
+# if only step 3 hangs, the bug is in fa's process wiring on this pool.
+
+name: fa git-hang repro (Bitrise pool)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: fa-git-hang-repro
+  cancel-in-progress: false
+
+jobs:
+  repro:
+    runs-on: bitrise-runner-dmtools-ci
+    timeout-minutes: 30
+    steps:
+      - name: Checkout target repository (full history, like the factory)
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Layer 1 — raw git chain under strace
+        run: |
+          set -x
+          which strace || sudo apt-get install -y strace || true
+          timeout 120 strace -f -tt -o /tmp/l1.strace sh -c 'git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat' && echo "LAYER1 OK" || echo "LAYER1 HUNG/FAIL rc=$?"
+          tail -30 /tmp/l1.strace 2>/dev/null || true
+
+      - name: Layer 2 — chain with stdin held open (fa tool wiring mimic)
+        run: |
+          set -x
+          # CORRECT mimic: process substitution gives git a stdin pipe whose
+          # writer (sleep) stays open, WITHOUT the pipeline waiting on the
+          # writer (the earlier `sleep 300 | sh -c ...` form was broken: the
+          # pipeline itself waits for sleep → rc=124 regardless of git).
+          timeout 120 bash -c 'git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat' < <(sleep 300) && echo "LAYER2 OK" || echo "LAYER2 HUNG/FAIL rc=$?"
+
+      - name: "Layer 2b — bisect: which command reads stdin"
+        run: |
+          set -x
+          for cmd in "git log --oneline -5" "git status" "git diff origin/main...HEAD --stat" "git branch -a" "true"; do
+            timeout 20 bash -c "$cmd < <(sleep 60)" >/dev/null 2>&1 \
+              && echo "OK   : $cmd" || echo "HUNG : $cmd (rc=$?)"
+          done
+
+      - name: Layer 3 — fa headless (v0.1.438) running the chain via its bash tool
+        env:
+          ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
+          # same provider preconfig the dmd runners use (.dmtools/runners/fa-*.json)
+          FA_PROVIDER_TYPE: zai
+          FA_PROVIDER_CONFIG: '{"baseUrl":"https://api.z.ai/api/coding/paas/v4","model":"glm-5.3-flash","apiKeyEnvVar":"ZAI_CODE_KEY","input":["text","image"]}'
+        run: |
+          set -x
+          tmp="$(mktemp -d)"
+          gh release download v0.1.438 --repo IstiN/flutter_agent_harness \
+            --pattern "fa-linux-x64.tar.gz" --dir "$tmp" --clobber
+          tar -xzf "$tmp/fa-linux-x64.tar.gz" -C "$tmp"
+          "$tmp/bundle/bin/fa" --version
+          timeout 420 "$tmp/bundle/bin/fa" -p \
+            "Run exactly this bash command and report its output: git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat" \
+            && echo "LAYER3 OK" || echo "LAYER3 HUNG/FAIL rc=$?"

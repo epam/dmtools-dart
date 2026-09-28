@@ -44,16 +44,17 @@ jobs:
       - name: Layer 2 — chain with stdin held open (fa tool wiring mimic)
         run: |
           set -x
-          # fa's bash tool spawns sh -c with stdin = a pipe whose write end
-          # the parent keeps OPEN. Mimic: sleep 300 holds the write end;
-          # git children inherit the read end.
-          timeout 120 bash -c 'sleep 300 | sh -c "git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat"' && echo "LAYER2 OK" || echo "LAYER2 HUNG/FAIL rc=$?"
+          # CORRECT mimic: process substitution gives git a stdin pipe whose
+          # writer (sleep) stays open, WITHOUT the pipeline waiting on the
+          # writer (the earlier `sleep 300 | sh -c ...` form was broken: the
+          # pipeline itself waits for sleep → rc=124 regardless of git).
+          timeout 120 bash -c 'git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat' < <(sleep 300) && echo "LAYER2 OK" || echo "LAYER2 HUNG/FAIL rc=$?"
 
       - name: "Layer 2b — bisect: which command reads stdin"
         run: |
           set -x
-          for cmd in "git log --oneline -5" "git status" "git status | head -5" "git diff origin/main...HEAD --stat" "git branch -a"; do
-            timeout 30 bash -c "sleep 60 | sh -c '$cmd'" >/dev/null 2>&1 \
+          for cmd in "git log --oneline -5" "git status" "git diff origin/main...HEAD --stat" "git branch -a" "true"; do
+            timeout 20 bash -c "$cmd < <(sleep 60)" >/dev/null 2>&1 \
               && echo "OK   : $cmd" || echo "HUNG : $cmd (rc=$?)"
           done
 

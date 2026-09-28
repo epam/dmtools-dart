@@ -130,6 +130,8 @@ void _testConfigFileResolution() {
 
   _testParentResolution();
   _testParentPackResolution();
+  _testParentPackRegistryRef();
+  _testParentPackEntryOverride();
 }
 
 void _testParentResolution() {
@@ -272,6 +274,22 @@ void _testParentPackResolution() {
       expect(File(jsPath).existsSync(), isTrue);
     });
 
+    test('non-pack parent paths still resolve from the filesystem', () {
+      _writeFile('parent.json', '{"params":{"k":"p"}}');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"}}',
+      );
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['k'], 'p');
+    });
+  });
+}
+
+/// Registry-ref parent (`<agent>@latest`) — split out of
+/// [_testParentPackResolution] for the loc gate.
+void _testParentPackRegistryRef() {
+  group('parent-config from agent pack (registry ref)', () {
     test('registry-ref parent (<agent>@latest) resolves and merges', () async {
       final zip = _buildParentPack();
       final zipBytes = zip.readAsBytesSync();
@@ -310,7 +328,13 @@ void _testParentPackResolution() {
         server.isolate.kill();
       }
     });
+  });
+}
 
+/// Pack parent with a `#entry` override — split out of
+/// [_testParentPackResolution] for the loc gate.
+void _testParentPackEntryOverride() {
+  group('parent-config from agent pack (entry override)', () {
     test('pack parent with #entry override uses the overridden entry', () {
       final zip = _buildParentPack(withAltEntry: true);
       final packsRoot = Directory('${_tmp.path}/packs');
@@ -329,16 +353,6 @@ void _testParentPackResolution() {
         isNull,
         reason: 'the default entry config is not loaded',
       );
-    });
-
-    test('non-pack parent paths still resolve from the filesystem', () {
-      _writeFile('parent.json', '{"params":{"k":"p"}}');
-      _writeFile(
-        'child.json',
-        '{"name":"child","parent":{"path":"parent.json"}}',
-      );
-      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
-      expect(json['params']['k'], 'p');
     });
   });
 }

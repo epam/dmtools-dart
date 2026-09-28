@@ -15,6 +15,7 @@ import 'echo_server_helper.dart';
 /// `Process.runSync('curl', …)`, so a separate process is required.
 void main() {
   _testBuildArgs();
+  _testBuildArgsPayloadFiles();
   _testRenderHeaderFile();
   _testParseResponse();
   _testRawByteParseResponse();
@@ -113,7 +114,13 @@ void _testBuildArgs() {
       expect(args, isNot(contains('--location')));
       expect(args, isNot(contains('--max-redirs')));
     });
+  });
+}
 
+/// `SyncHttpClient.buildArgs` — body/header file flags and URL placement
+/// (split out of [_testBuildArgs] for the loc gate).
+void _testBuildArgsPayloadFiles() {
+  group('SyncHttpClient.buildArgs payload files', () {
     test('body referenced via --data-binary @file, never inline', () {
       final args = SyncHttpClient.buildArgs(
         'POST',

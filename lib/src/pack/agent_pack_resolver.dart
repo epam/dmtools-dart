@@ -212,6 +212,14 @@ class AgentPackResolver {
   /// nested `{"agents": {"agent": "version"}}` shape.
   String _fetchLatestVersion(String registry, String agent) {
     final catalogUrl = '$registry/catalog.json';
+    final catalog = _fetchCatalog(catalogUrl);
+    final version = _catalogVersion(catalog, agent, catalogUrl);
+    _assertSafeCatalogVersion(version, agent);
+    return version;
+  }
+
+  /// GETs and JSON-decodes the registry catalog.
+  Object? _fetchCatalog(String catalogUrl) {
     // followRedirects: GitHub-Releases registry bases 302 to a signed CDN
     // URL (Java parity: the resolver follows redirects on every fetch).
     final response = SyncHttpClient.get(catalogUrl, followRedirects: true);
@@ -219,13 +227,16 @@ class AgentPackResolver {
       throw AgentPackException('Failed to read registry catalog: '
           'HTTP ${response.statusCode} for $catalogUrl');
     }
-    final Object? catalog;
     try {
-      catalog = jsonDecode(response.body);
+      return jsonDecode(response.body);
     } on FormatException catch (e) {
       throw AgentPackException(
           'Malformed registry catalog $catalogUrl: ${e.message}');
     }
+  }
+
+  /// Extracts [agent]'s version from the decoded catalog (flat or nested).
+  String _catalogVersion(Object? catalog, String agent, String catalogUrl) {
     String? version;
     if (catalog is Map) {
       final direct = catalog[agent];
@@ -240,13 +251,16 @@ class AgentPackResolver {
       throw AgentPackException(
           "Agent '$agent' not found in registry catalog $catalogUrl");
     }
-    // The catalog is an external input interpolated into the download URL —
-    // pin it to the same strict charset the manifest version is held to.
+    return version;
+  }
+
+  /// The catalog is an external input interpolated into the download URL —
+  /// pin it to the same strict charset the manifest version is held to.
+  void _assertSafeCatalogVersion(String version, String agent) {
     if (!_safeSegment.hasMatch(version) || _dotsOnly.hasMatch(version)) {
       throw AgentPackException('Unsafe catalog version for $agent: "$version" '
           '(allowed: [A-Za-z0-9._-], no dot-only segments)');
     }
-    return version;
   }
 
   // ------------------------------------------------------------------

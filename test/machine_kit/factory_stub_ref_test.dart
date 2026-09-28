@@ -45,6 +45,13 @@ final _agenticUsesRe = RegExp(
 final _agentsUsesRe = RegExp(r'uses:\s*IstiN/dmtools-agents/(\S+)@(\S+)');
 
 void main() {
+  frozenLoopStubTests();
+  teammateStubTests();
+}
+
+/// machine-sm / machine-merge call the FROZEN loop in dmtools-agentic-
+/// workflows: immutable-SHA pin, no factory_ref, exact secret mapping.
+void frozenLoopStubTests() {
   group('frozen machine-loop stubs (machine-sm / machine-merge)', () {
     test('pin uses: to the agentic-workflows immutable SHA', () {
       expect(
@@ -127,7 +134,11 @@ void main() {
       }
     });
   });
+}
 
+/// ai-teammate still calls the historical agents factory: in-lockstep pin,
+/// factory_ref, in-tree existence + secret mapping.
+void teammateStubTests() {
   group('teammate stub (historical agents factory, pre-migration)', () {
     test(
       'pins uses: to the agents submodule SHA + factory_ref in lockstep',

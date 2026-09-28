@@ -1,18 +1,22 @@
 /// The machine-loop workflow contract, stub + factory edition.
 ///
-/// The repository carries THIN STUBS (.github/workflows/ai-teammate.yml,
-/// machine-sm.yml) over the reusable factory pack in the agents submodule
-/// (agents/.github/workflows/factory/). The submodule is pinned, so both
-/// layers are part of this repo's merge tree and both are pinned here:
+/// Freeze model (agents-by-version migration, owner directive 2026-09-28):
 ///
 ///   README.md                              — linked workflow files exist
 ///   .github/workflows/machine-sm.yml       — stub: cron, dry dispatch, call
 ///   .github/workflows/ai-teammate.yml      — stub: triggers, per-issue
 ///                                             concurrency, dispatch inputs
-///   agents/.github/workflows/factory-sm.yml       — tick engine contract
-///   agents/.github/workflows/factory-teammate.yml — leg runner contract
 ///
-/// so the documentation and the machine can never drift apart silently.
+/// The SM tick + merge bot now call the FROZEN machine loop in
+/// IstiN/dmtools-agentic-workflows (pinned immutable SHA, guarded by
+/// test/machine_kit/factory_stub_ref_test.dart) — agent code and the CLI
+/// resolve from RELEASES at run time (vars.AGENTS_VERSION /
+/// vars.DMTOOLS_VERSION), so the frozen SHA never goes stale. Only the
+/// teammate leg still calls the historical factory inside the agents
+/// submodule (its migration is a follow-up), so its factory contract
+/// groups keep reading the in-tree submodule copy:
+///
+///   agents/.github/workflows/factory-teammate.yml — leg runner contract
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -20,29 +24,28 @@ import 'package:test/test.dart';
 const _readmePath = 'README.md';
 const _smStubPath = '.github/workflows/machine-sm.yml';
 const _teammateStubPath = '.github/workflows/ai-teammate.yml';
-const _smFactoryPath = 'agents/.github/workflows/factory-sm.yml';
 const _teammateFactoryPath = 'agents/.github/workflows/factory-teammate.yml';
 
-/// Single-instance contract: the FACTORY owns the `machine-sm` group —
-/// a caller declaring the same group deadlocks the called workflow.
+/// Single-instance contract: the FROZEN LOOP (dmtools-agentic-workflows
+/// factory-sm.yml at the pinned SHA) owns the `machine-sm` group — a caller
+/// declaring the same group deadlocks the called workflow. The frozen file
+/// is not part of this merge tree (it lives in its own repo at the pin),
+/// so this guard asserts the stub side only: NO caller-side `concurrency:`.
 void _singleInstanceContract() {
   final yaml = _read(_smStubPath);
   test('never runs two reconcilers concurrently (factory owns the group)', () {
-    // The single-instance group lives in the FACTORY (factory-sm.yml):
-    // a caller declaring the same group deadlocks the called workflow —
-    // the caller holds the group while the callee waits for it forever.
+    // The single-instance group lives in the frozen loop: a caller
+    // declaring the same group deadlocks the called workflow — the
+    // caller holds the group while the callee waits for it forever.
     // The stub must NOT declare its own concurrency group.
     final activeConcurrency =
         yaml.split('\n').any((l) => l.startsWith('concurrency:'));
     expect(activeConcurrency, isFalse,
         reason: 'caller-side concurrency on the same group as the '
-            'factory deadlocks the called workflow (pending, 0 jobs)');
-    final factory = _read(_smFactoryPath);
-    expect(factory, contains('group: machine-sm'),
-        reason: 'the factory must own the single-instance group');
-    expect(factory, contains('cancel-in-progress: false'),
-        reason: 'an in-flight reconcile must finish; a second tick must '
-            'queue, not interrupt it');
+            'factory deadlocks the called workflow (pending, 0 jobs); '
+            'the frozen loop owns `group: machine-sm` with '
+            'cancel-in-progress: false (reviewed in dmtools-agentic-'
+            'workflows at the pin guarded by factory_stub_ref_test)');
   });
 }
 
@@ -57,7 +60,7 @@ String _read(String path) {
 void main() {
   _readmeWorkflowLinks();
   _smStubContract();
-  _smFactoryContract();
+
   _teammateStubContract();
   _teammateFactoryContract();
 }
@@ -123,13 +126,20 @@ void _smStubContract() {
     });
 
     _singleInstanceContract();
-    test('calls the factory with the dryRun passthrough', () {
+    test('calls the frozen loop with the dryRun passthrough', () {
       expect(
         yaml,
         contains(
-            'uses: IstiN/dmtools-agents/.github/workflows/factory-sm.yml@'),
-        reason: 'the tick engine lives in the factory pack; the stub must '
-            'call it (pinned ref)',
+            'uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-sm.yml@'),
+        reason: 'the tick engine lives in the FROZEN machine loop; the stub '
+            'must call it (pinned immutable SHA, guarded by '
+            'factory_stub_ref_test.dart)',
+      );
+      expect(
+        yaml.contains('factory_ref'),
+        isFalse,
+        reason: 'agents resolve from the dmtools-agents RELEASE selected by '
+            'vars.AGENTS_VERSION at run time — no engine checkout ref',
       );
       expect(
         yaml.contains(r"dryRun: ${{ github.event.inputs.dryRun || 'false' }}"),
@@ -142,33 +152,6 @@ void _smStubContract() {
         yaml.split('\n').any((l) => l.trim() == 'secrets: inherit'),
         isFalse,
         reason: 'explicit secret mapping — inherit fails the required check',
-      );
-    });
-  });
-}
-
-/// The tick engine: dryRun must reach the rule engine as plan-only, and the
-/// rules must be pinned to the CALLING repository.
-void _smFactoryContract() {
-  group('factory/sm.yml tick engine', () {
-    final yaml = _read(_smFactoryPath);
-
-    test('dryRun propagates into the rule engine as plan-only', () {
-      expect(
-        yaml.contains(r'"dryRun\":true'),
-        isTrue,
-        reason: 'the dispatched jobParams override must carry dryRun:true so '
-            'the SM logs the plan and performs no action',
-      );
-    });
-
-    test('reconciles the CALLING repository via the smAgent rule pack', () {
-      expect(yaml, contains('dmtools run sm_github.json'));
-      expect(
-        yaml.contains(r'${{ github.repository }}'),
-        isTrue,
-        reason: 'a reusable workflow runs in the caller context — the rule '
-            'engine must be pinned to github.repository, not a hardcoded repo',
       );
     });
   });

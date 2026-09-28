@@ -27,7 +27,7 @@ import 'package:test/test.dart';
 /// The frozen machine-loop home and the immutable main SHA it is pinned to.
 /// Bump = merge the agents-by-version change in dmtools-agentic-workflows,
 /// then update this constant in the same PR (one review, enforced here).
-const _agenticWorkflowsPin = '89617d3faa760818a85b9afa4785eb2efe6ba5a8';
+const _agenticWorkflowsPin = '0c19a4fe26dc36672bf80193f91ff38d96c82ad2';
 
 /// Stub → frozen-loop calls (agentic-workflows home).
 const _frozenStubs = {

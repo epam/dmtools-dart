@@ -237,21 +237,24 @@ class AgentPackResolver {
 
   /// Extracts [agent]'s version from the decoded catalog (flat or nested).
   String _catalogVersion(Object? catalog, String agent, String catalogUrl) {
-    String? version;
-    if (catalog is Map) {
-      final direct = catalog[agent];
-      if (direct is String) version = direct;
-      final agents = catalog['agents'];
-      if ((version == null || version.isEmpty) && agents is Map) {
-        final nested = agents[agent];
-        if (nested is String) version = nested;
-      }
-    }
+    final version =
+        catalog is Map ? _versionFromCatalogMap(catalog, agent) : null;
     if (version == null || version.isEmpty) {
       throw AgentPackException(
           "Agent '$agent' not found in registry catalog $catalogUrl");
     }
     return version;
+  }
+
+  /// Flat `{"agent": "version"}` first, then nested
+  /// `{"agents": {"agent": "version"}}`; empty strings fall through.
+  String? _versionFromCatalogMap(Map<Object?, Object?> catalog, String agent) {
+    final direct = catalog[agent];
+    if (direct is String && direct.isNotEmpty) return direct;
+    final agents = catalog['agents'];
+    if (agents is! Map) return null;
+    final nested = agents[agent];
+    return nested is String && nested.isNotEmpty ? nested : null;
   }
 
   /// The catalog is an external input interpolated into the download URL —

@@ -58,6 +58,22 @@ jobs:
               && echo "OK   : $cmd" || echo "HUNG : $cmd (rc=$?)"
           done
 
+      - name: Layer 4 — git chain THROUGH the git-push-guard shim
+        run: |
+          set -x
+          # The factory interposes scripts/git-push-guard.sh as `git` on PATH
+          # for agent sessions (dmtools-agents#542) — the repro layers 1-3
+          # ran WITHOUT it. Test the shim on both the raw chain and with the
+          # open-pipe stdin.
+          git clone --depth 1 https://github.com/IstiN/dmtools-agents /tmp/dmta 2>&1 | tail -1
+          GUARD_BIN=/tmp/guard-bin
+          mkdir -p "$GUARD_BIN"
+          ln -sf /tmp/dmta/scripts/git-push-guard.sh "$GUARD_BIN/git"
+          export PATH="$GUARD_BIN:$PATH"
+          which git
+          timeout 60 sh -c 'git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat' && echo "LAYER4a OK (shim, plain)" || echo "LAYER4a HUNG/FAIL rc=$?"
+          timeout 60 bash -c 'git log --oneline -5 && git status | head -5 && git diff origin/main...HEAD --stat' < <(sleep 120) && echo "LAYER4b OK (shim, open stdin)" || echo "LAYER4b HUNG/FAIL rc=$?"
+
       - name: Layer 3 — fa headless (v0.1.438) running the chain via its bash tool
         env:
           ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}

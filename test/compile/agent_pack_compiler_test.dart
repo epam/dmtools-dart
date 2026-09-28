@@ -124,6 +124,37 @@ void referenceKindTests() {
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/common/commentMarkup.js'));
     });
+
+    test(
+        'require inside an embedded worker-source string is not matched '
+        '(dmtools-agents f377609 smAsync workers)', () {
+      // githubSource.js embeds runAsync worker bodies as string literals;
+      // their `require('./common/smProvider.js')` must NOT be resolved
+      // against the embedding file's directory (js/sm/common/… does not
+      // exist) — only real top-level requires enter the closure.
+      write('js/common/smProvider.js', 'exports.create = function() {};\n');
+      write(
+        'js/sm/sources/githubSource.js',
+        [
+          "var WORKER = [",
+          "  'function(args) {',",
+          "  \"    var mod = require('./common/smProvider.js');\",",
+          "  '    return mod.create();',",
+          "  '}'",
+          "].join('\\n');",
+          "var real = require('../../common/smProvider.js');",
+        ].join('\n'),
+      );
+      final entry = write(
+          'worker.json',
+          jsonEncode({
+            'name': 'X',
+            'params': {'jsPath': 'js/sm/sources/githubSource.js'},
+          }));
+      final names = zipNames(compileAgent(entry).zipFile);
+      expect(names, contains('js/common/smProvider.js')); // real require
+      expect(names, isNot(contains('js/sm/common/smProvider.js')));
+    });
   });
 }
 

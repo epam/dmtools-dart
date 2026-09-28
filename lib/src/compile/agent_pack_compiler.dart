@@ -262,10 +262,57 @@ class AgentPackCompiler {
     if (!visitedJs.add(normalized)) return; // cycle safety
     final content = stripJsComments(jsFile.readAsStringSync());
     final parentDir = File(normalized).parent.path;
-    for (final match in _jsModuleRef.allMatches(content)) {
+    for (final match in _jsModuleRef.allMatches(_maskStringLiterals(content))) {
+      // The ref was masked out of the scanned text; recover it from the
+      // original content at the same offset (masking preserves length).
+      final raw = content.substring(match.start, match.end);
+      final refMatch = _jsModuleRef.firstMatch(raw);
+      if (refMatch == null) continue;
       _resolveJsModule(
-          match.group(1)!, parentDir, normalized, closure, visitedJs);
+          refMatch.group(1)!, parentDir, normalized, closure, visitedJs);
     }
+  }
+
+  /// Blanks out the CONTENTS of string/template literals (single, double,
+  /// backtick) while preserving every other byte, so `require(...)` calls
+  /// inside embedded worker-source strings are not treated as real module
+  /// references. Length-preserving so match offsets stay valid against the
+  /// original content. Comment stripping runs BEFORE this (stripJsComments).
+  static String _maskStringLiterals(String content) {
+    final chars = content.codeUnits.toList();
+    const none = 0x00;
+    const single = 0x27; // '
+    const dbl = 0x22; // "
+    const backtick = 0x60; // `
+    const backslash = 0x5c; // \
+    const newline = 0x0a;
+    var quote = none;
+    for (var i = 0; i < chars.length; i++) {
+      final c = chars[i];
+      if (quote == none) {
+        if (c == single || c == dbl || c == backtick) {
+          quote = c;
+          chars[i] = c; // keep the opening quote (regex may anchor on it)
+        }
+        continue;
+      }
+      // Inside a literal.
+      if (c == backslash && i + 1 < chars.length) {
+        chars[i] = 0x20; // blank the escape, skip the escaped char
+        chars[++i] = 0x20;
+        continue;
+      }
+      if (c == quote) {
+        quote = none;
+        continue; // keep the closing quote
+      }
+      if (c == newline && quote != backtick) {
+        quote = none; // unterminated single/double literal ends at EOL
+        continue;
+      }
+      chars[i] = 0x20; // blank literal contents (offset-stable)
+    }
+    return String.fromCharCodes(chars);
   }
 
   /// Resolves one relative JS module reference and recurses into it.

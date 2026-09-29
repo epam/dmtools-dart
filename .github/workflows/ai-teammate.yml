@@ -92,10 +92,5 @@ jobs:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
       KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
-    # Caller-job env propagates into the reusable workflow's jobs: the
-    # machine runners on this repo resolve agent-pack REGISTRY refs
-    # (`pr_review@latest`, dm.ai #579) which need the releases base.
-    # Repo VARIABLE — bump together with DMTOOLS_VERSION on every
-    # dmtools-agents pack release.
-    env:
-      DMTOOLS_PACK_REGISTRY: ${{ vars.DMTOOLS_PACK_REGISTRY || 'https://github.com/IstiN/dmtools-agents/releases/download/agents-rel-20260929-203211' }}
+# DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
+# this repo's VARIABLE of the same name — see dmtools-agents#574.

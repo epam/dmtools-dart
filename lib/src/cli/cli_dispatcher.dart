@@ -285,7 +285,11 @@ Options:
       _writer('Error: invalid config JSON — ${e.message}');
       return 1;
     } on FileSystemException catch (e) {
-      _writer('Error: ${e.message}');
+      // e.message alone is just "Cannot open file" — without the path the
+      // leg logs give nothing actionable (live: dmtools-dart pr-301 review
+      // 2026-09-29, "Error: Cannot open file" with zero context).
+      _writer(
+          'Error: ${e.message} (path: ${e.path}, osError: ${e.osError?.message ?? 'n/a'})');
       return 1;
     } catch (e) {
       _writer('Error: $e');

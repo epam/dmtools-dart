@@ -82,14 +82,22 @@ class AgentPackCompiler {
 
   /// Compiles the pack for [entryJson].
   ///
+  /// [extraDirs] lists repo-relative directories to embed WHOLE (every file
+  /// under them), on top of the computed closure — the zip-flow contract
+  /// for files only the consuming child configs reference (e.g. the shared
+  /// `instructions/`/`prompts/` subtrees of a dmtools-agents pack that
+  /// runner children reach via `pack:` refs). A missing directory throws
+  /// [AgentPackException].
+  ///
   /// Throws [AgentPackException] on a missing referenced file (with the exact
   /// path) or on any I/O failure; nothing is written on failure.
   PackResult compile(
     File entryJson,
     String version,
     String sourceCommit,
-    Directory outDir,
-  ) {
+    Directory outDir, {
+    List<String> extraDirs = const [],
+  }) {
     final agentName = _stripJsonExtension(_basename(entryJson.path));
 
     // pack-relative path -> absolute source file, sorted for determinism.
@@ -98,6 +106,10 @@ class AgentPackCompiler {
     final visitedJs = <String>{};
 
     _collectConfig(entryJson.absolute, closure, visitedConfigs, visitedJs);
+
+    for (final dir in extraDirs) {
+      _includeSubtree(closure, dir);
+    }
 
     _includeIfExists(closure, 'AGENTS.md');
     _includeIfExists(closure, 'LICENSE');
@@ -351,6 +363,31 @@ class AgentPackCompiler {
   void _includeIfExists(Map<String, File> closure, String name) {
     final file = File('${_rootPath}/$name');
     if (file.existsSync()) closure[name] = file;
+  }
+
+  /// Embeds every file under the repo-relative [dir] into the closure
+  /// (pack-relative paths keyed under `dir/…`); symlinks are skipped.
+  /// A leading `agents/` is stripped per the path duality. Throws
+  /// [AgentPackException] when the directory is missing or escapes the
+  /// agents root.
+  void _includeSubtree(Map<String, File> closure, String dir) {
+    var normalized = p.normalize(dir).replaceAll('\\', '/');
+    while (normalized.startsWith('agents/')) {
+      normalized = normalized.substring('agents/'.length);
+    }
+    final rootDir = Directory(p.join(_rootPath, normalized));
+    final rootPath = p.normalize(rootDir.absolute.path);
+    if (!p.isWithin(_rootPath, rootPath) ||
+        !rootDir.existsSync() ||
+        rootPath == _rootPath) {
+      throw AgentPackException(
+          '--include directory missing: $normalized (under $_rootPath)');
+    }
+    for (final entity
+        in rootDir.listSync(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      closure[_packRelative(entity.absolute)] = entity.absolute;
+    }
   }
 
   // ------------------------------------------------------------------

@@ -149,7 +149,8 @@ class CliDispatcher {
           version,
           _optionValue(rest, '--source-commit') ??
               _detectSourceCommit(agentRoot),
-          Directory(_optionValue(rest, '--out') ?? 'dist'));
+          Directory(_optionValue(rest, '--out') ?? 'dist'),
+          extraDirs: _optionValues(rest, '--include'));
       _printCompileResult(agentName, version, result);
       return 0;
     } on AgentPackException catch (e) {
@@ -200,6 +201,7 @@ Options:
   --versions-file versions.json  Per-agent versions map
   --out <dir>                    Output directory (default: ./dist)
   --source-commit <sha>          Source commit (default: git rev-parse HEAD)
+  --include <dir>                Embed a whole repo-relative dir (repeatable; for files only `pack:`-consuming children reference)
 ''';
 
   /// Reads the agent's version from a `versions.json` map; `null` when absent.
@@ -237,6 +239,15 @@ Options:
       if (args[i] == flag) return args[i + 1];
     }
     return null;
+  }
+
+  /// All values of a repeatable option flag (e.g. `--include`), in order.
+  List<String> _optionValues(List<String> args, String flag) {
+    final values = <String>[];
+    for (var i = 0; i < args.length - 1; i++) {
+      if (args[i] == flag) values.add(args[i + 1]);
+    }
+    return values;
   }
 
   String _basename(String path) => path.replaceAll('\\', '/').split('/').last;

@@ -25,6 +25,7 @@ void main() {
   manifestTests();
   scriptsTests();
   prefixNormalizationTests();
+  extraDirsTests();
   commentStripperTests();
 }
 
@@ -57,8 +58,10 @@ List<String> zipNames(File zipFile) {
   return archive.files.map((f) => f.name).toList();
 }
 
-PackResult compileAgent(File entry, {String version = '1.0.0'}) =>
-    AgentPackCompiler(agentRoot.path).compile(entry, version, 'abc123', outDir);
+PackResult compileAgent(File entry,
+        {String version = '1.0.0', List<String> extraDirs = const []}) =>
+    AgentPackCompiler(agentRoot.path)
+        .compile(entry, version, 'abc123', outDir, extraDirs: extraDirs);
 
 /// Closure walking: transitive requires, missing-file negatives.
 void closureTests() {
@@ -295,6 +298,52 @@ void prefixNormalizationTests() {
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('AGENTS.md'));
       expect(names, contains('LICENSE'));
+    });
+  });
+}
+
+/// `--include` whole-subtree embedding (zip flow): files that only
+/// `pack:`-consuming child configs reference are embedded even when the
+/// entry's computed closure does not reach them.
+void extraDirsTests() {
+  group('AgentPackCompiler extraDirs (--include)', () {
+    test('embeds every file under the listed dir, referenced or not', () {
+      final entry = writeSimpleAgent();
+      write('instructions/pr_review/rules.md', '# rules\n');
+      write('instructions/common/format.md', '# format\n');
+      final names =
+          zipNames(compileAgent(entry, extraDirs: ['instructions']).zipFile);
+      expect(names, contains('instructions/pr_review/rules.md'));
+      expect(names, contains('instructions/common/format.md'));
+      expect(
+        names,
+        isNot(contains('agents/instructions/pr_review/rules.md')),
+        reason: 'the agents/ prefix is stripped per the path duality',
+      );
+    });
+
+    test('strips a leading agents/ prefix from the include dir', () {
+      final entry = writeSimpleAgent();
+      write('prompts/bash_tools.md', '# tools\n');
+      final names =
+          zipNames(compileAgent(entry, extraDirs: ['agents/prompts']).zipFile);
+      expect(names, contains('prompts/bash_tools.md'));
+    });
+
+    test('missing include dir throws AgentPackException', () {
+      final entry = writeSimpleAgent();
+      expect(
+        () => compileAgent(entry, extraDirs: ['nope']),
+        throwsA(isA<AgentPackException>()),
+      );
+    });
+
+    test('an include dir escaping the agents root is rejected', () {
+      final entry = writeSimpleAgent();
+      expect(
+        () => compileAgent(entry, extraDirs: ['../outside']),
+        throwsA(isA<AgentPackException>()),
+      );
     });
   });
 }

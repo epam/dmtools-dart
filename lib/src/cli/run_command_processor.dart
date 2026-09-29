@@ -11,6 +11,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'config_merger.dart';
 import 'encoding_detector.dart';
 import 'job_registry.dart';
@@ -270,12 +272,23 @@ class _ParentConfigResolver {
     if (path is! String) {
       return _stripMeta(child);
     }
-    final resolvedParent = _loadAndResolve(path, configDir);
+    final loaded = _loadAndResolve(path, configDir);
     final overridePaths = _readStringList(child, 'override');
     final mergePaths = _readStringList(child, 'merge');
     final strippedChild = _stripMeta(child);
+    if (loaded.packRoot != null) {
+      // The parent is an agent pack: the child's `pack:` references point
+      // inside it (zip flow — no agents checkout mounted, dm.ai parity).
+      _rewritePackRefs(strippedChild, loaded.packRoot!);
+    } else if (_containsPackRef(strippedChild)) {
+      throw ArgumentError.value(
+        path,
+        'parent.path',
+        'child config uses pack: references but its parent is not an agent pack',
+      );
+    }
     return _mergeWithDirectives(
-      resolvedParent,
+      loaded.config,
       strippedChild,
       overridePaths,
       mergePaths,
@@ -283,8 +296,13 @@ class _ParentConfigResolver {
   }
 
   /// Loads the parent config (filesystem path or agent pack ref) and
-  /// recursively resolves it.
-  Map<String, dynamic> _loadAndResolve(String parentPath, String configDir) {
+  /// recursively resolves it. Returns the resolved config plus the pack
+  /// root when the parent came from an agent pack, so the caller can
+  /// resolve the child's `pack:` references against it.
+  ({Map<String, dynamic> config, Directory? packRoot}) _loadAndResolve(
+    String parentPath,
+    String configDir,
+  ) {
     if (_packResolver.isPack(parentPath)) {
       // Pack ref (local .zip / http(s) URL / <agent>@<version|latest>):
       // resolve to the unpacked cache, load the entry config from there,
@@ -299,11 +317,76 @@ class _ParentConfigResolver {
           jsonDecode(pack.entryFile.readAsStringSync()) as Map<String, dynamic>;
       final config = resolve(json, pack.entryFile.parent.path);
       _packResolver.rewritePathsToPackRoot(config, pack.packRoot);
-      return config;
+      // `pack:` references inside the entry config resolve against this
+      // same pack.
+      _rewritePackRefs(config, pack.packRoot);
+      return (config: config, packRoot: pack.packRoot);
     }
     final file = File('$configDir/$parentPath');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-    return resolve(json, file.parent.path);
+    return (config: resolve(json, file.parent.path), packRoot: null);
+  }
+
+  /// Scheme prefix marking a config string as a reference into the resolved
+  /// parent agent pack (`pack:instructions/foo.md`). Only meaningful when
+  /// the config's parent is a pack.
+  static const String _packScheme = 'pack:';
+
+  /// Rewrites every `pack:` string under [node] to an absolute path inside
+  /// [packRoot]; throws [AgentPackException] on root escapes or missing
+  /// files. Non-string leaves and scheme-less strings pass through.
+  void _rewritePackRefs(Object? node, Directory packRoot) {
+    if (node is Map<String, dynamic>) {
+      for (final key in node.keys.toList()) {
+        final value = node[key];
+        final resolved =
+            value is String ? _resolvePackRef(value, packRoot) : null;
+        if (resolved != null) {
+          node[key] = resolved;
+        } else if (value is Map || value is List) {
+          _rewritePackRefs(value, packRoot);
+        }
+      }
+    } else if (node is List) {
+      for (var i = 0; i < node.length; i++) {
+        final value = node[i];
+        final resolved =
+            value is String ? _resolvePackRef(value, packRoot) : null;
+        if (resolved != null) {
+          node[i] = resolved;
+        } else if (value is Map || value is List) {
+          _rewritePackRefs(value, packRoot);
+        }
+      }
+    }
+  }
+
+  /// True when any string under [node] carries the `pack:` scheme.
+  bool _containsPackRef(Object? node) {
+    if (node is String) return node.trim().startsWith(_packScheme);
+    if (node is Map<String, dynamic>) {
+      return node.values.any(_containsPackRef);
+    }
+    if (node is List) return node.any(_containsPackRef);
+    return false;
+  }
+
+  /// Maps a `pack:`-prefixed string to an existing absolute path inside
+  /// [packRoot]; returns `null` for strings without the scheme.
+  String? _resolvePackRef(String value, Directory packRoot) {
+    var ref = value.trim();
+    if (!ref.startsWith(_packScheme)) return null;
+    ref = ref.substring(_packScheme.length);
+    while (ref.startsWith('/')) {
+      ref = ref.substring(1);
+    }
+    final candidate = File(p.normalize(p.join(packRoot.path, ref)));
+    if (!p.isWithin(packRoot.path, candidate.path) || !candidate.existsSync()) {
+      throw AgentPackException(
+        "pack: reference '$value' not found in pack '${packRoot.path}'",
+      );
+    }
+    return candidate.path;
   }
 
   /// Removes `parent`, `override` and `merge` meta keys, returning a copy.

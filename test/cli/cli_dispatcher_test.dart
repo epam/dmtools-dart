@@ -751,4 +751,28 @@ void _testDefaults() {
       );
     });
   });
+
+  group('run: FileSystemException carries the path', () {
+    // Regression: the handler printed only e.message — "Cannot open file" —
+    // which made factory leg logs undiagnosable (live: epam/dmtools-dart
+    // pr-301 review, run 36614989141, zero context for hours).
+    test('run on an unreadable config reports the offending path', () async {
+      final sealed = File('${_tmp.path}/sealed.json')
+        ..writeAsStringSync('{"name":"x"}');
+      // chmod 000 — File.open fails with FileSystemException("Cannot open
+      // file") on every supported platform except when running as root.
+      final failed = Process.runSync('chmod', ['000', sealed.path]);
+      if (failed.exitCode != 0) return; // root or non-POSIX: nothing to test
+      final code = await _dispatcher.dispatch(['run', sealed.path]);
+      expect(code, 1);
+      final errorLine = _lines.firstWhere(
+        (l) => l.startsWith('Error:'),
+        orElse: () => '<no error line>',
+      );
+      expect(errorLine, contains('Cannot open file'));
+      expect(errorLine, contains('(path: ${sealed.path}'));
+      Process.runSync('chmod', ['644', sealed.path]);
+      sealed.deleteSync();
+    });
+  });
 }

@@ -33,11 +33,9 @@ void main() {
   defaultTrackerWiringTests();
 }
 
-/// The format instruction exactly as the runners reference it
-/// (cwd-relative at run time: `factory-agents/` is the dmtools-agents
-/// checkout the factory workflow clones).
-const _runnerFormatPath =
-    './factory-agents/instructions/common/github_comment_format.md';
+/// The format instruction exactly as the runners reference it — a `pack:`
+/// ref resolved against the unpacked parent pack at run time.
+const _runnerFormatPath = 'pack:instructions/common/github_comment_format.md';
 
 /// In-repo location of the same instruction (agents/ submodule, pinned).
 const _formatFile = 'agents/instructions/common/github_comment_format.md';
@@ -103,13 +101,13 @@ void devRunnerWiringTests() {
 }
 
 void reworkRunnerWiringTests() {
-  test('rework runner pins its parent in the factory pack (sanity)', () {
+  test('rework runner pins its pack parent (registry ref sanity)', () {
     final runner = _runner('.dmtools/runners/fa-rework.json');
     expect(
       (runner['parent'] as Map)['path'],
-      '../../factory-agents/pr_rework.json',
-      reason: 'the rework runner extends the pack pr_rework config — the '
-          'parent chain resolves in the factory checkout at run time',
+      'pr_rework@latest',
+      reason: 'the rework runner extends the pr_rework agent pack — the '
+          'parent chain resolves from the release registry at run time',
     );
     final params = runner['params'] as Map;
     expect(

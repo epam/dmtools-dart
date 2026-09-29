@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:dmtools/src/cli/cli_dispatcher.dart';
 import 'package:dmtools/src/config/property_reader.dart';
 import 'package:test/test.dart';
@@ -133,6 +134,46 @@ void _registerPackBuildTests() {
   });
 }
 
+/// `--include` subtree embedding at the dispatcher level — repeatable flag
+/// parsing end to end.
+void _registerPackIncludeTests() {
+  group('CliDispatcher compile --include', () {
+    test('repeatable --include embeds each subtree into the pack', () async {
+      final entry = f.writeAgent();
+      File('${f.agentRoot.path}/instructions/rules.md')
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('# rules\n');
+      File('${f.agentRoot.path}/prompts/agent.md')
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('# prompt\n');
+      final code = await f.dispatcher.dispatch([
+        'compile',
+        entry.path,
+        '--agent-root',
+        f.agentRoot.path,
+        '--version',
+        '1.0.0',
+        '--include',
+        'instructions',
+        '--include',
+        'prompts',
+        '--out',
+        f.outDir.path,
+      ]);
+      expect(code, 0);
+      final names = zipNames(File('${f.outDir.path}/my_agent-1.0.0.zip'));
+      expect(names, contains('instructions/rules.md'));
+      expect(names, contains('prompts/agent.md'));
+    });
+  });
+}
+
+/// Reads all zip entry names.
+List<String> zipNames(File zipFile) {
+  final archive = ZipDecoder().decodeBytes(zipFile.readAsBytesSync());
+  return archive.files.map((f) => f.name).toList();
+}
+
 /// versions.json is the default version source when --version is omitted:
 /// compiles the pack with the version declared for the agent and returns
 /// the built zip for the caller to assert on.
@@ -166,4 +207,5 @@ void main() {
 
   _registerUsageAndErrorTests();
   _registerPackBuildTests();
+  _registerPackIncludeTests();
 }

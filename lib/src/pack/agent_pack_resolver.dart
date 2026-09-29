@@ -127,6 +127,15 @@ class AgentPackResolver {
   bool isRegistryRef(String base) =>
       _registry != null && _registryRef.hasMatch(base);
 
+  /// True when [runArg] matches the `<agent>@<version|latest>` registry-ref
+  /// shape regardless of whether a registry is configured. Lets callers
+  /// distinguish "no registry configured" from "not a pack ref at all".
+  bool isRegistryRefShaped(String? runArg) =>
+      runArg != null && _registryRef.hasMatch(stripEntry(runArg));
+
+  /// Whether a pack registry is configured (env `DMTOOLS_PACK_REGISTRY`).
+  bool get hasRegistry => _registry != null;
+
   /// Resolves [runArg] to a cached, verified pack.
   ///
   /// [githubToken] authorizes private GitHub release downloads.

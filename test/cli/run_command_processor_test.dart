@@ -132,6 +132,9 @@ void _testConfigFileResolution() {
   _testParentPackResolution();
   _testParentPackRegistryRef();
   _testParentPackEntryOverride();
+  _testChildPackRefs();
+  _testChildPackRefErrors();
+  _testRegistryRefGuard();
 }
 
 void _testParentResolution() {
@@ -355,6 +358,150 @@ void _testParentPackEntryOverride() {
       );
     });
   });
+}
+
+/// Child-side `pack:` references against a pack parent — the zip flow where
+/// no agents checkout is mounted: instructions/js resolve into the unpacked
+/// pack cache. Split out for the loc gate.
+void _testChildPackRefs() {
+  group('child pack: refs against a pack parent', () {
+    test('pack: strings in lists and maps rewrite into the pack cache', () {
+      final zip = _buildPackWithInstructions();
+      final packsRoot = Directory('${_tmp.path}/packs');
+      final resolver = AgentPackResolver(packsRoot: packsRoot);
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "params":{
+          "cliPrompts":["pack:instructions/review_rules.md","literal prompt"],
+          "customParams":{"rulesFile":"pack:/instructions/review_rules.md"}
+        }
+      }''');
+      final json = jsonDecode(
+        RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
+      final prompts = (json['params']['cliPrompts'] as List).cast<String>();
+      expect(prompts[1], 'literal prompt');
+      expect(prompts[0], startsWith(packsRoot.path));
+      expect(File(prompts[0]).existsSync(), isTrue);
+      final rules = json['params']['customParams']['rulesFile'] as String;
+      expect(rules, prompts[0], reason: 'pack:/ with a slash normalizes too');
+    });
+  });
+}
+
+/// Error paths for child-side `pack:` refs and registry-ref parents.
+void _testChildPackRefErrors() {
+  group('child pack: refs against a pack parent (errors)', () {
+    test('pack: ref escaping the pack root is rejected', () {
+      final zip = _buildPackWithInstructions();
+      final resolver = AgentPackResolver(
+        packsRoot: Directory('${_tmp.path}/packs'),
+      );
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "params":{"cliPrompts":["pack:../outside.md"]}
+      }''');
+      expect(
+        () => RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+        throwsA(isA<AgentPackException>()),
+      );
+      expect(File('${_tmp.path}/outside.md').existsSync(), isFalse);
+    });
+
+    test('pack: ref missing inside the pack throws AgentPackException', () {
+      final zip = _buildPackWithInstructions();
+      final resolver = AgentPackResolver(
+        packsRoot: Directory('${_tmp.path}/packs'),
+      );
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "params":{"cliPrompts":["pack:instructions/nope.md"]}
+      }''');
+      expect(
+        () => RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+        throwsA(isA<AgentPackException>()),
+      );
+    });
+
+    test('pack: refs with a non-pack filesystem parent are rejected', () {
+      _writeFile('parent.json', '{"params":{"k":"p"}}');
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"parent.json"},
+        "params":{"cliPrompts":["pack:instructions/review_rules.md"]}
+      }''');
+      expect(
+        () => _run(['run', '${_tmp.path}/child.json']),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+/// Registry-ref parents: the `<agent>@<version|latest>` shape with no
+/// registry configured must error clearly instead of a bare file-not-found.
+void _testRegistryRefGuard() {
+  group('registry ref parents (errors)', () {
+    test('<agent>@latest parent without a configured registry errors clearly',
+        () {
+      final resolver = AgentPackResolver(
+        packsRoot: Directory('${_tmp.path}/packs'),
+        registryBaseUrl: '', // hermetic: no registry
+      );
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"pr_review@latest"},
+        "params":{}
+      }''');
+      expect(
+        () => RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.toString(),
+            'toString',
+            allOf(contains('pr_review@latest'),
+                contains('DMTOOLS_PACK_REGISTRY')),
+          ),
+        ),
+      );
+    });
+  });
+}
+
+/// Builds a real pack zip containing `instructions/review_rules.md` plus the
+/// standard parent-pack fixture content. The entry references the
+/// instructions file (via the `agents/` path duality) so the compiler's
+/// closure embeds it in the zip.
+File _buildPackWithInstructions() {
+  final agentRoot = Directory('${_tmp.path}/parent_agent_root')
+    ..createSync(recursive: true);
+  File('${agentRoot.path}/js/helper.js')
+    ..createSync(recursive: true)
+    ..writeAsStringSync('// helper\n');
+  File('${agentRoot.path}/instructions/review_rules.md')
+    ..createSync(recursive: true)
+    ..writeAsStringSync('# review rules\n');
+  final entry = File('${agentRoot.path}/parent_agent.json')
+    ..writeAsStringSync(jsonEncode({
+      'name': 'ParentAgent',
+      'params': {
+        'jsPath': 'agents/js/helper.js',
+        'fromParent': 'yes',
+        'cliPrompts': ['agents/instructions/review_rules.md'],
+      },
+    }));
+  final dist = Directory('${_tmp.path}/parent_dist')
+    ..createSync(recursive: true);
+  return AgentPackCompiler(agentRoot.path)
+      .compile(entry, '1.0.0', 'deadbeef', dist)
+      .zipFile;
 }
 
 /// Builds a real parent pack zip with `js/helper.js` and an entry config.

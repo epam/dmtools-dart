@@ -48,6 +48,7 @@ void main() {
   formalReviewWiringTests();
   wiringTests();
   resolutionTests();
+  resolutionPackRefTests();
   faProviderPreconfigTests();
 }
 
@@ -122,75 +123,91 @@ void wiringTests() {
 /// gh-146 review thread 4 — the raw pins above cannot execute the
 /// parent-chain deepMerge `dmtools run` performs: a typo in a `merge`
 /// directive or a parent-shape change passes raw-pin tests and breaks the
-/// leg at run time. This group builds the real zip flow end to end: the
-/// four parent pipelines are compiled into agent packs from the pinned
-/// `agents/` submodule, served from a loopback registry under
-/// `<pipeline>@latest`, and each runner under `<tmp>/.dmtools/runners/`
-/// (a bare target repo — no `factory-agents/` checkout anywhere) is
-/// resolved through [RunCommandProcessor] with an [AgentPackResolver]
-/// pointed at that registry. The parent's own paths and the runner's
-/// `pack:` prompt refs must land in the pack cache for the legs to work.
+/// leg at run time. The resolution groups below build the real zip flow
+/// end to end: the four parent pipelines are compiled into agent packs
+/// from the pinned `agents/` submodule, served from a loopback registry
+/// under `<pipeline>@latest`, and each runner under
+/// `<tmp>/.dmtools/runners/` (a bare target repo — no `factory-agents/`
+/// checkout anywhere) is resolved through [RunCommandProcessor] with an
+/// [AgentPackResolver] pointed at that registry. The parent's own paths
+/// and the runner's `pack:` prompt refs must land in the pack cache for
+/// the legs to work.
+
+/// Shared fixture for the pack-resolution groups: compiles the four parent
+/// pipelines into agent packs from the pinned `agents/` submodule and
+/// serves them from a loopback registry under `<pipeline>@latest`.
+class _PackRegistryFixture {
+  late Directory tmp;
+  late Directory packsRoot;
+  ({int port, Isolate isolate})? server;
+
+  Future<void> setUp() async {
+    tmp = Directory.systemTemp.createTempSync('fa_runner_pack_resolution');
+    packsRoot = Directory('${tmp.path}/packs')..createSync();
+    final staging = Directory('${tmp.path}/agents-root')..createSync();
+    final dist = Directory('${tmp.path}/dist')..createSync();
+    // Staging mirrors a dmtools-agents checkout root: the pipeline
+    // configs at the root, the subtrees their closures reference.
+    for (final name in _packAgents) {
+      File('agents/$name').copySync('${staging.path}/$name');
+    }
+    for (final dir in _packAgentsSubtrees) {
+      _copyTree(Directory('agents/$dir'), Directory('${staging.path}/$dir'));
+    }
+    final files = <String, List<int>>{};
+    final catalog = <String, String>{};
+    for (final name in _packAgents) {
+      final agent = name.replaceAll('.json', '');
+      final zip = AgentPackCompiler(staging.path).compile(
+          File('${staging.path}/$name'), '1.0.0', 'deadbeef', dist,
+          extraDirs: ['instructions', 'prompts']).zipFile;
+      final bytes = zip.readAsBytesSync();
+      files['/$agent-1.0.0.zip'] = bytes;
+      files['/$agent-1.0.0.zip.sha256'] = utf8.encode(
+        '${sha256.convert(bytes)}  $agent-1.0.0.zip',
+      );
+      catalog[agent] = '1.0.0';
+    }
+    files['/catalog.json'] = utf8.encode(jsonEncode(catalog));
+    server = await startRegistryServer(files);
+    Directory('${tmp.path}/.dmtools/runners').createSync(recursive: true);
+    for (final runner in _runners) {
+      File('.dmtools/runners/$runner')
+          .copySync('${tmp.path}/.dmtools/runners/$runner');
+    }
+  }
+
+  void tearDown() {
+    server?.isolate.kill();
+    tmp.deleteSync(recursive: true);
+  }
+
+  /// Resolves one committed runner through [RunCommandProcessor] against
+  /// the loopback registry.
+  Map<String, dynamic> resolved(String runner) => jsonDecode(
+        RunCommandProcessor(
+          packResolver: AgentPackResolver(
+            packsRoot: packsRoot,
+            registryBaseUrl: 'http://127.0.0.1:${server!.port}',
+          ),
+        ).process(['run', '${tmp.path}/.dmtools/runners/$runner']),
+      ) as Map<String, dynamic>;
+}
+
+/// Runner resolution through [RunCommandProcessor] with the pack registry
+/// flow — merged-config semantics (fa pin, deep merge).
 void resolutionTests() {
+  final fixture = _PackRegistryFixture();
   group(
       'machine wiring: runner resolution through RunCommandProcessor '
       '(pack registry flow)', () {
-    late Directory tmp;
-    late Directory packsRoot;
-    ({int port, Isolate isolate})? server;
-
-    setUpAll(() async {
-      tmp = Directory.systemTemp.createTempSync('fa_runner_pack_resolution');
-      packsRoot = Directory('${tmp.path}/packs')..createSync();
-      final staging = Directory('${tmp.path}/agents-root')..createSync();
-      final dist = Directory('${tmp.path}/dist')..createSync();
-      // Staging mirrors a dmtools-agents checkout root: the pipeline
-      // configs at the root, the subtrees their closures reference.
-      for (final name in _packAgents) {
-        File('agents/$name').copySync('${staging.path}/$name');
-      }
-      for (final dir in _packAgentsSubtrees) {
-        _copyTree(Directory('agents/$dir'), Directory('${staging.path}/$dir'));
-      }
-      final files = <String, List<int>>{};
-      final catalog = <String, String>{};
-      for (final name in _packAgents) {
-        final agent = name.replaceAll('.json', '');
-        final zip = AgentPackCompiler(staging.path).compile(
-            File('${staging.path}/$name'), '1.0.0', 'deadbeef', dist,
-            extraDirs: ['instructions', 'prompts']).zipFile;
-        final bytes = zip.readAsBytesSync();
-        files['/$agent-1.0.0.zip'] = bytes;
-        files['/$agent-1.0.0.zip.sha256'] = utf8.encode(
-          '${sha256.convert(bytes)}  $agent-1.0.0.zip',
-        );
-        catalog[agent] = '1.0.0';
-      }
-      files['/catalog.json'] = utf8.encode(jsonEncode(catalog));
-      server = await startRegistryServer(files);
-      Directory('${tmp.path}/.dmtools/runners').createSync(recursive: true);
-      for (final runner in _runners) {
-        File('.dmtools/runners/$runner')
-            .copySync('${tmp.path}/.dmtools/runners/$runner');
-      }
-    });
-
-    tearDownAll(() {
-      server?.isolate.kill();
-      tmp.deleteSync(recursive: true);
-    });
-
-    Map<String, dynamic> resolved(String runner) => jsonDecode(
-          RunCommandProcessor(
-            packResolver: AgentPackResolver(
-              packsRoot: packsRoot,
-              registryBaseUrl: 'http://127.0.0.1:${server!.port}',
-            ),
-          ).process(['run', '${tmp.path}/.dmtools/runners/$runner']),
-        ) as Map<String, dynamic>;
+    setUpAll(fixture.setUp);
+    tearDownAll(fixture.tearDown);
 
     test('all four runners resolve their parent chain and keep the fa pin', () {
       for (final runner in _runners) {
-        final env = (resolved(runner)['params'] as Map)['envVariables'] as Map;
+        final env =
+            (fixture.resolved(runner)['params'] as Map)['envVariables'] as Map;
         expect(env['AI_AGENT_PROVIDER'], 'fa',
             reason: '$runner must keep the fa provider pin after the '
                 'parent-chain deepMerge');
@@ -200,8 +217,8 @@ void resolutionTests() {
     test(
         'review runner deep-merges gh-129 custom params '
         'alongside the parent\'s own', () {
-      final custom =
-          (resolved('fa-review.json')['params'] as Map)['customParams'] as Map;
+      final custom = (fixture.resolved('fa-review.json')['params']
+          as Map)['customParams'] as Map;
       expect(custom['formalGithubReview'], isTrue);
       expect(custom['allowApproveWithSuggestions'], isTrue);
       expect(custom['checkOpenPR'], isTrue,
@@ -210,9 +227,21 @@ void resolutionTests() {
       expect(custom['removeLabel'], 'sm_story_review_triggered',
           reason: "the parent's own removeLabel must survive too");
     });
+  });
+}
+
+/// Runner resolution through [RunCommandProcessor] with the pack registry
+/// flow — `pack:` references landing in the unpacked cache.
+void resolutionPackRefTests() {
+  final fixture = _PackRegistryFixture();
+  group(
+      'machine wiring: runner pack refs rewrite into the pack cache '
+      '(pack registry flow)', () {
+    setUpAll(fixture.setUp);
+    tearDownAll(fixture.tearDown);
 
     test('merge directive appends the pack-resolved verdict rules', () {
-      final params = resolved('fa-review.json')['params'] as Map;
+      final params = fixture.resolved('fa-review.json')['params'] as Map;
       final parentPrompts = (_runnerJson('agents/pr_review.json')['params']
           as Map)['cliPrompts'] as List;
       final prompts = (params['cliPrompts'] as List).cast<String>();
@@ -220,7 +249,7 @@ void resolutionTests() {
           reason: 'a missing/typoed "merge": ["params.cliPrompts"] would '
               'replace the parent prompts instead of appending');
       final verdictRules = prompts.last;
-      expect(verdictRules, startsWith(packsRoot.path),
+      expect(verdictRules, startsWith(fixture.packsRoot.path),
           reason: 'the pack: ref must resolve into the pack cache');
       expect(verdictRules,
           endsWith('instructions/pr_review/review_verdict_rules.md'));
@@ -228,20 +257,20 @@ void resolutionTests() {
       // The parent's own prompts are rewritten into the cache as well;
       // literal prompt text (no file behind it) passes through untouched.
       for (final prompt in prompts.take(parentPrompts.length)) {
-        if (prompt.startsWith(packsRoot.path)) {
+        if (prompt.startsWith(fixture.packsRoot.path)) {
           expect(File(prompt).existsSync(), isTrue, reason: prompt);
         }
       }
     });
 
     test('parent pack paths rewrite into the cache (js/actions/scripts)', () {
-      final params = resolved('fa-bug-dev.json')['params'] as Map;
+      final params = fixture.resolved('fa-bug-dev.json')['params'] as Map;
       final post = params['postJSAction'] as String;
-      expect(post, startsWith(packsRoot.path));
+      expect(post, startsWith(fixture.packsRoot.path));
       expect(post, endsWith('js/developBugAndCreatePR.js'));
       expect(File(post).existsSync(), isTrue);
       final commands = (params['cliCommands'] as List).cast<String>();
-      expect(commands.single, startsWith(packsRoot.path));
+      expect(commands.single, startsWith(fixture.packsRoot.path));
       expect(commands.single, endsWith('scripts/run-agent.sh'));
       expect(File(commands.single).existsSync(), isTrue);
     });

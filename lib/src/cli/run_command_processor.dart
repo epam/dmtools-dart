@@ -322,6 +322,19 @@ class _ParentConfigResolver {
       _rewritePackRefs(config, pack.packRoot);
       return (config: config, packRoot: pack.packRoot);
     }
+    if (_packResolver.isRegistryRefShaped(parentPath) &&
+        !_packResolver.hasRegistry) {
+      // `<agent>@<version|latest>` shape with no registry configured: a bare
+      // "file not found" here would send every machine leg debugging the
+      // wrong layer — say what is actually missing.
+      throw ArgumentError.value(
+        parentPath,
+        'parent.path',
+        'is an agent-pack registry ref (<agent>@<version|latest>) but no '
+            'pack registry is configured — set the DMTOOLS_PACK_REGISTRY '
+            'env var to the release-registry base URL',
+      );
+    }
     final file = File('$configDir/$parentPath');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
     return (config: resolve(json, file.parent.path), packRoot: null);
@@ -338,26 +351,32 @@ class _ParentConfigResolver {
   void _rewritePackRefs(Object? node, Directory packRoot) {
     if (node is Map<String, dynamic>) {
       for (final key in node.keys.toList()) {
-        final value = node[key];
-        final resolved =
-            value is String ? _resolvePackRef(value, packRoot) : null;
-        if (resolved != null) {
-          node[key] = resolved;
-        } else if (value is Map || value is List) {
-          _rewritePackRefs(value, packRoot);
-        }
+        _rewriteValue(node[key], (resolved) => node[key] = resolved, packRoot);
       }
     } else if (node is List) {
       for (var i = 0; i < node.length; i++) {
-        final value = node[i];
-        final resolved =
-            value is String ? _resolvePackRef(value, packRoot) : null;
-        if (resolved != null) {
-          node[i] = resolved;
-        } else if (value is Map || value is List) {
-          _rewritePackRefs(value, packRoot);
-        }
+        final index = i; // per-iteration capture for the assign closure
+        _rewriteValue(
+          node[index],
+          (resolved) => node[index] = resolved,
+          packRoot,
+        );
       }
+    }
+  }
+
+  /// Resolves one node value: `pack:` strings are rewritten via [assign],
+  /// nested maps/lists recursed into; everything else passes through.
+  void _rewriteValue(
+    Object? value,
+    void Function(String resolved) assign,
+    Directory packRoot,
+  ) {
+    final resolved = value is String ? _resolvePackRef(value, packRoot) : null;
+    if (resolved != null) {
+      assign(resolved);
+    } else if (value is Map || value is List) {
+      _rewritePackRefs(value, packRoot);
     }
   }
 

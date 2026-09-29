@@ -377,11 +377,14 @@ class AgentPackCompiler {
     }
     final rootDir = Directory(p.join(_rootPath, normalized));
     final rootPath = p.normalize(rootDir.absolute.path);
-    if (!p.isWithin(_rootPath, rootPath) ||
-        !rootDir.existsSync() ||
-        rootPath == _rootPath) {
+    if (!p.isWithin(_rootPath, rootPath) || rootPath == _rootPath) {
       throw AgentPackException(
-          '--include directory missing: $normalized (under $_rootPath)');
+          '--include directory escapes the agents root: $dir '
+          '(resolved to $normalized, root $_rootPath)');
+    }
+    if (!rootDir.existsSync()) {
+      throw AgentPackException(
+          '--include directory not found: $normalized (under $_rootPath)');
     }
     for (final entity
         in rootDir.listSync(recursive: true, followLinks: false)) {

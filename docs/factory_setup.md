@@ -143,14 +143,15 @@ module.exports = {
 ```
 
 Each runner is a thin child that only overrides the provider env (everything
-else is inherited from the parent agent config in the pack — the
-`factory-agents/` paths resolve against the pack checkout the factory
-workflow clones beside your repo):
+else is inherited from the parent pipeline, which the engine resolves as an
+agent pack from the release registry — no agents checkout is cloned anywhere;
+the registry base URL comes from the `DMTOOLS_PACK_REGISTRY` env var, and
+`pack:` prompt references resolve against the unpacked parent pack):
 
 ```json
 // .dmtools/runners/fa-story-dev.json
 {
-  "parent": { "path": "../../factory-agents/story_development.json" },
+  "parent": { "path": "story_development@latest" },
   "params": {
     "envVariables": {
       "DEFAULT_TRACKER": "github",
@@ -161,7 +162,10 @@ workflow clones beside your repo):
           \"model\":\"glm-5.3-flash\",
           \"apiKeyEnvVar\":\"ZAI_CODE_KEY\"}"
     },
-    "inputJql": ""
+    "inputJql": "",
+    "cliPromptsByTracker": {
+      "github": ["pack:instructions/common/github_comment_format.md"]
+    }
   }
 }
 ```

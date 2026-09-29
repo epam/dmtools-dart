@@ -68,20 +68,21 @@ A **runner** is a thin child config that pins a provider on top of an agent
 config from the dmtools-agents pack. Everything else — instructions, lifecycle,
 JS actions — is inherited from the parent. The configs live in-repo under
 `.dmtools/runners/` (the factory guard resolves the leg → runner mapping from
-`.dmtools/config.js` `sm.runners`); their `parent` and prompt paths resolve at
-run time against the pack checkout, which the factory workflow clones to
-`factory-agents/`.
+`.dmtools/config.js` `sm.runners`); their `parent` is an **agent-pack registry
+ref** (`<pipeline>@latest`) resolved against the release registry, and their
+prompt paths are `pack:` references into the unpacked parent pack — the zip
+flow needs no agents checkout anywhere.
 
 | Runner file (.dmtools/runners/) | Parent (pack) | Provider | Model | Used for |
 |---|---|---|---|---|
-| `fa-story-dev.json` | `story_development.json` | zai | glm-5.3-flash | story dev (default path) |
-| `fa-bug-dev.json` | `bug_development.json` | zai | glm-5.3-flash | `[BUG]` tickets |
-| `fa-review-kimi.json` | `pr_review.json` | kimi | k3 | PR review (stronger reviewer model) |
-| `fa-rework-zai.json` | `pr_rework.json` | zai | glm-5.3-flash | rework rounds |
+| `fa-story-dev.json` | `story_development@latest` | zai | glm-5.3-flash | story dev (default path) |
+| `fa-bug-dev.json` | `bug_development@latest` | zai | glm-5.3-flash | `[BUG]` tickets |
+| `fa-review-kimi.json` | `pr_review@latest` | kimi | k3 | PR review (stronger reviewer model) |
+| `fa-rework-zai.json` | `pr_rework@latest` | zai | glm-5.3-flash | rework rounds |
 
 ```json
 {
-  "parent": { "path": "../../factory-agents/story_development.json" },
+  "parent": { "path": "story_development@latest" },
   "params": {
     "envVariables": {
       "DEFAULT_TRACKER": "github",
@@ -94,12 +95,20 @@ run time against the pack checkout, which the factory workflow clones to
     "inputJql": "",
     "cliPromptsByTracker": {
       "github": [
-        "./factory-agents/instructions/common/github_comment_format.md"
+        "pack:instructions/common/github_comment_format.md"
       ]
     }
   }
 }
 ```
+
+The registry base URL comes from the `DMTOOLS_PACK_REGISTRY` env var — a flat
+catalog (`<base>/catalog.json` mapping agent → version) with the packs at
+`<base>/<agent>-<version>.zip` (+ `.sha256`), published per pipeline by
+dmtools-agents `agent-pack-release.yml`. A runner with an `@`-ref parent and
+no registry configured fails with an explicit error naming the env var.
+`@latest` tracks the newest published pack; pin an explicit version
+(`pr_review@0.1.2`) when a leg must not float.
 
 `DEFAULT_TRACKER=github` + `cliPromptsByTracker.github` (gh-125) keep machine
 comments on GitHub issues in GitHub-flavored Markdown: the CliAgent resolves

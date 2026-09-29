@@ -133,6 +133,8 @@ void _testConfigFileResolution() {
   _testParentPackRegistryRef();
   _testParentPackEntryOverride();
   _testChildPackRefs();
+  _testChildPackRefErrors();
+  _testRegistryRefGuard();
 }
 
 void _testParentResolution() {
@@ -386,7 +388,12 @@ void _testChildPackRefs() {
       final rules = json['params']['customParams']['rulesFile'] as String;
       expect(rules, prompts[0], reason: 'pack:/ with a slash normalizes too');
     });
+  });
+}
 
+/// Error paths for child-side `pack:` refs and registry-ref parents.
+void _testChildPackRefErrors() {
+  group('child pack: refs against a pack parent (errors)', () {
     test('pack: ref escaping the pack root is rejected', () {
       final zip = _buildPackWithInstructions();
       final resolver = AgentPackResolver(
@@ -432,6 +439,37 @@ void _testChildPackRefs() {
       expect(
         () => _run(['run', '${_tmp.path}/child.json']),
         throwsArgumentError,
+      );
+    });
+  });
+}
+
+/// Registry-ref parents: the `<agent>@<version|latest>` shape with no
+/// registry configured must error clearly instead of a bare file-not-found.
+void _testRegistryRefGuard() {
+  group('registry ref parents (errors)', () {
+    test('<agent>@latest parent without a configured registry errors clearly',
+        () {
+      final resolver = AgentPackResolver(
+        packsRoot: Directory('${_tmp.path}/packs'),
+        registryBaseUrl: '', // hermetic: no registry
+      );
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"pr_review@latest"},
+        "params":{}
+      }''');
+      expect(
+        () => RunCommandProcessor(packResolver: resolver)
+            .process(['run', '${_tmp.path}/child.json']),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.toString(),
+            'toString',
+            allOf(contains('pr_review@latest'),
+                contains('DMTOOLS_PACK_REGISTRY')),
+          ),
+        ),
       );
     });
   });

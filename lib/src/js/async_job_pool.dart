@@ -58,9 +58,24 @@ Future<void> _dmtoolsWorkerMain(AsyncWorkerLink link) async {
     while (true) {
       final request = await link.next();
       if (request == null) return; // shutdown
-      link.complete(
-        AsyncJobEnvelope.fromJson(_runJobOnWorker(link.workerId, request)),
-      );
+      try {
+        link.complete(
+          AsyncJobEnvelope.fromJson(_runJobOnWorker(link.workerId, request)),
+        );
+      } catch (e) {
+        // Last-resort: the caller is parked in a blocking Mailbox.take()
+        // with its event loop frozen — a throw past this point kills the
+        // worker mid-job and hangs that caller forever (the dead-worker
+        // exit listener can never run while the loop is frozen). Answer
+        // every request, no matter what broke inside the job.
+        link.complete(
+          AsyncJobEnvelope(
+            jobId: request.jobId,
+            ok: false,
+            error: 'worker job failed unexpectedly: $e',
+          ),
+        );
+      }
     }
   } finally {
     SyncHttpBridge.shared.dispose(); // this isolate's private HTTP worker
@@ -69,14 +84,19 @@ Future<void> _dmtoolsWorkerMain(AsyncWorkerLink link) async {
 
 /// Runs one dispatched function on a fresh engine — never throws.
 Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
-  final overrides = request.context['overrides'];
-  PropertyReader.setOverrides(
-    overrides is Map
-        ? overrides.map((k, v) => MapEntry('$k', '$v'))
-        : <String, String>{},
-  );
-  final runtime = QuickjsRuntime();
+  // Engine boot (e.g. the QuickJS dylib dlopen) must stay INSIDE the try:
+  // a throw past it kills the worker isolate without answering the job,
+  // and the caller is parked in a blocking Mailbox.take() with the event
+  // loop frozen — nothing can ever complete that wait.
+  QuickjsRuntime? runtime;
   try {
+    final overrides = request.context['overrides'];
+    PropertyReader.setOverrides(
+      overrides is Map
+          ? overrides.map((k, v) => MapEntry('$k', '$v'))
+          : <String, String>{},
+    );
+    runtime = QuickjsRuntime();
     final compat = wireEngine(
       runtime,
       EngineSpec(
@@ -114,7 +134,7 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
       error: e.toString(),
     ).toJson();
   } finally {
-    runtime.close();
+    runtime?.close();
   }
 }
 

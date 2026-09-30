@@ -607,6 +607,7 @@ String _wrapStorage(_XmlNode node, List<String> parts) {
   return _wrapHeadingOrParagraph(node, inner) ??
       _wrapListOrStructural(node, inner) ??
       _wrapConfluenceBlock(node, inner) ??
+      _wrapAdfNode(node, inner) ??
       _wrapAnchorOrImage(node) ??
       _wrapInlineStyle(node, inner);
 }
@@ -658,6 +659,19 @@ String? _wrapConfluenceBlock(_XmlNode node, String inner) {
       return inner;
   }
   return null;
+}
+
+/// `ac:adf-node` wrappers (Java dm.ai #596 parity): a synced block
+/// (`type="bodied-sync-block"`) renders its `ac:adf-content` payload inline
+/// via the normal converters (falling back to the rendered children when the
+/// content element is missing); any other adf-node — draw.io / ecosystem
+/// extension with no readable content — becomes the `[Diagram]` placeholder.
+/// `null` for anything else.
+String? _wrapAdfNode(_XmlNode node, String inner) {
+  if (node.name != 'ac:adf-node') return null;
+  if (node.attrs['type'] != 'bodied-sync-block') return '\n[Diagram]\n';
+  final content = node.child('ac:adf-content');
+  return content == null ? inner : _storageNodeToMarkdown(content);
 }
 
 /// Plain HTML anchors/images; `null` for anything else.

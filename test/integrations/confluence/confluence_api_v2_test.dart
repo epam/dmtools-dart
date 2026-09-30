@@ -37,7 +37,7 @@ MockConfluenceFixture mockConfluenceV2(
   String apiVersion = 'v2',
 }) {
   PropertyReader.setOverrides({
-    ..._testConfig,
+    ...confluenceTestConfig,
     'CONFLUENCE_API_VERSION': apiVersion,
   });
   final adapter = RoutingAdapter(router);
@@ -46,14 +46,6 @@ MockConfluenceFixture mockConfluenceV2(
   PropertyReader.clearOverrides();
   return (client: ConfluenceClient(http), adapter: adapter);
 }
-
-/// The Confluence config reused by the v2 fixtures (mirrors
-/// `confluence_test_support._testConfig`, which is private).
-const _testConfig = {
-  'CONFLUENCE_BASE_PATH': 'https://confluence.example.com/wiki',
-  'CONFLUENCE_EMAIL': 'dev@example.com',
-  'CONFLUENCE_API_TOKEN': 'tok-123',
-};
 
 /// `PropertyReader.getConfluenceApiVersion` — the `CONFLUENCE_API_VERSION` flag.
 void apiVersionConfigTests() {
@@ -78,8 +70,6 @@ void apiVersionConfigTests() {
 void httpClientV2Tests() {
   group('ConfluenceHttpClient v2', () {
     test('builds /wiki/api/v2 URLs', () {
-      final f = mockConfluenceV2((o) => '{}');
-      expect(f.client, isNotNull);
       final http = mockHttpV2();
       expect(http.buildUrlV2('pages/123'),
           'https://confluence.example.com/wiki/api/v2/pages/123');
@@ -103,7 +93,7 @@ void httpClientV2Tests() {
 /// Builds a bare v2-mode [ConfluenceHttpClient] (URL building only, no I/O).
 ConfluenceHttpClient mockHttpV2({String? apiVersion}) {
   PropertyReader.setOverrides({
-    ..._testConfig,
+    ...confluenceTestConfig,
     if (apiVersion != null) 'CONFLUENCE_API_VERSION': apiVersion,
   });
   final http = ConfluenceHttpClient(PropertyReader(), dio: Dio());
@@ -286,6 +276,22 @@ void spaceIdFromKeyV2Tests() {
         ),
       );
     });
+
+    test('throws when the space result carries no id', () async {
+      final f = mockConfluenceV2((o) => jsonEncode({
+            'results': [
+              {'key': 'PROJ'}
+            ]
+          }));
+
+      await expectLater(
+        f.client.spaceIdFromKey('PROJ'),
+        throwsA(
+          isA<StateError>()
+              .having((e) => e.message, 'message', contains('PROJ')),
+        ),
+      );
+    });
   });
 }
 
@@ -320,6 +326,22 @@ void createPageV2Tests() {
       expect(sent.containsKey('type'), isFalse);
       expect(sent.containsKey('ancestors'), isFalse);
       expect(sent.containsKey('space'), isFalse);
+    });
+
+    test('omits parentId when it is empty (v1 parity)', () async {
+      // findOrCreate passes `parentId: ""` when the agent supplies no parent:
+      // v1 omits `ancestors` in that case, so v2 must omit `parentId` too
+      // (the v2 API rejects an empty parent id with a 400).
+      final f = mockConfluenceV2((o) {
+        if (o.uri.path.endsWith('/spaces')) return spacesBody('456', 'PROJ');
+        return pageBody('<p>Hi</p>', id: 'new-1', title: 'New Page');
+      });
+
+      await f.client.createPage('PROJ', 'New Page', '<p>Hi</p>', parentId: '');
+
+      final sent = jsonDecode(f.adapter.calls.last.data as String)
+          as Map<String, dynamic>;
+      expect(sent.containsKey('parentId'), isFalse);
     });
 
     test('v1 keeps the legacy content post without the spaces resolver',

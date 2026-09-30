@@ -3,6 +3,9 @@ part of 'confluence_client.dart';
 /// Java-named tool methods of [ConfluenceClient] from the frozen gap
 /// snapshot (gh-191): title lookups, find-or-create, children-by-name,
 /// attachments/profile/search lookups, URL resolution.
+///
+/// NOTE: extension members are statically dispatched — subclasses/test spies
+/// cannot override these methods; extend the client class instead.
 extension ConfluenceJavaNameTools on ConfluenceClient {
   /// `confluence_content_by_title` — GET `content?title=&expand=…` in the
   /// configured default space (Java `contentByTitleInDefaultSpace`).

@@ -158,6 +158,10 @@ class ConfluenceClient {
       };
 
   /// Builds the v2 page creation payload (Java `createPage` v2 branch).
+  ///
+  /// [parentId] is omitted when empty so both API versions agree on the
+  /// "no parent" input (`findOrCreate` passes `""`): the v1 payload omits
+  /// `ancestors`, and the v2 API rejects an empty parent id with a 400.
   Future<Map<String, dynamic>> _pagePayloadV2(
     String spaceKey,
     String title,
@@ -169,7 +173,7 @@ class ConfluenceClient {
       'spaceId': spaceId,
       'status': 'current',
       'title': title,
-      if (parentId != null) 'parentId': parentId,
+      if (parentId != null && parentId.isNotEmpty) 'parentId': parentId,
       'body': {
         'representation': _kStorage,
         'value': body,
@@ -308,7 +312,9 @@ class ConfluenceClient {
   /// required by the v2 API via `GET /wiki/api/v2/spaces?keys=…`. v2 only;
   /// the v1 API addresses spaces by key directly.
   ///
-  /// Throws [StateError] when no space with the given key exists.
+  /// Throws [StateError] when no space with the given key exists or the
+  /// matched space carries no `id` (Java `getString("id")` fails fast the
+  /// same way instead of leaking a `"null"` space id downstream).
   /// Java parity: `Confluence.spaceIdFromKey`.
   Future<String> spaceIdFromKey(String spaceKey) async {
     final body = await _http.getV2('spaces', queryParams: {'keys': spaceKey});
@@ -316,7 +322,11 @@ class ConfluenceClient {
     if (results.isEmpty) {
       throw StateError('Confluence space not found by key: $spaceKey');
     }
-    return results.first['id'].toString();
+    final id = results.first['id'];
+    if (id == null) {
+      throw StateError('Confluence space by key $spaceKey returned no id');
+    }
+    return id.toString();
   }
 
   /// `confluence_get_page_by_id` / `confluence_content_by_id` — GET

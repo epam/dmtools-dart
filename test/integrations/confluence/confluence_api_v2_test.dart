@@ -247,6 +247,21 @@ String pageBody(String value,
       },
     });
 
+/// Canned v2 pages listing holding one page titled [title] with a storage
+/// body of `<p>found</p>`.
+String pagesListingBody({String id = '123', String title = 'My Page'}) =>
+    jsonEncode({
+      'results': [
+        {
+          'id': id,
+          'title': title,
+          'body': {
+            'storage': {'value': '<p>found</p>', 'representation': 'storage'}
+          },
+        }
+      ]
+    });
+
 /// `spaceIdFromKey` — v2 spaces lookup resolving a key to the numeric id.
 void spaceIdFromKeyV2Tests() {
   group('ConfluenceClient.spaceIdFromKey (v2)', () {
@@ -364,8 +379,13 @@ void updatePageV2Tests() {
       expect(sent.containsKey('ancestors'), isFalse);
       expect(sent.containsKey('space'), isFalse);
     });
+  });
+}
 
-    test('v1 keeps the legacy version expand + content put', () async {
+/// `confluence_update_page` under v1 — legacy endpoints stay untouched.
+void updatePageV1Tests() {
+  group('ConfluenceClient.updatePage (v1)', () {
+    test('keeps the legacy version expand + content put', () async {
       final f = mockConfluenceV2((o) {
         if (o.method == 'GET') {
           return jsonEncode({
@@ -385,6 +405,7 @@ void updatePageV2Tests() {
         'my comment',
       );
 
+      expect(f.adapter.calls, hasLength(2));
       expect(f.adapter.calls.first.uri.path, endsWith('/rest/api/content/123'));
       expect(f.adapter.calls.first.queryParameters['expand'], 'version');
       expect(f.adapter.calls.last.uri.path, endsWith('/rest/api/content/123'));
@@ -399,20 +420,7 @@ void contentByTitleV2Tests() {
     test('resolves spaceId then queries v2 pages by title', () async {
       final f = mockConfluenceV2((o) {
         if (o.uri.path.endsWith('/spaces')) return spacesBody('456', 'PROJ');
-        return jsonEncode({
-          'results': [
-            {
-              'id': '123',
-              'title': 'My Page',
-              'body': {
-                'storage': {
-                  'value': '<p>found</p>',
-                  'representation': 'storage'
-                }
-              },
-            }
-          ]
-        });
+        return pagesListingBody();
       });
 
       final result = await f.client.contentByTitleAndSpace('My Page', 'PROJ');
@@ -429,20 +437,7 @@ void contentByTitleV2Tests() {
     });
 
     test('format=md converts the v2 storage body in place', () async {
-      final f = mockConfluenceV2((o) => jsonEncode({
-            'results': [
-              {
-                'id': '123',
-                'title': 'My Page',
-                'body': {
-                  'storage': {
-                    'value': '<p>found</p>',
-                    'representation': 'storage'
-                  }
-                },
-              }
-            ]
-          }));
+      final f = mockConfluenceV2((o) => pagesListingBody());
 
       final result =
           await f.client.contentByTitleAndSpace('My Page', 'PROJ', 'md');
@@ -464,8 +459,13 @@ void contentByTitleV2Tests() {
       expect(call.uri.queryParameters.containsKey('spaceId'), isFalse);
       expect(call.uri.queryParameters['body-format'], 'storage');
     });
+  });
+}
 
-    test('v1 keeps the legacy spaceKey query', () async {
+/// Title lookup under v1 — the legacy spaceKey query stays untouched.
+void contentByTitleV1Tests() {
+  group('ConfluenceClient.contentByTitleAndSpace (v1)', () {
+    test('keeps the legacy spaceKey query', () async {
       final f = mockConfluenceV2((o) => jsonEncode({'results': []}),
           apiVersion: 'v1');
 

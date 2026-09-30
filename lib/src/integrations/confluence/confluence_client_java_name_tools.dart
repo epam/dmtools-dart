@@ -44,7 +44,7 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
             if (space.isNotEmpty) 'spaceKey': space,
           });
     final decoded = jsonDecode(body) as Map<String, dynamic>;
-    _applyFormat(_resultList(decoded), format);
+    ConfluenceClient._applyFormat(_resultList(decoded), format);
     return decoded;
   }
 
@@ -73,7 +73,7 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
     final listing = await contentByTitleAndSpace(title, effectiveSpace, null);
     final contents = _resultList(listing);
     if (contents.isEmpty) return null;
-    _applyFormat([contents.first], format);
+    ConfluenceClient._applyFormat([contents.first], format);
     return contents.first;
   }
 
@@ -104,7 +104,7 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
       throw StateError('Content not found: $contentName');
     }
     final children = await getContentChildren(parent['id'] as String);
-    _applyFormat(children, format);
+    ConfluenceClient._applyFormat(children, format);
     return children;
   }
 
@@ -178,7 +178,7 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
         continue; // Java logs and continues on per-URL failures.
       }
     }
-    _applyFormat(contents, format);
+    ConfluenceClient._applyFormat(contents, format);
     return contents;
   }
 

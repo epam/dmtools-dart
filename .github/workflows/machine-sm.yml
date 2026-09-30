@@ -59,6 +59,12 @@ jobs:
       # take the sequential fallback. Actions stay sequential on the main
       # engine either way.
       parallel-workers: '4'
+      # sm_github.json validation rules (validate-armed etc.) dispatch and
+      # stamp THIS workflow on PR heads — without it the required contexts
+      # (agents-suite/static/gate, produced by quality.yml jobs) never
+      # appear and approved PRs stall BLOCKED (issue dmtools-agents#575,
+      # live: PR #301 needed a manual Quality dispatch 2026-09-29).
+      ci-workflow: quality.yml
       # Manual ticks default to dry; cron ticks run live.
       dryRun: ${{ github.event.inputs.dryRun || 'false' }}
       # #687: the workflow token — silent branch updates (pushes trigger

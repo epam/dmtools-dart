@@ -21,7 +21,9 @@ void main() {
   spaceIdFromKeyV2Tests();
   createPageV2Tests();
   updatePageV2Tests();
+  updatePageV1Tests();
   contentByTitleV2Tests();
+  contentByTitleV1Tests();
   getContentAttachmentsV2Tests();
   v1OnlyLimitationTests();
 }

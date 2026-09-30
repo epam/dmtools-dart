@@ -76,7 +76,7 @@ jobs:
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: e18d98199ca4e79fc457209f31802b5e062bf594
+      factory_ref: e17f651ba1f2669c9f6660dcfd86ceeeb51aab40
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}

@@ -18,6 +18,12 @@ void main() {
   getPageByIdV2Tests();
   getContentChildrenV2Tests();
   testConnectionV2Tests();
+  spaceIdFromKeyV2Tests();
+  createPageV2Tests();
+  updatePageV2Tests();
+  contentByTitleV2Tests();
+  getContentAttachmentsV2Tests();
+  v1OnlyLimitationTests();
 }
 
 /// Builds a v2-aware client over a mocked [Dio] routed by [router].

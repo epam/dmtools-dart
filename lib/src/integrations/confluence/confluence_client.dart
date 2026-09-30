@@ -16,6 +16,7 @@ import 'confluence_markdown.dart';
 import 'confluence_page_url.dart';
 
 part 'confluence_client_transfer.dart';
+part 'confluence_client_java_name_tools.dart';
 
 /// The mutable page fields of an update (Java `updatePage` params).
 typedef _PageUpdateSpec = ({
@@ -25,6 +26,11 @@ typedef _PageUpdateSpec = ({
   String space,
   String historyComment,
 });
+
+/// Storage representation shared by the v1/v2 page payloads, the v2
+/// `body-format` query, and the storage body envelope key
+/// (crap4dart magic_constants gate).
+const _kStorage = 'storage';
 
 /// Confluence Cloud API methods exposed to the MCP tool runtime.
 class ConfluenceClient {
@@ -106,16 +112,28 @@ class ConfluenceClient {
   /// Creates a new page in [spaceKey] with the given [title] and storage-format
   /// [body]; returns the created page object from the API. [parentId] nests
   /// the page under an ancestor (Java `createPage` overload).
+  ///
+  /// Under `CONFLUENCE_API_VERSION=v2` uses `POST /wiki/api/v2/pages`: spaces
+  /// are addressed by numeric id (resolved from the key via [spaceIdFromKey]),
+  /// status is explicit, and the storage representation lives under
+  /// `body.value`. Required for granular/scoped tokens.
+  /// Java parity: `Confluence.createPage`.
   Future<Map<String, dynamic>> createPage(
     String spaceKey,
     String title,
     String body, {
     String? parentId,
   }) async {
-    final responseBody = await _http.post(
-      'content',
-      body: jsonEncode(_pagePayload(spaceKey, title, body, parentId)),
-    );
+    final responseBody = _http.isApiV2
+        ? await _http.postV2(
+            'pages',
+            body: jsonEncode(
+                await _pagePayloadV2(spaceKey, title, body, parentId)),
+          )
+        : await _http.post(
+            'content',
+            body: jsonEncode(_pagePayload(spaceKey, title, body, parentId)),
+          );
     return jsonDecode(responseBody) as Map<String, dynamic>;
   }
 
@@ -135,9 +153,33 @@ class ConfluenceClient {
             {'id': parentId},
           ],
         'body': {
-          'storage': {'value': body, 'representation': 'storage'},
+          _kStorage: {'value': body, 'representation': _kStorage},
         },
       };
+
+  /// Builds the v2 page creation payload (Java `createPage` v2 branch).
+  ///
+  /// [parentId] is omitted when empty so both API versions agree on the
+  /// "no parent" input (`findOrCreate` passes `""`): the v1 payload omits
+  /// `ancestors`, and the v2 API rejects an empty parent id with a 400.
+  Future<Map<String, dynamic>> _pagePayloadV2(
+    String spaceKey,
+    String title,
+    String body,
+    String? parentId,
+  ) async {
+    final spaceId = await spaceIdFromKey(spaceKey);
+    return {
+      'spaceId': spaceId,
+      'status': 'current',
+      'title': title,
+      if (parentId != null && parentId.isNotEmpty) 'parentId': parentId,
+      'body': {
+        'representation': _kStorage,
+        'value': body,
+      },
+    };
+  }
 
   /// `confluence_update_page` — PUT `content/{id}` with a bumped version.
   ///
@@ -145,6 +187,12 @@ class ConfluenceClient {
   /// re-sent as `current + 1`; the page is re-parented under [parentId] and
   /// kept in [space]. An optional [historyComment] lands in the version
   /// message (Java `confluence_update_page_with_history`).
+  ///
+  /// Under `CONFLUENCE_API_VERSION=v2` reads the current version via
+  /// `GET /wiki/api/v2/pages/{id}` and PUTs `/wiki/api/v2/pages/{id}` with
+  /// `version.number` incremented; v2 updates carry no ancestors/space in the
+  /// payload and require an explicit `current` status. Required for
+  /// granular/scoped tokens. Java parity: `Confluence.updatePage`.
   Future<Map<String, dynamic>> updatePage(
     String contentId,
     String title,
@@ -154,28 +202,33 @@ class ConfluenceClient {
     String historyComment = '',
   ]) async {
     final current = await _fetchVersion(contentId);
-    final responseBody = await _http.put(
-      'content/$contentId',
-      body: jsonEncode(_updatePayload(
-        contentId,
-        (
-          title: title,
-          parentId: parentId,
-          body: body,
-          space: space,
-          historyComment: historyComment,
-        ),
-        current + 1,
-      )),
+    final spec = (
+      title: title,
+      parentId: parentId,
+      body: body,
+      space: space,
+      historyComment: historyComment,
     );
+    final responseBody = _http.isApiV2
+        ? await _http.putV2(
+            'pages/$contentId',
+            body: jsonEncode(_updatePayloadV2(contentId, spec, current + 1)),
+          )
+        : await _http.put(
+            'content/$contentId',
+            body: jsonEncode(_updatePayload(contentId, spec, current + 1)),
+          );
     return jsonDecode(responseBody) as Map<String, dynamic>;
   }
 
-  /// Fetches the current version number of [contentId] (Java `updatePage`).
+  /// Fetches the current version number of [contentId] (Java `updatePage`):
+  /// v2 reads `pages/{id}` directly, v1 expands `version` on `content/{id}`.
   Future<int> _fetchVersion(String contentId) async {
-    final body = await _http.get('content/$contentId', queryParams: {
-      'expand': 'version',
-    });
+    final body = _http.isApiV2
+        ? await _http.getV2('pages/$contentId')
+        : await _http.get('content/$contentId', queryParams: {
+            'expand': 'version',
+          });
     final decoded = jsonDecode(body) as Map<String, dynamic>;
     final version = decoded['version'] as Map<String, dynamic>?;
     return (version?['number'] as num?)?.toInt() ?? 0;
@@ -197,8 +250,27 @@ class ConfluenceClient {
         'space': {'key': page.space},
         'version': {'number': version, 'message': page.historyComment},
         'body': {
-          'storage': {'value': page.body, 'representation': 'storage'},
+          _kStorage: {'value': page.body, 'representation': _kStorage},
         },
+      };
+
+  /// Builds the v2 page update payload (Java `updatePage` v2 branch): no
+  /// ancestors/space, explicit `current` status, and the bumped version
+  /// carrying the history comment.
+  Map<String, dynamic> _updatePayloadV2(
+    String id,
+    _PageUpdateSpec page,
+    int version,
+  ) =>
+      {
+        'id': id,
+        'status': 'current',
+        'title': page.title,
+        'body': {
+          'representation': _kStorage,
+          'value': page.body,
+        },
+        'version': {'number': version, 'message': page.historyComment},
       };
 
   /// `confluence_search` — GET `content/search?cql=`.
@@ -236,6 +308,27 @@ class ConfluenceClient {
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
+  /// Resolves a Confluence space key (e.g. `PROJ`) to the numeric space id
+  /// required by the v2 API via `GET /wiki/api/v2/spaces?keys=…`. v2 only;
+  /// the v1 API addresses spaces by key directly.
+  ///
+  /// Throws [StateError] when no space with the given key exists or the
+  /// matched space carries no `id` (Java `getString("id")` fails fast the
+  /// same way instead of leaking a `"null"` space id downstream).
+  /// Java parity: `Confluence.spaceIdFromKey`.
+  Future<String> spaceIdFromKey(String spaceKey) async {
+    final body = await _http.getV2('spaces', queryParams: {'keys': spaceKey});
+    final results = _resultList(jsonDecode(body) as Map<String, dynamic>);
+    if (results.isEmpty) {
+      throw StateError('Confluence space not found by key: $spaceKey');
+    }
+    final id = results.first['id'];
+    if (id == null) {
+      throw StateError('Confluence space by key $spaceKey returned no id');
+    }
+    return id.toString();
+  }
+
   /// `confluence_get_page_by_id` / `confluence_content_by_id` — GET
   /// `content/{id}?expand=body.storage,body.export_view,ancestors,version`.
   ///
@@ -248,7 +341,7 @@ class ConfluenceClient {
       // body.storage.value). Required for granular/scoped tokens.
       final body = await _http.getV2(
         'pages/$id',
-        queryParams: {'body-format': 'storage'},
+        queryParams: {'body-format': _kStorage},
       );
       return jsonDecode(body) as Map<String, dynamic>;
     }
@@ -272,9 +365,16 @@ class ConfluenceClient {
 
   /// `confluence_get_page_attachments` — GET `content/{id}/child/attachment`.
   ///
-  /// Returns the attachments of the page with [pageId].
-  Future<List<Map<String, dynamic>>> getPageAttachments(String pageId) =>
-      _getList('content/$pageId/child/attachment');
+  /// Under `CONFLUENCE_API_VERSION=v2` uses
+  /// `GET /wiki/api/v2/pages/{id}/attachments` (the `{"results":[…]}` envelope
+  /// is v1-compatible). Required for granular/scoped tokens.
+  /// Java parity: `Confluence.getContentAttachments`.
+  Future<List<Map<String, dynamic>>> getPageAttachments(String pageId) {
+    if (_http.isApiV2) {
+      return _getListV2('pages/$pageId/attachments');
+    }
+    return _getList('content/$pageId/child/attachment');
+  }
 
   /// `confluence_download_attachment` — GET
   /// `content/{pageId}/child/attachment/{attachmentId}/download`.
@@ -323,7 +423,7 @@ class ConfluenceClient {
       return _getListV2('pages', queryParams: {
         'parent-id': id,
         'limit': '100',
-        'body-format': 'storage',
+        'body-format': _kStorage,
       });
     }
     return _getList('content/$id/child/page');
@@ -456,224 +556,6 @@ class ConfluenceClient {
   Future<List<Map<String, dynamic>>> getWatchers(String contentId) =>
       _getList('content/$contentId/notification');
 
-  // ── gh-191: Java-named tools from the frozen gap snapshot ────────────────
-
-  /// `confluence_content_by_title` — GET `content?title=&expand=…` in the
-  /// configured default space (Java `contentByTitleInDefaultSpace`).
-  ///
-  /// Returns the full listing response; [format] `md`/`markdown` converts
-  /// every result's storage body to Markdown in place.
-  Future<Map<String, dynamic>> contentByTitle(
-    String title, [
-    String? format,
-  ]) async {
-    final space = defaultSpace;
-    if (space == null) {
-      throw StateError('Default space not set');
-    }
-    return contentByTitleAndSpace(title, space, format);
-  }
-
-  /// `confluence_content_by_title_and_space` — GET
-  /// `content?title=&spaceKey=&expand=…` (Java `content`).
-  Future<Map<String, dynamic>> contentByTitleAndSpace(
-    String title,
-    String space, [
-    String? format,
-  ]) async {
-    final body = await _http.get('content', queryParams: {
-      'expand': 'body.storage,body.export_view,ancestors,version',
-      'title': title,
-      if (space.isNotEmpty) 'spaceKey': space,
-    });
-    final decoded = jsonDecode(body) as Map<String, dynamic>;
-    _applyFormat(_resultList(decoded), format);
-    return decoded;
-  }
-
-  /// `confluence_find_content` — first match by title (in [space] or the
-  /// configured default space), or `null` (Java `findContent`).
-  Future<Map<String, dynamic>?> findContent(
-    String title, {
-    String? space,
-    String? format,
-  }) async {
-    final effectiveSpace = space ?? defaultSpace;
-    if (effectiveSpace == null) {
-      throw StateError('Default space not set');
-    }
-    final listing = await contentByTitleAndSpace(title, effectiveSpace, null);
-    final contents = _resultList(listing);
-    if (contents.isEmpty) return null;
-    _applyFormat([contents.first], format);
-    return contents.first;
-  }
-
-  /// `confluence_find_or_create` — find by title in the default space or
-  /// create under [parentId] (Java `findOrCreate`).
-  Future<Map<String, dynamic>> findOrCreate(
-    String title,
-    String parentId,
-    String body,
-  ) async {
-    final space = defaultSpace;
-    if (space == null) {
-      throw StateError('Default space not set');
-    }
-    final existing = await findContent(title, space: space);
-    return existing ?? createPage(space, title, body, parentId: parentId);
-  }
-
-  /// `confluence_get_children_by_name` — children of the page found by
-  /// title in [spaceKey] (Java `getChildrenOfContentByName`).
-  Future<List<Map<String, dynamic>>> getChildrenByName(
-    String spaceKey,
-    String contentName, [
-    String? format,
-  ]) async {
-    final parent = await findContent(contentName, space: spaceKey);
-    if (parent == null) {
-      throw StateError('Content not found: $contentName');
-    }
-    final children = await getContentChildren(parent['id'] as String);
-    _applyFormat(children, format);
-    return children;
-  }
-
-  /// `confluence_get_content_attachments` — GET
-  /// `content/{contentId}/child/attachment` (Java `getContentAttachments`).
-  Future<List<Map<String, dynamic>>> getContentAttachments(String contentId) =>
-      getPageAttachments(contentId);
-
-  /// `confluence_get_current_user_profile` — GET `user/current`.
-  Future<Map<String, dynamic>> getCurrentUserProfile() async {
-    final body = await _http.get('user/current');
-    return jsonDecode(body) as Map<String, dynamic>;
-  }
-
-  /// `confluence_get_user_profile_by_id` — GET `user?accountId={userId}`.
-  Future<Map<String, dynamic>> getUserProfileById(String userId) async {
-    final body = await _http.get('user', queryParams: {'accountId': userId});
-    return jsonDecode(body) as Map<String, dynamic>;
-  }
-
-  /// `confluence_search_content_by_text` — CQL `(title ~ … OR text ~ …)`
-  /// search with the Java expand list (Java `searchContentByText`; the
-  /// GraphQL fast path is not ported).
-  Future<List<Map<String, dynamic>>> searchContentByText(
-    String query, [
-    int? limit,
-  ]) =>
-      _getList(
-        'content/search',
-        queryParams: {
-          'cql':
-              '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
-          'limit': '${limit ?? 20}',
-          'expand': 'title,body.excerpt,history,space,body.storage',
-        },
-      );
-
-  /// `confluence_update_page_with_history` — [updatePage] whose bumped
-  /// version message is [historyComment] (Java tool of the same name).
-  Future<Map<String, dynamic>> updatePageWithHistory({
-    required String contentId,
-    required String title,
-    required String parentId,
-    required String body,
-    required String space,
-    required String historyComment,
-  }) =>
-      updatePage(contentId, title, parentId, body, space, historyComment);
-
-  /// `confluence_contents_by_urls` — resolve each URL to its content,
-  /// skipping failures like Java (`contentsByUrls`).
-  Future<List<Map<String, dynamic>>> contentsByUrls(
-    List<String> urlStrings, [
-    String? format,
-  ]) async {
-    final contents = <Map<String, dynamic>>[];
-    for (final url in urlStrings) {
-      if (url.isEmpty) continue;
-      try {
-        final content = await contentByUrl(url);
-        if (content != null) contents.add(content);
-      } on Object {
-        continue; // Java logs and continues on per-URL failures.
-      }
-    }
-    _applyFormat(contents, format);
-    return contents;
-  }
-
-  /// `contentByUrl` — resolves a Confluence page URL to its content object
-  /// (Java `contentByUrl`): `/spaces/{s}/pages/{id}[/title]` direct ids,
-  /// `/display/{s}/{title}` lookups, `/wiki/x/{key}` and `/l/…` short
-  /// links resolved through their 3xx Location. Returns `null` for unknown
-  /// URL shapes.
-  Future<Map<String, dynamic>?> contentByUrl(String urlString) async {
-    final parsed = Uri.tryParse(urlString);
-    if (parsed == null) return null;
-    final ref = await _resolveRef(parsed);
-    if (ref is ConfluencePageIdRef) return getPageById(ref.id);
-    if (ref is ConfluenceDisplayRef) {
-      final listing = await contentByTitleAndSpace(ref.title, ref.space);
-      final contents = _resultList(listing);
-      return contents.isEmpty ? null : contents.first;
-    }
-    return null;
-  }
-
-  /// Resolves [uri] through short-link redirect hops (max 5, Java parity):
-  /// each 3xx `Location` is followed and re-classified until a direct
-  /// page-id / display ref (or an unknown shape) remains. Returns `null`
-  /// when a hop fails or the hop budget is exhausted.
-  Future<ConfluencePageRef?> _resolveRef(Uri uri) async {
-    var current = uri;
-    var ref = resolveConfluencePageUrl(current);
-    var hops = 0;
-    while (ref is ConfluenceRedirectRef && hops < 5) {
-      hops++;
-      final location = await _resolveRedirect(current);
-      if (location == null) return null;
-      final next = Uri.tryParse(location);
-      if (next == null) return null;
-      current = next;
-      ref = resolveConfluencePageUrl(current);
-    }
-    return ref is ConfluenceRedirectRef ? null : ref;
-  }
-
-  /// Follows one 3xx hop for [uri], returning the `Location` URL, or `null`
-  /// when the response is not a redirect (dio follows redirects by default;
-  /// this disables that to mirror Java `resolveRedirect`).
-  ///
-  /// The probe travels authenticated (instances with anonymous access
-  /// disabled answer 302 → login otherwise) and any non-redirect outcome —
-  /// including a thrown 4xx/5xx — degrades to `null` so one dead short link
-  /// never aborts a whole `downloadPages` call.
-  Future<String?> _resolveRedirect(Uri uri) async {
-    try {
-      final response = await _http.dio.getUri<dynamic>(
-        uri,
-        options: Options(
-          followRedirects: false,
-          validateStatus: (_) => true,
-          headers: _http.headers,
-        ),
-      );
-      final location = response.headers.value('location');
-      return (response.statusCode != null &&
-              response.statusCode! >= 300 &&
-              response.statusCode! < 400 &&
-              location != null)
-          ? location
-          : null;
-    } on DioException {
-      return null;
-    }
-  }
-
   /// Decodes a dio response body that may arrive as String or JSON.
   ///
   /// Non-JSON strings (HTML error pages from proxies, text/plain bodies)
@@ -701,7 +583,7 @@ class ConfluenceClient {
     if (f != 'md' && f != 'markdown') return;
     for (final content in contents) {
       final body = content['body'];
-      final storage = body is Map ? body['storage'] : null;
+      final storage = body is Map ? body[_kStorage] : null;
       if (storage is! Map || storage['value'] is! String) continue;
       body.remove('export_view'); // redundant once Markdown is returned
       storage['value'] =

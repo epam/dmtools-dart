@@ -67,8 +67,9 @@ class RoutingAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-/// The Confluence config injected for every fixture built by [mockConfluence].
-const _testConfig = {
+/// The Confluence config injected for every fixture built by this library
+/// (single source of truth — also consumed by `confluence_api_v2_test.dart`).
+const confluenceTestConfig = {
   'CONFLUENCE_BASE_PATH': 'https://confluence.example.com/wiki',
   'CONFLUENCE_EMAIL': 'dev@example.com',
   'CONFLUENCE_API_TOKEN': 'tok-123',
@@ -90,7 +91,7 @@ MockConfluenceFixture mockConfluence(
 
 /// Builds a [ConfluenceHttpClient] over a mocked [Dio] routed by [router].
 MockHttpFixture mockHttp(String Function(RequestOptions options) router) {
-  PropertyReader.setOverrides(_testConfig);
+  PropertyReader.setOverrides(confluenceTestConfig);
   final adapter = RoutingAdapter(router);
   final dio = Dio()..httpClientAdapter = adapter;
   return (
@@ -105,7 +106,7 @@ MockHttpFixture mockHttpWithAuth(
   required String authType,
 }) {
   PropertyReader.setOverrides({
-    ..._testConfig,
+    ...confluenceTestConfig,
     'CONFLUENCE_AUTH_TYPE': authType,
   });
   final adapter = RoutingAdapter(router);
@@ -119,7 +120,7 @@ MockHttpFixture mockHttpWithAuth(
 /// Builds a [ConfluenceClient] over a fully custom adapter (for tests that
 /// need non-default status codes or content types).
 ConfluenceClient clientOnAdapter(HttpClientAdapter adapter) {
-  PropertyReader.setOverrides(_testConfig);
+  PropertyReader.setOverrides(confluenceTestConfig);
   final dio = Dio()..httpClientAdapter = adapter;
   return ConfluenceClient(ConfluenceHttpClient(PropertyReader(), dio: dio));
 }
@@ -197,7 +198,7 @@ typedef RedirectConfluenceFixture = ({
 RedirectConfluenceFixture mockRedirectConfluence(
   Map<String, RedirectRoute> routes,
 ) {
-  PropertyReader.setOverrides(_testConfig);
+  PropertyReader.setOverrides(confluenceTestConfig);
   final adapter = RedirectAdapter(routes);
   final dio = Dio()..httpClientAdapter = adapter;
   return (

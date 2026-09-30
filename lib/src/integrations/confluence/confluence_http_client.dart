@@ -92,6 +92,30 @@ class ConfluenceHttpClient extends BaseHttpClient {
     return response.data ?? '';
   }
 
+  /// Performs a POST request against the Confluence v2 API.
+  ///
+  /// Mirrors [post] but routes through [buildUrlV2].
+  Future<String> postV2(String path, {Object? body}) async {
+    final response = await dio.post<String>(
+      buildUrlV2(path),
+      data: body,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
+  /// Performs a PUT request against the Confluence v2 API.
+  ///
+  /// Mirrors [put] but routes through [buildUrlV2].
+  Future<String> putV2(String path, {Object? body}) async {
+    final response = await dio.put<String>(
+      buildUrlV2(path),
+      data: body,
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
   @override
   Map<String, String> get authHeaders => {
         'Authorization': _authValue,

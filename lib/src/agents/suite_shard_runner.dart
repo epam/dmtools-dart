@@ -19,13 +19,37 @@ import 'suite_sharding.dart';
 /// Resolved `run_all.json` content.
 class AgentsSuiteConfig {
   /// Resolved config.
-  const AgentsSuiteConfig({required this.jsPath, required this.testFiles});
+  const AgentsSuiteConfig({
+    required this.jsPath,
+    required this.testFiles,
+    required this.jobParams,
+  });
 
   /// `params.jsPath` — the runner script, relative to the agents root.
   final String jsPath;
 
   /// `params.jobParams.testFiles` — the canonical L4 test file list.
   final List<String> testFiles;
+
+  /// The raw `params.jobParams` map. The historical serial runner
+  /// forwarded the WHOLE map to the engine (edge case E2: nothing
+  /// hardcoded, re-derived from run_all.json every run) — only
+  /// `testFiles` is replaced by the planned subset. Typed loosely on
+  /// purpose: a future upstream key of any JSON shape must survive.
+  final Map<String, dynamic> jobParams;
+}
+
+/// Builds the engine's jobParams for [testFiles]: every run_all.json
+/// `jobParams` key verbatim, with `testFiles` replaced by the planned
+/// subset (the one key the runner owns).
+Map<String, dynamic> buildSuiteJobParams(
+  AgentsSuiteConfig config,
+  List<String> testFiles,
+) {
+  return <String, dynamic>{
+    ...config.jobParams,
+    'testFiles': testFiles,
+  };
 }
 
 /// Thrown when `run_all.json` is missing or malformed.
@@ -48,6 +72,7 @@ AgentsSuiteConfig loadAgentsSuiteConfig(String agentsPath) {
   return AgentsSuiteConfig(
     jsPath: _requireString(params, 'jsPath'),
     testFiles: _requireStringList(jobParams, 'testFiles'),
+    jobParams: Map<String, dynamic>.from(jobParams),
   );
 }
 
@@ -115,7 +140,7 @@ int runAgentsSuite(
   final planned = _planOrReport(args, config, err);
   if (planned == null) return 1;
   if (!_preflightOrReport(args, planned, err)) return 1;
-  return _runEngine(args, planned, config.jsPath, out, err);
+  return _runEngine(args, planned, config, out, err);
 }
 
 /// Semantic flag-combination validation (AC2); serial runs only carry the
@@ -227,7 +252,7 @@ bool _preflightOrReport(
 int _runEngine(
   SuiteShardArgs args,
   List<String> planned,
-  String jsPath,
+  AgentsSuiteConfig config,
   void Function(String line) out,
   void Function(String line) err,
 ) {
@@ -239,8 +264,8 @@ int _runEngine(
   String? result;
   try {
     result = const JsJobRunner().runScript(
-      scriptPath: '${args.agentsPath}/$jsPath',
-      jobParams: {'testFiles': planned},
+      scriptPath: '${args.agentsPath}/${config.jsPath}',
+      jobParams: buildSuiteJobParams(config, planned),
       workingDirectory: args.agentsPath,
     );
   } catch (e) {

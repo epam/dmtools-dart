@@ -281,6 +281,7 @@ function action(params) {
 
     setUp(() {
       tree.extraJobParams['extraFlag'] = 'present';
+      tree.writeRunAll(); // rewrite run_all.json with the extra key
       useKeyCheckingRunner();
     });
 

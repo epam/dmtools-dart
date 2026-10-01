@@ -81,20 +81,34 @@ ShardParityReport runShardParity({
   int totalShards = 4,
 }) {
   final config = loadAgentsSuiteConfig(agentsPath);
-  final serialOutcome = _runOnce(
-    agentsPath: agentsPath,
-    jsPath: config.jsPath,
-    label: 'serial',
-    testFiles: config.testFiles,
-  );
+  ShardOutcome runOnce(String label, List<String> testFiles) {
+    try {
+      final result = const JsJobRunner().runScript(
+        scriptPath: '${agentsPath}/${config.jsPath}',
+        // Same contract as the runner: the whole run_all.json jobParams
+        // map verbatim, testFiles replaced by the run's list (E2).
+        jobParams: buildSuiteJobParams(config, testFiles),
+        workingDirectory: agentsPath,
+      );
+      return _decodeOutcome(label, result);
+    } catch (e) {
+      return ShardOutcome(
+        label: label,
+        success: false,
+        passed: 0,
+        failed: 0,
+        crash: '$e',
+      );
+    }
+  }
+
+  final serialOutcome = runOnce('serial', config.testFiles);
   final shardOutcomes = <ShardOutcome>[];
   for (var i = 0; i < totalShards; i++) {
     shardOutcomes.add(
-      _runOnce(
-        agentsPath: agentsPath,
-        jsPath: config.jsPath,
-        label: 'shard ${i + 1}/$totalShards',
-        testFiles: ShardPlanner.split(config.testFiles, i, totalShards),
+      runOnce(
+        'shard ${i + 1}/$totalShards',
+        ShardPlanner.split(config.testFiles, i, totalShards),
       ),
     );
   }
@@ -103,30 +117,6 @@ ShardParityReport runShardParity({
     shardOutcomes: shardOutcomes,
     mismatches: _compare(serialOutcome, shardOutcomes),
   );
-}
-
-ShardOutcome _runOnce({
-  required String agentsPath,
-  required String jsPath,
-  required String label,
-  required List<String> testFiles,
-}) {
-  try {
-    final result = const JsJobRunner().runScript(
-      scriptPath: '$agentsPath/$jsPath',
-      jobParams: {'testFiles': testFiles},
-      workingDirectory: agentsPath,
-    );
-    return _decodeOutcome(label, result);
-  } catch (e) {
-    return ShardOutcome(
-      label: label,
-      success: false,
-      passed: 0,
-      failed: 0,
-      crash: '$e',
-    );
-  }
 }
 
 /// Maps a raw engine result to an outcome; unusable results (undefined,

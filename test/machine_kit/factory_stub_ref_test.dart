@@ -10,10 +10,11 @@
 ///   resolve from RELEASES at run time (vars.AGENTS_VERSION /
 ///   vars.DMTOOLS_VERSION on this repo, 'latest' defaults), so a frozen
 ///   SHA never goes stale.
-/// - `ai-teammate.yml` still calls the historical factory-teammate.yml
-///   inside the `agents` submodule pin (teammate migration is a follow-up)
-///   — there the old in-lockstep contract holds: uses-SHA == submodule
-///   gitlink == the factory_ref input.
+/// - `ai-teammate.yml` calls the factory home (dmtools-agentic-workflows)
+///   pinned to its own immutable SHA; the `agents` submodule gitlink rides
+///   the `factory_ref` input as the ENGINE pin — the two pins are
+///   independent and must never be conflated (uses-SHA ≠ factory_ref by
+///   design now).
 ///
 /// A reusable-workflow `uses:` ref is resolved at run start — a branch
 /// ref executes whatever sits at the branch head, which has already
@@ -37,12 +38,12 @@ const _frozenStubs = {
 
 /// The historical teammate call: inside the agents submodule pin.
 const _teammateStub = '.github/workflows/ai-teammate.yml';
+const _mergeTriggerStub = '.github/workflows/merge-trigger.yml';
 const _teammateFactoryPath = '.github/workflows/factory-teammate.yml';
 
 final _agenticUsesRe = RegExp(
   r'uses:\s*IstiN/dmtools-agentic-workflows/(\S+)@(\S+)',
 );
-final _agentsUsesRe = RegExp(r'uses:\s*IstiN/dmtools-agents/(\S+)@(\S+)');
 
 void main() {
   group('frozen machine-loop stubs (machine-sm / machine-merge)', () {
@@ -50,7 +51,10 @@ void main() {
     _frozenNoFactoryRef();
     _frozenSecretsMapped();
   });
-  group('teammate stub (historical agents factory, pre-migration)', () {
+  group('merge-trigger stub (factory home: dmtools-agentic-workflows)', () {
+    _mergeTriggerPin();
+  });
+  group('teammate stub (factory home: dmtools-agentic-workflows)', () {
     _teammateLockstepPin();
     _teammateFactoryExists();
     _teammateSecretsMapped();
@@ -143,17 +147,44 @@ void _frozenSecretsMapped() {
   });
 }
 
-/// ai-teammate pins uses: to the submodule gitlink AND passes the same
-/// SHA as factory_ref (the historical factory derives its checkout ref
-/// from the input — it cannot see its own uses: ref).
+/// merge-trigger.yml is the fourth called-workflow stub: it must pin the
+/// AW factory-merge-trigger at an immutable full SHA (own pin — it moves
+/// when the merge-trigger home changes, not in lockstep with the others).
+void _mergeTriggerPin() {
+  test('pins uses: to the AW factory-merge-trigger at an immutable SHA', () {
+    final yml = File(_mergeTriggerStub).readAsStringSync();
+    final match = _agenticUsesRe.firstMatch(yml);
+    expect(match, isNotNull,
+        reason: '$_mergeTriggerStub must call dmtools-agentic-workflows');
+    expect(
+      match!.group(1),
+      '.github/workflows/factory-merge-trigger.yml',
+      reason: '$_mergeTriggerStub must call factory-merge-trigger.yml',
+    );
+    expect(
+      match.group(2),
+      matches(RegExp(r'^[0-9a-f]{40}$')),
+      reason: 'the merge-trigger home pin must be an immutable full SHA '
+          '(got ${match.group(2)})',
+    );
+  });
+}
+
+/// ai-teammate pins uses: to the factory home (dmtools-agentic-workflows,
+/// immutable SHA) AND passes the agents submodule gitlink as factory_ref —
+/// the engine pin. The factory cannot see its own uses: ref, so the stub
+/// hands it the engine ref explicitly.
 void _teammateLockstepPin() {
-  test('pins uses: to the agents submodule SHA + factory_ref in lockstep', () {
+  test(
+      'pins uses: to the factory home SHA + factory_ref to the engine submodule',
+      () {
     final sha = _submodulePin();
     expect(sha, matches(RegExp(r'^[0-9a-f]{40}$')),
         reason: 'gitlink must be a full SHA');
     final yml = File(_teammateStub).readAsStringSync();
-    final match = _agentsUsesRe.firstMatch(yml);
-    expect(match, isNotNull, reason: '$_teammateStub must call dmtools-agents');
+    final match = _agenticUsesRe.firstMatch(yml);
+    expect(match, isNotNull,
+        reason: '$_teammateStub must call dmtools-agentic-workflows');
     expect(
       match!.group(1),
       _teammateFactoryPath,
@@ -161,34 +192,38 @@ void _teammateLockstepPin() {
     );
     expect(
       match.group(2),
-      sha,
-      reason: '$_teammateStub must pin the immutable SHA the agents '
-          'submodule pins (got ${match.group(2)})',
+      matches(RegExp(r'^[0-9a-f]{40}$')),
+      reason: 'the factory home pin must be an immutable full SHA '
+          '(got ${match.group(2)})',
     );
     final refLine = RegExp(r'factory_ref:\s*([0-9a-f]{40})').firstMatch(yml);
     expect(
       refLine,
       isNotNull,
-      reason: '$_teammateStub must pass factory_ref (the historical '
-          'factory declares it required)',
+      reason: '$_teammateStub must pass factory_ref (the factory '
+          'declares it required)',
     );
     expect(
       refLine!.group(1),
-      match.group(2),
-      reason: 'factory_ref must equal the uses pin — engine and '
-          'factory must execute the same commit',
+      sha,
+      reason: 'factory_ref must equal the agents submodule gitlink — '
+          'engine and factory must execute the same commit',
     );
   });
 }
 
-/// The called factory workflow must exist at the pinned commit (in-tree).
+/// The factory workflow lives in dmtools-agentic-workflows now — the
+/// engine repo (agents/ submodule) must NOT carry a factory copy.
+/// SKIPPED until dmtools-agents#591 (retire legacy copies) merges and
+/// this stub's submodule bump lands past it.
 void _teammateFactoryExists() {
-  test('the called factory workflow exists at the pinned commit', () {
+  test('the engine submodule carries no factory-teammate copy',
+      skip: 'pending dmtools-agents#591 + submodule bump', () {
     expect(
       File('agents/$_teammateFactoryPath').existsSync(),
-      isTrue,
-      reason: 'agents/ is the submodule checkout of the pinned '
-          'commit — $_teammateFactoryPath must exist there',
+      isFalse,
+      reason: 'factory workflows moved to dmtools-agentic-workflows — '
+          'a copy under agents/ would be an unmanaged legacy route',
     );
   });
 }
@@ -230,13 +265,12 @@ String _submodulePin() {
   return parts[2];
 }
 
-/// The `secrets:` names the historical factory-teammate.yml declares
-/// (read from the in-tree submodule checkout).
+/// The `secrets:` names the factory-teammate.yml declares. The workflow
+/// lives in dmtools-agentic-workflows now (nothing in-tree to parse).
+/// MANUAL LOCKSTEP DUTY: when factory-teammate.yml at the pinned AW SHA
+/// declares/renames a secret, update BOTH this literal AND the mapping
+/// in ai-teammate.yml — otherwise the workflow call fails at startup
+/// ("required secret not mapped") while this test keeps passing stale.
 Set<String> _declaredTeammateSecrets() {
-  final yml = File('agents/$_teammateFactoryPath').readAsStringSync();
-  final block = yml.split('    secrets:').last.split('\n\n').first;
-  return RegExp(
-    r'^\s{6}([A-Z_]+):',
-    multiLine: true,
-  ).allMatches(block).map((m) => m.group(1)!).toSet();
+  return {'SOURCE_GITHUB_TOKEN', 'ZAI_CODE_KEY', 'KIMI_REVIEW_KEY'};
 }

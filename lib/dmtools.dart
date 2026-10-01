@@ -84,6 +84,7 @@ export 'src/integrations/sharepoint/sharepoint_tools.dart';
 export 'src/integrations/kb/kb_client.dart';
 export 'src/integrations/kb/kb_tools.dart';
 export 'src/integrations/mermaid/mermaid_tools.dart';
+export 'src/js/agents_suite.dart';
 export 'src/js/async_job_pool.dart';
 export 'src/js/engine_factory.dart';
 export 'src/js/job_runner.dart';

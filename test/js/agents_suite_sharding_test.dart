@@ -14,6 +14,7 @@ void main() {
   copyAgentTreeGitRefTests();
   rebaseTests();
   runParallelAgentsSuiteTests();
+  runParallelAgentsSuiteFailureTests();
   shardOutcomeTests();
   agentsSuiteReportTests();
   agentsSuiteReportFailureTests();
@@ -410,6 +411,23 @@ ShardInvocation _invocation(int index, int total) => ShardInvocation(
       preludeCode: '',
     );
 
+/// Shared [ParallelSuiteRequest] builder for the parallel-suite groups.
+ParallelSuiteRequest _parallelRequest(
+  Directory tree,
+  void Function(String) out,
+  void Function(String) err,
+) =>
+    ParallelSuiteRequest(
+      agentsPath: tree.path,
+      jsPath: 'js/unit-tests/testRunner.js',
+      jobParams: const {},
+      testFiles: [
+        for (var i = 0; i < 5; i++) 'js/unit-tests/test_f$i.js',
+      ],
+      out: out,
+      err: err,
+    );
+
 void runParallelAgentsSuiteTests() {
   group('runParallelAgentsSuite', () {
     late Directory tree;
@@ -423,23 +441,11 @@ void runParallelAgentsSuiteTests() {
     });
     tearDown(() => tree.delete(recursive: true));
 
-    ParallelSuiteRequest request(List<String> out, List<String> err) =>
-        ParallelSuiteRequest(
-          agentsPath: tree.path,
-          jsPath: 'js/unit-tests/testRunner.js',
-          jobParams: const {},
-          testFiles: [
-            for (var i = 0; i < 5; i++) 'js/unit-tests/test_f$i.js',
-          ],
-          out: out.add,
-          err: err.add,
-        );
-
     test('aggregates chunk outcomes and exits 0 on green', () async {
       final out = <String>[];
       final err = <String>[];
       final code = await runParallelAgentsSuite(
-        request(out, err),
+        _parallelRequest(tree, out.add, err.add),
         runChunk: (chunk) async => ChunkOutcome(
           index: chunk.index,
           result: '{"success":true,"passed":2,"failed":0}',
@@ -453,12 +459,27 @@ void runParallelAgentsSuiteTests() {
       expect(text, contains('Agents suite green: 10 passed, 0 failed.'));
       expect(err.where((l) => l.isNotEmpty), isEmpty);
     });
+  });
+}
+
+void runParallelAgentsSuiteFailureTests() {
+  group('runParallelAgentsSuite failures', () {
+    late Directory tree;
+    setUp(() async {
+      tree = await Directory.systemTemp.createTemp('parallel-suite-red-');
+      for (var i = 0; i < 5; i++) {
+        File('${tree.path}/js/unit-tests/test_f$i.js')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('// file $i\n' * (i + 1));
+      }
+    });
+    tearDown(() => tree.delete(recursive: true));
 
     test('a red chunk fails the run with the historical footer', () async {
       final out = <String>[];
       final err = <String>[];
       final code = await runParallelAgentsSuite(
-        request(out, err),
+        _parallelRequest(tree, out.add, err.add),
         runChunk: (chunk) async => ChunkOutcome(
           index: chunk.index,
           result: chunk.index == 0
@@ -477,7 +498,7 @@ void runParallelAgentsSuiteTests() {
       final out = <String>[];
       final err = <String>[];
       final code = await runParallelAgentsSuite(
-        request(out, err),
+        _parallelRequest(tree, out.add, err.add),
         runChunk: (chunk) async => chunk.index == 1
             ? ChunkOutcome(index: 1, result: 'garbage')
             : ChunkOutcome(

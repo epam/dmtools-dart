@@ -56,6 +56,21 @@ class SyncRetryPolicy {
   /// `SLEEP_TIME_REQUEST`, default 300).
   final int sleepTimeRequestMs;
 
+  /// Java `rateLimitMaxWaitSeconds`: cap for server-mandated rate-limit
+  /// waits (`X-RateLimit-Reset`, or a 429 `Retry-After`) — env/property
+  /// `RATE_LIMIT_MAX_WAIT_SECONDS`, default
+  /// [defaultRateLimitMaxWaitSeconds]. Never capped by [maxDelayMs] and
+  /// never aborted.
+  final int rateLimitMaxWaitSeconds;
+
+  /// Java `MAX_RETRY_AFTER_SECONDS`: abort threshold for a non-rate-limit
+  /// `Retry-After` wait (5 minutes).
+  static const int maxRetryAfterSeconds = 300;
+
+  /// Java `DEFAULT_RATE_LIMIT_MAX_WAIT_SECONDS`: default cap for a genuine
+  /// rate-limit wait (60 minutes — GitHub resets up to ~hourly).
+  static const int defaultRateLimitMaxWaitSeconds = 3600;
+
   /// Creates a policy with explicit settings.
   const SyncRetryPolicy({
     required this.maxAttempts,
@@ -66,6 +81,7 @@ class SyncRetryPolicy {
     this.random = const _NeutralRandom(),
     this.waitBeforePerform = false,
     this.sleepTimeRequestMs = 300,
+    this.rateLimitMaxWaitSeconds = defaultRateLimitMaxWaitSeconds,
   });
 
   /// Milliseconds to sleep before each request execution (Java
@@ -113,6 +129,7 @@ class SyncRetryPolicy {
               waitBeforePerform:
                   get('JIRA_WAIT_BEFORE_PERFORM')?.toLowerCase() == 'true',
               sleepTimeRequestMs: _intEnv(get, 'SLEEP_TIME_REQUEST', 300),
+              rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(get),
               random: random ?? Random(),
             );
 
@@ -150,19 +167,25 @@ class SyncRetryPolicy {
   }
 
   /// Delay before the next attempt after a retryable-status [attempt]
-  /// (1-based), honoring `Retry-After` then `X-RateLimit-Reset` from
-  /// [headers], then exponential backoff with jitter. Returns `null` when a
-  /// `Retry-After` above the 300s cap demands an abort (Java throws).
-  int? statusDelayMs(int attempt, [Map<String, String> headers = const {}]) {
-    final serverDelay = _serverDelayMs(headers, DateTime.now());
-    if (serverDelay == null) return null; // Retry-After over the cap: abort
-    final base = serverDelay != 0
-        ? serverDelay
-        : min(
-            maxDelayMs,
-            (baseDelayMs * pow(backoffMultiplier, attempt - 1)).toInt(),
-          );
-    return _addJitter(base);
+  /// (1-based): server `Retry-After` / `X-RateLimit-Reset` headers from
+  /// [headers] first, then exponential backoff with jitter. [statusCode]
+  /// (the failing response's code) marks a genuine rate limit: its
+  /// `Retry-After` may exceed [maxRetryAfterSeconds] and is honored up to
+  /// [rateLimitMaxWaitSeconds] instead (Java PR epam/dm.ai#624). Returns
+  /// `null` when a non-rate-limit `Retry-After` above [maxRetryAfterSeconds]
+  /// demands an abort (Java throws IOException).
+  int? statusDelayMs(int attempt,
+      [Map<String, String> headers = const {}, int statusCode = 0]) {
+    final server = _serverDelayMs(headers, DateTime.now(), statusCode);
+    if (server == null) return null; // Retry-After over the cap: abort
+    if (server.ms > 0)
+      return server.jittered ? _addJitter(server.ms) : server.ms;
+    return _addJitter(
+      min(
+        maxDelayMs,
+        (baseDelayMs * pow(backoffMultiplier, attempt - 1)).toInt(),
+      ),
+    );
   }
 
   /// Java's connection-error schedule: `200 * 2^(attempt-1)` capped at 5s,
@@ -170,28 +193,47 @@ class SyncRetryPolicy {
   int connectionDelayMs(int attempt) =>
       min(5000, 200 * pow(2, attempt - 1).toInt());
 
-  /// Server-mandated delay: `Retry-After` seconds (abort above 300s,
-  /// surfaced as `null`), else `X-RateLimit-Reset` (unix seconds, +1s
-  /// buffer, capped at [maxDelayMs]). Returns `0` when no server header
-  /// applies.
-  int? _serverDelayMs(Map<String, String> headers, DateTime now) {
+  /// Server-mandated delay (Java `calculateDelayMs` header branches):
+  /// `null` aborts (non-rate-limit `Retry-After` above
+  /// [maxRetryAfterSeconds]); otherwise the milliseconds to wait plus
+  /// whether the Java branch applies jitter to it (`Retry-After` does,
+  /// `X-RateLimit-Reset` does not). `(0, jittered: false)` = no server
+  /// header applies — fall through to exponential backoff.
+  _ServerDelay? _serverDelayMs(
+      Map<String, String> headers, DateTime now, int statusCode) {
     final retryAfter = _header(headers, 'retry-after');
     if (retryAfter != null) {
       final seconds = int.tryParse(retryAfter);
-      if (seconds != null) {
-        if (seconds > 300) return null; // abort
-        return _addJitter(seconds * 1000);
-      }
+      if (seconds != null) return _retryAfterDelayMs(seconds, statusCode);
     }
     final reset = _header(headers, 'x-ratelimit-reset');
     if (reset != null) {
       final resetMs = int.tryParse(reset);
       if (resetMs != null) {
         final delay = resetMs * 1000 - now.millisecondsSinceEpoch;
-        if (delay > 0) return min(delay + 1000, maxDelayMs);
+        if (delay > 0) {
+          // Honor the server's reset time (GitHub resets up to ~60 min
+          // out): +1s buffer capped at the configurable rate-limit cap —
+          // never by [maxDelayMs], never aborted, no jitter (Java parity).
+          return (
+            ms: min(delay + 1000, rateLimitMaxWaitSeconds * 1000),
+            jittered: false,
+          );
+        }
       }
     }
-    return 0;
+    return const (ms: 0, jittered: false);
+  }
+
+  /// Java `Retry-After` branch: aborts (`null`) when a non-429 wait exceeds
+  /// [maxRetryAfterSeconds]; a 429 rate limit is honored up to
+  /// [rateLimitMaxWaitSeconds] instead — capped, never aborted.
+  _ServerDelay? _retryAfterDelayMs(int seconds, int statusCode) {
+    final rateLimited = statusCode == 429;
+    if (!rateLimited && seconds > maxRetryAfterSeconds) return null; // abort
+    var ms = seconds * 1000;
+    if (rateLimited) ms = min(ms, rateLimitMaxWaitSeconds * 1000);
+    return (ms: ms, jittered: true);
   }
 
   /// Case-insensitive [name] lookup over [headers].
@@ -212,10 +254,26 @@ class SyncRetryPolicy {
   static int _intEnv(String? Function(String) get, String key, int fallback) =>
       int.tryParse(get(key) ?? '') ?? fallback;
 
+  /// Java `resolveRateLimitMaxWaitSeconds`: parses
+  /// `RATE_LIMIT_MAX_WAIT_SECONDS`, falling back to
+  /// [defaultRateLimitMaxWaitSeconds] when unset, unparsable, or `<= 0`.
+  static int _rateLimitMaxWaitSeconds(String? Function(String) get) {
+    final value = (get('RATE_LIMIT_MAX_WAIT_SECONDS') ?? '').trim();
+    final parsed = int.tryParse(value);
+    return (parsed != null && parsed > 0)
+        ? parsed
+        : defaultRateLimitMaxWaitSeconds;
+  }
+
   static double _doubleEnv(
           String? Function(String) get, String key, double fallback) =>
       double.tryParse(get(key) ?? '') ?? fallback;
 }
+
+/// Server-mandated delay outcome: the milliseconds to wait plus whether
+/// Java jitters that branch (`Retry-After` is jittered, `X-RateLimit-Reset`
+/// is returned verbatim).
+typedef _ServerDelay = ({int ms, bool jittered});
 
 /// Jitter-neutral [Random] used as the const default (always returns the
 /// 0.5 midpoint so `addJitter` is a no-op); the factories override it with

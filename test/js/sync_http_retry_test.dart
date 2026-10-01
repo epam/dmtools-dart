@@ -237,8 +237,8 @@ void rateLimitWaitTests() {
 
     test('long X-RateLimit-Reset wait is honored, not capped at maxDelayMs',
         () {
-      final delay = policy
-          .statusDelayMs(1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
+      final delay = policy.statusDelayMs(
+          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
       // ~600s + 1s buffer; maxDelayMs is 60s and must not cap it.
       expect(delay, greaterThan(policy.maxDelayMs));
       expect(delay, inInclusiveRange(595000, 602000));
@@ -252,8 +252,8 @@ void rateLimitWaitTests() {
         backoffMultiplier: 2.0,
         jitterFactor: 0.0,
       );
-      final delay = tiny
-          .statusDelayMs(1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
+      final delay = tiny.statusDelayMs(
+          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
       expect(delay, inInclusiveRange(595000, 602000));
     });
 
@@ -263,8 +263,7 @@ void rateLimitWaitTests() {
       expect(delay, inInclusiveRange(5000, 7000)); // ~5s + 1s buffer
     });
 
-    test('far-future reset is capped at the default 3600s cap, not thrown',
-        () {
+    test('far-future reset is capped at the default 3600s cap, not thrown', () {
       final delay = policy.statusDelayMs(
           1, {'X-RateLimit-Reset': '${resetSecondsFromNow(7200)}'});
       expect(delay, SyncRetryPolicy.defaultRateLimitMaxWaitSeconds * 1000);
@@ -278,11 +277,11 @@ void rateLimitWaitTests() {
       expect(delay, inInclusiveRange(510000, 690000));
     });
 
-    test('429 Retry-After above the rate-limit cap is capped, not aborted',
-        () {
+    test('429 Retry-After above the rate-limit cap is capped, not aborted', () {
       final delay = policy.statusDelayMs(1, const {'Retry-After': '7200'}, 429);
       final capMs = SyncRetryPolicy.defaultRateLimitMaxWaitSeconds * 1000;
-      expect(delay, inInclusiveRange((capMs * 0.84).toInt(), (capMs * 1.16).toInt()));
+      expect(delay,
+          inInclusiveRange((capMs * 0.84).toInt(), (capMs * 1.16).toInt()));
     });
 
     test('non-429 Retry-After beyond 5 minutes still aborts', () {

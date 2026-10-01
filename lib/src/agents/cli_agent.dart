@@ -15,6 +15,10 @@
 /// (per output line; returning `true` stops the batch). Errors in hooks and
 /// actions are caught and logged (the lifecycle continues); only CLI command
 /// failures can fail the run.
+///
+/// Strict mode (`requireCliOutputFile=true`) with no CLI output file skips
+/// `postJSAction` entirely (Java `skipFieldUpdate` parity, epam/dm.ai#622) —
+/// the error summary returned as the response reports the failure instead.
 library;
 
 import 'dart:convert';
@@ -131,13 +135,25 @@ class CliAgent {
         workDir,
       );
       response = await _executeCliCommands(workDir);
-      _executeJsAction(
-        'postJSAction',
-        params.postJSAction,
-        response,
-        _inputContextPath,
-        workDir,
-      );
+      if (_strictModeMissingOutput) {
+        // Java `skipFieldUpdate` parity (epam/dm.ai#622, #409): in strict
+        // mode, never run postJSAction against the failed/missing CLI
+        // response — a post action like closeQuestionTicket would move
+        // tickets to Done on a genuine CLI failure. The error summary in
+        // `response` reports the failure instead.
+        stderr.writeln(
+          'Skipping postJSAction due to missing CLI output file '
+          '(requireCliOutputFile=true)',
+        );
+      } else {
+        _executeJsAction(
+          'postJSAction',
+          params.postJSAction,
+          response,
+          _inputContextPath,
+          workDir,
+        );
+      }
       await _executeScriptHook('cache', params.cache, workDir, response);
       return {
         'success': true,
@@ -374,6 +390,17 @@ class CliAgent {
     String workDir,
   ) {
     return {..._buildExtraGlobals(null, null, workDir), ...context};
+  }
+
+  /// Whether the strict-mode guard applies: `requireCliOutputFile=true` and
+  /// the CLI produced no output response — the same condition that makes
+  /// [_extractResponse] return the error summary. Java sets `skipFieldUpdate`
+  /// from it and skips postJSAction (epam/dm.ai#622, #409).
+  bool get _strictModeMissingOutput {
+    final result = _cliResult;
+    return params.requireCliOutputFile &&
+        result != null &&
+        !result.hasOutputResponse;
   }
 
   /// Extracts the response from the CLI result.

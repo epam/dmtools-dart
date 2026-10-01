@@ -95,21 +95,6 @@ void _invalidComboTests() {
     // below discriminate the two paths.
     final bogusJsPath = 'js/unit-tests/does-not-exist.js';
 
-    List<String> argsWith({
-      required String jsPath,
-      int? shardIndex,
-      int? totalShards,
-      String? manifestOut,
-    }) {
-      tree.setJsPath(jsPath);
-      return [
-        tree.root.path,
-        if (shardIndex != null) ...['--shard-index', '$shardIndex'],
-        if (totalShards != null) ...['--total-shards', '$totalShards'],
-        if (manifestOut != null) ...['--manifest-out', manifestOut],
-      ];
-    }
-
     for (final entry in {
       'index >= total': (index: 2, total: 2, message: '--shard-index'),
       'total < 1': (index: 0, total: 0, message: '--total-shards'),
@@ -141,7 +126,7 @@ void _invalidComboTests() {
           contains(entry.value.message),
         );
       });
-    });
+    }
   });
 }
 

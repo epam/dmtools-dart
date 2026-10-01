@@ -134,7 +134,7 @@ void primePreludeJsTests() {
 void invocationsForTests() {
   group('invocationsFor', () {
     test('composes testFiles as prime + counted and keeps other jobParams', () {
-      final config = AgentsSuiteConfig(
+      final config = SuiteRunConfig(
         jsPath: 'js/unit-tests/testRunner.js',
         jobParams: {
           'testFiles': ['a.js', 'b.js'],
@@ -275,9 +275,9 @@ void rebaseTests() {
 }
 
 void shardOutcomeTests() {
-  group('ShardOutcome', () {
+  group('ChunkOutcome', () {
     test('parses well-formed results', () {
-      const outcome = ShardOutcome(
+      const outcome = ChunkOutcome(
         index: 0,
         result: '{"success":true,"passed":12,"failed":0}',
       );
@@ -289,23 +289,23 @@ void shardOutcomeTests() {
     test(
         'null, non-object, invalid-JSON and non-integer results are '
         'malformed', () {
-      expect(const ShardOutcome.crashed(0, 'boom').malformed, isTrue);
-      expect(const ShardOutcome(index: 0, result: '"just a string"').malformed,
+      expect(const ChunkOutcome.crashed(0, 'boom').malformed, isTrue);
+      expect(const ChunkOutcome(index: 0, result: '"just a string"').malformed,
           isTrue);
-      expect(const ShardOutcome(index: 0, result: 'garbage').malformed, isTrue);
+      expect(const ChunkOutcome(index: 0, result: 'garbage').malformed, isTrue);
       expect(
-        const ShardOutcome(index: 0, result: '{"passed":"12","failed":0}')
+        const ChunkOutcome(index: 0, result: '{"passed":"12","failed":0}')
             .malformed,
         isTrue,
       );
       // Crash outcomes contribute no counts.
-      expect(const ShardOutcome.crashed(0, 'boom').passed, 0);
-      expect(const ShardOutcome.crashed(0, 'boom').failed, 0);
+      expect(const ChunkOutcome.crashed(0, 'boom').passed, 0);
+      expect(const ChunkOutcome.crashed(0, 'boom').failed, 0);
     });
   });
 }
 
-ShardOutcome _ok(int index, int passed) => ShardOutcome(
+ChunkOutcome _ok(int index, int passed) => ChunkOutcome(
       index: index,
       result: '{"success":true,"passed":$passed,"failed":0}',
     );
@@ -321,7 +321,7 @@ void agentsSuiteReportTests() {
     });
 
     test('a red shard fails the run but keeps the sums', () {
-      final red = ShardOutcome(
+      final red = ChunkOutcome(
         index: 1,
         result: '{"success":false,"passed":7,"failed":4}',
       );
@@ -344,7 +344,7 @@ void agentsSuiteReportFailureTests() {
   group('AgentsSuiteReport failures', () {
     test('one malformed shard fails the whole run', () {
       final report = AgentsSuiteReport.fromShards(
-        [_ok(0, 10), const ShardOutcome(index: 1, result: 'garbage')],
+        [_ok(0, 10), const ChunkOutcome(index: 1, result: 'garbage')],
       );
       expect(report.success, isFalse);
       expect(report.malformedShards, [1]);
@@ -353,7 +353,7 @@ void agentsSuiteReportFailureTests() {
 
     test('one crashed shard fails the whole run', () {
       final report = AgentsSuiteReport.fromShards(
-        [_ok(0, 10), const ShardOutcome.crashed(1, 'isolate died')],
+        [_ok(0, 10), const ChunkOutcome.crashed(1, 'isolate died')],
       );
       expect(report.success, isFalse);
       expect(report.crashedShards, [1]);
@@ -371,9 +371,9 @@ void agentsSuiteReportFailureTests() {
   group('diagnostics helpers', () {
     test('shardDiagnostics describes crashed and malformed chunks', () {
       const outcomes = [
-        ShardOutcome(index: 0, result: '{"passed":1,"failed":0}'),
-        ShardOutcome.crashed(1, 'isolate died'),
-        ShardOutcome(index: 2, result: 'garbage'),
+        ChunkOutcome(index: 0, result: '{"passed":1,"failed":0}'),
+        ChunkOutcome.crashed(1, 'isolate died'),
+        ChunkOutcome(index: 2, result: 'garbage'),
       ];
       final text = shardDiagnostics(outcomes);
       expect(text, contains('Chunk 2 crashed: isolate died'));
@@ -383,14 +383,14 @@ void agentsSuiteReportFailureTests() {
 
     test('shardDiagnostics is empty for well-formed chunks', () {
       const outcomes = [
-        ShardOutcome(index: 0, result: '{"passed":1,"failed":2}'),
+        ChunkOutcome(index: 0, result: '{"passed":1,"failed":2}'),
       ];
       expect(shardDiagnostics(outcomes), '');
     });
 
     test('failureSummary carries the totals', () {
       final report = AgentsSuiteReport.fromShards(
-        [const ShardOutcome.crashed(0, 'boom')],
+        [const ChunkOutcome.crashed(0, 'boom')],
       );
       expect(
         failureSummary(report),
@@ -419,7 +419,7 @@ void runChunkQueueTests() {
         await Future<void>.delayed(
           Duration(milliseconds: 40 * (4 - chunk.index)),
         );
-        return ShardOutcome(
+        return ChunkOutcome(
           index: chunk.index,
           result: '{"success":true,"passed":${chunk.index},"failed":0}',
         );
@@ -437,7 +437,7 @@ void runChunkQueueTests() {
         peak = peak > inFlight ? peak : inFlight;
         await Future<void>.delayed(const Duration(milliseconds: 20));
         inFlight--;
-        return ShardOutcome(
+        return ChunkOutcome(
           index: chunk.index,
           result: '{"passed":1,"failed":0}',
         );
@@ -454,7 +454,7 @@ void runChunkQueueTests() {
         peak = peak > inFlight ? peak : inFlight;
         await Future<void>.delayed(const Duration(milliseconds: 5));
         inFlight--;
-        return ShardOutcome(
+        return ChunkOutcome(
           index: chunk.index,
           result: '{"passed":1,"failed":0}',
         );

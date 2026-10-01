@@ -64,9 +64,9 @@ import 'job_runner.dart';
 
 /// Parsed `run_all.json` (JSRunner job config) — everything the suite
 /// runner needs to execute the job.
-class AgentsSuiteConfig {
+class SuiteRunConfig {
   /// Creates a suite config.
-  const AgentsSuiteConfig({
+  const SuiteRunConfig({
     required this.jsPath,
     required this.jobParams,
     required this.testFiles,
@@ -77,7 +77,7 @@ class AgentsSuiteConfig {
   ///
   /// Throws [StateError] with a descriptive message when the file is
   /// missing or malformed (the caller maps that to a hard failure).
-  factory AgentsSuiteConfig.load(String agentsPath) {
+  factory SuiteRunConfig.load(String agentsPath) {
     final configPath = '$agentsPath/js/unit-tests/run_all.json';
     final file = File(configPath);
     if (!file.existsSync()) {
@@ -104,7 +104,7 @@ class AgentsSuiteConfig {
       throw StateError('Config params.jobParams.testFiles must be a '
           'non-empty array of strings');
     }
-    return AgentsSuiteConfig(
+    return SuiteRunConfig(
       jsPath: jsPath,
       jobParams: Map<String, dynamic>.from(jobParams),
       testFiles: List<String>.from(testFiles.whereType<String>()),
@@ -302,7 +302,7 @@ class ShardInvocation {
 /// Builds the invocation for each chunk against [agentsPath].
 List<ShardInvocation> invocationsFor({
   required String agentsPath,
-  required AgentsSuiteConfig config,
+  required SuiteRunConfig config,
   required List<ShardChunk> chunks,
 }) {
   return [
@@ -327,13 +327,13 @@ List<ShardInvocation> invocationsFor({
 /// One shard's outcome — the raw `action()` result JSON, or the error
 /// text when the shard never produced one (isolate crash, wiring error,
 /// script exception). Deeply sendable across `Isolate.run`.
-class ShardOutcome {
+class ChunkOutcome {
   /// Creates a shard outcome.
-  const ShardOutcome({required this.index, this.result, this.error});
+  const ChunkOutcome({required this.index, this.result, this.error});
 
   /// Creates the outcome for a shard that crashed before producing a
   /// result ([error] text only).
-  const ShardOutcome.crashed(this.index, this.error) : result = null;
+  const ChunkOutcome.crashed(this.index, this.error) : result = null;
 
   /// Zero-based shard number.
   final int index;
@@ -392,7 +392,7 @@ class AgentsSuiteReport {
   /// `success` requires EVERY shard to be well-formed, crash-free, and
   /// green, plus a non-zero total pass count — the sharded equivalent
   /// of the old single-run gate (`success && passed > 0 && failed == 0`).
-  factory AgentsSuiteReport.fromShards(List<ShardOutcome> outcomes) {
+  factory AgentsSuiteReport.fromShards(List<ChunkOutcome> outcomes) {
     var passed = 0;
     var failed = 0;
     var allGreen = true;
@@ -454,7 +454,7 @@ class AgentsSuiteReport {
 
 /// Per-chunk stderr diagnostics for crashed/malformed chunks (one line
 /// each; empty when every chunk produced a well-formed result).
-String shardDiagnostics(List<ShardOutcome> outcomes) {
+String shardDiagnostics(List<ChunkOutcome> outcomes) {
   final lines = <String>[];
   for (final outcome in outcomes) {
     if (outcome.error != null) {
@@ -478,7 +478,89 @@ String failureSummary(AgentsSuiteReport report) {
 
 /// Signature of the per-chunk executor — [runChunkInIsolate] in
 /// production, fakes in unit tests.
-typedef ShardRunner = Future<ShardOutcome> Function(ShardInvocation chunk);
+typedef ShardRunner = Future<ChunkOutcome> Function(ShardInvocation chunk);
+
+/// Inputs for [runParallelAgentsSuite] — the no-flag default of
+/// `bin/run_agents_suite.dart`.
+class ParallelSuiteRequest {
+  /// Creates a request.
+  const ParallelSuiteRequest({
+    required this.agentsPath,
+    required this.jsPath,
+    required this.jobParams,
+    required this.testFiles,
+    this.out,
+    this.err,
+  });
+
+  /// dmtools-agents checkout root.
+  final String agentsPath;
+
+  /// `run_all.json` `params.jsPath` (relative to [agentsPath]).
+  final String jsPath;
+
+  /// Base job params (`testFiles` is replaced per chunk).
+  final Map<String, dynamic> jobParams;
+
+  /// Every test file of the suite, in run order.
+  final List<String> testFiles;
+
+  /// Optional stdout sink (defaults to `stdout.writeln`).
+  final void Function(String line)? out;
+
+  /// Optional stderr sink (defaults to `stderr.writeln`).
+  final void Function(String line)? err;
+}
+
+/// Runs the FULL suite (every file in [request.testFiles]) as parallel
+/// chunks and returns the process exit code.
+///
+/// Prints the historical contract through the request sinks: the
+/// planning banner, `Result: {"success":…,"passed":N,"failed":M}`, and
+/// the green/failed footer. Exit codes match the serial runner: 0
+/// green, 1 red or any crashed/malformed chunk.
+Future<int> runParallelAgentsSuite(ParallelSuiteRequest request) async {
+  final writeOut = request.out ?? stdout.writeln;
+  final writeErr = request.err ?? stderr.writeln;
+  final shardCount = resolveShardCount(
+    Platform.environment['DMTOOLS_SUITE_SHARDS'],
+    processors: Platform.numberOfProcessors,
+  );
+  final chunks = planChunks(
+    request.testFiles,
+    chunkCountFor(request.testFiles.length, shardCount),
+    (file) => File('${request.agentsPath}/$file').lengthSync(),
+  );
+  final invocations = invocationsFor(
+    agentsPath: request.agentsPath,
+    config: SuiteRunConfig(
+      jsPath: request.jsPath,
+      jobParams: request.jobParams,
+      testFiles: request.testFiles,
+    ),
+    chunks: chunks,
+  );
+  writeOut(
+    'Agents suite: ${request.testFiles.length} files in ${chunks.length} '
+    'chunks on $shardCount parallel worker(s), each chunk in a '
+    'disposable tree copy.',
+  );
+  final outcomes = await runChunkQueue(
+    invocations,
+    runChunkInIsolate,
+    concurrency: shardCount,
+  );
+  final report = AgentsSuiteReport.fromShards(outcomes);
+  writeOut('Result: ${jsonEncode(report.toJson())}');
+  final diagnostics = shardDiagnostics(outcomes);
+  if (diagnostics.isNotEmpty) writeErr(diagnostics.trim());
+  if (report.exitCode != 0) {
+    writeErr('Agents suite failed: ${failureSummary(report)}');
+    return report.exitCode;
+  }
+  writeOut('Agents suite green: ${report.passed} passed, 0 failed.');
+  return 0;
+}
 
 /// Runs [chunks] through [runChunk] with at most [concurrency] in flight.
 ///
@@ -490,12 +572,12 @@ typedef ShardRunner = Future<ShardOutcome> Function(ShardInvocation chunk);
 /// regardless of completion order, and every counted file still runs
 /// exactly once with its exact serial prefix — totals are identical to
 /// a serial run no matter how the queue interleaves.
-Future<List<ShardOutcome>> runChunkQueue(
+Future<List<ChunkOutcome>> runChunkQueue(
   List<ShardInvocation> chunks,
   ShardRunner runChunk, {
   required int concurrency,
 }) async {
-  final outcomes = List<ShardOutcome?>.filled(chunks.length, null);
+  final outcomes = List<ChunkOutcome?>.filled(chunks.length, null);
   var next = 0;
   Future<void> worker() async {
     while (next < chunks.length) {
@@ -520,7 +602,7 @@ Future<List<ShardOutcome>> runChunkQueue(
 /// same thread that is inside `qjs_eval`). Errors are captured inside
 /// the isolate and returned as a crashed outcome — one dead chunk fails
 /// the run instead of killing the sibling chunks.
-Future<ShardOutcome> runChunkInIsolate(ShardInvocation chunk) {
+Future<ChunkOutcome> runChunkInIsolate(ShardInvocation chunk) {
   return Isolate.run(() => _runChunkSync(chunk));
 }
 
@@ -530,7 +612,7 @@ Future<ShardOutcome> runChunkInIsolate(ShardInvocation chunk) {
 /// disposable copy of the agents tree (see the library docs) unless
 /// `DMTOOLS_SUITE_ISOLATED_COPIES=0`. Never rethrows — a crash becomes
 /// a crashed outcome.
-ShardOutcome _runChunkSync(ShardInvocation chunk) {
+ChunkOutcome _runChunkSync(ShardInvocation chunk) {
   if (!_copiesEnabled()) return _evalChunk(chunk);
   final copyRoot =
       Directory.systemTemp.createTempSync('dmtools-suite-chunk-').path;
@@ -541,7 +623,7 @@ ShardOutcome _runChunkSync(ShardInvocation chunk) {
     _logChunkTiming(chunk, copyWatch, label: 'copy+run');
     return outcome;
   } catch (e) {
-    return ShardOutcome.crashed(chunk.index, '$e');
+    return ChunkOutcome.crashed(chunk.index, '$e');
   } finally {
     Directory(copyRoot).deleteSync(recursive: true);
   }
@@ -671,7 +753,7 @@ dynamic _rebaseValue(dynamic value, String from, String to) {
 
 /// Evaluates the chunk in its own `JsJobRunner` — the part after any
 /// tree copy/rebase has happened.
-ShardOutcome _evalChunk(ShardInvocation chunk) {
+ChunkOutcome _evalChunk(ShardInvocation chunk) {
   final prefix = '[chunk ${chunk.index + 1}/${chunk.total}] ';
   final fileCount = (chunk.jobParams['testFiles'] as List?)?.length ?? 0;
   stderr.writeln('$prefix▶ start ($fileCount files to eval)');
@@ -685,8 +767,8 @@ ShardOutcome _evalChunk(ShardInvocation chunk) {
         preActionCode: chunk.preludeCode,
       ),
     );
-    return ShardOutcome(index: chunk.index, result: result);
+    return ChunkOutcome(index: chunk.index, result: result);
   } catch (e) {
-    return ShardOutcome.crashed(chunk.index, '$e');
+    return ChunkOutcome.crashed(chunk.index, '$e');
   }
 }

@@ -31,7 +31,7 @@ void primingIntegrationTests(String? checkout) {
         // by the earlier test_postPRReviewComments.js in run_all.json
         // order — alone it fails 16/16; with its serial prefix primed it
         // must pass exactly as in the serial run.
-        final config = AgentsSuiteConfig.load(agentsPath);
+        final config = SuiteRunConfig.load(agentsPath);
         final chunks = planChunks(
           [
             'js/unit-tests/test_postPRReviewComments.js',
@@ -72,7 +72,7 @@ void parallelTotalsIntegrationTests(String? checkout) {
         // Also the FFI-parallelism probe: several QuickJS engines with
         // host callbacks run on concurrent isolates in one process;
         // totals must equal the single-context serial run.
-        final config = AgentsSuiteConfig.load(agentsPath);
+        final config = SuiteRunConfig.load(agentsPath);
         const files = [
           'js/unit-tests/test_commentMarkup.js',
           'js/unit-tests/test_configLoader.js',

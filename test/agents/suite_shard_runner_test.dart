@@ -40,6 +40,7 @@ void main() {
   _failingShardTests();
   _realRunnerTests();
   _parityTests();
+  _parityCrashTests();
 }
 
 /// Fixture tree shared by every test in this file (recreated per test).
@@ -506,7 +507,11 @@ void _parityTests() {
       expect(report.serialOutcome.crash, isNotNull);
       expect(report.shardOutcomes.every((o) => o.crash != null), isTrue);
     });
+  }, timeout: const Timeout(Duration(minutes: 2)));
+}
 
+void _parityCrashTests() {
+  group('suite parity — crashed engine outcomes (AC6)', () {
     test('an action() returning undefined is a crashed outcome', () {
       tree.setRunnerScript('function action(params) { return; }');
       final report = runShardParity(

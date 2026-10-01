@@ -62,16 +62,14 @@ class SuiteShardArgs {
           '--shard-index',
         );
         if (!arg.contains('=')) i++; // space form consumed the next token
-      } else if (arg == '--total-shards' ||
-          arg.startsWith('--total-shards=')) {
+      } else if (arg == '--total-shards' || arg.startsWith('--total-shards=')) {
         totalShards = _intValue(
           _valueOf(args, i, problems),
           problems,
           '--total-shards',
         );
         if (!arg.contains('=')) i++;
-      } else if (arg == '--manifest-out' ||
-          arg.startsWith('--manifest-out=')) {
+      } else if (arg == '--manifest-out' || arg.startsWith('--manifest-out=')) {
         manifestOut = _valueOf(args, i, problems);
         if (!arg.contains('=')) i++;
       } else if (arg.startsWith('--')) {

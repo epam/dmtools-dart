@@ -40,14 +40,16 @@ void main() {
 
   group('sharded run (AC2)', () {
     test('runs only the planned subset and writes a valid manifest', () {
-      final manifestPath =
-          '${tree.root.path}/out/manifest-0.json';
+      final manifestPath = '${tree.root.path}/out/manifest-0.json';
       final code = runAgentsSuite(
         SuiteShardArgs.parse([
           tree.root.path,
-          '--shard-index', '0',
-          '--total-shards', '2',
-          '--manifest-out', manifestPath,
+          '--shard-index',
+          '0',
+          '--total-shards',
+          '2',
+          '--manifest-out',
+          manifestPath,
         ]),
       );
 
@@ -66,14 +68,16 @@ void main() {
     });
 
     test('shard 1 gets the complement subset', () {
-      final manifestPath =
-          '${tree.root.path}/out/manifest-1.json';
+      final manifestPath = '${tree.root.path}/out/manifest-1.json';
       final code = runAgentsSuite(
         SuiteShardArgs.parse([
           tree.root.path,
-          '--shard-index', '1',
-          '--total-shards', '2',
-          '--manifest-out', manifestPath,
+          '--shard-index',
+          '1',
+          '--total-shards',
+          '2',
+          '--manifest-out',
+          manifestPath,
         ]),
       );
 
@@ -118,11 +122,7 @@ void main() {
       'index without total': (index: 0, total: null, message: '--total-shards'),
       'total without index': (index: null, total: 2, message: '--shard-index'),
       'empty planned shard': (index: 4, total: 5, message: 'empty'),
-      'missing --manifest-out': (
-        index: 0,
-        total: 2,
-        message: '--manifest-out'
-      ),
+      'missing --manifest-out': (index: 0, total: 2, message: '--manifest-out'),
     }.entries) {
       test('${entry.key} is rejected', () {
         final out = <String>[];
@@ -174,9 +174,12 @@ void main() {
       final code = runAgentsSuite(
         SuiteShardArgs.parse([
           tree.root.path,
-          '--shard-index', '0',
-          '--total-shards', '1',
-          '--manifest-out', manifestPath,
+          '--shard-index',
+          '0',
+          '--total-shards',
+          '1',
+          '--manifest-out',
+          manifestPath,
         ]),
         err: out.add,
       );
@@ -189,17 +192,19 @@ void main() {
       expect(manifest.success, isFalse);
     });
 
-    test('a planned MISSING file fails the shard before the engine runs',
-        () {
+    test('a planned MISSING file fails the shard before the engine runs', () {
       tree.setTestFiles(['js/unit-tests/test_ghost.js']);
       final out = <String>[];
 
       final code = runAgentsSuite(
         SuiteShardArgs.parse([
           tree.root.path,
-          '--shard-index', '0',
-          '--total-shards', '1',
-          '--manifest-out', '${tree.root.path}/out/manifest.json',
+          '--shard-index',
+          '0',
+          '--total-shards',
+          '1',
+          '--manifest-out',
+          '${tree.root.path}/out/manifest.json',
         ]),
         err: out.add,
       );
@@ -233,7 +238,8 @@ void main() {
 
       expect(code, 0);
       // The full list reached the engine: all four files counted as passed.
-      expect(out.join('\n'), contains('Agents suite green: 4 passed, 0 failed.'));
+      expect(
+          out.join('\n'), contains('Agents suite green: 4 passed, 0 failed.'));
       // No manifest on the serial path — sharding is opt-in.
       expect(File('${tree.root.path}/out').existsSync(), isFalse,
           reason: 'serial run must not write shard artifacts');
@@ -262,9 +268,12 @@ void main() {
       final code = runAgentsSuite(
         SuiteShardArgs.parse([
           tree.root.path,
-          '--shard-index', '1',
-          '--total-shards', '3',
-          '--manifest-out', manifestPath,
+          '--shard-index',
+          '1',
+          '--total-shards',
+          '3',
+          '--manifest-out',
+          manifestPath,
         ]),
         err: out.add,
       );
@@ -297,9 +306,12 @@ void main() {
         final code = runAgentsSuite(
           SuiteShardArgs.parse([
             realTree.root.path,
-            '--shard-index', '1',
-            '--total-shards', '2',
-            '--manifest-out', manifestPath,
+            '--shard-index',
+            '1',
+            '--total-shards',
+            '2',
+            '--manifest-out',
+            manifestPath,
           ]),
         );
 
@@ -381,16 +393,20 @@ class FixtureTree {
 
   final List<String> _testFiles = [];
 
-  void addTestFile(String relPath, {required bool ok, bool empty = false,
-      String? content}) {
+  void addTestFile(String relPath,
+      {required bool ok, bool empty = false, String? content}) {
     final file = File('${root.path}/$relPath');
     file.createSync(recursive: true);
     if (empty) {
       file.writeAsStringSync('');
     } else {
-      file.writeAsStringSync(
-          content ?? (ok ? '// passing test file' : 'throw new Error("boom");'));
+      file.writeAsStringSync(content ??
+          (ok ? '// passing test file' : 'throw new Error("boom");'));
     }
+    if (!_testFiles.contains(relPath)) {
+      _testFiles.add(relPath);
+    }
+    _syncRunAll();
   }
 
   /// A fixture test file exercising the REAL testRunner.js global API.
@@ -404,11 +420,21 @@ suite('fixture', function () {
   });
 });
 ''');
+    _testFiles.add(relPath);
   }
 
-  void setTestFiles(List<String> files) => _testFiles
-    ..clear()
-    ..addAll(files);
+  void setTestFiles(List<String> files) {
+    _testFiles
+      ..clear()
+      ..addAll(files);
+    _syncRunAll();
+  }
+
+  void _syncRunAll() {
+    final configPath = '${root.path}/js/unit-tests/run_all.json';
+    if (!File(configPath).existsSync()) return;
+    _writeRunAllFiles();
+  }
 
   void writeRunAll() {
     if (_testFiles.isEmpty) {
@@ -418,7 +444,12 @@ suite('fixture', function () {
         'js/unit-tests/test_b1.js',
         'js/unit-tests/test_b2.js',
       ]);
+      return;
     }
+    _writeRunAllFiles();
+  }
+
+  void _writeRunAllFiles() {
     File('${root.path}/js/unit-tests/run_all.json')
       ..createSync(recursive: true)
       ..writeAsStringSync(jsonEncode({

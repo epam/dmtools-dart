@@ -26,8 +26,8 @@ void main() {
       final files = _synthetic(37);
       for (var n = 1; n <= 5; n++) {
         for (var i = 0; i < n; i++) {
-          expect(ShardPlanner.split(files, i, n),
-              ShardPlanner.split(files, i, n),
+          expect(
+              ShardPlanner.split(files, i, n), ShardPlanner.split(files, i, n),
               reason: 'shard $i/$n must be a pure function of its inputs');
         }
       }
@@ -81,7 +81,9 @@ void main() {
 
     test('round-robin balances the file count across shards', () {
       final files = _synthetic(92);
-      final sizes = [for (var i = 0; i < 4; i++) ShardPlanner.split(files, i, 4).length];
+      final sizes = [
+        for (var i = 0; i < 4; i++) ShardPlanner.split(files, i, 4).length
+      ];
       expect(sizes, everyElement(23));
     });
 

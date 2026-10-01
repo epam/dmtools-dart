@@ -16,7 +16,7 @@ library;
 
 import 'dart:convert';
 
-import 'job_runner.dart';
+import '../js/job_runner.dart';
 import 'suite_shard_runner.dart';
 import 'suite_sharding.dart';
 
@@ -47,8 +47,7 @@ class ShardOutcome {
   final String? crash;
 
   @override
-  String toString() =>
-      '$label: success=$success passed=$passed failed=$failed'
+  String toString() => '$label: success=$success passed=$passed failed=$failed'
       '${crash == null ? '' : ' (crashed: $crash)'}';
 }
 
@@ -120,7 +119,10 @@ ShardOutcome _runOnce({
     );
     if (result == null) {
       return ShardOutcome(
-        label: label, success: false, passed: 0, failed: 0,
+        label: label,
+        success: false,
+        passed: 0,
+        failed: 0,
         crash: 'action() returned undefined',
       );
     }
@@ -130,7 +132,10 @@ ShardOutcome _runOnce({
         decoded['passed'] is! int ||
         decoded['failed'] is! int) {
       return ShardOutcome(
-        label: label, success: false, passed: 0, failed: 0,
+        label: label,
+        success: false,
+        passed: 0,
+        failed: 0,
         crash: 'malformed result: $result',
       );
     }
@@ -142,7 +147,11 @@ ShardOutcome _runOnce({
     );
   } catch (e) {
     return ShardOutcome(
-      label: label, success: false, passed: 0, failed: 0, crash: '$e',
+      label: label,
+      success: false,
+      passed: 0,
+      failed: 0,
+      crash: '$e',
     );
   }
 }

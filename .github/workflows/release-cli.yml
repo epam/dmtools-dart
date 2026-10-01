@@ -106,7 +106,7 @@ jobs:
           # and build below are what matter then.
           # [skip ci] is load-bearing: the temp-branch force-push (and the
           # eventual main push) would otherwise trigger the real static /
-          # gate / agents-suite suites on the release SHA — branch
+          # gate / agents-gate suites on the release SHA — branch
           # protection then sees them in_progress alongside the API-created
           # success runs and rejects the push ("3 of 3 required status
           # checks have not succeeded"; live: release-cli failure at
@@ -161,11 +161,14 @@ jobs:
         #     protection is satisfied without re-running the suites (every
         #     commit already on main passed them; re-running only opens a
         #     non-fast-forward race). gh-261: main requires the quality.yml
-        #     trio {static, gate, agents-suite} since #187 renamed the old
-        #     `quality` aggregate to `gate` + `static` — stamping the dead
-        #     name failed every push with "2 of 3 required status checks
-        #     are expected" (runs 34/35/36). Lockstep with quality.yml job
-        #     names is guarded by test/release_required_checks_test.dart.
+        #     trio {static, gate, agents-gate} since #187 renamed the old
+        #     `quality` aggregate to `gate` + `static`, and gh-315 sharded
+        #     the agents suite (its merge job `agents-gate` is the required
+        #     context; the matrix shards are not, like `test`) — stamping
+        #     a dead name failed every push with "N of 3 required status
+        #     checks are expected" (runs 34/35/36). Lockstep with
+        #     quality.yml job names is guarded by
+        #     test/release_required_checks_test.dart.
         #  3. push main with rebase-retry (3 attempts) in case main moved
         #     between checkout and here; a protection decline is NOT a
         #     moved-main race, so it aborts with the real cause instead.
@@ -182,7 +185,7 @@ jobs:
           stamp_required_checks() {
             local sha
             sha="$(git rev-parse HEAD)"
-            for ctx in static gate agents-suite; do
+            for ctx in static gate agents-gate; do
               gh api -X POST "repos/${{ github.repository }}/check-runs" \
                 -f name="$ctx" \
                 -f head_sha="$sha" \

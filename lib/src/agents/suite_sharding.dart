@@ -33,7 +33,8 @@ class ShardPlanner {
     List<String> files,
     int shardIndex,
     int totalShards,
-  ) => [
+  ) =>
+      [
         for (var pos = 0; pos < files.length; pos++)
           if (pos % totalShards == shardIndex) files[pos],
       ];
@@ -208,7 +209,9 @@ class ShardManifestMerger {
           problems: problems, passedTotal: 0, failedTotal: 0);
     }
     _collectShardProblems(manifests, problems);
-    _collectPartitionProblems(manifests, expectedFiles, problems);
+    if (manifests.isNotEmpty) {
+      _collectPartitionProblems(manifests, expectedFiles, problems);
+    }
     return ShardMergeResult(
       problems: problems,
       passedTotal: manifests.fold(0, (sum, m) => sum + m.passed),
@@ -217,10 +220,14 @@ class ShardManifestMerger {
   }
 
   /// Shard-level defects: count vs total, duplicate shard index, red shard.
+  ///
+  /// [manifests] may be empty when every payload failed to parse — the
+  /// parse problems already red the merge.
   static void _collectShardProblems(
     List<ShardManifest> manifests,
     List<String> problems,
   ) {
+    if (manifests.isEmpty) return;
     final total = manifests.first.total;
     for (final m in manifests) {
       if (m.total != total) {
@@ -232,7 +239,7 @@ class ShardManifestMerger {
       final seen = <int>{for (final m in manifests) m.shard};
       final missingShards = [
         for (var i = 0; i < total; i++)
-          if (!seen.contains(i)) i,
+          if (!seen.contains(i)) 'shard $i',
       ];
       problems.add('expected $total shard manifests, found '
           '${manifests.length} — missing shard manifests: $missingShards');
@@ -282,7 +289,8 @@ class ShardManifestMerger {
     final duplicated = [
       for (final entry in planned.entries)
         if (expected.containsKey(entry.key) &&
-            entry.value > expected[entry.key]!) entry.key,
+            entry.value > expected[entry.key]!)
+          entry.key,
     ];
     final unexpected = [
       for (final file in planned.keys)

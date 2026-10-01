@@ -24,8 +24,9 @@ const _workflowPath = '.github/workflows/release-cli.yml';
 const _qualityPath = '.github/workflows/quality.yml';
 
 /// The contexts branch protection on `main` requires — the non-matrix
-/// quality.yml surface (`gate` summarizes the `test (n)` shards).
-const _requiredContexts = {'static', 'gate', 'agents-suite'};
+/// quality.yml surface (`gate` summarizes the `test (n)` shards; since
+/// gh-315 `agents-gate` summarizes the sharded `agents-suite` matrix).
+const _requiredContexts = {'static', 'gate', 'agents-gate'};
 
 String _read(String path) {
   final file = File(path);
@@ -45,7 +46,7 @@ void _stampSetGuards() {
   final quality = _read(_qualityPath);
 
   group('release-cli stamps the branch-protection-required contexts', () {
-    test('stamped context set is exactly {static, gate, agents-suite}', () {
+    test('stamped context set is exactly {static, gate, agents-gate}', () {
       final stampLoop = RegExp(r'for ctx in (.+?); do').firstMatch(workflow);
       expect(stampLoop, isNotNull,
           reason: '$_workflowPath must stamp the required check-runs via '

@@ -14,7 +14,7 @@ import 'dart:io';
 
 import 'suite_shard_args.dart';
 import 'suite_sharding.dart';
-import 'job_runner.dart';
+import '../js/job_runner.dart';
 
 /// Resolved `run_all.json` content.
 class AgentsSuiteConfig {
@@ -111,7 +111,8 @@ int runAgentsSuite(
   }
 
   final planned = args.isSharded
-      ? ShardPlanner.split(config.testFiles, args.shardIndex!, args.totalShards!)
+      ? ShardPlanner.split(
+          config.testFiles, args.shardIndex!, args.totalShards!)
       : config.testFiles;
   if (args.isSharded && planned.isEmpty) {
     err('Shard ${args.shardIndex}/${args.totalShards} is empty: the suite '
@@ -244,7 +245,9 @@ String? _acceptanceFailure(String? result) {
   if (result == null) return (0, 0);
   try {
     final decoded = jsonDecode(result);
-    if (decoded is Map && decoded['passed'] is int && decoded['failed'] is int) {
+    if (decoded is Map &&
+        decoded['passed'] is int &&
+        decoded['failed'] is int) {
       return (decoded['passed'] as int, decoded['failed'] as int);
     }
   } on FormatException {

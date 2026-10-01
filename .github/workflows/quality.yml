@@ -225,9 +225,24 @@ jobs:
           git push || true
 
   agents-suite:
-    # Runs in parallel with the test shards — both are required merge checks
-    # and the suite hard-gates on its own, so serializing only adds wall time.
+    # gh-315: the suite (92 files, 917 tests) runs in ONE sequential QuickJS
+    # engine — 11m44s of wall time, the quality pipeline's long pole. It is
+    # now sharded 4 ways the same dart test already is: each matrix shard
+    # plans its round-robin subset (ShardPlanner), pre-flights that every
+    # planned file exists and is non-empty (testRunner.js would silently
+    # skip unreadable files — pre-flight turns that into a hard red), runs
+    # the subset through the UNMODIFIED testRunner.js, and uploads a JSON
+    # manifest of its result. fail-fast: false so every shard reports; a
+    # re-dispatch retries the whole matrix (concurrency group semantics).
+    #
+    # N is a workflow-level constant: bump matrix + TOTAL_SHARDS together.
     runs-on: bitrise-runner-dmtools-ci
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      TOTAL_SHARDS: 4
     steps:
       - name: Runner disk hygiene
         # Bitrise pool machines accumulate per-run workdirs; twice on
@@ -269,11 +284,57 @@ jobs:
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
           bash "$PKG/tool/build_quickjs.sh"
       # Pinned via the agents/ submodule instead of a floating clone so the
-      # suite state is reproducible per commit.
-      #
-      # Blocking: the suite is fully green again (882/882 at
-      # agents@432cd4c — upstream fixed the 14 formerly-failing tests and
-      # the Dart runtime satisfies them; the continue-on-error fuse has
-      # been restored to hard-gate).
-      - name: Run agents test suite (agents/ submodule)
-        run: dart run bin/run_agents_suite.dart agents
+      # suite state is reproducible per commit. The suite hard-gates: the
+      # runner requires a well-formed, fully-passing result per shard.
+      - name: Run agents test suite (shard ${{ matrix.shard }}/${{ env.TOTAL_SHARDS }})
+        run: |
+          dart run bin/run_agents_suite.dart agents \
+            --shard-index "${{ matrix.shard }}" \
+            --total-shards "$TOTAL_SHARDS" \
+            --manifest-out "agents-suite-shard/manifest-${{ matrix.shard }}.json"
+      # The manifest is machine-written JSON from our own runner (paths +
+      # counts only) — the agents-gate merge job parses it, never evals it.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agents-manifest-${{ matrix.shard }}
+          path: agents-suite-shard/manifest-${{ matrix.shard }}.json
+          retention-days: 1
+
+  agents-gate:
+    # gh-315: single merge point for the sharded agents suite — mirrors the
+    # `gate` job that merges lcov shards. Any red shard already fails this
+    # job through `needs:`; the merge additionally fails on partition
+    # defects: the multiset of planned files across the downloaded
+    # manifests must equal run_all.json's testFiles exactly (a lost or
+    # duplicated file is red, not a silent green with fewer tests), and
+    # every manifest must report a fully-passing shard. Manifests are
+    # parsed as data, never evaled. Required status check (like `gate`).
+    needs: [agents-suite]
+    runs-on: bitrise-runner-dmtools-ci
+    steps:
+      - name: Runner disk hygiene
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
+      - uses: actions/checkout@v4
+        with:
+          # agents/ is the partition's ground truth: the gate compares the
+          # merged manifests against the pinned run_all.json list.
+          submodules: true
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: agents-manifest-*
+          path: agents-manifests
+      - name: Merge shard manifests (partition + all-green)
+        run: |
+          dart run scripts/agents_shard_gate.dart \
+            agents-manifests agents/js/unit-tests/run_all.json

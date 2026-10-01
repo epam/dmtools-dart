@@ -103,14 +103,14 @@ jobs:
   factory:
     needs: dedupe
     if: needs.dedupe.outputs.duplicate != 'true'
-    # Pinned to the immutable SHA the `agents` submodule pins — a branch
-    # ref executes the branch head at run start, and the head has since
-    # renamed the reusable workflows away from factory/<name>.yml. This
-    # commit has the called paths and the self-pin that checks out
-    # factory-agents/ at the same SHA. Flip in lockstep with the
-    # submodule when dmtools-agents#424 merges (bump the submodule,
-    # then repoint this ref at the new SHA).
-    # Guarded by test/machine_kit/factory_stub_ref_test.dart.
+    # TWO PINS, never conflated (see test/machine_kit/factory_stub_ref_test.dart):
+    #   uses:  — the FACTORY HOME pin (dmtools-agentic-workflows). Moves
+    #            only when the factory home changes; never bumped with
+    #            the agents submodule.
+    #   factory_ref: — the ENGINE pin (dmtools-agents, == the `agents`
+    #            submodule gitlink). Bumps in lockstep with the submodule.
+    # A branch ref would execute an unreviewed branch head at run start —
+    # keep both immutable SHAs.
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-teammate.yml@b93dc51c1030839153c9bb86c8aa2e6b3fad82de
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its

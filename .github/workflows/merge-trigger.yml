@@ -28,4 +28,10 @@ jobs:
       remove_pr_label: true
       map_pr_labels: true
       gh_branch_pattern: true
+    # `secrets: inherit` is safe here — unlike the other stubs, the AW
+    # factory-merge-trigger declares NO `secrets:` block under
+    # workflow_call, so required-secret validation cannot fail at startup;
+    # its header prescribes inherit as the way to forward the optional
+    # PAT (it reads secrets.PAT_TOKEN || github.token; explicitly mapping
+    # an undeclared secret is rejected at call time).
     secrets: inherit

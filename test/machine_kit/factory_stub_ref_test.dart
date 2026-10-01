@@ -38,6 +38,7 @@ const _frozenStubs = {
 
 /// The historical teammate call: inside the agents submodule pin.
 const _teammateStub = '.github/workflows/ai-teammate.yml';
+const _mergeTriggerStub = '.github/workflows/merge-trigger.yml';
 const _teammateFactoryPath = '.github/workflows/factory-teammate.yml';
 
 final _agenticUsesRe = RegExp(
@@ -49,6 +50,9 @@ void main() {
     _frozenPinUsesSha();
     _frozenNoFactoryRef();
     _frozenSecretsMapped();
+  });
+  group('merge-trigger stub (factory home: dmtools-agentic-workflows)', () {
+    _mergeTriggerPin();
   });
   group('teammate stub (factory home: dmtools-agentic-workflows)', () {
     _teammateLockstepPin();
@@ -140,6 +144,29 @@ void _frozenSecretsMapped() {
             'frozen loop declares {${entry.value.join(', ')}}',
       );
     }
+  });
+}
+
+/// merge-trigger.yml is the fourth called-workflow stub: it must pin the
+/// AW factory-merge-trigger at an immutable full SHA (own pin — it moves
+/// when the merge-trigger home changes, not in lockstep with the others).
+void _mergeTriggerPin() {
+  test('pins uses: to the AW factory-merge-trigger at an immutable SHA', () {
+    final yml = File(_mergeTriggerStub).readAsStringSync();
+    final match = _agenticUsesRe.firstMatch(yml);
+    expect(match, isNotNull,
+        reason: '$_mergeTriggerStub must call dmtools-agentic-workflows');
+    expect(
+      match!.group(1),
+      '.github/workflows/factory-merge-trigger.yml',
+      reason: '$_mergeTriggerStub must call factory-merge-trigger.yml',
+    );
+    expect(
+      match.group(2),
+      matches(RegExp(r'^[0-9a-f]{40}$')),
+      reason: 'the merge-trigger home pin must be an immutable full SHA '
+          '(got ${match.group(2)})',
+    );
   });
 }
 
@@ -239,8 +266,11 @@ String _submodulePin() {
 }
 
 /// The `secrets:` names the factory-teammate.yml declares. The workflow
-/// lives in dmtools-agentic-workflows now (nothing in-tree to parse) —
-/// keep this list in lockstep with its secrets block.
+/// lives in dmtools-agentic-workflows now (nothing in-tree to parse).
+/// MANUAL LOCKSTEP DUTY: when factory-teammate.yml at the pinned AW SHA
+/// declares/renames a secret, update BOTH this literal AND the mapping
+/// in ai-teammate.yml — otherwise the workflow call fails at startup
+/// ("required secret not mapped") while this test keeps passing stale.
 Set<String> _declaredTeammateSecrets() {
   return {'SOURCE_GITHUB_TOKEN', 'ZAI_CODE_KEY', 'KIMI_REVIEW_KEY'};
 }

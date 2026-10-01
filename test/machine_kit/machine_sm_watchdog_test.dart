@@ -214,12 +214,15 @@ void _teammateStubContract() {
 /// The leg runner: runners resolve from THIS repo's .dmtools/config.js
 /// (sm.runners), never from factory-internal defaults.
 ///
-/// SKIPPED: the factory moved to dmtools-agentic-workflows;
-/// dmtools-agents#591 retires the in-submodule copy this group parses.
+/// The factory moved to dmtools-agentic-workflows; dmtools-agents#591
+/// retires the in-submodule copy this group parses. The group below
+/// carries `skip:` directly on the group() call (a @Skip on this helper
+/// would be inert — package:test only honors it on test/group/main).
 /// Re-home the contract to the AW pin as a follow-up.
-@Skip('factory moved to dmtools-agentic-workflows (pending #591 bump)')
 void _teammateFactoryContract() {
-  group('factory/teammate.yml leg runner', () {
+  group('factory/teammate.yml leg runner',
+      skip: 'factory moved to dmtools-agentic-workflows '
+          '(pending dmtools-agents#591 + submodule bump)', () {
     final yaml = _read(_teammateFactoryPath);
 
     test('the guard pins the runner from the SM-provided leg', () {

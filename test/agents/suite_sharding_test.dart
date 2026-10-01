@@ -311,7 +311,11 @@ void _mergerDefectTests() {
       expect(result.problems.join('\n'), contains('d.js'));
       expect(result.problems.join('\n'), contains('missing'));
     });
+  });
+}
 
+void _mergerPartitionDefectTests() {
+  group('ShardManifestMerger.merge — partition defects (AC4)', () {
     test('a duplicated planned file fails the merge', () {
       final result = ShardManifestMerger.merge(
         manifestJsons: manifestJsons([

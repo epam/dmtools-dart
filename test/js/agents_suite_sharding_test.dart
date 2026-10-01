@@ -13,6 +13,7 @@ void main() {
   copyAgentTreeTests();
   copyAgentTreeGitRefTests();
   rebaseTests();
+  runParallelAgentsSuiteTests();
   shardOutcomeTests();
   agentsSuiteReportTests();
   agentsSuiteReportFailureTests();
@@ -408,6 +409,88 @@ ShardInvocation _invocation(int index, int total) => ShardInvocation(
       workingDirectory: '.',
       preludeCode: '',
     );
+
+void runParallelAgentsSuiteTests() {
+  group('runParallelAgentsSuite', () {
+    late Directory tree;
+    setUp(() async {
+      tree = await Directory.systemTemp.createTemp('parallel-suite-');
+      for (var i = 0; i < 5; i++) {
+        File('${tree.path}/js/unit-tests/test_f$i.js')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('// file $i\n' * (i + 1));
+      }
+    });
+    tearDown(() => tree.delete(recursive: true));
+
+    ParallelSuiteRequest request(List<String> out, List<String> err) =>
+        ParallelSuiteRequest(
+          agentsPath: tree.path,
+          jsPath: 'js/unit-tests/testRunner.js',
+          jobParams: const {},
+          testFiles: [
+            for (var i = 0; i < 5; i++) 'js/unit-tests/test_f$i.js',
+          ],
+          out: out.add,
+          err: err.add,
+        );
+
+    test('aggregates chunk outcomes and exits 0 on green', () async {
+      final out = <String>[];
+      final err = <String>[];
+      final code = await runParallelAgentsSuite(
+        request(out, err),
+        runChunk: (chunk) async => ChunkOutcome(
+          index: chunk.index,
+          result: '{"success":true,"passed":2,"failed":0}',
+        ),
+      );
+      expect(code, 0);
+      final text = out.join('\n');
+      expect(text, contains('5 files in'));
+      expect(text, contains('disposable tree copy'));
+      expect(text, contains('Result: {"success":true'));
+      expect(text, contains('Agents suite green: 10 passed, 0 failed.'));
+      expect(err.where((l) => l.isNotEmpty), isEmpty);
+    });
+
+    test('a red chunk fails the run with the historical footer', () async {
+      final out = <String>[];
+      final err = <String>[];
+      final code = await runParallelAgentsSuite(
+        request(out, err),
+        runChunk: (chunk) async => ChunkOutcome(
+          index: chunk.index,
+          result: chunk.index == 0
+              ? '{"success":false,"passed":1,"failed":2}'
+              : '{"success":true,"passed":2,"failed":0}',
+        ),
+      );
+      expect(code, 1);
+      expect(
+        err.join('\n'),
+        allOf(contains('Agents suite failed'), contains('2 failed')),
+      );
+    });
+
+    test('a malformed chunk fails the run and is diagnosed', () async {
+      final out = <String>[];
+      final err = <String>[];
+      final code = await runParallelAgentsSuite(
+        request(out, err),
+        runChunk: (chunk) async => chunk.index == 1
+            ? ChunkOutcome(index: 1, result: 'garbage')
+            : ChunkOutcome(
+                index: chunk.index,
+                result: '{"success":true,"passed":2,"failed":0}',
+              ),
+      );
+      expect(code, 1);
+      expect(err.join('\n'), contains('malformed'));
+      expect(out.join('\n'), contains('"failed":0'));
+    });
+  });
+}
 
 void runChunkQueueTests() {
   group('runChunkQueue', () {

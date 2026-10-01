@@ -480,6 +480,10 @@ String failureSummary(AgentsSuiteReport report) {
 /// production, fakes in unit tests.
 typedef ShardRunner = Future<ChunkOutcome> Function(ShardInvocation chunk);
 
+/// The [runChunkQueue] executor type: runs one chunk and yields its
+/// outcome ([runChunkInIsolate] in production, fakes in tests).
+typedef ChunkRunner = ShardRunner;
+
 /// Inputs for [runParallelAgentsSuite] — the no-flag default of
 /// `bin/run_agents_suite.dart`.
 class ParallelSuiteRequest {
@@ -518,8 +522,12 @@ class ParallelSuiteRequest {
 /// Prints the historical contract through the request sinks: the
 /// planning banner, `Result: {"success":…,"passed":N,"failed":M}`, and
 /// the green/failed footer. Exit codes match the serial runner: 0
-/// green, 1 red or any crashed/malformed chunk.
-Future<int> runParallelAgentsSuite(ParallelSuiteRequest request) async {
+/// green, 1 red or any crashed/malformed chunk. [runChunk] is
+/// injectable for tests (defaults to the real isolate executor).
+Future<int> runParallelAgentsSuite(
+  ParallelSuiteRequest request, {
+  ChunkRunner runChunk = runChunkInIsolate,
+}) async {
   final writeOut = request.out ?? stdout.writeln;
   final writeErr = request.err ?? stderr.writeln;
   final shardCount = resolveShardCount(
@@ -547,7 +555,7 @@ Future<int> runParallelAgentsSuite(ParallelSuiteRequest request) async {
   );
   final outcomes = await runChunkQueue(
     invocations,
-    runChunkInIsolate,
+    runChunk,
     concurrency: shardCount,
   );
   final report = AgentsSuiteReport.fromShards(outcomes);

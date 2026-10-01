@@ -201,9 +201,8 @@ void _teammateStubContract() {
       );
       // The AW-home factory declares its secrets; the stub maps them
       // explicitly (no inherit — explicit mapping fails loudly on drift).
-      final hasActiveInherit = yaml
-          .split('\n')
-          .any((l) => l.trim() == 'secrets: inherit');
+      final hasActiveInherit =
+          yaml.split('\n').any((l) => l.trim() == 'secrets: inherit');
       expect(hasActiveInherit, isFalse);
       expect(yaml.contains('SOURCE_GITHUB_TOKEN:'), isTrue);
     });

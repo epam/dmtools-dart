@@ -147,7 +147,9 @@ void _frozenSecretsMapped() {
 /// the engine pin. The factory cannot see its own uses: ref, so the stub
 /// hands it the engine ref explicitly.
 void _teammateLockstepPin() {
-  test('pins uses: to the factory home SHA + factory_ref to the engine submodule', () {
+  test(
+      'pins uses: to the factory home SHA + factory_ref to the engine submodule',
+      () {
     final sha = _submodulePin();
     expect(sha, matches(RegExp(r'^[0-9a-f]{40}$')),
         reason: 'gitlink must be a full SHA');

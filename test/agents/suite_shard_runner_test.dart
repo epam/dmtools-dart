@@ -506,6 +506,16 @@ void _parityTests() {
       expect(report.serialOutcome.crash, isNotNull);
       expect(report.shardOutcomes.every((o) => o.crash != null), isTrue);
     });
+
+    test('an action() returning undefined is a crashed outcome', () {
+      tree.setRunnerScript('function action(params) { return; }');
+      final report = runShardParity(
+        agentsPath: tree.root.path,
+        totalShards: 1,
+      );
+      expect(report.ok, isFalse);
+      expect(report.serialOutcome.crash, contains('returned undefined'));
+    });
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
 

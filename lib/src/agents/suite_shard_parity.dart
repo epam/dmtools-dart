@@ -133,34 +133,11 @@ ShardOutcome _runOnce({
 /// non-JSON, wrong shape) become crashed outcomes.
 ShardOutcome _decodeOutcome(String label, String? result) {
   if (result == null) {
-    return ShardOutcome(
-      label: label,
-      success: false,
-      passed: 0,
-      failed: 0,
-      crash: 'action() returned undefined',
-    );
+    return _crashOutcome(label, 'action() returned undefined');
   }
-  // A unusable payload is a crash, whatever the reason: the runtime
-  // JSON-encodes every action() return, so non-JSON text here means the
-  // engine broke its contract just like a wrong-shaped object would.
-  dynamic decoded;
-  try {
-    decoded = jsonDecode(result);
-  } on FormatException {
-    decoded = null;
-  }
-  if (decoded is! Map ||
-      decoded['success'] is! bool ||
-      decoded['passed'] is! int ||
-      decoded['failed'] is! int) {
-    return ShardOutcome(
-      label: label,
-      success: false,
-      passed: 0,
-      failed: 0,
-      crash: 'malformed result: $result',
-    );
+  final decoded = _tryDecode(result);
+  if (!_wellFormedOutcome(decoded)) {
+    return _crashOutcome(label, 'malformed result: $result');
   }
   return ShardOutcome(
     label: label,
@@ -169,6 +146,32 @@ ShardOutcome _decodeOutcome(String label, String? result) {
     failed: decoded['failed'] as int,
   );
 }
+
+ShardOutcome _crashOutcome(String label, String crash) => ShardOutcome(
+      label: label,
+      success: false,
+      passed: 0,
+      failed: 0,
+      crash: crash,
+    );
+
+/// A unusable payload is a crash, whatever the reason: the runtime
+/// JSON-encodes every action() return, so non-JSON text here means the
+/// engine broke its contract just like a wrong-shaped object would.
+dynamic _tryDecode(String result) {
+  try {
+    return jsonDecode(result);
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Upstream's result contract: `{success: bool, passed: int, failed: int}`.
+bool _wellFormedOutcome(dynamic decoded) =>
+    decoded is Map &&
+    decoded['success'] is bool &&
+    decoded['passed'] is int &&
+    decoded['failed'] is int;
 
 /// Outcome equality: shard successes must match the serial run, and the
 /// passed/failed counters must sum to the serial counters.

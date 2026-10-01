@@ -45,7 +45,8 @@ Future<void> main(List<String> args) async {
   );
   stdout.writeln(
     'Agents suite: ${config.testFiles.length} files in ${chunks.length} '
-    'chunks on $shardCount parallel worker(s).',
+    'chunks on $shardCount parallel worker(s), each chunk in a '
+    'disposable tree copy.',
   );
 
   final outcomes = await runChunkQueue(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dmtools/src/js/agents_suite.dart';
 import 'package:test/test.dart';
@@ -9,6 +10,8 @@ void main() {
   planChunksTests();
   primePreludeJsTests();
   invocationsForTests();
+  copyAgentTreeTests();
+  rebaseTests();
   shardOutcomeTests();
   agentsSuiteReportTests();
   agentsSuiteReportFailureTests();
@@ -159,6 +162,109 @@ void invocationsForTests() {
         invocations[1].preludeCode,
         primePreludeJs(['a.js', 'b.js'], 1),
       );
+    });
+  });
+}
+
+void copyAgentTreeTests() {
+  group('copyAgentTree', () {
+    test(
+        'copies files and nested dirs; .git becomes an absolute gitfile '
+        'ref; .dart_tool/symlinks skipped', () async {
+      final src = await Directory.systemTemp.createTemp('copy-src-');
+      final dst = await Directory.systemTemp.createTemp('copy-dst-');
+      addTearDown(() async {
+        await src.delete(recursive: true);
+        await dst.delete(recursive: true);
+      });
+      File('${src.path}/run_all.json').writeAsStringSync('{}');
+      File('${src.path}/js/a.js').createSync(recursive: true);
+      File('${src.path}/js/unit/b.js').createSync(recursive: true);
+      Directory('${src.path}/.git/objects').createSync(recursive: true);
+      File('${src.path}/.git/HEAD').writeAsStringSync('ref');
+      Directory('${src.path}/.dart_tool/pkg').createSync(recursive: true);
+      Link('${src.path}/js/link.js').createSync('${src.path}/js/a.js');
+
+      copyAgentTree(src.path, dst.path);
+
+      expect(File('${dst.path}/run_all.json').readAsStringSync(), '{}');
+      expect(File('${dst.path}/js/a.js').existsSync(), isTrue);
+      expect(File('${dst.path}/js/unit/b.js').existsSync(), isTrue);
+      // .git is a one-line redirect to the original metadata, not a copy.
+      final gitRef = File('${dst.path}/.git');
+      expect(gitRef.existsSync(), isTrue);
+      expect(gitRef.readAsStringSync(), 'gitdir: ${src.path}/.git\n');
+      expect(Directory('${dst.path}/.git').existsSync(), isFalse);
+      expect(Directory('${dst.path}/.dart_tool').existsSync(), isFalse);
+      expect(File('${dst.path}/js/link.js').existsSync(), isFalse);
+    });
+
+    test('resolves a relative submodule gitfile to an absolute gitdir',
+        () async {
+      final src = await Directory.systemTemp.createTemp('copy-sub-');
+      final dst = await Directory.systemTemp.createTemp('copy-sub-dst-');
+      addTearDown(() async {
+        await src.delete(recursive: true);
+        await dst.delete(recursive: true);
+      });
+      File('${src.path}/.git')
+          .writeAsStringSync('gitdir: ../.git/modules/agents\n');
+
+      copyAgentTree(src.path, dst.path);
+
+      expect(
+        File('${dst.path}/.git').readAsStringSync(),
+        'gitdir: ${src.path}/../.git/modules/agents\n',
+      );
+    });
+
+    test('empty source directory copies as an empty tree', () async {
+      final src = await Directory.systemTemp.createTemp('copy-empty-');
+      final dst = await Directory.systemTemp.createTemp('copy-empty-dst-');
+      addTearDown(() async {
+        await src.delete(recursive: true);
+        await dst.delete(recursive: true);
+      });
+      copyAgentTree(src.path, dst.path);
+      expect(Directory(dst.path).listSync(), isEmpty);
+    });
+  });
+}
+
+void rebaseTests() {
+  group('rebasePath', () {
+    test('re-bases the root itself and everything under it', () {
+      expect(rebasePath('/a/agents', '/a/agents', '/tmp/c'), '/tmp/c');
+      expect(
+        rebasePath('/a/agents/js/x.js', '/a/agents', '/tmp/c'),
+        '/tmp/c/js/x.js',
+      );
+    });
+
+    test('leaves unrelated and sibling-prefix paths alone', () {
+      expect(rebasePath('/a/agents-x/js', '/a/agents', '/tmp/c'), isNull);
+      expect(rebasePath('js/relative.js', '/a/agents', '/tmp/c'), isNull);
+      expect(rebasePath('/elsewhere/x', '/a/agents', '/tmp/c'), isNull);
+    });
+  });
+
+  group('rebaseJobParams', () {
+    test('re-bases absolute strings nested in maps and lists', () {
+      final params = <String, dynamic>{
+        'jsPath': 'js/unit-tests/testRunner.js',
+        'root': '/a/agents',
+        'cfg': {
+          'path': '/a/agents/configs/c.json',
+          'other': '/keep/me',
+          'list': ['/a/agents/x', 'rel.js', 7],
+        },
+      };
+      final out = rebaseJobParams(params, '/a/agents', '/tmp/c');
+      expect(out['jsPath'], 'js/unit-tests/testRunner.js');
+      expect(out['root'], '/tmp/c');
+      expect(out['cfg']['path'], '/tmp/c/configs/c.json');
+      expect(out['cfg']['other'], '/keep/me');
+      expect(out['cfg']['list'], ['/tmp/c/x', 'rel.js', 7]);
     });
   });
 }

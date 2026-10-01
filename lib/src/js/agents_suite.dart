@@ -37,9 +37,23 @@
 /// as in a serial run, so totals match the serial run exactly — no
 /// matter how the pull queue interleaves the chunks.
 ///
-/// The suite is read-only over the agents checkout (`testRunner.js`
-/// only `file_read`s; tests mock `file_write` and every tool), so all
-/// workers share one working directory — no per-worker repo copies.
+/// ## Why every chunk runs in a disposable tree copy
+///
+/// The suite is NOT read-only over the agents checkout: tests persist
+/// cross-file state on disk (fixture caches, `outputs/` artifacts) and
+/// some wait on those files with real-time CLI-resume backoffs. On a
+/// shared working tree, concurrent chunks interleave those writes — on
+/// CI (slow disk) this opened a minutes-wide race window: a chunk's
+/// prefix rebuild could momentarily truncate `outputs/response.md`, the
+/// `publishDiscoveryToConfluence` test then sat in its resume-backoff
+/// for 6+ minutes before giving up, and two such stragglers pinned the
+/// whole run at ~12.7 min despite the other 46 chunks finishing in
+/// under a second (2026-10-01, run 36891377431). Each chunk therefore
+/// gets its own copy of the tree (`.git`/`.dart_tool` skipped, ~11 MB)
+/// and is its single writer; the prefix priming rebuilds the exact
+/// serial on-disk state inside that copy, so counts stay identical to
+/// a serial run. `DMTOOLS_SUITE_ISOLATED_COPIES=0` falls back to the
+/// shared tree.
 library;
 
 import 'dart:convert';
@@ -512,9 +526,133 @@ Future<ShardOutcome> runChunkInIsolate(ShardInvocation chunk) {
 
 /// Synchronous chunk body: fresh `JsJobRunner` + QuickJS context, prime
 /// files + chunk slice injected as `jobParams.testFiles`, priming
-/// prelude, `[chunk k/N]` console attribution. Never rethrows — a crash
-/// becomes a crashed outcome.
+/// prelude, `[chunk k/N]` console attribution. The chunk runs in a
+/// disposable copy of the agents tree (see the library docs) unless
+/// `DMTOOLS_SUITE_ISOLATED_COPIES=0`. Never rethrows — a crash becomes
+/// a crashed outcome.
 ShardOutcome _runChunkSync(ShardInvocation chunk) {
+  if (!_copiesEnabled()) return _evalChunk(chunk);
+  final copyRoot =
+      Directory.systemTemp.createTempSync('dmtools-suite-chunk-').path;
+  try {
+    copyAgentTree(chunk.workingDirectory, copyRoot);
+    return _evalChunk(_rebasedChunk(chunk, copyRoot));
+  } catch (e) {
+    return ShardOutcome.crashed(chunk.index, '$e');
+  } finally {
+    Directory(copyRoot).deleteSync(recursive: true);
+  }
+}
+
+/// Whether chunks get disposable tree copies (on unless explicitly
+/// disabled via `DMTOOLS_SUITE_ISOLATED_COPIES=0`).
+bool _copiesEnabled() =>
+    Platform.environment['DMTOOLS_SUITE_ISOLATED_COPIES'] != '0';
+
+/// The chunk with every [ShardInvocation.workingDirectory]-rooted path
+/// rebased onto [copyRoot] (script, working dir, absolute job params).
+ShardInvocation _rebasedChunk(ShardInvocation chunk, String copyRoot) {
+  return ShardInvocation(
+    index: chunk.index,
+    total: chunk.total,
+    scriptPath:
+        rebasePath(chunk.scriptPath, chunk.workingDirectory, copyRoot) ??
+            chunk.scriptPath,
+    jobParams:
+        rebaseJobParams(chunk.jobParams, chunk.workingDirectory, copyRoot),
+    workingDirectory: copyRoot,
+    preludeCode: chunk.preludeCode,
+  );
+}
+
+/// Recursively copies the agents tree [source] → [destination].
+///
+/// Skips `.dart_tool` (never read by the suite) and symlinks (none in
+/// a plain checkout). `.git` is never copied as data: the copy gets a
+/// one-line `.git` gitfile pointing at the ORIGINAL git dir by absolute
+/// path (see [_writeGitFileRef]) so the read-only git commands the
+/// suite really runs — `git ls-files` in `test_agentDocsCoverage.js`
+/// and `test_agentValidator.js` — answer from the original index, while
+/// the worktree they see is the copy. Every other git call in the suite
+/// is a mocked tool.
+void copyAgentTree(String source, String destination) {
+  const skipDirs = {'.dart_tool'};
+  for (final entity in Directory(source).listSync(followLinks: false)) {
+    // Directory URIs end in '/', so the raw last pathSegment is '' —
+    // filter empties before taking the name.
+    final name =
+        entity.uri.pathSegments.where((segment) => segment.isNotEmpty).last;
+    final target = '$destination/$name';
+    if (entity is Directory) {
+      if (name == '.git') {
+        _writeGitFileRef(entity, target);
+      } else if (!skipDirs.contains(name)) {
+        Directory(target).createSync();
+        copyAgentTree(entity.path, target);
+      }
+    } else if (name == '.git') {
+      // The source itself is a submodule-style gitfile — re-point it.
+      _writeGitFileRef(entity, target);
+    } else if (entity is File) {
+      entity.copySync(target);
+    }
+  }
+}
+
+/// Writes [destination] as a `.git` gitfile redirecting git to the
+/// ORIGINAL repository metadata ([gitEntity] being the source's `.git`
+/// — either a real directory, or itself a gitfile whose `gitdir:` may
+/// be relative, e.g. a submodule's `../.git/modules/agents`).
+void _writeGitFileRef(FileSystemEntity gitEntity, String destination) {
+  var gitDir = gitEntity.path;
+  if (gitEntity is File) {
+    final raw = gitEntity.readAsStringSync().trim();
+    const marker = 'gitdir:';
+    if (!raw.startsWith(marker)) return;
+    gitDir = raw.substring(marker.length).trim();
+    if (!gitDir.startsWith('/')) gitDir = '${gitEntity.parent.path}/$gitDir';
+  }
+  File(destination).writeAsStringSync('gitdir: $gitDir\n');
+}
+
+/// [path] re-based from the [from] root onto [to], or null when [path]
+/// does not live under [from].
+String? rebasePath(String path, String from, String to) {
+  if (path == from) return to;
+  final prefix = '$from/';
+  return path.startsWith(prefix)
+      ? '$to/${path.substring(prefix.length)}'
+      : null;
+}
+
+/// Deep-copies [params], re-basing every [agentsRoot]-rooted string
+/// (maps and lists included) onto [copyRoot]. Relative paths such as
+/// `testFiles` entries are left untouched.
+Map<String, dynamic> rebaseJobParams(
+  Map<String, dynamic> params,
+  String agentsRoot,
+  String copyRoot,
+) {
+  return _rebaseValue(params, agentsRoot, copyRoot) as Map<String, dynamic>;
+}
+
+dynamic _rebaseValue(dynamic value, String from, String to) {
+  if (value is String) return rebasePath(value, from, to) ?? value;
+  if (value is Map) {
+    return <String, dynamic>{
+      for (final entry in value.entries)
+        entry.key as String: _rebaseValue(entry.value, from, to),
+    };
+  }
+  if (value is List) {
+    return <dynamic>[for (final item in value) _rebaseValue(item, from, to)];
+  }
+  return value;
+}
+
+/// Evaluates the chunk in its own `JsJobRunner` — the part after any
+/// tree copy/rebase has happened.
+ShardOutcome _evalChunk(ShardInvocation chunk) {
   final prefix = '[chunk ${chunk.index + 1}/${chunk.total}] ';
   try {
     final result = const JsJobRunner().runScript(

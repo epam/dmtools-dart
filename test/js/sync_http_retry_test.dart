@@ -17,7 +17,8 @@ void main() {
   policyStatusAndBudgetTests();
   delayMathTests();
   jitterDelayTests();
-  rateLimitWaitTests();
+  rateLimitResetWaitTests();
+  rateLimitRetryAfterTests();
   retryIntegrationTests();
 }
 
@@ -222,23 +223,25 @@ void jitterDelayTests() {
   });
 }
 
-/// Rate-limit wait parity with Java PR epam/dm.ai#624 (gh-318): a genuine
-/// rate limit is waited out up to a configurable `RATE_LIMIT_MAX_WAIT_
-/// SECONDS` cap (default 3600s) — never capped by `maxDelayMs`, never
-/// aborted; the 300s abort survives only for non-rate-limit responses.
-/// All assertions are on the computed delay value; nothing sleeps.
-void rateLimitWaitTests() {
-  group('SyncRetryPolicy rate-limit wait (Java dm.ai#624 parity)', () {
-    // Java RetryPolicyTest's default policy: maxDelayMs 60s, jitter 0.3.
-    final policy = SyncRetryPolicy.fromEnvMap((_) => null);
+/// Default policy mirror of Java RetryPolicyTest's (maxDelayMs 60s, jitter
+/// 0.3) for the rate-limit wait groups below.
+final _rateLimitPolicy = SyncRetryPolicy.fromEnvMap((_) => null);
 
-    int resetSecondsFromNow(int offsetSeconds) =>
-        (DateTime.now().millisecondsSinceEpoch / 1000).round() + offsetSeconds;
+int _resetSecondsFromNow(int offsetSeconds) =>
+    (DateTime.now().millisecondsSinceEpoch / 1000).round() + offsetSeconds;
+
+/// X-RateLimit-Reset parity with Java PR epam/dm.ai#624 (gh-318): the
+/// reset wait is honored up to the configurable `RATE_LIMIT_MAX_WAIT_
+/// SECONDS` cap (default 3600s) — never capped by `maxDelayMs`, never
+/// aborted. Assertions are on the computed delay value; nothing sleeps.
+void rateLimitResetWaitTests() {
+  group('SyncRetryPolicy X-RateLimit-Reset wait (Java dm.ai#624 parity)', () {
+    final policy = _rateLimitPolicy;
 
     test('long X-RateLimit-Reset wait is honored, not capped at maxDelayMs',
         () {
       final delay = policy.statusDelayMs(
-          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
+          1, {'X-RateLimit-Reset': '${_resetSecondsFromNow(600)}'});
       // ~600s + 1s buffer; maxDelayMs is 60s and must not cap it.
       expect(delay, greaterThan(policy.maxDelayMs));
       expect(delay, inInclusiveRange(595000, 602000));
@@ -253,21 +256,52 @@ void rateLimitWaitTests() {
         jitterFactor: 0.0,
       );
       final delay = tiny.statusDelayMs(
-          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(600)}'});
+          1, {'X-RateLimit-Reset': '${_resetSecondsFromNow(600)}'});
       expect(delay, inInclusiveRange(595000, 602000));
     });
 
     test('X-RateLimit-Reset a few seconds out is honored', () {
-      final delay = policy
-          .statusDelayMs(1, {'X-RateLimit-Reset': '${resetSecondsFromNow(5)}'});
+      final delay = policy.statusDelayMs(
+          1, {'X-RateLimit-Reset': '${_resetSecondsFromNow(5)}'});
       expect(delay, inInclusiveRange(5000, 7000)); // ~5s + 1s buffer
     });
 
     test('far-future reset is capped at the default 3600s cap, not thrown', () {
       final delay = policy.statusDelayMs(
-          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(7200)}'});
+          1, {'X-RateLimit-Reset': '${_resetSecondsFromNow(7200)}'});
       expect(delay, SyncRetryPolicy.defaultRateLimitMaxWaitSeconds * 1000);
     });
+
+    test('RATE_LIMIT_MAX_WAIT_SECONDS is configurable', () {
+      final capped = SyncRetryPolicy.fromEnvMap(
+          (k) => k == 'RATE_LIMIT_MAX_WAIT_SECONDS' ? '300' : null);
+      expect(capped.rateLimitMaxWaitSeconds, 300);
+      final delay = capped.statusDelayMs(
+          1, {'X-RateLimit-Reset': '${_resetSecondsFromNow(3600)}'});
+      expect(delay, 300000); // capped at the configured 300s, no jitter
+    });
+
+    test('invalid RATE_LIMIT_MAX_WAIT_SECONDS falls back to the default', () {
+      for (final value in ['', 'abc', '0', '-5']) {
+        final p = SyncRetryPolicy.fromEnvMap(
+            (k) => k == 'RATE_LIMIT_MAX_WAIT_SECONDS' ? value : null);
+        expect(p.rateLimitMaxWaitSeconds, 3600, reason: "value '$value'");
+      }
+    });
+
+    test('default rate-limit max wait is 3600 seconds', () {
+      expect(SyncRetryPolicy.defaultRateLimitMaxWaitSeconds, 3600);
+      expect(policy.rateLimitMaxWaitSeconds, 3600);
+    });
+  });
+}
+
+/// Retry-After parity with Java PR epam/dm.ai#624 (gh-318): a 429
+/// rate-limit Retry-After is honored (up to the rate-limit cap) instead of
+/// aborted; the 300s abort survives only for non-rate-limit responses.
+void rateLimitRetryAfterTests() {
+  group('SyncRetryPolicy 429 Retry-After (Java dm.ai#624 parity)', () {
+    final policy = _rateLimitPolicy;
 
     test('429 Retry-After beyond 5 minutes is honored, not aborted', () {
       final delay = policy.statusDelayMs(1, const {'Retry-After': '600'}, 429);
@@ -296,28 +330,6 @@ void rateLimitWaitTests() {
     test('missing status code keeps the 300s abort for Retry-After', () {
       // Legacy call shape (no statusCode): never treated as rate-limited.
       expect(policy.statusDelayMs(1, const {'Retry-After': '600'}), isNull);
-    });
-
-    test('RATE_LIMIT_MAX_WAIT_SECONDS is configurable', () {
-      final capped = SyncRetryPolicy.fromEnvMap(
-          (k) => k == 'RATE_LIMIT_MAX_WAIT_SECONDS' ? '300' : null);
-      expect(capped.rateLimitMaxWaitSeconds, 300);
-      final delay = capped.statusDelayMs(
-          1, {'X-RateLimit-Reset': '${resetSecondsFromNow(3600)}'});
-      expect(delay, 300000); // capped at the configured 300s, no jitter
-    });
-
-    test('invalid RATE_LIMIT_MAX_WAIT_SECONDS falls back to the default', () {
-      for (final value in ['', 'abc', '0', '-5']) {
-        final p = SyncRetryPolicy.fromEnvMap(
-            (k) => k == 'RATE_LIMIT_MAX_WAIT_SECONDS' ? value : null);
-        expect(p.rateLimitMaxWaitSeconds, 3600, reason: "value '$value'");
-      }
-    });
-
-    test('default rate-limit max wait is 3600 seconds', () {
-      expect(SyncRetryPolicy.defaultRateLimitMaxWaitSeconds, 3600);
-      expect(policy.rateLimitMaxWaitSeconds, 3600);
     });
   });
 }

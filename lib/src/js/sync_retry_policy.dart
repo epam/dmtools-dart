@@ -71,6 +71,9 @@ class SyncRetryPolicy {
   /// rate-limit wait (60 minutes — GitHub resets up to ~hourly).
   static const int defaultRateLimitMaxWaitSeconds = 3600;
 
+  /// Seconds → milliseconds conversion used by the server-header math.
+  static const int _msPerSecond = 1000;
+
   /// Creates a policy with explicit settings.
   const SyncRetryPolicy({
     required this.maxAttempts,
@@ -210,13 +213,14 @@ class SyncRetryPolicy {
     if (reset != null) {
       final resetMs = int.tryParse(reset);
       if (resetMs != null) {
-        final delay = resetMs * 1000 - now.millisecondsSinceEpoch;
+        final delay = resetMs * _msPerSecond - now.millisecondsSinceEpoch;
         if (delay > 0) {
           // Honor the server's reset time (GitHub resets up to ~60 min
           // out): +1s buffer capped at the configurable rate-limit cap —
           // never by [maxDelayMs], never aborted, no jitter (Java parity).
           return (
-            ms: min(delay + 1000, rateLimitMaxWaitSeconds * 1000),
+            ms: min(
+                delay + _msPerSecond, rateLimitMaxWaitSeconds * _msPerSecond),
             jittered: false,
           );
         }
@@ -231,8 +235,8 @@ class SyncRetryPolicy {
   _ServerDelay? _retryAfterDelayMs(int seconds, int statusCode) {
     final rateLimited = statusCode == 429;
     if (!rateLimited && seconds > maxRetryAfterSeconds) return null; // abort
-    var ms = seconds * 1000;
-    if (rateLimited) ms = min(ms, rateLimitMaxWaitSeconds * 1000);
+    var ms = seconds * _msPerSecond;
+    if (rateLimited) ms = min(ms, rateLimitMaxWaitSeconds * _msPerSecond);
     return (ms: ms, jittered: true);
   }
 

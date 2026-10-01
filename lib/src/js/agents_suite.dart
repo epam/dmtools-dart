@@ -535,13 +535,27 @@ ShardOutcome _runChunkSync(ShardInvocation chunk) {
   final copyRoot =
       Directory.systemTemp.createTempSync('dmtools-suite-chunk-').path;
   try {
+    final copyWatch = Stopwatch()..start();
     copyAgentTree(chunk.workingDirectory, copyRoot);
-    return _evalChunk(_rebasedChunk(chunk, copyRoot));
+    final outcome = _evalChunk(_rebasedChunk(chunk, copyRoot));
+    _logChunkTiming(chunk, copyWatch, label: 'copy+run');
+    return outcome;
   } catch (e) {
     return ShardOutcome.crashed(chunk.index, '$e');
   } finally {
     Directory(copyRoot).deleteSync(recursive: true);
   }
+}
+
+/// One stderr timing line per chunk — wall-clock attribution for CI
+/// (chunk ends alone don't show when a chunk started or how long the
+/// tree copy took).
+void _logChunkTiming(ShardInvocation chunk, Stopwatch copyWatch,
+    {required String label}) {
+  final secs = (copyWatch.elapsedMilliseconds / 1000).toStringAsFixed(1);
+  stderr.writeln(
+    '[chunk ${chunk.index + 1}/${chunk.total}] ⏱ $label took ${secs}s',
+  );
 }
 
 /// Whether chunks get disposable tree copies (on unless explicitly
@@ -610,7 +624,12 @@ void _writeGitFileRef(FileSystemEntity gitEntity, String destination) {
     const marker = 'gitdir:';
     if (!raw.startsWith(marker)) return;
     gitDir = raw.substring(marker.length).trim();
-    if (!gitDir.startsWith('/')) gitDir = '${gitEntity.parent.path}/$gitDir';
+  }
+  // Absolute always: a relative gitdir would dangle once the copy lives
+  // in the system temp dir (CI passes `agents` as a relative path).
+  if (!gitDir.startsWith('/')) {
+    final base = Directory(gitEntity.parent.path).absolute.path;
+    gitDir = '$base/$gitDir';
   }
   File(destination).writeAsStringSync('gitdir: $gitDir\n');
 }
@@ -654,6 +673,8 @@ dynamic _rebaseValue(dynamic value, String from, String to) {
 /// tree copy/rebase has happened.
 ShardOutcome _evalChunk(ShardInvocation chunk) {
   final prefix = '[chunk ${chunk.index + 1}/${chunk.total}] ';
+  final fileCount = (chunk.jobParams['testFiles'] as List?)?.length ?? 0;
+  stderr.writeln('$prefix▶ start ($fileCount files to eval)');
   try {
     final result = const JsJobRunner().runScript(
       scriptPath: chunk.scriptPath,

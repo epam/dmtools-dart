@@ -133,21 +133,28 @@ void _shardFlagProblems(SuiteShardArgs args, List<String> problems) {
   if (args.shardIndex == null || args.totalShards == null) {
     problems.add('--shard-index and --total-shards must be given together');
   }
-  if (args.totalShards != null && args.totalShards! < 1) {
-    problems.add('--total-shards must be >= 1, got ${args.totalShards}');
-  }
-  if (args.shardIndex != null && args.shardIndex! < 0) {
-    problems.add('--shard-index must be >= 0, got ${args.shardIndex}');
-  }
-  if (args.shardIndex != null &&
-      args.totalShards != null &&
-      args.shardIndex! >= args.totalShards!) {
-    problems.add('--shard-index ${args.shardIndex} must be < '
-        '--total-shards ${args.totalShards}');
-  }
+  _totalRangeProblems(args.totalShards, problems);
+  _indexRangeProblems(args, problems);
   if (args.manifestOut == null) {
     problems.add('--manifest-out <path> is required for sharded runs: the '
         'agents-gate merge job parses it (never evaled)');
+  }
+}
+
+void _totalRangeProblems(int? total, List<String> problems) {
+  if (total != null && total < 1) {
+    problems.add('--total-shards must be >= 1, got $total');
+  }
+}
+
+void _indexRangeProblems(SuiteShardArgs args, List<String> problems) {
+  final index = args.shardIndex;
+  if (index != null && index < 0) {
+    problems.add('--shard-index must be >= 0, got $index');
+  }
+  if (index != null && args.totalShards != null && index >= args.totalShards!) {
+    problems.add('--shard-index $index must be < '
+        '--total-shards ${args.totalShards}');
   }
 }
 

@@ -29,11 +29,14 @@ void main() {
   tearDown(() => tree.dispose());
 
   _shardedRunTests();
-  _invalidFlagTests();
+  _invalidComboTests();
+  _unknownFlagTests();
   _preflightTests();
   _serialTests();
-  _configErrorTests();
-  _engineFailureTests();
+  _configErrorShapeTests();
+  _configErrorFieldTests();
+  _engineCrashTests();
+  _engineRedResultTests();
   _failingShardTests();
   _realRunnerTests();
   _parityTests();
@@ -82,7 +85,7 @@ void _shardedRunTests() {
   });
 }
 
-void _invalidFlagTests() {
+void _invalidComboTests() {
   group('invalid flag combos exit non-zero before the engine (AC2)', () {
     // The fixture config points at a runner script that does not exist, so
     // if validation DIDN'T reject the args first, the engine start would
@@ -95,7 +98,6 @@ void _invalidFlagTests() {
       int? shardIndex,
       int? totalShards,
       String? manifestOut,
-      List<String> extra = const [],
     }) {
       tree.setJsPath(jsPath);
       return [
@@ -103,7 +105,6 @@ void _invalidFlagTests() {
         if (shardIndex != null) ...['--shard-index', '$shardIndex'],
         if (totalShards != null) ...['--total-shards', '$totalShards'],
         if (manifestOut != null) ...['--manifest-out', manifestOut],
-        ...extra,
       ];
     }
 
@@ -135,17 +136,28 @@ void _invalidFlagTests() {
         expect(out.join('\n'), contains(entry.value.message));
       });
     }
+  });
+}
+
+void _unknownFlagTests() {
+  group('an unknown flag exits non-zero before the engine (AC2)', () {
+    final bogusJsPath = 'js/unit-tests/does-not-exist.js';
 
     test('an unknown flag is rejected', () {
+      tree.setJsPath(bogusJsPath);
       final out = <String>[];
       final code = runAgentsSuite(
-        SuiteShardArgs.parse(argsWith(
-          jsPath: bogusJsPath,
-          shardIndex: 0,
-          totalShards: 2,
-          manifestOut: '${tree.root.path}/out/manifest.json',
-          extra: ['--shard-quota', '9'],
-        )),
+        SuiteShardArgs.parse([
+          tree.root.path,
+          '--shard-index',
+          '0',
+          '--total-shards',
+          '2',
+          '--manifest-out',
+          '${tree.root.path}/out/manifest.json',
+          '--shard-quota',
+          '9',
+        ]),
         err: out.add,
       );
       expect(code, isNot(0));
@@ -237,7 +249,7 @@ void _serialTests() {
   });
 }
 
-void _configErrorTests() {
+void _configErrorShapeTests() {
   group('config errors exit 2 (run_all.json contract)', () {
     test('a missing run_all.json exits 2', () {
       final out = <String>[];
@@ -272,7 +284,11 @@ void _configErrorTests() {
       expect(code, 2);
       expect(out.join('\n'), contains('"params"'));
     });
+  });
+}
 
+void _configErrorFieldTests() {
+  group('config errors exit 2 (run_all.json contract)', () {
     test('a non-string jsPath exits 2', () {
       File('${tree.root.path}/js/unit-tests/run_all.json').writeAsStringSync(
         jsonEncode({
@@ -313,7 +329,7 @@ void _configErrorTests() {
   });
 }
 
-void _engineFailureTests() {
+void _engineCrashTests() {
   group('engine failures keep the exit contract and red the manifest', () {
     test('a runner script without action() crashes the shard (exit 1)', () {
       tree.setRunnerScript('// no action function here');
@@ -343,7 +359,11 @@ void _engineFailureTests() {
       expect(code, 1);
       expect(out.join('\n'), contains('returned no result'));
     });
+  });
+}
 
+void _engineRedResultTests() {
+  group('engine failures keep the exit contract and red the manifest', () {
     test('a non-JSON result fails the run', () {
       tree.setRunnerScript('function action(params) { return "not json"; }');
       final out = <String>[];

@@ -11,14 +11,24 @@ name: Release CLI
 #   3. release: publish tar.gz bundles + install.sh + checksums with the
 #      generated changelog as the release body
 #
-# Trigger is dispatch-only (like dm.ai) — the workflow itself pushes the tag,
-# so a tag-push trigger would double-fire.
+# Trigger: dispatch-only (like dm.ai) PLUS auto-fire on every main push —
+# owner mandate 2026-10-01: the CLI always tracks latest (the factories
+# resolve vars.DMTOOLS_VERSION=latest), so a substantive main merge must cut
+# a release without a manual button. Docs/CI-only changes never cut one
+# (paths-ignore mirrors dmtools-agents agent-pack-release.yml). The workflow
+# itself pushes the tag, so a tag-push trigger would double-fire.
 #
 # Platform matrix: linux-x64/arm64, macos-x64/arm64, windows-x64
 # (MinGW-w64 builds the QuickJS bridge; the zip carries dmtools.exe +
 # the bridge + a dmtools.cmd launcher that pins JSR_QUICKJS_LIB).
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/**'
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
     inputs:
       version:

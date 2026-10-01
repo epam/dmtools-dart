@@ -31,7 +31,17 @@ run-name: >-
 
 on:
   issues:
-    types: [assigned, labeled]  # dev leg; review/rework ride labels too
+    # assigned only — labeled REMOVED (2026-10-01): every label echo (the dev
+    # leg's own status:In Development, SM backfills) spawned a workflow run
+    # that queued BEHIND the concurrency group for the whole leg duration
+    # (live: gh-317/gh-318 twins, 20:01→20:03); the in-run dedupe gate cannot
+    # act — workflow-level concurrency holds the whole run pending before any
+    # job (incl. dedupe) starts. The awf guard skips status echoes at
+    # evaluation, so no double EXECUTION — but the queue clutter was real.
+    # Leg dispatching is dispatch-only: the SM dispatches review/rework
+    # (workflow_dispatch, inputs.leg), the manual rework override (#544) is a
+    # dispatch with leg=rework instead of the agent:rework label.
+    types: [assigned]
   workflow_dispatch:
     inputs:
       issue:

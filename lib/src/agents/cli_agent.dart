@@ -225,8 +225,10 @@ class CliAgent {
 
   /// Executes a JS action via [JsJobRunner] with context bindings.
   ///
-  /// Errors are caught and logged — the lifecycle continues (mirrors Java
-  /// `executeJsAction`).
+  /// Binds a top-level `metadata` into the JS `params` object
+  /// ([_metadataContextParams] — Java `TrackerParams.METADATA` binding,
+  /// epam/dm.ai#623 parity). Errors are caught and logged — the lifecycle
+  /// continues (mirrors Java `executeJsAction`).
   void _executeJsAction(
     String name,
     String? actionPath,
@@ -243,6 +245,7 @@ class CliAgent {
         workingDirectory: workDir,
         config: JsRunConfig(
           extraGlobals: _buildExtraGlobals(response, inputFolderPath, workDir),
+          contextParams: _metadataContextParams(),
         ),
       );
     } catch (e) {
@@ -313,7 +316,8 @@ class CliAgent {
     );
   }
 
-  /// Builds the periodic timer callback (Java `buildTimerRunnable`).
+  /// Builds the periodic timer callback (Java `buildTimerRunnable`,
+  /// including the #454 `TrackerParams.METADATA` binding).
   void Function()? _buildTimerAction(String workDir, LiveCliOutput live) {
     final action = params.timerJSAction;
     if (action == null || action.trim().isEmpty) return null;
@@ -322,6 +326,7 @@ class CliAgent {
           action,
           workDir,
           {'currentCliOutput': live.value},
+          contextParams: _metadataContextParams(),
         );
   }
 
@@ -358,16 +363,19 @@ class CliAgent {
 
   /// Runs a context JS action via [JsJobRunner], injecting [context] globals.
   ///
-  /// Returns the JSON-serialized result (for line-stop boolean parsing).
-  /// Errors are caught and logged — the lifecycle continues — mirroring the
-  /// Java `executeJsAction` / `buildLineStopPredicate` swallow-and-continue
-  /// contract.
+  /// [contextParams] carries extra `params.*` bindings for specific actions
+  /// (the timer binds `metadata`; error/line actions stay unbound — Java
+  /// parity). Returns the JSON-serialized result (for line-stop boolean
+  /// parsing). Errors are caught and logged — the lifecycle continues —
+  /// mirroring the Java `executeJsAction` / `buildLineStopPredicate`
+  /// swallow-and-continue contract.
   String? _runContextJsAction(
     String name,
     String actionPath,
     String workDir,
-    Map<String, dynamic> context,
-  ) {
+    Map<String, dynamic> context, {
+    Map<String, dynamic>? contextParams,
+  }) {
     try {
       return jsRunner.runScript(
         scriptPath: actionPath,
@@ -376,12 +384,25 @@ class CliAgent {
         workingDirectory: workDir,
         config: JsRunConfig(
           extraGlobals: _mergeContextGlobals(context, workDir),
+          contextParams: contextParams,
         ),
       );
     } catch (e) {
       stderr.writeln('$name failed, continuing: $e');
       return null;
     }
+  }
+
+  /// Top-level `metadata` binding merged into the params object of the
+  /// pre/post JS hooks (`preJSAction`, `preCliJSAction`, `postJSAction`,
+  /// timer) — Java `TrackerParams.METADATA` binding parity
+  /// (epam/dm.ai#623): vendored hooks (e.g. the `<contextId>_wip`
+  /// re-entrancy guard) read `params.metadata.contextId`. Null when the
+  /// job carries no metadata — Java's `JSONObject.put(key, null)` removes
+  /// the key (null-omission parity).
+  Map<String, dynamic>? _metadataContextParams() {
+    final md = params.metadata;
+    return md == null ? null : {'metadata': md};
   }
 
   /// Merges the standard JS action globals with action-specific [context].

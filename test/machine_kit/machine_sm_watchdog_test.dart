@@ -11,12 +11,14 @@
 /// IstiN/dmtools-agentic-workflows (pinned immutable SHA, guarded by
 /// test/machine_kit/factory_stub_ref_test.dart) — agent code and the CLI
 /// resolve from RELEASES at run time (vars.AGENTS_VERSION /
-/// vars.DMTOOLS_VERSION), so the frozen SHA never goes stale. Only the
-/// teammate leg still calls the historical factory inside the agents
-/// submodule (its migration is a follow-up), so its factory contract
-/// groups keep reading the in-tree submodule copy:
+/// vars.DMTOOLS_VERSION), so the frozen SHA never goes stale. The
+/// teammate leg calls the same factory home (its own immutable pin) with
+/// the `agents` submodule gitlink riding `factory_ref` as the ENGINE
+/// pin — two independent pins. The leg-runner contract group that used
+/// to parse the in-tree submodule copy is SKIPPED until it re-homes to
+/// the AW pin (dmtools-agents#591 retires the submodule copy):
 ///
-///   agents/.github/workflows/factory-teammate.yml — leg runner contract
+///   (leg runner contract — re-home to the AW factory pin as follow-up)
 import 'dart:io';
 
 import 'package:test/test.dart';

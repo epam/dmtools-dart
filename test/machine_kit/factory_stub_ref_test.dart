@@ -10,10 +10,11 @@
 ///   resolve from RELEASES at run time (vars.AGENTS_VERSION /
 ///   vars.DMTOOLS_VERSION on this repo, 'latest' defaults), so a frozen
 ///   SHA never goes stale.
-/// - `ai-teammate.yml` still calls the historical factory-teammate.yml
-///   inside the `agents` submodule pin (teammate migration is a follow-up)
-///   — there the old in-lockstep contract holds: uses-SHA == submodule
-///   gitlink == the factory_ref input.
+/// - `ai-teammate.yml` calls the factory home (dmtools-agentic-workflows)
+///   pinned to its own immutable SHA; the `agents` submodule gitlink rides
+///   the `factory_ref` input as the ENGINE pin — the two pins are
+///   independent and must never be conflated (uses-SHA ≠ factory_ref by
+///   design now).
 ///
 /// A reusable-workflow `uses:` ref is resolved at run start — a branch
 /// ref executes whatever sits at the branch head, which has already

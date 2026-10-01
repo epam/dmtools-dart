@@ -12,7 +12,11 @@ import 'package:test/test.dart';
 /// added to quality.yml.
 void main() {
   final quality = File('.github/workflows/quality.yml').readAsStringSync();
+  _agentsGateTests(quality);
+  _gateTests(quality);
+}
 
+void _agentsGateTests(String quality) {
   group('agents-gate job (quality.yml)', () {
     test('runs unconditionally with if: always()', () {
       expect(
@@ -56,7 +60,9 @@ void main() {
       );
     });
   });
+}
 
+void _gateTests(String quality) {
   group('gate job (quality.yml) — same latent hole', () {
     test('runs unconditionally with if: always()', () {
       expect(

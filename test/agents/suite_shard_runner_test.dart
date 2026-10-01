@@ -125,29 +125,47 @@ void _invalidComboTests() {
       ),
     }.entries) {
       test('${entry.key} is rejected', () {
-        final out = <String>[];
-        final code = runAgentsSuite(
-          SuiteShardArgs.parse(
-            argsWith(
-              jsPath: bogusJsPath,
-              shardIndex: entry.value.index,
-              totalShards: entry.value.total,
-              // The empty-value entry exercises `--manifest-out ""` — a
-              // non-null flag that must still be rejected (thread 5).
-              manifestOut: switch (entry.key) {
-                'missing --manifest-out' => null,
-                'empty --manifest-out value' => '',
-                _ => '${tree.root.path}/out/manifest.json',
-              },
-            ),
+        expect(
+          _rejectCombo(
+            jsPath: bogusJsPath,
+            shardIndex: entry.value.index,
+            totalShards: entry.value.total,
+            // The empty-value entry exercises `--manifest-out ""` — a
+            // non-null flag that must still be rejected (thread 5).
+            manifestOut: switch (entry.key) {
+              'missing --manifest-out' => null,
+              'empty --manifest-out value' => '',
+              _ => '${tree.root.path}/out/manifest.json',
+            },
           ),
-          err: out.add,
+          contains(entry.value.message),
         );
-        expect(code, isNot(0), reason: 'expected rejection, got output: $out');
-        expect(out.join('\n'), contains(entry.value.message));
       });
-    }
+    });
   });
+}
+
+/// Runs one invalid combo through the runner and returns the combined
+/// stderr output; the caller asserts the rejection reason.
+String _rejectCombo({
+  required String jsPath,
+  int? shardIndex,
+  int? totalShards,
+  String? manifestOut,
+}) {
+  tree.setJsPath(jsPath);
+  final out = <String>[];
+  final code = runAgentsSuite(
+    SuiteShardArgs.parse([
+      tree.root.path,
+      if (shardIndex != null) ...['--shard-index', '$shardIndex'],
+      if (totalShards != null) ...['--total-shards', '$totalShards'],
+      if (manifestOut != null) ...['--manifest-out', manifestOut],
+    ]),
+    err: out.add,
+  );
+  expect(code, isNot(0), reason: 'expected rejection, got output: $out');
+  return out.join('\n');
 }
 
 void _unknownFlagTests() {

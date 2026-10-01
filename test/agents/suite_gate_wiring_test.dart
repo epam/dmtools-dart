@@ -24,8 +24,7 @@ void main() {
       );
     });
 
-    test('fails explicitly when the agents-suite result is not success',
-        () {
+    test('fails explicitly when the agents-suite result is not success', () {
       final block = _jobBlock(quality, 'agents-gate');
       expect(
         block,
@@ -83,8 +82,8 @@ void main() {
 /// The YAML block of job [name]: from its `name:` line to the next
 /// top-level job key (same indentation).
 String _jobBlock(String yaml, String name) {
-  final pattern = RegExp('^\\s*${RegExp.escape(name.trim())}:\\n',
-      multiLine: true);
+  final pattern =
+      RegExp('^\\s*${RegExp.escape(name.trim())}:\\n', multiLine: true);
   final match = pattern.firstMatch(yaml);
   if (match == null) {
     fail('job $name not found in workflow');

@@ -228,7 +228,8 @@ void _preflightTests() {
 }
 
 void _serialTests() {
-  group('serial path (AC5)', () {    test('passes the identical full testFiles list through and exits 0', () {
+  group('serial path (AC5)', () {
+    test('passes the identical full testFiles list through and exits 0', () {
       final out = <String>[];
       final code = runAgentsSuite(
         SuiteShardArgs.parse([tree.root.path]),

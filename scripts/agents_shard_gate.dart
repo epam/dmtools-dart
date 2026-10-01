@@ -10,10 +10,11 @@
 //
 // The merge logic itself lives in lib/src/agents/suite_sharding.dart and
 // is unit-tested in test/agents/suite_sharding_test.dart (AC4 hooks).
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/src/agents/suite_shard_runner.dart';
 import 'package:dmtools/src/agents/suite_sharding.dart';
+import 'package:path/path.dart' as p;
 
 void main(List<String> args) {
   if (args.length != 2) {
@@ -37,7 +38,6 @@ void main(List<String> args) {
   }
 
   final expectedFiles = _expectedFiles(runAllPath);
-
   final result = ShardManifestMerger.merge(
     manifestJsons: payloads,
     expectedFiles: expectedFiles,
@@ -77,24 +77,21 @@ List<String> _collectManifestPayloads(Directory dir) {
   return payloads;
 }
 
-/// The canonical `params.jobParams.testFiles` list.
+/// The canonical `params.jobParams.testFiles` list — parsed by the one
+/// loader every consumer shares (`loadAgentsSuiteConfig`), so the
+/// partition's ground truth has a single parser (review thread 6).
 List<String> _expectedFiles(String runAllPath) {
-  final file = File(runAllPath);
-  if (!file.existsSync()) {
+  if (!File(runAllPath).existsSync()) {
     stderr.writeln('run_all.json not found: $runAllPath '
         '(agents-gate needs the agents/ submodule checked out)');
     exit(2);
   }
-  final config = jsonDecode(file.readAsStringSync());
-  final params = config is Map ? config['params'] : null;
-  final jobParams = params is Map ? params['jobParams'] : null;
-  final testFiles = jobParams is Map ? jobParams['testFiles'] : null;
-  if (testFiles is! List || testFiles.any((f) => f is! String)) {
-    stderr.writeln(
-      'Malformed run_all.json: params.jobParams.testFiles must be a list '
-      'of strings ($runAllPath)',
-    );
+  // run_all.json lives at <agents-root>/js/unit-tests/run_all.json.
+  final agentsPath = p.normalize(p.join(runAllPath, '..', '..', '..'));
+  try {
+    return loadAgentsSuiteConfig(agentsPath).testFiles;
+  } on SuiteConfigException catch (e) {
+    stderr.writeln('Malformed run_all.json: ${e.message}');
     exit(2);
   }
-  return [for (final f in testFiles) f as String];
 }

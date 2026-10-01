@@ -148,7 +148,7 @@ jobs:
       - name: Fail unless static and test both succeeded
         if: needs.static.result != 'success' || needs.test.result != 'success'
         run: |
-          echo "static result: ${needs.static.result}; test result: ${needs.test.result}" >&2
+          echo "static result: ${{ needs.static.result }}; test result: ${{ needs.test.result }}" >&2
           exit 1
       - name: Runner disk hygiene
         if: needs.static.result == 'success' && needs.test.result == 'success'
@@ -241,8 +241,8 @@ jobs:
             .badges/crap4dart.svg
       - name: Commit badges
         # Badges belong to main only — on PR branches this step would push a
+        # stray bot commit to the feature branch mid-review.
         if: needs.static.result == 'success' && needs.test.result == 'success' && github.ref == 'refs/heads/main'
-        if: github.ref == 'refs/heads/main'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
@@ -361,7 +361,7 @@ jobs:
       - name: Fail unless every shard succeeded
         if: needs.agents-suite.result != 'success'
         run: |
-          echo "agents-suite result: ${needs.agents-suite.result}" >&2
+          echo "agents-suite result: ${{ needs.agents-suite.result }}" >&2
           exit 1
       - name: Runner disk hygiene
         if: needs.agents-suite.result == 'success'

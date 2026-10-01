@@ -18,9 +18,9 @@ quality.yml (dispatch)
  ├─ agents-suite (matrix ×6)            ← sharded; each shard:
  │    bin/run_agents_suite.dart agents
  │      --shard-index i --total-shards 6 --manifest-out <path>
- │      ├─ ShardPlanner.split(testFiles, i, 4)   // pure, deterministic
+ │      ├─ ShardPlanner.split(testFiles, i, N)   // pure, deterministic
  │      ├─ pre-flight: every planned file exists & non-empty
- │      ├─ JsJobRunner().runScript(testRunner.js, jobParams{testFiles: subset})
+ │      ├─ JsJobRunner().runScript(testRunner.js, run_all.json jobParams verbatim, testFiles → subset)
  │      └─ writes the suite-shard manifest artifact (JSON, parse-only)
  └─ agents-gate (needs: agents-suite)   ← required merge check
       ├─ downloads the 6 manifests
@@ -67,7 +67,13 @@ identical full `testFiles` list to the engine and keeps the exit contract
 `dmtools run agents/js/unit-tests/run_all.json` pipeline is untouched.
 
 Invalid flag combos (`i ≥ N`, `N < 1`, `i`/`N` split, empty planned shard,
-missing `--manifest-out`, unknown flags) exit non-zero before the engine.
+missing or empty `--manifest-out`, unknown flags) exit non-zero before the
+engine.
+
+One delta from the historical serial run: a planned file that is missing or
+empty now fails the serial run in pre-flight (exit 1) where `testRunner.js`
+used to skip it silently and still go green — AC3's strictly-stricter gate
+applies to both modes.
 
 ## Bumping the shard count N
 

@@ -1,7 +1,7 @@
-# AI Teammate — thin stub over the dmtools-agents factory (reusable pack).
+# AI Teammate — thin stub over the factory home (dmtools-agentic-workflows).
 #
-# ALL logic lives in IstiN/dmtools-agents/.github/workflows/factory/
-# teammate.yml (guard, legs, verdict, sessions, memory). This file carries
+# ALL logic lives in IstiN/dmtools-agentic-workflows/.github/workflows/
+# factory-teammate.yml (guard, legs, verdict, sessions, memory). This file carries
 # only what cannot live in a reusable workflow: the repository event
 # triggers, the per-issue concurrency group, and the call itself.
 #

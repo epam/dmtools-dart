@@ -132,11 +132,26 @@ jobs:
   gate:
     # Single merge point: full coverage lcov + total test count restored
     # from the shards, then the crap4dart gates and the badges. Required
-    # status check — a red shard fails this job through `needs`.
+    # status check.
+    #
+    # Enforcement path (review thread 1): a `needs:`-dependent job whose
+    # dependency fails reports `skipped`, and skipped counts as a
+    # SUCCESSFUL status for required checks. Today quality.yml is
+    # dispatch-only (the SM tick stamps required contexts from the run
+    # outcome), but this job must also go RED on its own: `if: always()`
+    # + the result guard below keep the shape safe if a `pull_request`
+    # trigger is ever added.
     needs: [static, test]
+    if: always()
     runs-on: bitrise-runner-dmtools-ci
     steps:
+      - name: Fail unless static and test both succeeded
+        if: needs.static.result != 'success' || needs.test.result != 'success'
+        run: |
+          echo "static result: ${{ needs.static.result }}; test result: ${{ needs.test.result }}" >&2
+          exit 1
       - name: Runner disk hygiene
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         # Bitrise pool machines accumulate per-run workdirs; twice on
         # 2026-09-26 a full disk killed agents-suite mid-run. Drop stale
         # dirs (>1 day) before checkout. Never touches the current
@@ -149,19 +164,25 @@ jobs:
           find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
           df -h / || true
       - uses: actions/checkout@v4
+        if: needs.static.result == 'success' && needs.test.result == 'success'
       - uses: dart-lang/setup-dart@v1
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         with:
           sdk: stable
       - run: dart pub get
+        if: needs.static.result == 'success' && needs.test.result == 'success'
       - uses: actions/download-artifact@v4
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         with:
           pattern: lcov-*
           path: coverage-shards
       - uses: actions/download-artifact@v4
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         with:
           pattern: count-*
           path: shard-counts
       - name: Merge shard coverage
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq lcov
           mkdir -p coverage
@@ -170,17 +191,22 @@ jobs:
           lcov $ARGS -o coverage/lcov.info
       - name: Sum shard test counts
         id: counts
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         run: |
           TOTAL=$(cat shard-counts/count-*/shard_count.txt | awk '{s+=$1} END{print s+0}')
           echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
       - name: Install crap4dart
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         # 0.9.5: fixed the test_assertions parser limitation with trailing
         # named `skip:` args, so the two config excludes are gone. Keep this
         # pin aligned with the version the pre-commit hook runs locally.
         run: dart pub global activate crap4dart 0.9.5
       - run: crap4dart check --all
+        if: needs.static.result == 'success' && needs.test.result == 'success'
       - run: crap4dart analyze
+        if: needs.static.result == 'success' && needs.test.result == 'success'
       - name: Generate badges
+        if: needs.static.result == 'success' && needs.test.result == 'success'
         run: |
           mkdir -p .badges
           TEST_COUNT="${{ steps.counts.outputs.test_count }}"
@@ -216,7 +242,7 @@ jobs:
       - name: Commit badges
         # Badges belong to main only — on PR branches this step would push a
         # stray bot commit to the feature branch mid-review.
-        if: github.ref == 'refs/heads/main'
+        if: needs.static.result == 'success' && needs.test.result == 'success' && github.ref == 'refs/heads/main'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
@@ -225,9 +251,33 @@ jobs:
           git push || true
 
   agents-suite:
-    # Runs in parallel with the test shards — both are required merge checks
-    # and the suite hard-gates on its own, so serializing only adds wall time.
+    # gh-315: the suite (92 files, 917 tests) runs in ONE sequential QuickJS
+    # engine — 11m44s of wall time, the quality pipeline's long pole. It is
+    # now sharded the same way dart test already is: each matrix shard
+    # plans its round-robin subset (ShardPlanner), pre-flights that every
+    # planned file exists and is non-empty (testRunner.js would silently
+    # skip unreadable files — pre-flight turns that into a hard red), runs
+    # the subset through the UNMODIFIED testRunner.js, and uploads a JSON
+    # manifest of its result. fail-fast: false so every shard reports; a
+    # re-dispatch retries the whole matrix (concurrency group semantics).
+    #
+    # N is a workflow-level constant: bump matrix + TOTAL_SHARDS together.
+    # N=6, not the proposed 4: round-robin balances the file COUNT (23/23/
+    # 23/23 @ N=4), but test_smAgent.js' quarter of the list carries ~47%
+    # of the tests (measured shard 0 @ N=4: 432 of 917) — a 4-way split
+    # keeps a ~5.5 min pole and blows the <=7 min budget once agents-gate
+    # is added. Static per-file test counts (exact against the measured
+    # shard) give max-shard shares of 34% @ N=4, 24% @ N=6, 22% @ N=8;
+    # N=6 keeps the pole at ~4 min while adding only 2 extra jobs beyond
+    # the proposal (13 total). If the Bitrise pool cannot host them, shards
+    # queue — wall time degrades gracefully, correctness is unaffected.
     runs-on: bitrise-runner-dmtools-ci
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      TOTAL_SHARDS: 6
     steps:
       - name: Runner disk hygiene
         # Bitrise pool machines accumulate per-run workdirs; twice on
@@ -269,11 +319,78 @@ jobs:
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
           bash "$PKG/tool/build_quickjs.sh"
       # Pinned via the agents/ submodule instead of a floating clone so the
-      # suite state is reproducible per commit.
-      #
-      # Blocking: the suite is fully green again (882/882 at
-      # agents@432cd4c — upstream fixed the 14 formerly-failing tests and
-      # the Dart runtime satisfies them; the continue-on-error fuse has
-      # been restored to hard-gate).
-      - name: Run agents test suite (agents/ submodule)
-        run: dart run bin/run_agents_suite.dart agents
+      # suite state is reproducible per commit. The suite hard-gates: the
+      # runner requires a well-formed, fully-passing result per shard.
+      - name: Run agents test suite (shard ${{ matrix.shard }}/${{ env.TOTAL_SHARDS }})
+        run: |
+          dart run bin/run_agents_suite.dart agents \
+            --shard-index "${{ matrix.shard }}" \
+            --total-shards "$TOTAL_SHARDS" \
+            --manifest-out "agents-suite-shard/manifest-${{ matrix.shard }}.json"
+      # The manifest is machine-written JSON from our own runner (paths +
+      # counts only) — the agents-gate merge job parses it, never evals it.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agents-manifest-${{ matrix.shard }}
+          path: agents-suite-shard/manifest-${{ matrix.shard }}.json
+          retention-days: 1
+
+  agents-gate:
+    # gh-315: single merge point for the sharded agents suite — mirrors the
+    # `gate` job that merges lcov shards. The merge additionally fails on
+    # partition defects: the multiset of planned files across the
+    # downloaded manifests must equal run_all.json's testFiles exactly (a
+    # lost or duplicated file is red, not a silent green with fewer
+    # tests), and every manifest must report a fully-passing shard.
+    # Manifests are parsed as data, never evaled. Required status check
+    # (like `gate`).
+    #
+    # Enforcement path (review thread 1): a `needs:`-dependent job whose
+    # dependency fails reports `skipped`, and skipped counts as a
+    # SUCCESSFUL status for required checks. Today the gate is still
+    # protected run-level (dispatch-only workflow → SM validate → tick
+    # stamping), but this job must also go RED on its own: `if: always()`
+    # + the result guard below make a red/cancelled shard produce a red
+    # required check, so the shape stays safe if a `pull_request` trigger
+    # is ever added.
+    needs: [agents-suite]
+    if: always()
+    runs-on: bitrise-runner-dmtools-ci
+    steps:
+      - name: Fail unless every shard succeeded
+        if: needs.agents-suite.result != 'success'
+        run: |
+          echo "agents-suite result: ${{ needs.agents-suite.result }}" >&2
+          exit 1
+      - name: Runner disk hygiene
+        if: needs.agents-suite.result == 'success'
+        run: |
+          df -h / || true
+          WS_PARENT="$(dirname "$RUNNER_WORKSPACE")"
+          CUR="$(basename "$RUNNER_WORKSPACE")"
+          find "$WS_PARENT" -maxdepth 1 -mindepth 1 -type d ! -name "$CUR" -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+          find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
+          df -h / || true
+      - uses: actions/checkout@v4
+        if: needs.agents-suite.result == 'success'
+        with:
+          # agents/ is the partition's ground truth: the gate compares the
+          # merged manifests against the pinned run_all.json list.
+          submodules: true
+      - uses: dart-lang/setup-dart@v1
+        if: needs.agents-suite.result == 'success'
+        with:
+          sdk: stable
+      - run: dart pub get
+        if: needs.agents-suite.result == 'success'
+      - uses: actions/download-artifact@v4
+        if: needs.agents-suite.result == 'success'
+        with:
+          pattern: agents-manifest-*
+          path: agents-manifests
+      - name: Merge shard manifests (partition + all-green)
+        if: needs.agents-suite.result == 'success'
+        run: |
+          dart run scripts/agents_shard_gate.dart \
+            agents-manifests agents/js/unit-tests/run_all.json

@@ -50,12 +50,11 @@ jobs:
       runner: bitrise-runner-dmtools-ci
       # Bridge-free mode (factory #510): the tick stamps the three required
       # protection checks itself — the sm-validation bridge is deleted.
-      validation-checks: '["agents-suite","static","gate"]'
-      # Factory-state snapshot → factory-data branch, CDN-read by the board
-      # (IstiN/dmtools-agents site/factory; fa machine-sm.yml parity). The
-      # tag IS the branch name — factory-data everywhere so the board URLs
-      # share one shape (was factory-state: same transport, off-name branch).
-      state-publish: '{"channel":"release","tag":"factory-data","asset":"dart-state.json"}'
+      # gh-315: the sharded agents suite merges in `agents-gate` (the
+      # matrix shards themselves are not required contexts, same as `test`).
+      validation-checks: '["agents-gate","static","gate"]'
+      # Factory-state snapshot → public prerelease asset (board: site/factory)
+      state-publish: '{"channel":"release","tag":"factory-state","asset":"dart-state.json"}'
       # Parallel READ fan-out inside the tick (dmtools-agents#559): wires the
       # Dart runtime's runAsync worker pool into the SM engine — per-PR/issue
       # enrichment + dispatched-CI probes fan out over 4 workers; '0' would
@@ -64,7 +63,7 @@ jobs:
       parallel-workers: '4'
       # sm_github.json validation rules (validate-armed etc.) dispatch and
       # stamp THIS workflow on PR heads — without it the required contexts
-      # (agents-suite/static/gate, produced by quality.yml jobs) never
+      # (agents-gate/static/gate, produced by quality.yml jobs) never
       # appear and approved PRs stall BLOCKED (issue dmtools-agents#575,
       # live: PR #301 needed a manual Quality dispatch 2026-09-29).
       ci-workflow: quality.yml

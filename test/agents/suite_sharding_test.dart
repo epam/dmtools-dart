@@ -1,0 +1,359 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dmtools/src/agents/suite_sharding.dart';
+import 'package:test/test.dart';
+
+/// gh-315 — runner-level sharding of the agents suite (L4).
+///
+/// Covers the pure half of the sharding design:
+/// - [ShardPlanner] partition exactness (AC1): disjoint shards, union equals
+///   the input element-for-element, deterministic, N=1 identity, N > len
+///   degrades to empty high shards.
+/// - [ShardManifest] schema round-trip and [ShardManifestMerger] outcomes
+///   (AC4 test hooks): green manifests, red shard, missing file, duplicated
+///   file, malformed JSON, shard-count defects — each mapped to a problem.
+void main() {
+  group('ShardPlanner.split (AC1)', () {
+    test('N=1 reproduces the original list unchanged', () {
+      final files = ['b.js', 'a.js', 'c.js'];
+      final shard = ShardPlanner.split(files, 0, 1);
+      expect(shard, files);
+      expect(shard, sameOrderAs(files));
+    });
+
+    test('split is deterministic (same input ⇒ same output)', () {
+      final files = _synthetic(37);
+      for (var n = 1; n <= 5; n++) {
+        for (var i = 0; i < n; i++) {
+          expect(ShardPlanner.split(files, i, n),
+              ShardPlanner.split(files, i, n),
+              reason: 'shard $i/$n must be a pure function of its inputs');
+        }
+      }
+    });
+
+    test('shards are disjoint and their union equals the input', () {
+      for (final len in [0, 1, 2, 3, 7, 92, 200]) {
+        final files = _synthetic(len);
+        for (var n = 1; n <= len + 3; n++) {
+          final shards = [
+            for (var i = 0; i < n; i++) ShardPlanner.split(files, i, n),
+          ];
+          final union = [for (final s in shards) ...s]..sort();
+          final expected = [...files]..sort();
+          expect(union, expected,
+              reason: 'len=$len n=$n: union of shards must equal the input');
+          // Disjointness: a file in two shards would show up twice above.
+        }
+      }
+    });
+
+    test('every file lands in exactly one shard (pos % N assignment)', () {
+      final files = _synthetic(10);
+      for (var pos = 0; pos < files.length; pos++) {
+        final home = pos % 4;
+        for (var i = 0; i < 4; i++) {
+          final shard = ShardPlanner.split(files, i, 4);
+          expect(shard.contains(files[pos]), i == home,
+              reason: '${files[pos]} must live in shard $home, not $i');
+        }
+      }
+    });
+
+    test('order is stable inside each shard', () {
+      final files = _synthetic(12);
+      final shard0 = ShardPlanner.split(files, 0, 3);
+      final expected0 = [
+        for (var pos = 0; pos < files.length; pos++)
+          if (pos % 3 == 0) files[pos],
+      ];
+      expect(shard0, expected0);
+    });
+
+    test('N greater than the file count yields empty high shards', () {
+      final files = _synthetic(2);
+      expect(ShardPlanner.split(files, 0, 5), hasLength(1));
+      expect(ShardPlanner.split(files, 1, 5), hasLength(1));
+      expect(ShardPlanner.split(files, 2, 5), isEmpty);
+      expect(ShardPlanner.split(files, 4, 5), isEmpty);
+    });
+
+    test('round-robin balances the file count across shards', () {
+      final files = _synthetic(92);
+      final sizes = [for (var i = 0; i < 4; i++) ShardPlanner.split(files, i, 4).length];
+      expect(sizes, everyElement(23));
+    });
+
+    test('the real run_all.json list partitions exactly (92 files, N=4)', () {
+      final testFiles = _realRunAllTestFiles();
+      if (testFiles == null) {
+        return; // Submodule not checked out — covered by synthetic cases above.
+      }
+      expect(testFiles, hasLength(92));
+      final shards = [
+        for (var i = 0; i < 4; i++) ShardPlanner.split(testFiles, i, 4),
+      ];
+      final union = [for (final s in shards) ...s];
+      expect(union.length, testFiles.length,
+          reason: 'no file may be lost or duplicated by the split');
+      final sortedUnion = [...union]..sort();
+      final sortedInput = [...testFiles]..sort();
+      expect(sortedUnion, sortedInput);
+      // Every file appears exactly once (disjointness).
+      expect(union.toSet().length, union.length);
+      expect(shards.map((s) => s.length), everyElement(23));
+    });
+
+    test('split accepts every N in {1..len+} on the real list', () {
+      final testFiles = _realRunAllTestFiles();
+      if (testFiles == null) return;
+      for (final n in [1, 2, 3, 4, 5, 23, 46, 92, 93, 100]) {
+        final union = <String>[
+          for (var i = 0; i < n; i++) ...ShardPlanner.split(testFiles, i, n),
+        ]..sort();
+        expect(union, [...testFiles]..sort(),
+            reason: 'N=$n must preserve the multiset of files');
+      }
+    });
+
+    test('empty input: every shard is empty, N=1 is an identity', () {
+      expect(ShardPlanner.split(const [], 0, 1), isEmpty);
+      expect(ShardPlanner.split(const [], 0, 4), isEmpty);
+    });
+  });
+
+  group('ShardManifest schema', () {
+    test('toJson/fromJson round-trip', () {
+      const manifest = ShardManifest(
+        shard: 2,
+        total: 4,
+        plannedFiles: ['js/unit-tests/test_a.js', 'js/unit-tests/test_b.js'],
+        success: true,
+        passed: 11,
+        failed: 0,
+      );
+      final decoded = ShardManifest.fromJson(
+        jsonDecode(jsonEncode(manifest.toJson())) as Map,
+      );
+      expect(decoded, manifest);
+    });
+
+    test('fromJson rejects a missing key', () {
+      expect(
+        () => ShardManifest.fromJson({
+          'shard': 0,
+          'total': 2,
+          'plannedFiles': <String>[],
+          'success': true,
+          'passed': 1,
+          // failed missing
+        }),
+        throwsA(isA<ShardManifestException>()),
+      );
+    });
+
+    test('fromJson rejects a wrong-typed value', () {
+      expect(
+        () => ShardManifest.fromJson({
+          'shard': 'zero',
+          'total': 2,
+          'plannedFiles': <String>[],
+          'success': true,
+          'passed': 1,
+          'failed': 0,
+        }),
+        throwsA(isA<ShardManifestException>()),
+      );
+    });
+  });
+
+  group('ShardManifestMerger.merge (AC4 outcomes)', () {
+    const files = ['a.js', 'b.js', 'c.js', 'd.js'];
+
+    List<String> manifestJsons(List<ShardManifest> manifests) =>
+        [for (final m in manifests) jsonEncode(m.toJson())];
+
+    ShardManifest green(int shard, int total, List<String> planned,
+            {int passed = 1}) =>
+        ShardManifest(
+          shard: shard,
+          total: total,
+          plannedFiles: planned,
+          success: true,
+          passed: passed,
+          failed: 0,
+        );
+
+    test('green manifests with an exact partition merge ok', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 2, ['a.js', 'c.js'], passed: 7),
+          green(1, 2, ['b.js', 'd.js'], passed: 9),
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isTrue, reason: 'problems: ${result.problems}');
+      expect(result.passedTotal, 16);
+      expect(result.failedTotal, 0);
+    });
+
+    test('a red shard fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: [
+          jsonEncode(green(0, 2, ['a.js', 'b.js']).toJson()),
+          jsonEncode(
+            ShardManifest(
+              shard: 1,
+              total: 2,
+              plannedFiles: ['c.js', 'd.js'],
+              success: false,
+              passed: 1,
+              failed: 2,
+            ).toJson(),
+          ),
+        ],
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems, hasLength(1));
+      expect(result.problems.single, contains('shard 1'));
+      expect(result.failedTotal, 2);
+    });
+
+    test('failed > 0 on an allegedly green shard fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: [
+          jsonEncode(
+            ShardManifest(
+              shard: 0,
+              total: 1,
+              plannedFiles: files,
+              success: true,
+              passed: 5,
+              failed: 3,
+            ).toJson(),
+          ),
+        ],
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.single, contains('failed=3'));
+    });
+
+    test('a missing planned file fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 2, ['a.js', 'b.js']),
+          green(1, 2, ['c.js']), // d.js dropped — silent-skip shape
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('d.js'));
+      expect(result.problems.join('\n'), contains('missing'));
+    });
+
+    test('a duplicated planned file fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 2, ['a.js', 'b.js', 'a.js']),
+          green(1, 2, ['c.js', 'd.js']),
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('a.js'));
+      expect(result.problems.join('\n'), contains('duplicate'));
+    });
+
+    test('an unexpected file (not in run_all.json) fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 1, ['a.js', 'b.js', 'c.js', 'd.js', 'rogue.js']),
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('rogue.js'));
+    });
+
+    test('malformed JSON maps to a problem, not a crash', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: ['{not json'],
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems, hasLength(1));
+      expect(result.problems.single, contains('parse'));
+    });
+
+    test('fewer manifests than total fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 2, ['a.js', 'b.js', 'c.js', 'd.js']),
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('shard 1'));
+    });
+
+    test('duplicate shard index fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: manifestJsons([
+          green(0, 2, ['a.js', 'b.js']),
+          green(0, 2, ['c.js', 'd.js']),
+        ]),
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('twice'));
+    });
+
+    test('shards disagreeing on total fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: [
+          jsonEncode(green(0, 2, ['a.js', 'b.js']).toJson()),
+          jsonEncode(green(1, 4, ['c.js', 'd.js']).toJson()),
+        ],
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('total'));
+    });
+
+    test('an empty manifest list fails the merge', () {
+      final result = ShardManifestMerger.merge(
+        manifestJsons: [],
+        expectedFiles: files,
+      );
+      expect(result.ok, isFalse);
+      expect(result.problems.join('\n'), contains('no manifests'));
+    });
+  });
+}
+
+List<String> _synthetic(int count) => [
+      for (var i = 0; i < count; i++) 'js/unit-tests/test_file$i.js',
+    ];
+
+/// The L4 suite's canonical test file list (agents/ submodule), or null when
+/// the submodule is not checked out.
+List<String>? _realRunAllTestFiles() {
+  const runAllPath = 'agents/js/unit-tests/run_all.json';
+  if (!File(runAllPath).existsSync()) return null;
+  final config = jsonDecode(File(runAllPath).readAsStringSync()) as Map;
+  final params = config['params'] as Map;
+  final jobParams = params['jobParams'] as Map;
+  return [for (final f in jobParams['testFiles'] as List) f as String];
+}
+
+Matcher sameOrderAs(List<String> expected) => predicate<List<String>>(
+      (actual) =>
+          actual.length == expected.length &&
+          [
+            for (var i = 0; i < actual.length; i++) actual[i] == expected[i],
+          ].every((same) => same),
+      'is in the same order as $expected',
+    );

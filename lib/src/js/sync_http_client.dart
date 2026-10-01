@@ -142,8 +142,10 @@ class SyncHttpClient {
       if (!policy.shouldRetry(attempt, resp.statusCode)) return resp;
       final delayMs = resp.statusCode == 0
           ? policy.connectionDelayMs(attempt)
-          : policy.statusDelayMs(attempt, resp.headers);
-      if (delayMs == null) return resp; // Retry-After over the cap: give up
+          : policy.statusDelayMs(attempt, resp.headers, resp.statusCode);
+      if (delayMs == null) {
+        return resp; // non-rate-limit Retry-After over the cap: give up
+      }
       sleep(Duration(milliseconds: delayMs));
       attempt++;
     }

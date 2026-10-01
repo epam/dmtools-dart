@@ -106,12 +106,13 @@ gates:
       - paths: ['lib/src/integrations/github/github_client_ci_tools.dart']
         max_params: 9
       # The sync RetryPolicy mirrors the Java `RetryPolicyConfig` knobs 1:1
-      # (maxAttempts/baseDelay/maxDelay/backoffMultiplier/jitterFactor plus
-      # the WAIT_BEFORE_PERFORM throttle pair and the injected Random; Java
+      # (maxAttempts/baseDelay/maxDelay/backoffMultiplier/jitterFactor,
+      # the rate-limit wait cap from Java PR epam/dm.ai#624, the
+      # WAIT_BEFORE_PERFORM throttle pair and the injected Random; Java
       # source is the spec per AGENTS.md rule 2) — grouping them into a
       # settings object would diverge from the parity surface.
       - paths: ['lib/src/js/sync_retry_policy.dart']
-        max_params: 8
+        max_params: 9
       # EngineSpec carries the independent dimensions of one engine wiring
       # (params bundle, registry, wrappers filter, working/script dirs,
       # console attribution, direct params) shared verbatim by the main

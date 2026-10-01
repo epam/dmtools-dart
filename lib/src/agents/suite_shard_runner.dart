@@ -135,7 +135,7 @@ void _shardFlagProblems(SuiteShardArgs args, List<String> problems) {
   }
   _totalRangeProblems(args.totalShards, problems);
   _indexRangeProblems(args, problems);
-  if (args.manifestOut == null) {
+  if (args.manifestOut == null || args.manifestOut!.isEmpty) {
     problems.add('--manifest-out <path> is required for sharded runs: the '
         'agents-gate merge job parses it (never evaled)');
   }

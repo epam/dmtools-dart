@@ -33,6 +33,7 @@ void main() {
   _unknownFlagTests();
   _preflightTests();
   _serialTests();
+  _jobParamsPassthroughTests();
   _configErrorShapeTests();
   _configErrorFieldTests();
   _engineCrashTests();
@@ -117,6 +118,11 @@ void _invalidComboTests() {
       'total without index': (index: null, total: 2, message: '--shard-index'),
       'empty planned shard': (index: 4, total: 5, message: 'empty'),
       'missing --manifest-out': (index: 0, total: 2, message: '--manifest-out'),
+      'empty --manifest-out value': (
+        index: 0,
+        total: 2,
+        message: '--manifest-out',
+      ),
     }.entries) {
       test('${entry.key} is rejected', () {
         final out = <String>[];
@@ -126,9 +132,13 @@ void _invalidComboTests() {
               jsPath: bogusJsPath,
               shardIndex: entry.value.index,
               totalShards: entry.value.total,
-              manifestOut: entry.key == 'missing --manifest-out'
-                  ? null
-                  : '${tree.root.path}/out/manifest.json',
+              // The empty-value entry exercises `--manifest-out ""` — a
+              // non-null flag that must still be rejected (thread 5).
+              manifestOut: switch (entry.key) {
+                'missing --manifest-out' => null,
+                'empty --manifest-out value' => '',
+                _ => '${tree.root.path}/out/manifest.json',
+              },
             ),
           ),
           err: out.add,
@@ -218,8 +228,7 @@ void _preflightTests() {
 }
 
 void _serialTests() {
-  group('serial path (AC5)', () {
-    test('passes the identical full testFiles list through and exits 0', () {
+  group('serial path (AC5)', () {    test('passes the identical full testFiles list through and exits 0', () {
       final out = <String>[];
       final code = runAgentsSuite(
         SuiteShardArgs.parse([tree.root.path]),
@@ -246,6 +255,55 @@ void _serialTests() {
 
       expect(code, 1);
       expect(out.join('\n'), contains('Agents suite failed'));
+    });
+  });
+}
+
+void _jobParamsPassthroughTests() {
+  // Thread 4 / edge case E2: the historical serial runner forwarded the
+  // WHOLE jobParams map to the engine. The runner must keep doing that —
+  // only `testFiles` is replaced by the planned subset — so an upstream
+  // run_all.json that grows a new jobParams key is not silently dropped.
+  group('jobParams passthrough (E2 forward-compat)', () {
+    /// A runner script that refuses to run unless the extra key arrived.
+    void useKeyCheckingRunner() {
+      tree.setRunnerScript('''
+function action(params) {
+  var p = params.jobParams || params;
+  if (p.extraFlag !== 'present') {
+    return { success: false, passed: 0, failed: 1 };
+  }
+  var n = (p.testFiles || []).length;
+  return { success: true, passed: n, failed: 0 };
+}
+''');
+    }
+
+    setUp(() {
+      tree.extraJobParams['extraFlag'] = 'present';
+      useKeyCheckingRunner();
+    });
+
+    test('serial run forwards extra jobParams keys to the engine', () {
+      final code = runAgentsSuite(SuiteShardArgs.parse([tree.root.path]));
+
+      expect(code, 0,
+          reason: 'the engine must see the whole jobParams map, '
+              'not just testFiles');
+    });
+
+    test('sharded run forwards extra keys with the planned testFiles subset',
+        () {
+      final manifestPath = '${tree.root.path}/out/manifest-0.json';
+      final code = _runShard(0, 2, manifestPath);
+
+      expect(code, 0);
+      final manifest = _readManifest(manifestPath);
+      // Round-robin over 4 files with N=2 → 2 planned; the count proves the
+      // PLANNED SUBSET was sent together with the extra key (not the full
+      // list, not an empty map).
+      expect(manifest.passed, 2);
+      expect(manifest.success, isTrue);
     });
   });
 }
@@ -620,6 +678,11 @@ suite('fixture', function () {
     File('${root.path}/js/unit-tests/testRunner.js').writeAsStringSync(source);
   }
 
+  /// Extra `jobParams` keys written verbatim into run_all.json next to
+  /// `testFiles` (forward-compat scenarios — the engine contract is
+  /// "forward the whole map").
+  final Map<String, String> extraJobParams = {};
+
   void setTestFiles(List<String> files) {
     _testFiles
       ..clear()
@@ -653,7 +716,10 @@ suite('fixture', function () {
         'name': 'JSRunner',
         'params': {
           'jsPath': 'js/unit-tests/testRunner.js',
-          'jobParams': {'testFiles': _testFiles},
+          'jobParams': {
+            'testFiles': _testFiles,
+            ...extraJobParams,
+          },
         },
       }));
   }

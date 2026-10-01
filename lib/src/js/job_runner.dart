@@ -40,6 +40,8 @@ class JsRunConfig {
     this.contextParams,
     this.pool,
     this.httpFetch,
+    this.consolePrefix,
+    this.preActionCode,
   });
 
   /// Restricts generated wrappers to the named integrations.
@@ -73,6 +75,20 @@ class JsRunConfig {
   /// main engine (JSON in, JSON out). Defaults to the pooled
   /// [SyncHttpClient]; see [EngineSpec.httpFetch].
   final String? Function(String requestJson)? httpFetch;
+
+  /// Prefix prepended to every `console.*` line the script prints —
+  /// shard/worker log attribution (mirrors [EngineSpec.consolePrefix],
+  /// used by the sharded agents-suite runner). Null keeps the default
+  /// unprefixed console output.
+  final String? consolePrefix;
+
+  /// JS evaluated in the same context AFTER the script source but
+  /// BEFORE `action(params)` — a host-side hook to prime or mutate the
+  /// script's globals (the sharded agents suite uses it to neutralize
+  /// `testRunner.js` counting while a shard evals its prime prefix; see
+  /// `agents_suite.dart`). Null (default) keeps the plain
+  /// eval-then-action pipeline.
+  final String? preActionCode;
 }
 
 /// A resolved script source: the [code] plus the [filename] used for eval
@@ -133,6 +149,9 @@ class JsJobRunner {
       setScriptDirectory(rt, scriptPath);
       final loaded = _loadJavaScriptCode(scriptPath);
       _evalScript(rt, loaded.code, loaded.filename);
+      if (cfg.preActionCode != null) {
+        _evalScript(rt, cfg.preActionCode!, '<pre_action>');
+      }
       final result = _callAction(rt);
       // nodeCompat scripts may register timers (setTimeout-as-sleep etc.);
       // block-mode drain (dmtools default) settles them like Node would.
@@ -260,6 +279,7 @@ class JsJobRunner {
         integrationFilter: config.integrationFilter,
         workingDirectory: workingDirectory,
         httpFetch: config.httpFetch,
+        consolePrefix: config.consolePrefix,
       ),
     );
   }

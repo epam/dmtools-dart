@@ -308,7 +308,10 @@ version).
 passes **unmodified and green** — **met**: 751/751 pass locally and in CI
 (the suite job is a hard gate: `run_agents_suite.dart` fails on any test
 failure or malformed result). Run via
-`dart run bin/run_agents_suite.dart /path/to/dmtools-agents`.
+`dart run bin/run_agents_suite.dart /path/to/dmtools-agents` — executed as
+parallel contiguous chunks over worker isolates (same totals as serial; see
+`lib/src/js/agents_suite.dart`), `DMTOOLS_SUITE_SHARDS` overrides the
+worker count.
 
 ### Phase 5 — CliAgent port (first agent)
 

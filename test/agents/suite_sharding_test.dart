@@ -328,11 +328,7 @@ void _mergerPartitionDefectTests() {
       expect(result.problems.join('\n'), contains('a.js'));
       expect(result.problems.join('\n'), contains('duplicate'));
     });
-  });
-}
 
-void _mergerPartitionDefectTests() {
-  group('ShardManifestMerger.merge — unexpected-file defect (AC4)', () {
     test('an unexpected file (not in run_all.json) fails the merge', () {
       final result = ShardManifestMerger.merge(
         manifestJsons: manifestJsons([

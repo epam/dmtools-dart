@@ -12,9 +12,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../js/job_runner.dart';
 import 'suite_shard_args.dart';
 import 'suite_sharding.dart';
-import '../js/job_runner.dart';
 
 /// Resolved `run_all.json` content.
 class AgentsSuiteConfig {
@@ -42,6 +42,16 @@ class SuiteConfigException implements Exception {
 
 /// Loads and validates `js/unit-tests/run_all.json` under [agentsPath].
 AgentsSuiteConfig loadAgentsSuiteConfig(String agentsPath) {
+  final decoded = _readRunAllJson(agentsPath);
+  final params = _requireMap(decoded, 'params');
+  final jobParams = _requireMap(params, 'jobParams');
+  return AgentsSuiteConfig(
+    jsPath: _requireString(params, 'jsPath'),
+    testFiles: _requireStringList(jobParams, 'testFiles'),
+  );
+}
+
+dynamic _readRunAllJson(String agentsPath) {
   final configPath = '$agentsPath/js/unit-tests/run_all.json';
   if (!File(configPath).existsSync()) {
     throw SuiteConfigException(
@@ -58,28 +68,27 @@ AgentsSuiteConfig loadAgentsSuiteConfig(String agentsPath) {
   if (decoded is! Map) {
     throw SuiteConfigException('Config must be a JSON object: $configPath');
   }
-  final params = decoded['params'];
-  if (params is! Map) {
-    throw SuiteConfigException('Config is missing "params": $configPath');
+  return decoded;
+}
+
+Map<dynamic, dynamic> _requireMap(Map<dynamic, dynamic> parent, String key) {
+  final value = parent[key];
+  if (value is Map) return value;
+  throw SuiteConfigException('Config "$key" must be a JSON object');
+}
+
+String _requireString(Map<dynamic, dynamic> parent, String key) {
+  final value = parent[key];
+  if (value is String) return value;
+  throw SuiteConfigException('Config "$key" must be a string');
+}
+
+List<String> _requireStringList(Map<dynamic, dynamic> parent, String key) {
+  final value = parent[key];
+  if (value is List && value.every((f) => f is String)) {
+    return [for (final f in value) f as String];
   }
-  final jsPath = params['jsPath'];
-  if (jsPath is! String) {
-    throw SuiteConfigException('Config "params.jsPath" must be a string');
-  }
-  final jobParams = params['jobParams'];
-  if (jobParams is! Map) {
-    throw SuiteConfigException('Config is missing "params.jobParams"');
-  }
-  final testFiles = jobParams['testFiles'];
-  if (testFiles is! List || testFiles.any((f) => f is! String)) {
-    throw SuiteConfigException(
-      'Config "params.jobParams.testFiles" must be a list of strings',
-    );
-  }
-  return AgentsSuiteConfig(
-    jsPath: jsPath,
-    testFiles: [for (final f in testFiles) f as String],
-  );
+  throw SuiteConfigException('Config "$key" must be a list of strings');
 }
 
 /// Runs the agents suite per [args]; returns the process exit code.
@@ -101,42 +110,81 @@ int runAgentsSuite(
     }
     return 1;
   }
+  final config = _loadConfigOrReport(args, err);
+  if (config == null) return 2;
+  final planned = _planOrReport(args, config, err);
+  if (planned == null) return 1;
+  if (!_preflightOrReport(args, planned, err)) return 1;
+  return _runEngine(args, planned, config.jsPath, out, err);
+}
 
-  final AgentsSuiteConfig config;
+/// Semantic flag-combination validation (AC2); serial runs only carry the
+/// parse-level problems through.
+List<String> _validationProblems(SuiteShardArgs args) {
+  final problems = [...args.problems];
+  if (!args.isSharded) return problems;
+  _shardFlagProblems(args, problems);
+  return problems;
+}
+
+/// Shard-combo validation: both flags together, `total >= 1`,
+/// `0 <= index < total`, and a manifest path for the gate to parse.
+void _shardFlagProblems(SuiteShardArgs args, List<String> problems) {
+  if (args.shardIndex == null || args.totalShards == null) {
+    problems.add('--shard-index and --total-shards must be given together');
+  }
+  if (args.totalShards != null && args.totalShards! < 1) {
+    problems.add('--total-shards must be >= 1, got ${args.totalShards}');
+  }
+  if (args.shardIndex != null && args.shardIndex! < 0) {
+    problems.add('--shard-index must be >= 0, got ${args.shardIndex}');
+  }
+  if (args.shardIndex != null &&
+      args.totalShards != null &&
+      args.shardIndex! >= args.totalShards!) {
+    problems.add('--shard-index ${args.shardIndex} must be < '
+        '--total-shards ${args.totalShards}');
+  }
+  if (args.manifestOut == null) {
+    problems.add('--manifest-out <path> is required for sharded runs: the '
+        'agents-gate merge job parses it (never evaled)');
+  }
+}
+
+AgentsSuiteConfig? _loadConfigOrReport(
+  SuiteShardArgs args,
+  void Function(String line) err,
+) {
   try {
-    config = loadAgentsSuiteConfig(args.agentsPath);
+    return loadAgentsSuiteConfig(args.agentsPath);
   } on SuiteConfigException catch (e) {
     err(e.message);
-    return 2;
+    return null;
   }
+}
 
-  final planned = args.isSharded
-      ? ShardPlanner.split(
-          config.testFiles, args.shardIndex!, args.totalShards!)
-      : config.testFiles;
-  if (args.isSharded && planned.isEmpty) {
-    err('Shard ${args.shardIndex}/${args.totalShards} is empty: the suite '
-        'has ${config.testFiles.length} files, which cannot fill '
-        '${args.totalShards} shards. Reduce --total-shards.');
-    return 1;
-  }
-
-  final preflightProblems = preflightTestFiles(args.agentsPath, planned);
-  if (preflightProblems.isNotEmpty) {
-    err('Pre-flight failed — planned test files are missing or empty '
-        '(testRunner.js would silently skip them):');
-    for (final problem in preflightProblems) {
-      err('  - $problem');
-    }
-    _writeManifest(args, planned, success: false, passed: 0, failed: 0);
-    return 1;
-  }
-
-  return _runEngine(args, planned, config, out, err);
+/// Plans the shard subset; null after reporting when the shard is empty.
+List<String>? _planOrReport(
+  SuiteShardArgs args,
+  AgentsSuiteConfig config,
+  void Function(String line) err,
+) {
+  if (!args.isSharded) return config.testFiles;
+  final planned = ShardPlanner.split(
+    config.testFiles,
+    args.shardIndex!,
+    args.totalShards!,
+  );
+  if (planned.isNotEmpty) return planned;
+  err('Shard ${args.shardIndex}/${args.totalShards} is empty: the suite '
+      'has ${config.testFiles.length} files, which cannot fill '
+      '${args.totalShards} shards. Reduce --total-shards.');
+  return null;
 }
 
 /// Pre-flight readability check: every planned file must exist and be
-/// non-empty (relative to [agentsPath]).
+/// non-empty (relative to the agents root) — `testRunner.js` would
+/// silently skip the rest.
 List<String> preflightTestFiles(String agentsPath, List<String> planned) {
   final problems = <String>[];
   for (final file in planned) {
@@ -152,11 +200,27 @@ List<String> preflightTestFiles(String agentsPath, List<String> planned) {
   return problems;
 }
 
+bool _preflightOrReport(
+  SuiteShardArgs args,
+  List<String> planned,
+  void Function(String line) err,
+) {
+  final problems = preflightTestFiles(args.agentsPath, planned);
+  if (problems.isEmpty) return true;
+  err('Pre-flight failed — planned test files are missing or empty '
+      '(testRunner.js would silently skip them):');
+  for (final problem in problems) {
+    err('  - $problem');
+  }
+  _writeManifest(args, planned, success: false, passed: 0, failed: 0);
+  return false;
+}
+
 /// Runs the engine over [planned] and applies the acceptance contract.
 int _runEngine(
   SuiteShardArgs args,
   List<String> planned,
-  AgentsSuiteConfig config,
+  String jsPath,
   void Function(String line) out,
   void Function(String line) err,
 ) {
@@ -168,7 +232,7 @@ int _runEngine(
   String? result;
   try {
     result = const JsJobRunner().runScript(
-      scriptPath: '${args.agentsPath}/${config.jsPath}',
+      scriptPath: '${args.agentsPath}/$jsPath',
       jobParams: {'testFiles': planned},
       workingDirectory: args.agentsPath,
     );
@@ -227,16 +291,21 @@ String? _acceptanceFailure(String? result) {
   if (decoded is! Map) {
     return 'Agents suite returned a non-object result: $decoded';
   }
-  final passed = decoded['passed'];
-  final failed = decoded['failed'];
-  if (decoded['success'] != true ||
-      passed is! int ||
-      failed is! int ||
-      passed <= 0 ||
-      failed > 0) {
+  if (!_isPassingResult(decoded)) {
     return 'Agents suite failed: $decoded';
   }
   return null;
+}
+
+/// The acceptance contract: fully passing AND demonstrably non-empty.
+bool _isPassingResult(Map<dynamic, dynamic> decoded) {
+  final passed = decoded['passed'];
+  final failed = decoded['failed'];
+  return decoded['success'] == true &&
+      passed is int &&
+      failed is int &&
+      passed > 0 &&
+      failed == 0;
 }
 
 /// Extracts upstream's (passed, failed) counters verbatim when the result
@@ -254,38 +323,6 @@ String? _acceptanceFailure(String? result) {
     // Fall through to the (0, 0) default.
   }
   return (0, 0);
-}
-
-/// Semantic flag-combination validation (AC2): both shard flags together,
-/// `0 <= index < total`, `total >= 1`, manifest path for sharded runs.
-List<String> _validationProblems(SuiteShardArgs args) {
-  final problems = [...args.problems];
-  final index = args.shardIndex;
-  final total = args.totalShards;
-  if (index == null && total == null && args.manifestOut == null) {
-    return problems; // serial run
-  }
-  if (index == null || total == null) {
-    problems.add(
-      '--shard-index and --total-shards must be given together',
-    );
-  }
-  if (total != null && total < 1) {
-    problems.add('--total-shards must be >= 1, got $total');
-  }
-  if (index != null && index < 0) {
-    problems.add('--shard-index must be >= 0, got $index');
-  }
-  if (index != null && total != null && index >= total) {
-    problems.add(
-      '--shard-index $index must be < --total-shards $total',
-    );
-  }
-  if (args.isSharded && args.manifestOut == null) {
-    problems.add('--manifest-out <path> is required for sharded runs: the '
-        'agents-gate merge job parses it (never evaled)');
-  }
-  return problems;
 }
 
 /// Writes the shard manifest (sharded runs only). Written for every
@@ -311,9 +348,9 @@ void _writeManifest(
   );
   final file = File(args.manifestOut!);
   file.parent.createSync(recursive: true);
-  file.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(
-    manifest.toJson(),
-  ));
+  file.writeAsStringSync(
+    const JsonEncoder.withIndent('  ').convert(manifest.toJson()),
+  );
 }
 
 void _printErr(String line) => stderr.writeln(line);

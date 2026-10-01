@@ -14,6 +14,12 @@ import 'package:test/test.dart';
 ///   (AC4 test hooks): green manifests, red shard, missing file, duplicated
 ///   file, malformed JSON, shard-count defects — each mapped to a problem.
 void main() {
+  _plannerTests();
+  _manifestSchemaTests();
+  _mergerTests();
+}
+
+void _plannerTests() {
   group('ShardPlanner.split (AC1)', () {
     test('N=1 reproduces the original list unchanged', () {
       final files = ['b.js', 'a.js', 'c.js'];
@@ -125,7 +131,9 @@ void main() {
       expect(ShardPlanner.split(const [], 0, 4), isEmpty);
     });
   });
+}
 
+void _manifestSchemaTests() {
   group('ShardManifest schema', () {
     test('toJson/fromJson round-trip', () {
       const manifest = ShardManifest(
@@ -170,7 +178,9 @@ void main() {
       );
     });
   });
+}
 
+void _mergerTests() {
   group('ShardManifestMerger.merge (AC4 outcomes)', () {
     const files = ['a.js', 'b.js', 'c.js', 'd.js'];
 

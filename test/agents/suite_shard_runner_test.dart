@@ -25,38 +25,40 @@ import 'package:test/test.dart';
 ///   list through and keeps the exit contract.
 /// - AC6: parity-tool smoke test on the fixture tree (serial vs sharded).
 void main() {
-  late FixtureTree tree;
-
-  setUp(() {
-    tree = FixtureTree();
-    tree.addTestFile('js/unit-tests/test_a1.js', ok: true);
-    tree.addTestFile('js/unit-tests/test_a2.js', ok: true);
-    tree.addTestFile('js/unit-tests/test_b1.js', ok: true);
-    tree.addTestFile('js/unit-tests/test_b2.js', ok: true);
-    tree.writeRunAll();
-  });
-
+  setUp(_freshTree);
   tearDown(() => tree.dispose());
 
+  _shardedRunTests();
+  _invalidFlagTests();
+  _preflightTests();
+  _serialTests();
+  _configErrorTests();
+  _engineFailureTests();
+  _failingShardTests();
+  _realRunnerTests();
+  _parityTests();
+}
+
+/// Fixture tree shared by every test in this file (recreated per test).
+FixtureTree tree = FixtureTree();
+
+void _freshTree() {
+  tree = FixtureTree();
+  tree.addTestFile('js/unit-tests/test_a1.js', ok: true);
+  tree.addTestFile('js/unit-tests/test_a2.js', ok: true);
+  tree.addTestFile('js/unit-tests/test_b1.js', ok: true);
+  tree.addTestFile('js/unit-tests/test_b2.js', ok: true);
+  tree.writeRunAll();
+}
+
+void _shardedRunTests() {
   group('sharded run (AC2)', () {
     test('runs only the planned subset and writes a valid manifest', () {
       final manifestPath = '${tree.root.path}/out/manifest-0.json';
-      final code = runAgentsSuite(
-        SuiteShardArgs.parse([
-          tree.root.path,
-          '--shard-index',
-          '0',
-          '--total-shards',
-          '2',
-          '--manifest-out',
-          manifestPath,
-        ]),
-      );
+      final code = _runShard(0, 2, manifestPath);
 
       expect(code, 0, reason: 'green shard must exit 0');
-      final manifest = ShardManifest.fromJson(
-        jsonDecode(File(manifestPath).readAsStringSync()) as Map,
-      );
+      final manifest = _readManifest(manifestPath);
       expect(manifest.shard, 0);
       expect(manifest.total, 2);
       expect(manifest.success, isTrue);
@@ -69,29 +71,23 @@ void main() {
 
     test('shard 1 gets the complement subset', () {
       final manifestPath = '${tree.root.path}/out/manifest-1.json';
-      final code = runAgentsSuite(
-        SuiteShardArgs.parse([
-          tree.root.path,
-          '--shard-index',
-          '1',
-          '--total-shards',
-          '2',
-          '--manifest-out',
-          manifestPath,
-        ]),
-      );
+      final code = _runShard(1, 2, manifestPath);
 
       expect(code, 0);
-      final manifest = ShardManifest.fromJson(
-        jsonDecode(File(manifestPath).readAsStringSync()) as Map,
-      );
+      final manifest = _readManifest(manifestPath);
       expect(manifest.passed, 2);
       expect(manifest.plannedFiles,
           ['js/unit-tests/test_a2.js', 'js/unit-tests/test_b2.js']);
     });
   });
+}
 
+void _invalidFlagTests() {
   group('invalid flag combos exit non-zero before the engine (AC2)', () {
+    // The fixture config points at a runner script that does not exist, so
+    // if validation DIDN'T reject the args first, the engine start would
+    // fail with a "not found" message instead — the message assertions
+    // below discriminate the two paths.
     final bogusJsPath = 'js/unit-tests/does-not-exist.js';
 
     List<String> argsWith({
@@ -111,10 +107,6 @@ void main() {
       ];
     }
 
-    // The fixture config points at a runner script that does not exist, so
-    // if validation DIDN'T reject the args first, the engine start would
-    // fail with a "not found" message instead — the message assertions
-    // below discriminate the two paths.
     for (final entry in {
       'index >= total': (index: 2, total: 2, message: '--shard-index'),
       'total < 1': (index: 0, total: 0, message: '--total-shards'),
@@ -160,7 +152,9 @@ void main() {
       expect(out.join('\n'), contains('unknown'));
     });
   });
+}
 
+void _preflightTests() {
   group('pre-flight closes the silent-skip hole (AC3)', () {
     test('a planned EMPTY file fails the shard before the engine runs', () {
       tree.addTestFile('js/unit-tests/test_empty.js', ok: true, empty: true);
@@ -171,24 +165,11 @@ void main() {
       final manifestPath = '${tree.root.path}/out/manifest.json';
       final out = <String>[];
 
-      final code = runAgentsSuite(
-        SuiteShardArgs.parse([
-          tree.root.path,
-          '--shard-index',
-          '0',
-          '--total-shards',
-          '1',
-          '--manifest-out',
-          manifestPath,
-        ]),
-        err: out.add,
-      );
+      final code = _runShard(0, 1, manifestPath, err: out.add);
 
       expect(code, isNot(0), reason: 'empty planned file must red the shard');
       expect(out.join('\n'), contains('test_empty.js'));
-      final manifest = ShardManifest.fromJson(
-        jsonDecode(File(manifestPath).readAsStringSync()) as Map,
-      );
+      final manifest = _readManifest(manifestPath);
       expect(manifest.success, isFalse);
     });
 
@@ -196,16 +177,10 @@ void main() {
       tree.setTestFiles(['js/unit-tests/test_ghost.js']);
       final out = <String>[];
 
-      final code = runAgentsSuite(
-        SuiteShardArgs.parse([
-          tree.root.path,
-          '--shard-index',
-          '0',
-          '--total-shards',
-          '1',
-          '--manifest-out',
-          '${tree.root.path}/out/manifest.json',
-        ]),
+      final code = _runShard(
+        0,
+        1,
+        '${tree.root.path}/out/manifest.json',
         err: out.add,
       );
 
@@ -227,7 +202,9 @@ void main() {
       expect(out.join('\n'), contains('test_ghost.js'));
     });
   });
+}
 
+void _serialTests() {
   group('serial path (AC5)', () {
     test('passes the identical full testFiles list through and exits 0', () {
       final out = <String>[];
@@ -258,30 +235,159 @@ void main() {
       expect(out.join('\n'), contains('Agents suite failed'));
     });
   });
+}
 
+void _configErrorTests() {
+  group('config errors exit 2 (run_all.json contract)', () {
+    test('a missing run_all.json exits 2', () {
+      final out = <String>[];
+      final code = runAgentsSuite(
+        SuiteShardArgs.parse(['${tree.root.path}/nowhere']),
+        err: out.add,
+      );
+      expect(code, 2);
+      expect(out.join('\n'), contains('Config not found'));
+    });
+
+    test('a malformed run_all.json exits 2', () {
+      File('${tree.root.path}/js/unit-tests/run_all.json')
+          .writeAsStringSync('{not json');
+      final out = <String>[];
+      final code = runAgentsSuite(
+        SuiteShardArgs.parse([tree.root.path]),
+        err: out.add,
+      );
+      expect(code, 2);
+      expect(out.join('\n'), contains('not valid JSON'));
+    });
+
+    test('a non-object params section exits 2', () {
+      File('${tree.root.path}/js/unit-tests/run_all.json')
+          .writeAsStringSync('{"params": 42}');
+      final out = <String>[];
+      final code = runAgentsSuite(
+        SuiteShardArgs.parse([tree.root.path]),
+        err: out.add,
+      );
+      expect(code, 2);
+      expect(out.join('\n'), contains('"params"'));
+    });
+
+    test('a non-string jsPath exits 2', () {
+      File('${tree.root.path}/js/unit-tests/run_all.json').writeAsStringSync(
+        jsonEncode({
+          'params': {
+            'jsPath': 7,
+            'jobParams': {
+              'testFiles': ['js/unit-tests/test_a1.js'],
+            },
+          },
+        }),
+      );
+      final out = <String>[];
+      final code = runAgentsSuite(
+        SuiteShardArgs.parse([tree.root.path]),
+        err: out.add,
+      );
+      expect(code, 2);
+      expect(out.join('\n'), contains('"jsPath"'));
+    });
+
+    test('missing testFiles exits 2', () {
+      File('${tree.root.path}/js/unit-tests/run_all.json').writeAsStringSync(
+        jsonEncode({
+          'params': {
+            'jsPath': 'js/unit-tests/testRunner.js',
+            'jobParams': <String, dynamic>{},
+          },
+        }),
+      );
+      final out = <String>[];
+      final code = runAgentsSuite(
+        SuiteShardArgs.parse([tree.root.path]),
+        err: out.add,
+      );
+      expect(code, 2);
+      expect(out.join('\n'), contains('"testFiles"'));
+    });
+  });
+}
+
+void _engineFailureTests() {
+  group('engine failures keep the exit contract and red the manifest', () {
+    test('a runner script without action() crashes the shard (exit 1)', () {
+      tree.setRunnerScript('// no action function here');
+      final manifestPath = '${tree.root.path}/out/manifest.json';
+      final out = <String>[];
+
+      final code = _runShard(0, 1, manifestPath, err: out.add);
+
+      expect(code, 1);
+      expect(out.join('\n'), contains('Agents suite crashed'));
+      final manifest = _readManifest(manifestPath);
+      expect(manifest.success, isFalse);
+      expect(manifest.passed, 0);
+    });
+
+    test('an action() returning undefined fails the run', () {
+      tree.setRunnerScript('function action(params) { return; }');
+      final out = <String>[];
+
+      final code = _runShard(
+        0,
+        1,
+        '${tree.root.path}/out/manifest.json',
+        err: out.add,
+      );
+
+      expect(code, 1);
+      expect(out.join('\n'), contains('returned no result'));
+    });
+
+    test('a non-JSON result fails the run', () {
+      tree.setRunnerScript('function action(params) { return "not json"; }');
+      final out = <String>[];
+
+      final code = _runShard(
+        0,
+        1,
+        '${tree.root.path}/out/manifest.json',
+        err: out.add,
+      );
+
+      expect(code, 1);
+      expect(out.join('\n'), contains('non-object result'));
+    });
+
+    test('a failing result carries its counters into the manifest', () {
+      tree.setRunnerScript(
+        'function action(params) '
+        '{ return {success: false, passed: 3, failed: 1}; }',
+      );
+      final manifestPath = '${tree.root.path}/out/manifest.json';
+
+      final code = _runShard(0, 1, manifestPath);
+
+      expect(code, 1);
+      final manifest = _readManifest(manifestPath);
+      expect(manifest.success, isFalse);
+      expect(manifest.passed, 3, reason: 'upstream counters carried verbatim');
+      expect(manifest.failed, 1);
+    });
+  });
+}
+
+void _failingShardTests() {
   group('sharded run with a failing test file', () {
     test('manifest reports failure and exit code is non-zero', () {
       tree.addTestFile('js/unit-tests/test_red.js', ok: false);
       final manifestPath = '${tree.root.path}/out/manifest.json';
       final out = <String>[];
 
-      final code = runAgentsSuite(
-        SuiteShardArgs.parse([
-          tree.root.path,
-          '--shard-index',
-          '1',
-          '--total-shards',
-          '3',
-          '--manifest-out',
-          manifestPath,
-        ]),
-        err: out.add,
-      );
+      final code = _runShard(1, 3, manifestPath, err: out.add);
 
       expect(code, 1);
-      final manifest = ShardManifest.fromJson(
-        jsonDecode(File(manifestPath).readAsStringSync()) as Map,
-      );
+      final manifest = _readManifest(manifestPath);
       // Shard 1 of 3 over [a1, a2, b1, b2, red] = a2, red.
       expect(manifest.plannedFiles,
           ['js/unit-tests/test_a2.js', 'js/unit-tests/test_red.js']);
@@ -289,7 +395,9 @@ void main() {
       expect(manifest.failed, 1);
     });
   });
+}
 
+void _realRunnerTests() {
   group('the REAL unmodified testRunner.js shards too (AC2)', () {
     test('subset of fixture tests runs green through the real runner', () {
       const agentsPath = 'agents';
@@ -316,9 +424,7 @@ void main() {
         );
 
         expect(code, 0);
-        final manifest = ShardManifest.fromJson(
-          jsonDecode(File(manifestPath).readAsStringSync()) as Map,
-        );
+        final manifest = _readManifest(manifestPath);
         expect(manifest.success, isTrue);
         expect(manifest.plannedFiles, ['js/unit-tests/test_fx_b.js']);
         expect(manifest.passed, 1, reason: 'one fixture test in this shard');
@@ -328,10 +434,15 @@ void main() {
       }
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
+}
 
+void _parityTests() {
   group('suite parity tool (AC6)', () {
     test('reports parity on a clean fixture (serial == sharded)', () {
-      final report = runShardParity(agentsPath: tree.root.path, totalShards: 2);
+      final report = runShardParity(
+        agentsPath: tree.root.path,
+        totalShards: 2,
+      );
       expect(report.ok, isTrue, reason: 'mismatches: ${report.mismatches}');
       expect(report.serialOutcome.passed, 4);
       expect(report.shardOutcomes.map((o) => o.passed), [2, 2]);
@@ -357,12 +468,53 @@ void main() {
         'js/unit-tests/test_order_b.js',
       ]);
 
-      final report = runShardParity(agentsPath: tree.root.path, totalShards: 2);
+      final report = runShardParity(
+        agentsPath: tree.root.path,
+        totalShards: 2,
+      );
       expect(report.ok, isFalse);
       expect(report.mismatches, isNotEmpty);
     });
+
+    test('a crashing engine shows up as an outcome mismatch', () {
+      tree.setRunnerScript('// no action function — every run crashes');
+      final report = runShardParity(
+        agentsPath: tree.root.path,
+        totalShards: 2,
+      );
+      expect(report.ok, isFalse);
+      expect(report.serialOutcome.crash, isNotNull);
+      expect(report.shardOutcomes.every((o) => o.crash != null), isTrue);
+    });
   }, timeout: const Timeout(Duration(minutes: 2)));
 }
+
+/// Runs one shard of [tree] with [shardIndex] of [total].
+int _runShard(
+  int shardIndex,
+  int total,
+  String manifestPath, {
+  void Function(String line)? err,
+  void Function(String line)? out,
+}) {
+  return runAgentsSuite(
+    SuiteShardArgs.parse([
+      tree.root.path,
+      '--shard-index',
+      '$shardIndex',
+      '--total-shards',
+      '$total',
+      '--manifest-out',
+      manifestPath,
+    ]),
+    err: err ?? (_) {},
+    out: out ?? (_) {},
+  );
+}
+
+ShardManifest _readManifest(String path) => ShardManifest.fromJson(
+      jsonDecode(File(path).readAsStringSync()) as Map,
+    );
 
 /// A throwaway mini-agents tree: `js/unit-tests/testRunner.js` (a stand-in
 /// implementing the upstream action contract) + `run_all.json` + test files.
@@ -393,15 +545,20 @@ class FixtureTree {
 
   final List<String> _testFiles = [];
 
-  void addTestFile(String relPath,
-      {required bool ok, bool empty = false, String? content}) {
+  void addTestFile(
+    String relPath, {
+    required bool ok,
+    bool empty = false,
+    String? content,
+  }) {
     final file = File('${root.path}/$relPath');
     file.createSync(recursive: true);
     if (empty) {
       file.writeAsStringSync('');
     } else {
-      file.writeAsStringSync(content ??
-          (ok ? '// passing test file' : 'throw new Error("boom");'));
+      file.writeAsStringSync(
+        content ?? (ok ? '// passing test file' : 'throw new Error("boom");'),
+      );
     }
     if (!_testFiles.contains(relPath)) {
       _testFiles.add(relPath);
@@ -421,6 +578,11 @@ suite('fixture', function () {
 });
 ''');
     _testFiles.add(relPath);
+  }
+
+  /// Replaces the runner script (engine-failure scenarios).
+  void setRunnerScript(String source) {
+    File('${root.path}/js/unit-tests/testRunner.js').writeAsStringSync(source);
   }
 
   void setTestFiles(List<String> files) {

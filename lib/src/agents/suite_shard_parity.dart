@@ -117,34 +117,7 @@ ShardOutcome _runOnce({
       jobParams: {'testFiles': testFiles},
       workingDirectory: agentsPath,
     );
-    if (result == null) {
-      return ShardOutcome(
-        label: label,
-        success: false,
-        passed: 0,
-        failed: 0,
-        crash: 'action() returned undefined',
-      );
-    }
-    final decoded = jsonDecode(result);
-    if (decoded is! Map ||
-        decoded['success'] is! bool ||
-        decoded['passed'] is! int ||
-        decoded['failed'] is! int) {
-      return ShardOutcome(
-        label: label,
-        success: false,
-        passed: 0,
-        failed: 0,
-        crash: 'malformed result: $result',
-      );
-    }
-    return ShardOutcome(
-      label: label,
-      success: decoded['success'] as bool,
-      passed: decoded['passed'] as int,
-      failed: decoded['failed'] as int,
-    );
+    return _decodeOutcome(label, result);
   } catch (e) {
     return ShardOutcome(
       label: label,
@@ -156,6 +129,50 @@ ShardOutcome _runOnce({
   }
 }
 
+/// Maps a raw engine result to an outcome; unusable results (undefined,
+/// non-JSON, wrong shape) become crashed outcomes.
+ShardOutcome _decodeOutcome(String label, String? result) {
+  if (result == null) {
+    return ShardOutcome(
+      label: label,
+      success: false,
+      passed: 0,
+      failed: 0,
+      crash: 'action() returned undefined',
+    );
+  }
+  final dynamic decoded;
+  try {
+    decoded = jsonDecode(result);
+  } on FormatException {
+    return ShardOutcome(
+      label: label,
+      success: false,
+      passed: 0,
+      failed: 0,
+      crash: 'non-JSON result: $result',
+    );
+  }
+  if (decoded is! Map ||
+      decoded['success'] is! bool ||
+      decoded['passed'] is! int ||
+      decoded['failed'] is! int) {
+    return ShardOutcome(
+      label: label,
+      success: false,
+      passed: 0,
+      failed: 0,
+      crash: 'malformed result: $result',
+    );
+  }
+  return ShardOutcome(
+    label: label,
+    success: decoded['success'] as bool,
+    passed: decoded['passed'] as int,
+    failed: decoded['failed'] as int,
+  );
+}
+
 /// Outcome equality: shard successes must match the serial run, and the
 /// passed/failed counters must sum to the serial counters.
 List<String> _compare(
@@ -163,6 +180,16 @@ List<String> _compare(
   List<ShardOutcome> shards,
 ) {
   final mismatches = <String>[];
+  _counterMismatches(serial, shards, mismatches);
+  _successMismatches(serial, shards, mismatches);
+  return mismatches;
+}
+
+void _counterMismatches(
+  ShardOutcome serial,
+  List<ShardOutcome> shards,
+  List<String> mismatches,
+) {
   final passedSum = shards.fold(0, (sum, o) => sum + o.passed);
   final failedSum = shards.fold(0, (sum, o) => sum + o.failed);
   if (passedSum != serial.passed) {
@@ -175,6 +202,13 @@ List<String> _compare(
       'failed mismatch: serial=${serial.failed} vs shards sum=$failedSum',
     );
   }
+}
+
+void _successMismatches(
+  ShardOutcome serial,
+  List<ShardOutcome> shards,
+  List<String> mismatches,
+) {
   for (final shard in shards) {
     if (shard.success != serial.success || shard.crash != null) {
       mismatches.add(
@@ -185,5 +219,4 @@ List<String> _compare(
       );
     }
   }
-  return mismatches;
 }

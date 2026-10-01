@@ -228,6 +228,16 @@ class ShardManifestMerger {
     List<String> problems,
   ) {
     if (manifests.isEmpty) return;
+    _manifestCountProblems(manifests, problems);
+    _shardOutcomeProblems(manifests, problems);
+  }
+
+  /// Shard-count defects: disagreeing `total`, missing shard manifests,
+  /// duplicated shard index.
+  static void _manifestCountProblems(
+    List<ShardManifest> manifests,
+    List<String> problems,
+  ) {
     final total = manifests.first.total;
     for (final m in manifests) {
       if (m.total != total) {
@@ -253,6 +263,13 @@ class ShardManifestMerger {
         problems.add('shard ${entry.key} appears twice in the manifests');
       }
     }
+  }
+
+  /// Per-shard outcome defects: any shard not fully passing is red.
+  static void _shardOutcomeProblems(
+    List<ShardManifest> manifests,
+    List<String> problems,
+  ) {
     for (final m in manifests) {
       if (m.success != true) {
         problems.add('shard ${m.shard} failed (success=false, '

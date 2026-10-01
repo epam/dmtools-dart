@@ -141,17 +141,14 @@ ShardOutcome _decodeOutcome(String label, String? result) {
       crash: 'action() returned undefined',
     );
   }
-  final dynamic decoded;
+  // A unusable payload is a crash, whatever the reason: the runtime
+  // JSON-encodes every action() return, so non-JSON text here means the
+  // engine broke its contract just like a wrong-shaped object would.
+  dynamic decoded;
   try {
     decoded = jsonDecode(result);
   } on FormatException {
-    return ShardOutcome(
-      label: label,
-      success: false,
-      passed: 0,
-      failed: 0,
-      crash: 'non-JSON result: $result',
-    );
+    decoded = null;
   }
   if (decoded is! Map ||
       decoded['success'] is! bool ||

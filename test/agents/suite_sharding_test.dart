@@ -15,10 +15,12 @@ import 'package:test/test.dart';
 ///   file, malformed JSON, shard-count defects — each mapped to a problem.
 void main() {
   _plannerPartitionTests();
+  _plannerEdgeTests();
   _plannerRealListTests();
   _manifestSchemaTests();
   _mergerGreenTests();
   _mergerDefectTests();
+  _mergerPartitionDefectTests();
   _mergerSchemaTests();
 }
 
@@ -104,6 +106,15 @@ void _plannerPartitionTests() {
       ]);
     });
 
+    test('empty input: every shard is empty, N=1 is an identity', () {
+      expect(ShardPlanner.split(const [], 0, 1), isEmpty);
+      expect(ShardPlanner.split(const [], 0, 4), isEmpty);
+    });
+  });
+}
+
+void _plannerEdgeTests() {
+  group('ShardPlanner.split (AC1) — edge shapes', () {
     test('N greater than the file count yields empty high shards', () {
       final files = _synthetic(2);
       expect(ShardPlanner.split(files, 0, 5), hasLength(1));
@@ -118,11 +129,6 @@ void _plannerPartitionTests() {
         for (var i = 0; i < 4; i++) ShardPlanner.split(files, i, 4).length,
       ];
       expect(sizes, everyElement(23));
-    });
-
-    test('empty input: every shard is empty, N=1 is an identity', () {
-      expect(ShardPlanner.split(const [], 0, 1), isEmpty);
-      expect(ShardPlanner.split(const [], 0, 4), isEmpty);
     });
   });
 }
@@ -318,7 +324,11 @@ void _mergerDefectTests() {
       expect(result.problems.join('\n'), contains('a.js'));
       expect(result.problems.join('\n'), contains('duplicate'));
     });
+  });
+}
 
+void _mergerPartitionDefectTests() {
+  group('ShardManifestMerger.merge — unexpected-file defect (AC4)', () {
     test('an unexpected file (not in run_all.json) fails the merge', () {
       final result = ShardManifestMerger.merge(
         manifestJsons: manifestJsons([

@@ -673,10 +673,25 @@ void _registerConsole(QuickjsRuntime runtime, String? prefix) {
   runtime.eval(_consoleBootstrap, filename: '<console>');
 }
 
+/// Hard cap on a single `console.*` line.
+///
+/// The agents suite contains failure-path fixtures that print ~500 KB
+/// strings (`test_setupCommands.js`: `'X'.repeat(500000)`); GitHub
+/// Actions' log ingester stalls for ~6 minutes per such line while the
+/// blocked stdio pipe freezes every isolate in the process (measured
+/// 2026-10-01, runs 36891377431/36895373638/36898332667: ~25 s of real
+/// suite work plus 2×6 min of log stalls was the entire "12-minute
+/// suite"). No legitimate script output approaches this size.
+const int _consoleLineLimit = 8192;
+
 /// Prints one console line and signals JS `undefined` (Dart `null`).
 String? _printTo(IOSink sink, String argsJson, String? prefix) {
   final line = _consoleArg(argsJson);
-  sink.writeln(prefix == null ? line : '$prefix$line');
+  final capped = line.length <= _consoleLineLimit
+      ? line
+      : '${line.substring(0, _consoleLineLimit)}'
+          ' …[truncated ${line.length - _consoleLineLimit} chars]';
+  sink.writeln(prefix == null ? capped : '$prefix$capped');
   return null;
 }
 

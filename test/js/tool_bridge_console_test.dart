@@ -45,6 +45,18 @@ void main() {
     );
     expect(result, '3');
   });
+
+  test('a pathological console line is truncated, execution continues', () {
+    // test_setupCommands.js failure fixtures print ~500 KB single lines;
+    // the GitHub Actions log ingester stalls minutes per such line.
+    final result = _runScript(
+      "function action(params) {"
+      " console.log('X'.repeat(500000));"
+      " console.log('after');"
+      " return 7; }",
+    );
+    expect(result, '7');
+  });
 }
 
 /// Runs [source] as a temp script and returns the raw JSON result.

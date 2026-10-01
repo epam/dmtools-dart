@@ -13,6 +13,11 @@
 /// - Everything else reads the `JIRA_RETRY_*` environment: `MAX_ATTEMPTS`
 ///   (5), `BASE_DELAY_MS` (1000), `MAX_DELAY_MS` (60000),
 ///   `BACKOFF_MULTIPLIER` (2.0), `JITTER_FACTOR` (0.3), `ENABLED` (true).
+/// - Rate-limit waits (Java PR epam/dm.ai#624, gh-318): `X-RateLimit-Reset`
+///   and 429 `Retry-After` are honored up to the configurable
+///   `RATE_LIMIT_MAX_WAIT_SECONDS` cap (default 3600s) — never capped by
+///   `MAX_DELAY_MS`, never aborted; the 300s `Retry-After` abort applies
+///   only to non-rate-limit responses.
 /// - The per-perform throttle (Java `BasicJiraClient`): `JIRA_WAIT_BEFORE_
 ///   PERFORM` (bool, default false) sleeps `SLEEP_TIME_REQUEST`
 ///   milliseconds (default 300) before each request execution.

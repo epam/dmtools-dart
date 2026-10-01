@@ -11,6 +11,7 @@ void main() {
   primePreludeJsTests();
   invocationsForTests();
   copyAgentTreeTests();
+  copyAgentTreeGitRefTests();
   rebaseTests();
   shardOutcomeTests();
   agentsSuiteReportTests();
@@ -199,6 +200,21 @@ void copyAgentTreeTests() {
       expect(File('${dst.path}/js/link.js').existsSync(), isFalse);
     });
 
+    test('empty source directory copies as an empty tree', () async {
+      final src = await Directory.systemTemp.createTemp('copy-empty-');
+      final dst = await Directory.systemTemp.createTemp('copy-empty-dst-');
+      addTearDown(() async {
+        await src.delete(recursive: true);
+        await dst.delete(recursive: true);
+      });
+      copyAgentTree(src.path, dst.path);
+      expect(Directory(dst.path).listSync(), isEmpty);
+    });
+  });
+}
+
+void copyAgentTreeGitRefTests() {
+  group('copyAgentTree git refs', () {
     test('resolves a relative submodule gitfile to an absolute gitdir',
         () async {
       final src = await Directory.systemTemp.createTemp('copy-sub-');
@@ -216,17 +232,6 @@ void copyAgentTreeTests() {
         File('${dst.path}/.git').readAsStringSync(),
         'gitdir: ${src.path}/../.git/modules/agents\n',
       );
-    });
-
-    test('empty source directory copies as an empty tree', () async {
-      final src = await Directory.systemTemp.createTemp('copy-empty-');
-      final dst = await Directory.systemTemp.createTemp('copy-empty-dst-');
-      addTearDown(() async {
-        await src.delete(recursive: true);
-        await dst.delete(recursive: true);
-      });
-      copyAgentTree(src.path, dst.path);
-      expect(Directory(dst.path).listSync(), isEmpty);
     });
   });
 }

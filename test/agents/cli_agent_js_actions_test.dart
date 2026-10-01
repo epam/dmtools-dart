@@ -12,6 +12,8 @@ void main() {
   lifecycleJsActionTests();
   ticketContextJsActionTests();
   metadataBindingJsActionTests();
+  metadataContextHooksJsActionTests();
+  metadataOmissionJsActionTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -104,7 +106,7 @@ void ticketContextJsActionTests() {
 // ======================================================================
 
 void metadataBindingJsActionTests() {
-  group('CliAgent JS actions — metadata binding', () {
+  group('CliAgent JS actions — metadata binding (pre/post)', () {
     test('preJSAction and postJSAction see params.metadata', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/js_metadata.log';
@@ -140,7 +142,11 @@ void metadataBindingJsActionTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void metadataContextHooksJsActionTests() {
+  group('CliAgent JS actions — metadata binding (preCli/timer)', () {
     test('preCliJSAction sees params.metadata.contextId', () async {
       final tmp = await _createTempDir();
       final log = '${tmp.path}/js_precli_meta.log';
@@ -188,7 +194,11 @@ void metadataBindingJsActionTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void metadataOmissionJsActionTests() {
+  group('CliAgent JS actions — metadata null-omission', () {
     test('params.metadata stays undefined when the job has no metadata',
         () async {
       final tmp = await _createTempDir();

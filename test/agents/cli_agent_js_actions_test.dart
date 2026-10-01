@@ -11,6 +11,9 @@ import 'package:test/test.dart';
 void main() {
   lifecycleJsActionTests();
   ticketContextJsActionTests();
+  metadataBindingJsActionTests();
+  metadataContextHooksJsActionTests();
+  metadataOmissionJsActionTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -91,6 +94,130 @@ void ticketContextJsActionTests() {
           },
         )).run();
         expect((await File(log).readAsString()).trim(), 'GH-21');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+// ======================================================================
+// CliAgent — top-level metadata binding (epam/dm.ai#623 parity)
+// ======================================================================
+
+void metadataBindingJsActionTests() {
+  group('CliAgent JS actions — metadata binding (pre/post)', () {
+    test('preJSAction and postJSAction see params.metadata', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_metadata.log';
+      try {
+        final pre = _actionJs(
+          tmp,
+          'pre_meta.js',
+          'file_append({path: "$log", content: "pre=" + '
+              'params.metadata.contextId + ":" + params.metadata.agentId '
+              '+ "\\n"});',
+        );
+        final post = _actionJs(
+          tmp,
+          'post_meta.js',
+          'file_append({path: "$log", content: "post=" + '
+              'params.metadata.contextId + ":" + params.metadata.agentId '
+              '+ "\\n"});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = const {'contextId': 'ctx-123', 'agentId': 'agent-1'}
+            ..preJSAction = pre.path
+            ..postJSAction = post.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect(
+          (await File(log).readAsString()).trim().split('\n'),
+          ['pre=ctx-123:agent-1', 'post=ctx-123:agent-1'],
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void metadataContextHooksJsActionTests() {
+  group('CliAgent JS actions — metadata binding (preCli/timer)', () {
+    test('preCliJSAction sees params.metadata.contextId', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_precli_meta.log';
+      try {
+        final js = _actionJs(
+          tmp,
+          'pre_cli_meta.js',
+          'file_write({path: "$log", content: params.metadata.contextId});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = const {'contextId': 'gh-317', 'agentId': 'senior'}
+            ..preCliJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect((await File(log).readAsString()).trim(), 'gh-317');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('timerJSAction sees params.metadata.contextId', () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_timer_meta.log';
+      try {
+        final js = _actionJs(
+          tmp,
+          'timer_meta.js',
+          'file_write({path: "$log", content: params.metadata.contextId});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..metadata = const {'contextId': 'ctx-timer'}
+            ..timerJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        // The final tick always runs after the batch, so this is
+        // deterministic even though no periodic tick fits in the batch.
+        expect((await File(log).readAsString()).trim(), 'ctx-timer');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void metadataOmissionJsActionTests() {
+  group('CliAgent JS actions — metadata null-omission', () {
+    test('params.metadata stays undefined when the job has no metadata',
+        () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_no_meta.log';
+      try {
+        final js = _actionJs(
+          tmp,
+          'post_no_meta.js',
+          'file_write({path: "$log", content: typeof params.metadata});',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..postJSAction = js.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        // Java null-omission parity: no key instead of a null value.
+        expect((await File(log).readAsString()).trim(), 'undefined');
       } finally {
         await tmp.delete(recursive: true);
       }

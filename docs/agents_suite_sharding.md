@@ -2,7 +2,7 @@
 
 The Quality pipeline's long pole was the `agents-suite` job: 92 test files /
 917 tests in one sequential QuickJS engine — 11m44s of the job's 12m20s. The
-suite now runs as a 4-way CI matrix of runner-level shards with a merge gate,
+suite now runs as a 6-way CI matrix of runner-level shards with a merge gate,
 the same shape the `dart test` suite already uses (`test` matrix ×4 → `gate`).
 
 **Zero changes under `agents/`** — the suite runs unmodified (GOAL.md Phase 4
@@ -15,15 +15,15 @@ shard feeds a subset of `jobParams.testFiles` to the same `testRunner.js`.
 quality.yml (dispatch)
  ├─ static ───────────────────────────── unchanged
  ├─ test (matrix ×4) ─────────────────── unchanged
- ├─ agents-suite (matrix ×4)            ← sharded; each shard:
+ ├─ agents-suite (matrix ×6)            ← sharded; each shard:
  │    bin/run_agents_suite.dart agents
- │      --shard-index i --total-shards 4 --manifest-out <path>
+ │      --shard-index i --total-shards 6 --manifest-out <path>
  │      ├─ ShardPlanner.split(testFiles, i, 4)   // pure, deterministic
  │      ├─ pre-flight: every planned file exists & non-empty
  │      ├─ JsJobRunner().runScript(testRunner.js, jobParams{testFiles: subset})
  │      └─ writes the suite-shard manifest artifact (JSON, parse-only)
  └─ agents-gate (needs: agents-suite)   ← required merge check
-      ├─ downloads the 4 manifests
+      ├─ downloads the 6 manifests
       ├─ asserts: union(planned) == run_all.json testFiles, exactly once each
       └─ asserts: every shard success:true, failed == 0
 ```
@@ -48,6 +48,16 @@ quality.yml (dispatch)
   exactly like `test (n)` shards are covered by `gate`.
   Lockstep pins: `test/release_required_checks_test.dart`,
   `machine-sm.yml` validation-checks, `release-cli.yml` stamp loop.
+
+## Why N=6
+
+Round-robin balances the file count, but per-file test weights are known
+uneven (`test_smAgent.js`'s quarter of the list carried 432 of 917 tests —
+measured on the real suite at N=4). Static per-file test counts give a
+max-shard share of 34% @ N=4, 24% @ N=6, 22% @ N=8; N=6 keeps the slowest
+shard ≈ 4 min so the whole dispatch (incl. `agents-gate`) stays ≤ 7 min.
+N stays a pure workflow constant — retune by editing the matrix list and
+`TOTAL_SHARDS` together; no code change.
 
 ## Serial path is unchanged (AC5)
 

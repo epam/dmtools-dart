@@ -227,7 +227,7 @@ jobs:
   agents-suite:
     # gh-315: the suite (92 files, 917 tests) runs in ONE sequential QuickJS
     # engine — 11m44s of wall time, the quality pipeline's long pole. It is
-    # now sharded 4 ways the same dart test already is: each matrix shard
+    # now sharded the same way dart test already is: each matrix shard
     # plans its round-robin subset (ShardPlanner), pre-flights that every
     # planned file exists and is non-empty (testRunner.js would silently
     # skip unreadable files — pre-flight turns that into a hard red), runs
@@ -236,13 +236,22 @@ jobs:
     # re-dispatch retries the whole matrix (concurrency group semantics).
     #
     # N is a workflow-level constant: bump matrix + TOTAL_SHARDS together.
+    # N=6, not the proposed 4: round-robin balances the file COUNT (23/23/
+    # 23/23 @ N=4), but test_smAgent.js' quarter of the list carries ~47%
+    # of the tests (measured shard 0 @ N=4: 432 of 917) — a 4-way split
+    # keeps a ~5.5 min pole and blows the <=7 min budget once agents-gate
+    # is added. Static per-file test counts (exact against the measured
+    # shard) give max-shard shares of 34% @ N=4, 24% @ N=6, 22% @ N=8;
+    # N=6 keeps the pole at ~4 min while adding only 2 extra jobs beyond
+    # the proposal (13 total). If the Bitrise pool cannot host them, shards
+    # queue — wall time degrades gracefully, correctness is unaffected.
     runs-on: bitrise-runner-dmtools-ci
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5]
     env:
-      TOTAL_SHARDS: 4
+      TOTAL_SHARDS: 6
     steps:
       - name: Runner disk hygiene
         # Bitrise pool machines accumulate per-run workdirs; twice on

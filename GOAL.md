@@ -308,7 +308,17 @@ version).
 passes **unmodified and green** — **met**: 751/751 pass locally and in CI
 (the suite job is a hard gate: `run_agents_suite.dart` fails on any test
 failure or malformed result). Run via
-`dart run bin/run_agents_suite.dart /path/to/dmtools-agents`.
+`dart run bin/run_agents_suite.dart /path/to/dmtools-agents` — executed as
+parallel contiguous chunks over worker isolates (same totals as serial; see
+`lib/src/js/agents_suite.dart`), `DMTOOLS_SUITE_SHARDS` overrides the
+worker count. Each chunk runs in a disposable copy of the agents tree
+(`.git` becomes an absolute gitfile ref so real `git ls-files` calls in
+`test_agentDocsCoverage`/`test_agentValidator` still answer from the
+original index); `DMTOOLS_SUITE_ISOLATED_COPIES=0` shares one tree —
+not recommended on CI, where interleaved chunk writes on a shared tree
+once parked two chunks in a minutes-long CLI-resume backoff
+(`publishDiscoveryToConfluence` waiting on `outputs/response.md`,
+2026-10-01 run 36891377431).
 
 ### Phase 5 — CliAgent port (first agent)
 

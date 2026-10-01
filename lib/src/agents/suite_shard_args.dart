@@ -13,6 +13,7 @@ class SuiteShardArgs {
   const SuiteShardArgs({
     required this.agentsPath,
     required this.problems,
+    required this.serial,
     this.shardIndex,
     this.totalShards,
     this.manifestOut,
@@ -33,12 +34,17 @@ class SuiteShardArgs {
   /// written (required for sharded runs).
   final String? manifestOut;
 
+  /// Whether `--serial` was given: force the historical single-engine
+  /// run for the no-flag path (the default is now the in-process
+  /// parallel chunk executor; sharded runs are always single-engine).
+  final bool serial;
+
   /// Parse-level problems (unknown flag, non-integer value, stray
   /// positional). Empty when the argv is well-formed.
   final List<String> problems;
 
   /// Whether any shard flag was given at all — sharding is strictly
-  /// opt-in; the no-flag invocation is the historical serial run (AC5).
+  /// opt-in; the no-flag invocation is the parallel chunk run.
   bool get isSharded =>
       shardIndex != null || totalShards != null || manifestOut != null;
 
@@ -48,6 +54,7 @@ class SuiteShardArgs {
   factory SuiteShardArgs.parse(List<String> args) {
     var agentsPath = '/tmp/dmtools-agents';
     var positionalSeen = false;
+    var serial = false;
     int? shardIndex;
     int? totalShards;
     String? manifestOut;
@@ -72,6 +79,8 @@ class SuiteShardArgs {
       } else if (arg == '--manifest-out' || arg.startsWith('--manifest-out=')) {
         manifestOut = _valueOf(args, i, problems);
         if (!arg.contains('=')) i++;
+      } else if (arg == '--serial') {
+        serial = true;
       } else if (arg.startsWith('--')) {
         problems.add('unknown flag: $arg');
       } else if (!positionalSeen) {
@@ -84,6 +93,7 @@ class SuiteShardArgs {
     return SuiteShardArgs(
       agentsPath: agentsPath,
       problems: problems,
+      serial: serial,
       shardIndex: shardIndex,
       totalShards: totalShards,
       manifestOut: manifestOut,

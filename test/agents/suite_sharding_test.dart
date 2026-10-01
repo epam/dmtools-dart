@@ -95,13 +95,14 @@ void main() {
         for (var i = 0; i < 4; i++) ShardPlanner.split(testFiles, i, 4),
       ];
       final union = [for (final s in shards) ...s];
+      // Positional coverage: every input entry (including the upstream
+      // duplicate of test_postPRReviewComments.js) lands in exactly one
+      // shard — multiset equality, not per-filename uniqueness.
       expect(union.length, testFiles.length,
           reason: 'no file may be lost or duplicated by the split');
       final sortedUnion = [...union]..sort();
       final sortedInput = [...testFiles]..sort();
       expect(sortedUnion, sortedInput);
-      // Every file appears exactly once (disjointness).
-      expect(union.toSet().length, union.length);
       expect(shards.map((s) => s.length), everyElement(23));
     });
 

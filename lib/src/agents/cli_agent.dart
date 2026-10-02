@@ -19,6 +19,10 @@
 /// Strict mode (`requireCliOutputFile=true`) with no CLI output file skips
 /// `postJSAction` entirely (Java `skipFieldUpdate` parity, epam/dm.ai#622) —
 /// the error summary returned as the response reports the failure instead.
+///
+/// Manual skip flags (`skipPreJSAction` / `skipPreCliJSAction` /
+/// `skipPostJSAction`, Java epam/dm.ai#266 parity) each prevent their hook
+/// with a skip log line; the flags compose with the strict-mode guard.
 library;
 
 import 'dart:convert';
@@ -125,7 +129,8 @@ class CliAgent {
       _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
-      _executeJsAction('preJSAction', params.preJSAction, null, null, workDir);
+      _executeJsAction('preJSAction', params.preJSAction, null, null, workDir,
+          skip: params.skipPreJSAction);
       _inputContextPath = _createInputContext(workDir);
       _executeJsAction(
         'preCliJSAction',
@@ -133,6 +138,7 @@ class CliAgent {
         null,
         _inputContextPath,
         workDir,
+        skip: params.skipPreCliJSAction,
       );
       response = await _executeCliCommands(workDir);
       if (_strictModeMissingOutput) {
@@ -152,6 +158,7 @@ class CliAgent {
           response,
           _inputContextPath,
           workDir,
+          skip: params.skipPostJSAction,
         );
       }
       await _executeScriptHook('cache', params.cache, workDir, response);
@@ -225,6 +232,11 @@ class CliAgent {
 
   /// Executes a JS action via [JsJobRunner] with context bindings.
   ///
+  /// [skip] mirrors the Java `skipPreJSAction` / `skipPreCliJSAction` /
+  /// `skipPostJSAction` guards (epam/dm.ai#266): a set flag prevents the
+  /// hook and logs the skip — the log fires whenever the flag is set, even
+  /// when no hook path is configured (Java `else if` branch parity).
+  ///
   /// Binds a top-level `metadata` into the JS `params` object
   /// ([_metadataContextParams] — Java `TrackerParams.METADATA` binding,
   /// epam/dm.ai#623 parity). Errors are caught and logged — the lifecycle
@@ -234,8 +246,13 @@ class CliAgent {
     String? actionPath,
     String? response,
     String? inputFolderPath,
-    String workDir,
-  ) {
+    String workDir, {
+    bool skip = false,
+  }) {
+    if (skip) {
+      stderr.writeln('Skipping $name (skip${_flagName(name)}=true)');
+      return;
+    }
     if (actionPath == null || actionPath.trim().isEmpty) return;
     try {
       jsRunner.runScript(
@@ -252,6 +269,11 @@ class CliAgent {
       stderr.writeln('$name failed, continuing: $e');
     }
   }
+
+  /// The config key of the skip flag for a JS action name — `preJSAction`
+  /// → `PreJSAction` (used as `skip<$suffix>`).
+  static String _flagName(String name) =>
+      '${name[0].toUpperCase()}${name.substring(1)}';
 
   // ------------------------------------------------------------------
   // CLI command phase

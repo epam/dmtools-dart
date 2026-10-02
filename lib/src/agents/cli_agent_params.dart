@@ -84,6 +84,15 @@ class CliAgentParams {
   /// JS action path fired for each output line; returning true stops.
   String? cliOutputLineJSAction;
 
+  /// Whether to skip the `preJSAction` hook. Default: `false`.
+  bool skipPreJSAction = false;
+
+  /// Whether to skip the `preCliJSAction` hook. Default: `false`.
+  bool skipPreCliJSAction = false;
+
+  /// Whether to skip the `postJSAction` hook. Default: `false`.
+  bool skipPostJSAction = false;
+
   // --- Inherited from TrackerParams ---
 
   /// Output type — `comment`, `field`, `creation`, or `none`.
@@ -150,6 +159,9 @@ class CliAgentParams {
       ..cliExecutionErrorJSAction =
           _parseString(json['cliExecutionErrorJSAction'])
       ..cliOutputLineJSAction = _parseString(json['cliOutputLineJSAction'])
+      ..skipPreJSAction = _parseBool(json['skipPreJSAction'], false)
+      ..skipPreCliJSAction = _parseBool(json['skipPreCliJSAction'], false)
+      ..skipPostJSAction = _parseBool(json['skipPostJSAction'], false)
       ..outputType = _parseString(json['outputType'])
       ..envVariables = _parseStringMap(json['envVariables'])
       ..metadata = _parseDynamicMap(json['metadata'])

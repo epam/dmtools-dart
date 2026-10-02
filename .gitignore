@@ -49,5 +49,9 @@ outputs/
 # artifact, never repo content.
 /factory-agents/
 
+# Local git-push-guard kit checkout (installs the `git` shim into
+# git-push-guard-bin on the agent machine). Run artifact, never repo content.
+/factory-kit/
+
 # CodeGraph generated index - regenerated per-run, must never be committed
 .codegraph/

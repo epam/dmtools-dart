@@ -27,22 +27,6 @@ const String verdictNone = 'none';
 /// GH check-run conclusions that are conclusive failures.
 const _ghFailConclusions = {'failure', 'timed_out'};
 
-/// GH check-run conclusions that produced NO verdict about the head.
-///
-/// `neutral` completed without a pass/fail answer, `cancelled` says
-/// nothing about the head (the SM's cancelled-is-not-a-verdict rule,
-/// live gh-191), `action_required` needs a human, `skipped`/`stale` ran
-/// nothing current, `startup_failure` never ran.
-const _ghPendingConclusions = {
-  'neutral',
-  'cancelled',
-  'canceled',
-  'action_required',
-  'skipped',
-  'stale',
-  'startup_failure',
-};
-
 /// GL statuses that are conclusive failures (`fail` is the commit-status
 /// spelling of `failed`).
 const _glFailStatuses = {'failed', 'fail'};

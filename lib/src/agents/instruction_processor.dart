@@ -18,8 +18,14 @@ library;
 import 'dart:io';
 
 /// Matches relative or absolute file paths with known extensions.
+///
+/// Path segments may contain dots (`/home/runner/.dmtools/packs/
+/// story_development-0.1.18/...md`) — pack paths on runners always do —
+/// so the charset includes `.` between separators. The extension anchor
+/// stays pinned to the known list, and the leading boundary (`/`, `./`,
+/// `../`) keeps ordinary prose with dots out.
 final RegExp _filePathRegExp = RegExp(
-  r'\.{0,2}/[\w/-]+\.(?:md|txt|json|yaml|yml)',
+  r'(?<![:/\w])\.{0,2}/[\w./-]+\.(?:md|txt|json|yaml|yml)\b',
 );
 
 /// Matches GitHub pull-request URLs (captures owner, repo, number).

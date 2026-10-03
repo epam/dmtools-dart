@@ -38,7 +38,7 @@ jobs:
     # Frozen machine loop (same freeze contract as machine-sm.yml: agents
     # resolve from dmtools-agents RELEASES by vars.AGENTS_VERSION).
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge.yml@2b4b83558f2e27c97b7d46cfb7beeca4ae7dfda7
+    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge.yml@e611e5f4240e9c8a5cdbf10721562eb04513d006
     with:
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci

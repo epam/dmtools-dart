@@ -160,7 +160,11 @@ void scmGithubTests() {
         'diff --git a/x b/x',
       );
     });
+  });
+}
 
+void scmGithubBranchTests() {
+  group('scm_* → github (data plane)', () {
     test('scm_add_labels passes the plain-string label array', () {
       final tools = ghSubject({
         'github_add_labels': (args) {
@@ -299,7 +303,11 @@ void scmGitlabTests() {
         {'workspace': 'g', 'repository': 'r', 'pr': 42},
       );
     });
+  });
+}
 
+void scmGitlabBranchTests() {
+  group('scm_* → gitlab (data plane)', () {
     test('scm_add_labels fans out per label (multi-item loop)', () {
       final added = <String>[];
       final tools = glSubject({
@@ -394,7 +402,11 @@ void ciGithubTriggerTests() {
       expect(out['runId'], isNull,
           reason: 'no matching run — the handle is honestly null');
     });
+  });
+}
 
+void ciGithubListRunsTests() {
+  group('ci_* → github actions (control plane)', () {
     test('ci_trigger_workflow returns the trigger error untouched', () {
       final tools = ghSubject({
         'github_trigger_workflow': (args) => '{"error":"Workflow trigger '
@@ -463,10 +475,11 @@ void ciGithubTriggerTests() {
       expect(runs[0]['event'], 'workflow_dispatch');
       expect(runs[1]['verdict'], 'pending');
     });
-
+  });
 }
 
 void ciGithubVerdictTests() {
+  group('ci_* → github actions (control plane)', () {
     test('ci_get_verdict by runId reads the run conclusion', () {
       final tools = ghSubject({
         'github_get_workflow_run': (args) {
@@ -544,7 +557,11 @@ void ciGithubVerdictTests() {
       );
       expect(out['verdict'], 'fail');
     });
+  });
+}
 
+void ciGithubMergeStateTests() {
+  group('ci_* → github actions (control plane)', () {
     test('ci_get_verdict with no evidence at all is none', () {
       final tools = ghSubject({
         'github_get_commit_check_runs': (args) => '{"check_runs": []}',
@@ -594,7 +611,8 @@ void ciGithubVerdictTests() {
       expect(out['mergeState'], 'BLOCKED');
       expect(out['reason'], 'required-checks-pending');
     });
-  });}
+  });
+}
 
 void ciGitlabTriggerTests() {
   group('ci_* → gitlab ci (control plane)', () {
@@ -643,10 +661,11 @@ void ciGitlabTriggerTests() {
       expect(runs.single['runId'], 9);
       expect(runs.single['verdict'], 'pass');
     });
-
+  });
 }
 
 void ciGitlabVerdictTests() {
+  group('ci_* → gitlab ci (control plane)', () {
     test('ci_get_verdict pr-probe rolls MR pipelines up to the enum', () {
       final tools = glSubject({
         'gitlab_get_mr_pipelines': (args) {
@@ -683,7 +702,11 @@ void ciGitlabVerdictTests() {
       expect(out['error'], contains('GitLab'));
       expect(out['error'], contains('different provider'));
     });
+  });
+}
 
+void ciGitlabMergeStateTests() {
+  group('ci_* → gitlab ci (control plane)', () {
     test('ci_get_verdict sha-probe reads commit statuses', () {
       final tools = glSubject({
         'gitlab_get_commit_statuses': (args) {
@@ -721,7 +744,8 @@ void ciGitlabVerdictTests() {
       expect(out['mergeState'], 'BLOCKED');
       expect(out['reason'], 'ci-still-running');
     });
-  });}
+  });
+}
 
 /// Edge contracts from the ticket's test plan.
 void edgeContractTests() {

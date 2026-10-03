@@ -19,10 +19,20 @@
 library;
 
 /// The pinned merge-state enum (AC7) — the vocabulary the SM speaks.
+
+/// No blocker, head == base.
 const String stateClean = 'CLEAN';
+
+/// Head is behind base but otherwise mergeable.
 const String stateBehind = 'BEHIND';
+
+/// Conflicts — a human must resolve before the SM may arm.
 const String stateDirty = 'DIRTY';
+
+/// Checks/protection still settling (carries a [MergeState.reason]).
 const String stateBlocked = 'BLOCKED';
+
+/// No evidence (unknown mergeability or non-open PR).
 const String stateUnknown = 'UNKNOWN';
 
 /// The pinned 4-value verdict enum (AC6).

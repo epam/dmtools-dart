@@ -74,7 +74,6 @@ void ghVerdictTableTests() {
       expect(ghConclusionVerdict('TIMED_OUT'), 'fail');
     });
   });
-
 }
 
 void glVerdictTableTests() {
@@ -112,7 +111,6 @@ void glVerdictTableTests() {
     });
   });
 }
-
 
 /// Rollup semantics across several checks for one head.
 void ghVerdictRollupTests() {
@@ -170,7 +168,6 @@ void ghVerdictRollupTests() {
       );
     });
   });
-
 }
 
 void glVerdictRollupTests() {
@@ -200,7 +197,6 @@ void glVerdictRollupTests() {
     });
   });
 }
-
 
 /// AC7 — the merge-state enum the SM already speaks.
 void ghMergeStateTests() {
@@ -249,9 +245,6 @@ void ghMergeStateTests() {
 }
 
 void gitlabMergeStateTests() {
-  Map<String, dynamic> decode(MergeState ms) =>
-      jsonDecode(jsonEncode(ms.toJson())) as Map<String, dynamic>;
-
   group('GL merge state', () {
     test('can_be_merged without conflicts is CLEAN', () {
       expect(
@@ -289,7 +282,14 @@ void gitlabMergeStateTests() {
       // the SM's no-unarm-on-BLOCKED rule stays intact (AC7).
       expect(ghMergeState(mergeableState: 'blocked').state, ms.state);
     });
+  });
+}
 
+void gitlabMergeStateTransientTests() {
+  Map<String, dynamic> decode(MergeState ms) =>
+      jsonDecode(jsonEncode(ms.toJson())) as Map<String, dynamic>;
+
+  group('GL merge state', () {
     test('protection shapes are BLOCKED with reasons', () {
       for (final d in const [
         'blocked',

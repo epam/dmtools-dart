@@ -41,9 +41,12 @@ typedef Handler = String Function(Map<String, dynamic> args);
 /// the only accepted shape — a raw provider spelling is rejected).
 const String kScmStateEnum = 'open, closed, merged, all';
 
-// Provider ids used as dispatch keys and as the `provider` field the
-// bridge rewrites to. Named so the sync surface stays literal-light.
+/// GitHub provider id (dispatch key + the `provider` field the bridge
+/// rewrites to).
 const String providerGithub = 'github';
+
+/// GitLab provider id (dispatch key + the `provider` field the bridge
+/// rewrites to).
 const String providerGitlab = 'gitlab';
 
 /// Translates `scm_*`/`ci_*` calls to the configured provider.
@@ -226,7 +229,8 @@ class ScmCiSyncTools {
         },
         a);
     if (raw.contains('"error"')) return raw;
-    return _triggerResult(providerGithub, _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
+    return _triggerResult(
+        providerGithub, _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
   }
 
   /// Best-effort run handle after a GitHub dispatch (the API returns no
@@ -279,7 +283,8 @@ class ScmCiSyncTools {
     if (runId != null) {
       final raw = _ghCall('github_get_workflow_run', {'runId': runId}, a);
       final body = _decode(raw);
-      if (body['error'] != null) return _runMismatch(raw, providerGithub, runId);
+      if (body['error'] != null)
+        return _runMismatch(raw, providerGithub, runId);
       return jsonEncode({
         'provider': providerGithub,
         'verdict': ghRunVerdict(
@@ -384,7 +389,8 @@ class ScmCiSyncTools {
     if (runId != null) {
       final raw = _glCall('gitlab_get_pipeline_jobs', {'pipelineId': runId}, a);
       final body = _decode(raw);
-      if (body['error'] != null) return _runMismatch(raw, providerGitlab, runId);
+      if (body['error'] != null)
+        return _runMismatch(raw, providerGitlab, runId);
       final jobs = body['jobs'] as List? ?? const [];
       final statuses = [
         for (final j in jobs.whereType<Map>()) {'status': j['status']},

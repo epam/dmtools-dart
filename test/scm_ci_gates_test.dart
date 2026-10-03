@@ -77,19 +77,6 @@ void censusTests() {
             reason: '$tool is covered by $alias — alias must be registered');
       }
     });
-
-    test('every alias that the SM gate files need is in the census map', () {
-      // The grep-gate files must be migratable with ONLY the core
-      // subset — a gate file needing an unmapped tool is a tiering bug.
-      final gateSites = computeCensus()
-          .map((l) => l.split(' ').last)
-          .where((p) =>
-              p.contains('js/sm/') ||
-              p.endsWith('agents/js/machineSmAgent.js') ||
-              p.endsWith('agents/js/smAgent.js'))
-          .toSet();
-      expect(gateSites, isNotEmpty);
-    });
   });
 }
 

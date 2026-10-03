@@ -96,6 +96,36 @@ void ciGithubTriggerValidationTests() {
       );
       expect(out['error'], contains('422'));
     });
+
+    test('ci_trigger_workflow rejects an unparsable inputs JSON string', () {
+      final tools = ghSubject({
+        'github_trigger_workflow': (args) =>
+            fail('must not reach the provider with invalid inputs'),
+      });
+      final out = decode(
+        tools.handlers['ci_trigger_workflow']!(
+          {'workflow': 'ci.yml', 'inputs': '{not json'},
+        ),
+      );
+      expect(out['error'], contains('invalid inputs JSON'));
+    });
+
+    test('non-map inputs wrap under the `input` key, stringified', () {
+      final tools = ghSubject({
+        'github_trigger_workflow': (args) {
+          expect(args['inputs'], '{"input":"42"}');
+          return '"ok"';
+        },
+        'github_list_workflow_runs': (args) =>
+            '{"workflow_runs":[{"id":7,"head_branch":"main"}]}',
+      });
+      final out = decode(
+        tools.handlers['ci_trigger_workflow']!(
+          {'workflow': 'ci.yml', 'inputs': 42},
+        ),
+      );
+      expect(out['runId'], 7);
+    });
   });
 }
 
@@ -275,6 +305,36 @@ void ciGithubMergeStateTests() {
       expect(out['error'], contains('sha'));
     });
 
+    test(
+        'sha-probe without check runs and without workflow is none '
+        '(no speculative listing)', () {
+      final tools = ghSubject({
+        'github_get_commit_check_runs': (args) => '{"check_runs": []}',
+        'github_list_workflow_runs': (args) =>
+            fail('no workflow filter → no fallback listing'),
+      });
+      final out = decode(
+        tools.handlers['ci_get_verdict']!(
+          {'workspace': 'o', 'repository': 'r', 'sha': 'abc'},
+        ),
+      );
+      expect(out['verdict'], 'none');
+    });
+
+    test('a runId the routed provider rejects names the mismatch (E3, GH)', () {
+      final tools = ghSubject({
+        'github_get_workflow_run': (args) =>
+            '{"error":"GitHub API 404: Not Found"}',
+      });
+      final out = decode(
+        tools.handlers['ci_get_verdict']!(
+          {'workspace': 'o', 'repository': 'r', 'runId': '77'},
+        ),
+      );
+      expect(out['error'], contains('GitHub API 404'));
+      expect(out['error'], contains('different provider'));
+    });
+
     test('ci_get_merge_state normalizes the REST body (AC7)', () {
       final tools = ghSubject({
         'github_get_pr': (args) {
@@ -299,6 +359,19 @@ void ciGithubMergeStateTests() {
 
 void ciGitlabTriggerTests() {
   group('ci_* → gitlab ci (control plane)', () {
+    test('ci_trigger_workflow rejects an unparsable inputs JSON string', () {
+      final tools = glSubject({
+        'gitlab_trigger_pipeline': (args) =>
+            fail('must not reach the provider with invalid inputs'),
+      });
+      final out = decode(
+        tools.handlers['ci_trigger_workflow']!(
+          {'workflow': '.gitlab-ci.yml', 'inputs': '{oops'},
+        ),
+      );
+      expect(out['error'], contains('invalid inputs JSON'));
+    });
+
     test('ci_trigger_workflow triggers a pipeline with variables', () {
       final tools = glSubject({
         'gitlab_trigger_pipeline': (args) {
@@ -384,6 +457,39 @@ void ciGitlabVerdictTests() {
       );
       expect(out['error'], contains('GitLab'));
       expect(out['error'], contains('different provider'));
+    });
+
+    test('ci_get_verdict runId-form rolls the job statuses up (multi-job)', () {
+      final tools = glSubject({
+        'gitlab_get_pipeline_jobs': (args) {
+          expect(args['pipelineId'], '123456');
+          return jsonEncode({
+            'jobs': [
+              {'status': 'success'},
+              {'status': 'running'},
+            ],
+          });
+        },
+      });
+      final out = decode(
+        tools.handlers['ci_get_verdict']!(
+          {'workspace': 'g', 'repository': 'r', 'runId': '123456'},
+        ),
+      );
+      expect(out['verdict'], 'pending',
+          reason: 'success + in-flight is pending, never a silent pass');
+      expect(out['provider'], 'gitlab');
+    });
+
+    test('ci_get_verdict without runId/pr/sha is a schema error', () {
+      final tools = glSubject(const {});
+      final out = decode(
+        tools.handlers['ci_get_verdict']!(
+          {'workspace': 'g', 'repository': 'r'},
+        ),
+      );
+      expect(out['error'], contains('runId'));
+      expect(out['error'], contains('pr'));
     });
   });
 }

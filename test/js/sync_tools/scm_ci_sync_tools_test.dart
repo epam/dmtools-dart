@@ -99,6 +99,21 @@ void scmGithubTests() {
       );
       expect(decode(out)['merged'], isTrue);
     });
+
+    test('scm_get_diff maps to the diff-text tool with pullRequestId', () {
+      final tools = ghSubject({
+        'github_get_pr_diff_text': (args) {
+          expect(args['pullRequestId'], 9);
+          return '"diff --git a/x b/x"';
+        },
+      });
+      final out = decode(
+        tools.handlers['scm_get_diff']!(
+          {'workspace': 'o', 'repository': 'r', 'pr': 9},
+        ),
+      );
+      expect(out, 'diff --git a/x b/x');
+    });
   });
 }
 

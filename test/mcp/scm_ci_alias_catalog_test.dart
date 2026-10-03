@@ -165,7 +165,8 @@ void schemaTests() {
         ...scmAliasTools(),
         ...ciAliasTools(),
       ];
-      expect(catalog.every((t) => t.integration == 'scm' || t.integration == 'ci'),
+      expect(
+          catalog.every((t) => t.integration == 'scm' || t.integration == 'ci'),
           isTrue);
     });
   });
@@ -185,8 +186,7 @@ void catalogParityTests() {
           reason: 'each alias must be a distinct new tool');
     });
 
-    test('a concrete github tool keeps its exact schema alongside aliases',
-        () {
+    test('a concrete github tool keeps its exact schema alongside aliases', () {
       final r = buildRegistry(overrides: {'DEFAULT_SCM': 'github'});
       final gh = r.registry.getTool('github_get_pr')!;
       expect(gh.integration, 'github');

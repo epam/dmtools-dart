@@ -14,7 +14,6 @@ library;
 import 'dart:io';
 
 import 'package:dmtools/src/config/property_reader.dart';
-import 'package:dmtools/src/integrations/scm/scm_ci_alias_catalog.dart';
 import 'package:dmtools/src/mcp/default_tool_registry.dart';
 import 'package:test/test.dart';
 
@@ -37,8 +36,7 @@ void main() {
 /// AC2 — the census is the tiering witness for the core alias subset.
 void censusTests() {
   group('scm alias usage census (AC2)', () {
-    test('the committed fixture is current (regenerate when js/ changes)',
-        () {
+    test('the committed fixture is current (regenerate when js/ changes)', () {
       final computed = computeCensus();
       final committed = File('test/fixtures/scm_alias_usage_census.txt')
           .readAsLinesSync()
@@ -62,10 +60,8 @@ void censusTests() {
         'DEFAULT_SCM': 'github',
         'DEFAULT_CI': 'actions',
       });
-      final aliasNames = createDefaultToolRegistry()
-          .allTools
-          .map((t) => t.name)
-          .toSet();
+      final aliasNames =
+          createDefaultToolRegistry().allTools.map((t) => t.name).toSet();
       final censusTools =
           computeCensus().map((l) => l.split(' ').first).toSet();
       expect(censusTools, isNotEmpty);
@@ -91,8 +87,7 @@ void grepGateTests() {
       'agents/js/machineSmAgent.js',
     ];
 
-    test('the gate files exist (the gate cannot silently pass on a move)',
-        () {
+    test('the gate files exist (the gate cannot silently pass on a move)', () {
       for (final f in gateFiles) {
         expect(File(f).existsSync(), isTrue, reason: f);
       }

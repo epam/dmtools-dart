@@ -73,7 +73,8 @@ class ScmCiSyncTools {
       _ciOverride ?? resolveCiProvider(_reader.getDefaultCi());
 
   /// The concrete GitHub handlers (real or injected).
-  Map<String, Handler> get _gh => _githubHandlers ?? const GitHubSyncTools().handlers;
+  Map<String, Handler> get _gh =>
+      _githubHandlers ?? const GitHubSyncTools().handlers;
 
   /// The concrete GitLab handlers (real or injected).
   Map<String, Handler> get _gl =>
@@ -90,44 +91,54 @@ class ScmCiSyncTools {
   Map<String, Handler> _scmRoute() =>
       _scm == 'gitlab' ? _scmGitlab() : _scmGithub();
 
-  Map<String, Handler> _ciRoute() => _ci == 'gitlab' ? _ciGitlab() : _ciGithub();
+  Map<String, Handler> _ciRoute() =>
+      _ci == 'gitlab' ? _ciGitlab() : _ciGithub();
 
   // ── scm_* → github ────────────────────────────────────────────────────
 
   Map<String, Handler> _scmGithub() => {
-        'scm_list_prs': (a) => _stateValidated(a, (state) => _ghCall(
-            'github_list_prs', {'state': state}, a)),
-        'scm_get_pr': (a) => _ghCall('github_get_pr', {'pullRequestId': a['pr']}, a),
-        'scm_merge_pr': (a) => _ghCall('github_merge_pr', {
+        'scm_list_prs': (a) => _stateValidated(
+            a, (state) => _ghCall('github_list_prs', {'state': state}, a)),
+        'scm_get_pr': (a) =>
+            _ghCall('github_get_pr', {'pullRequestId': a['pr']}, a),
+        'scm_merge_pr': (a) => _ghCall(
+            'github_merge_pr',
+            {
               'pullRequestId': a['pr'],
               if (a['mergeMethod'] != null) 'mergeMethod': a['mergeMethod'],
               if (a['commitTitle'] != null) 'commitTitle': a['commitTitle'],
-              if (a['commitMessage'] != null) 'commitMessage': a['commitMessage'],
-            }, a),
+              if (a['commitMessage'] != null)
+                'commitMessage': a['commitMessage'],
+            },
+            a),
         'scm_get_diff': (a) =>
             _ghCall('github_get_pr_diff_text', {'pullRequestId': a['pr']}, a),
-        'scm_add_labels': (a) =>
-            _ghCall('github_add_labels', {'number': a['pr'], 'labels': a['labels']}, a),
-        'scm_remove_label': (a) =>
-            _ghCall('github_remove_label', {'number': a['pr'], 'label': a['label']}, a),
-        'scm_add_pr_comment': (a) => _ghCall(
-            'github_add_pr_comment', {'pullRequestId': a['pr'], 'text': a['text']}, a),
+        'scm_add_labels': (a) => _ghCall(
+            'github_add_labels', {'number': a['pr'], 'labels': a['labels']}, a),
+        'scm_remove_label': (a) => _ghCall(
+            'github_remove_label', {'number': a['pr'], 'label': a['label']}, a),
+        'scm_add_pr_comment': (a) => _ghCall('github_add_pr_comment',
+            {'pullRequestId': a['pr'], 'text': a['text']}, a),
         'scm_get_pr_comments': (a) =>
             _ghCall('github_get_pr_comments', {'pullRequestId': a['pr']}, a),
-        'scm_create_comment': (a) =>
-            _ghCall('github_create_comment', {'number': a['issue'], 'body': a['body']}, a),
+        'scm_create_comment': (a) => _ghCall('github_create_comment',
+            {'number': a['issue'], 'body': a['body']}, a),
         'scm_get_issue': (a) =>
             _ghCall('github_get_issue', {'issueNumber': a['issue']}, a),
         'scm_search_issues': (a) =>
             _ghCall('github_search_issues', {'query': a['query']}, a),
-        'scm_list_branches': (a) => _ghCall('github_list_branches', const {}, a),
+        'scm_list_branches': (a) =>
+            _ghCall('github_list_branches', const {}, a),
         'scm_get_reviews': (a) =>
             _ghCall('github_list_pr_reviews', {'pullRequestId': a['pr']}, a),
-        'scm_approve': (a) => _ghCall('github_submit_pr_review', {
+        'scm_approve': (a) => _ghCall(
+            'github_submit_pr_review',
+            {
               'pullRequestId': a['pr'],
               'event': 'APPROVE',
               if (a['body'] != null) 'body': a['body'],
-            }, a),
+            },
+            a),
         'scm_close_issue': (a) =>
             _ghCall('github_close_issue', {'number': a['issue']}, a),
       };
@@ -136,28 +147,26 @@ class ScmCiSyncTools {
 
   Map<String, Handler> _scmGitlab() => {
         'scm_list_prs': (a) => _stateValidated(
-            a, (state) => _glCall('gitlab_list_mrs', {'state': _glState(state)}, a)),
+            a,
+            (state) =>
+                _glCall('gitlab_list_mrs', {'state': _glState(state)}, a)),
         'scm_get_pr': (a) =>
             _glCall('gitlab_get_mr', {'pullRequestId': '${a['pr']}'}, a),
         'scm_merge_pr': (a) =>
             _glCall('gitlab_merge_mr', {'pullRequestId': '${a['pr']}'}, a),
-        'scm_get_diff': (a) =>
-            _glCall('gitlab_get_mr_diff_text', {'pullRequestId': '${a['pr']}'}, a),
+        'scm_get_diff': (a) => _glCall(
+            'gitlab_get_mr_diff_text', {'pullRequestId': '${a['pr']}'}, a),
         'scm_add_labels': (a) => _glAddLabels(a),
-        'scm_remove_label': (a) => _glCall(
-            'gitlab_remove_mr_label',
-            {'pullRequestId': '${a['pr']}', 'label': a['label']},
-            a),
-        'scm_add_pr_comment': (a) => _glCall(
-            'gitlab_add_mr_comment', {'pullRequestId': '${a['pr']}', 'text': a['text']}, a),
-        'scm_get_pr_comments': (a) =>
-            _glCall('gitlab_get_mr_comments', {'pullRequestId': '${a['pr']}'}, a),
+        'scm_remove_label': (a) => _glCall('gitlab_remove_mr_label',
+            {'pullRequestId': '${a['pr']}', 'label': a['label']}, a),
+        'scm_add_pr_comment': (a) => _glCall('gitlab_add_mr_comment',
+            {'pullRequestId': '${a['pr']}', 'text': a['text']}, a),
+        'scm_get_pr_comments': (a) => _glCall(
+            'gitlab_get_mr_comments', {'pullRequestId': '${a['pr']}'}, a),
         // Issue notes ride the MR-note shape (smProvider twin precedent:
         // projects using MRs as the state carrier get exact behavior).
-        'scm_create_comment': (a) => _glCall(
-            'gitlab_create_mr_note',
-            {'pullRequestId': '${a['issue']}', 'text': a['body']},
-            a),
+        'scm_create_comment': (a) => _glCall('gitlab_create_mr_note',
+            {'pullRequestId': '${a['issue']}', 'text': a['body']}, a),
         'scm_get_issue': (a) => _glGap('scm_get_issue'),
         'scm_search_issues': (a) => _glGap('scm_search_issues'),
         'scm_list_branches': (a) => _glGap('scm_list_branches'),
@@ -203,11 +212,14 @@ class ScmCiSyncTools {
   String _ghTrigger(Map<String, dynamic> a) {
     final inputs = _stringifiedInputs(a);
     if (inputs == null) return _err('ci_trigger_workflow: invalid inputs JSON');
-    final raw = _ghCall('github_trigger_workflow', {
-      'workflowId': a['workflow'],
-      if (a['ref'] != null) 'ref': a['ref'],
-      if (inputs.isNotEmpty) 'inputs': inputs,
-    }, a);
+    final raw = _ghCall(
+        'github_trigger_workflow',
+        {
+          'workflowId': a['workflow'],
+          if (a['ref'] != null) 'ref': a['ref'],
+          if (inputs.isNotEmpty) 'inputs': inputs,
+        },
+        a);
     if (raw.contains('"error"')) return raw;
     return _triggerResult('github', _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
   }
@@ -228,11 +240,14 @@ class ScmCiSyncTools {
   }
 
   String _ghListRuns(Map<String, dynamic> a) {
-    final raw = _ghCall('github_list_workflow_runs', {
-      if (a['workflow'] != null) 'workflowId': a['workflow'],
-      if (a['status'] != null) 'status': a['status'],
-      if (a['limit'] != null) 'perPage': a['limit'],
-    }, a);
+    final raw = _ghCall(
+        'github_list_workflow_runs',
+        {
+          if (a['workflow'] != null) 'workflowId': a['workflow'],
+          if (a['status'] != null) 'status': a['status'],
+          if (a['limit'] != null) 'perPage': a['limit'],
+        },
+        a);
     final runs = _decode(raw)['workflow_runs'] as List? ?? const [];
     return jsonEncode({
       'runs': [
@@ -240,8 +255,8 @@ class ScmCiSyncTools {
           {
             'runId': r['id'],
             'status': r['status'],
-            'verdict': ghRunVerdict(r['status'] as String?,
-                r['conclusion'] as String?),
+            'verdict': ghRunVerdict(
+                r['status'] as String?, r['conclusion'] as String?),
             'sha': r['head_sha'],
             'url': r['html_url'],
             'startedAt': r['created_at'],
@@ -257,8 +272,7 @@ class ScmCiSyncTools {
     final runId = a['runId'];
     final sha = a['sha'];
     if (runId != null) {
-      final raw = _ghCall(
-          'github_get_workflow_run', {'runId': runId}, a);
+      final raw = _ghCall('github_get_workflow_run', {'runId': runId}, a);
       final body = _decode(raw);
       if (body['error'] != null) return _runMismatch(raw, 'github', runId);
       return jsonEncode({
@@ -276,8 +290,8 @@ class ScmCiSyncTools {
   /// head carries no check runs, the workflow-runs fallback matched on
   /// head_sha (the SM's stale-verdict probe, live fa #762).
   String _ghShaVerdict(Map<String, dynamic> a, String sha) {
-    final cr = _decode(
-        _ghCall('github_get_commit_check_runs', {'commitSha': sha}, a));
+    final cr =
+        _decode(_ghCall('github_get_commit_check_runs', {'commitSha': sha}, a));
     final runs = cr['check_runs'] as List? ?? const [];
     if (runs.isNotEmpty) {
       return jsonEncode(
@@ -298,8 +312,8 @@ class ScmCiSyncTools {
     final top = mine.first;
     return jsonEncode({
       'provider': 'github',
-      'verdict': ghRunVerdict(
-          top['status'] as String?, top['conclusion'] as String?),
+      'verdict':
+          ghRunVerdict(top['status'] as String?, top['conclusion'] as String?),
     });
   }
 
@@ -314,19 +328,25 @@ class ScmCiSyncTools {
           if (inputs == null) {
             return _err('ci_trigger_workflow: invalid inputs JSON');
           }
-          final raw = _glCall('gitlab_trigger_pipeline', {
-            'ref': a['ref'] ?? 'main',
-            if (inputs.isNotEmpty) 'variablesJson': inputs,
-          }, a);
+          final raw = _glCall(
+              'gitlab_trigger_pipeline',
+              {
+                'ref': a['ref'] ?? 'main',
+                if (inputs.isNotEmpty) 'variablesJson': inputs,
+              },
+              a);
           if (raw.contains('"error"')) return raw;
           return _triggerResult('gitlab', _decode(raw)['id'], raw);
         },
         'ci_list_runs': (a) {
-          final raw = _glCall('gitlab_list_pipeline_runs', {
-            if (a['ref'] != null) 'ref': a['ref'],
-            if (a['status'] != null) 'status': a['status'],
-            if (a['limit'] != null) 'limit': a['limit'],
-          }, a);
+          final raw = _glCall(
+              'gitlab_list_pipeline_runs',
+              {
+                if (a['ref'] != null) 'ref': a['ref'],
+                if (a['status'] != null) 'status': a['status'],
+                if (a['limit'] != null) 'limit': a['limit'],
+              },
+              a);
           final runs = _decode(raw) as List? ?? const [];
           return jsonEncode({
             'runs': [
@@ -357,14 +377,12 @@ class ScmCiSyncTools {
   String _glVerdict(Map<String, dynamic> a) {
     final runId = a['runId'];
     if (runId != null) {
-      final raw =
-          _glCall('gitlab_get_pipeline_jobs', {'pipelineId': runId}, a);
+      final raw = _glCall('gitlab_get_pipeline_jobs', {'pipelineId': runId}, a);
       final body = _decode(raw);
       if (body['error'] != null) return _runMismatch(raw, 'gitlab', runId);
       final jobs = body['jobs'] as List? ?? const [];
       final statuses = [
-        for (final j in jobs.whereType<Map>())
-          {'status': j['status']},
+        for (final j in jobs.whereType<Map>()) {'status': j['status']},
       ];
       return jsonEncode({
         'provider': 'gitlab',
@@ -376,17 +394,15 @@ class ScmCiSyncTools {
           'gitlab_get_mr_pipelines', {'pullRequestId': '${a['pr']}'}, a);
       return jsonEncode({
         'provider': 'gitlab',
-        'verdict':
-            gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
+        'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
       });
     }
     if (a['sha'] != null) {
-      final raw = _glCall(
-          'gitlab_get_commit_statuses', {'commitSha': a['sha']}, a);
+      final raw =
+          _glCall('gitlab_get_commit_statuses', {'commitSha': a['sha']}, a);
       return jsonEncode({
         'provider': 'gitlab',
-        'verdict':
-            gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
+        'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
       });
     }
     return _err('ci_get_verdict requires runId, pr, or sha (+ optional '
@@ -457,7 +473,8 @@ class ScmCiSyncTools {
 
   Map<String, dynamic> _stringifiedMap(dynamic decoded) => {
         for (final entry in (decoded as Map).entries)
-          '${entry.key}': entry.value is String ? entry.value : '${entry.value}',
+          '${entry.key}':
+              entry.value is String ? entry.value : '${entry.value}',
       };
 
   /// The trigger response: provider + best-effort run handle + the
@@ -465,8 +482,9 @@ class ScmCiSyncTools {
   /// message arrives JSON-quoted).
   String _triggerResult(String provider, dynamic runId, String raw) {
     final decoded = _decode(raw);
-    final message =
-        decoded is Map ? decoded['message'] ?? _unwrapQuoted(raw) : _unwrapQuoted(raw);
+    final message = decoded is Map
+        ? decoded['message'] ?? _unwrapQuoted(raw)
+        : _unwrapQuoted(raw);
     return jsonEncode({
       'provider': provider,
       'runId': runId,
@@ -499,9 +517,9 @@ class ScmCiSyncTools {
   }
 
   /// The honest v1 gap error for a tool without a GitLab sync surface.
-  String _glGap(String tool) => _err(
-      '$tool is not available on the GitLab route in v1 (no GitLab sync '
-      'surface for it yet) — see the gh-339 tiering notes');
+  String _glGap(String tool) =>
+      _err('$tool is not available on the GitLab route in v1 (no GitLab sync '
+          'surface for it yet) — see the gh-339 tiering notes');
 
   String _err(String message) => '{"error":${jsonEncode(message)}}';
 }

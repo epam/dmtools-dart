@@ -140,7 +140,8 @@ List<ToolDefinition> scmAliasTools() => [
           _workspace(required: false),
           _repository(required: false),
           _pr(),
-          ToolParam(name: 'labels', description: 'Labels to add', type: 'array'),
+          ToolParam(
+              name: 'labels', description: 'Labels to add', type: 'array'),
         ],
       ),
       _scm(
@@ -324,7 +325,8 @@ List<ToolDefinition> ciAliasTools() => [
 /// The `scm_*` family registers only when [defaultScm] (or
 /// `PropertyReader.getDefaultScm`) resolves to a known provider; the
 /// `ci_*` family follows [defaultCi] / `DEFAULT_CI` independently.
-List<ToolDefinition> scmCiAliasCatalog({String? defaultScm, String? defaultCi}) {
+List<ToolDefinition> scmCiAliasCatalog(
+    {String? defaultScm, String? defaultCi}) {
   final reader = PropertyReader();
   final scm = resolveScmProvider(defaultScm ?? reader.getDefaultScm());
   final ci = resolveCiProvider(defaultCi ?? reader.getDefaultCi());

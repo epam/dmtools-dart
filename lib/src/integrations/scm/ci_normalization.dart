@@ -18,10 +18,23 @@
 /// no evidence at all is `none`.
 library;
 
-/// The pinned 4-value verdict enum.
+/// The pinned merge-state enum (AC7) — the vocabulary the SM speaks.
+const String stateClean = 'CLEAN';
+const String stateBehind = 'BEHIND';
+const String stateDirty = 'DIRTY';
+const String stateBlocked = 'BLOCKED';
+const String stateUnknown = 'UNKNOWN';
+
+/// The pinned 4-value verdict enum (AC6).
 const String verdictPass = 'pass';
+
+/// A conclusive failure (GH `failure`/`timed_out`, GL `failed`).
 const String verdictFail = 'fail';
+
+/// No verdict yet — in-flight, cancelled, skipped, or unmappable.
 const String verdictPending = 'pending';
+
+/// No evidence at all (an empty rollup).
 const String verdictNone = 'none';
 
 /// GH check-run conclusions that are conclusive failures.
@@ -59,8 +72,7 @@ String ghCheckRunsVerdict(List<dynamic> runs) {
 
 /// One GitHub Actions run (status + conclusion) to a verdict: a
 /// non-completed run has no verdict yet.
-String ghRunVerdict(String? status, String? conclusion) =>
-    _rollupVerdicts([
+String ghRunVerdict(String? status, String? conclusion) => _rollupVerdicts([
       (status?.trim().toLowerCase() ?? '') == 'completed'
           ? ghConclusionVerdict(conclusion)
           : verdictPending,
@@ -144,22 +156,23 @@ MergeState ghMergeState({
   String? mergeableState,
   String? mergeStateStatus,
 }) {
-  if (mergeable == false) return const MergeState('DIRTY');
+  if (mergeable == false) return const MergeState(stateDirty);
   final raw = (mergeStateStatus ??
           (mergeableState != null && mergeableState.isNotEmpty
               ? mergeableState.toUpperCase()
               : null)) ??
       '';
   final ms = raw.trim().toLowerCase();
-  if (ms == 'clean') return const MergeState('CLEAN');
-  if (ms == 'dirty') return const MergeState('DIRTY');
-  if (ms == 'behind') return const MergeState('BEHIND');
+  if (ms == 'clean') return const MergeState(stateClean);
+  if (ms == 'dirty') return const MergeState(stateDirty);
+  if (ms == 'behind') return const MergeState(stateBehind);
   if (ms == 'blocked') {
-    return const MergeState('BLOCKED', reason: 'required-checks-pending');
+    return const MergeState(stateBlocked, reason: 'required-checks-pending');
   }
   final blockedReason = _ghBlockedReasons[ms];
-  if (blockedReason != null) return MergeState('BLOCKED', reason: blockedReason);
-  return MergeState(mergeable == true ? 'CLEAN' : 'UNKNOWN');
+  if (blockedReason != null)
+    return MergeState(stateBlocked, reason: blockedReason);
+  return MergeState(mergeable == true ? stateClean : stateUnknown);
 }
 
 const _glBlockedReasons = {
@@ -188,17 +201,18 @@ MergeState gitlabMergeState({
 }) {
   final ms = mergeStatus?.trim().toLowerCase() ?? '';
   if (ms == 'not_open') return const MergeState('UNKNOWN');
-  if (hasConflicts == true) return const MergeState('DIRTY');
+  if (hasConflicts == true) return const MergeState(stateDirty);
   final detailed = detailedMergeStatus?.trim().toLowerCase() ?? '';
   final blockedReason = _glBlockedReasons[detailed];
-  if (blockedReason != null) return MergeState('BLOCKED', reason: blockedReason);
+  if (blockedReason != null)
+    return MergeState(stateBlocked, reason: blockedReason);
   if (_glDirtyDetailedStatuses.contains(detailed)) {
-    return const MergeState('DIRTY');
+    return const MergeState(stateDirty);
   }
   if (detailed == 'checking') return const MergeState('UNKNOWN');
-  if (ms == 'can_be_merged') return const MergeState('CLEAN');
+  if (ms == 'can_be_merged') return const MergeState(stateClean);
   if (ms == 'cannot_be_merged' || ms == 'cannot_be_merged_rechecking') {
-    return const MergeState('DIRTY');
+    return const MergeState(stateDirty);
   }
   return const MergeState('UNKNOWN');
 }

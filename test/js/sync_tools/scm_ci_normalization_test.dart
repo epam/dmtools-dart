@@ -268,8 +268,7 @@ void gitlabMergeStateTests() {
       );
     });
 
-    test('ci_still_running is BLOCKED + reason (the pinned GL transient)',
-        () {
+    test('ci_still_running is BLOCKED + reason (the pinned GL transient)', () {
       final ms = gitlabMergeState(
         mergeStatus: 'can_be_merged',
         detailedMergeStatus: 'ci_still_running',
@@ -278,8 +277,7 @@ void gitlabMergeStateTests() {
       expect(ms.reason, 'ci-still-running');
       // Both providers translate their transient to BLOCKED+reason —
       // the SM's no-unarm-on-BLOCKED rule stays intact (AC7).
-      expect(ghMergeState(mergeableState: 'blocked').state,
-          ms.state);
+      expect(ghMergeState(mergeableState: 'blocked').state, ms.state);
     });
 
     test('protection shapes are BLOCKED with reasons', () {
@@ -291,7 +289,8 @@ void gitlabMergeStateTests() {
         'pinned_thread',
       ]) {
         expect(
-          gitlabMergeState(mergeStatus: 'cannot_be_merged', detailedMergeStatus: d)
+          gitlabMergeState(
+                  mergeStatus: 'cannot_be_merged', detailedMergeStatus: d)
               .state,
           'BLOCKED',
           reason: d,

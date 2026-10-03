@@ -87,7 +87,8 @@ List<String> writeCensusFixture() {
 }
 
 void main(List<String> args) {
-  final lines = args.contains('--check') ? computeCensus() : writeCensusFixture();
+  final lines =
+      args.contains('--check') ? computeCensus() : writeCensusFixture();
   final fixture = File('test/fixtures/scm_alias_usage_census.txt');
   if (args.contains('--check')) {
     final current = fixture

@@ -76,8 +76,7 @@ void availabilityTests() {
       expect(tools.handlers.keys.any((k) => k.startsWith('ci_')), isFalse);
     });
 
-    test('routing never changes mid-process (env flip after first read)',
-        () {
+    test('routing never changes mid-process (env flip after first read)', () {
       PropertyReader.setOverrides({'DEFAULT_SCM': 'github'});
       final tools = ScmCiSyncTools();
       expect(tools.handlers.keys, contains('scm_get_pr'));
@@ -86,7 +85,8 @@ void availabilityTests() {
           reason: 'routing is frozen at first resolution');
     });
 
-    test('the dispatcher-level handlers include both families when both '
+    test(
+        'the dispatcher-level handlers include both families when both '
         'axes are configured', () {
       final tools = ghSubject(const {}, gl: const {});
       expect(
@@ -99,7 +99,8 @@ void availabilityTests() {
 
 void scmGithubTests() {
   group('scm_* → github (data plane)', () {
-    test('scm_get_pr maps pr→pullRequestId and returns the provider body '
+    test(
+        'scm_get_pr maps pr→pullRequestId and returns the provider body '
         'byte-identical', () {
       const body = '{"number":42,"state":"open","mergeable_state":"clean"}';
       final tools = ghSubject({
@@ -167,8 +168,12 @@ void scmGithubTests() {
         },
       });
       tools.handlers['scm_add_labels']!(
-        {'workspace': 'o', 'repository': 'r', 'pr': 9,
-         'labels': ['ai_developed', 'agent:dev']},
+        {
+          'workspace': 'o',
+          'repository': 'r',
+          'pr': 9,
+          'labels': ['ai_developed', 'agent:dev']
+        },
       );
     });
 
@@ -237,12 +242,21 @@ void scmGithubTests() {
         {'workspace': 'o', 'repository': 'r', 'issue': 5},
       );
       h['scm_search_issues']!(
-        {'workspace': 'o', 'repository': 'r', 'query': 'repo:o/r is:issue is:open'},
+        {
+          'workspace': 'o',
+          'repository': 'r',
+          'query': 'repo:o/r is:issue is:open'
+        },
       );
       h['scm_list_branches']!({'workspace': 'o', 'repository': 'r'});
       h['scm_get_reviews']!({'workspace': 'o', 'repository': 'r', 'pr': 5});
       h['scm_remove_label']!(
-        {'workspace': 'o', 'repository': 'r', 'pr': 5, 'label': 'ai_validating'},
+        {
+          'workspace': 'o',
+          'repository': 'r',
+          'pr': 5,
+          'label': 'ai_validating'
+        },
       );
       h['scm_add_pr_comment']!(
         {'workspace': 'o', 'repository': 'r', 'pr': 5, 'text': 'note'},
@@ -263,7 +277,8 @@ void scmGitlabTests() {
         },
       });
       final h = tools.handlers;
-      h['scm_list_prs']!({'workspace': 'g', 'repository': 'r', 'state': 'open'});
+      h['scm_list_prs']!(
+          {'workspace': 'g', 'repository': 'r', 'state': 'open'});
       h['scm_list_prs']!(
         {'workspace': 'g', 'repository': 'r', 'state': 'merged'},
       );
@@ -292,8 +307,12 @@ void scmGitlabTests() {
         },
       });
       tools.handlers['scm_add_labels']!(
-        {'workspace': 'g', 'repository': 'r', 'pr': 3,
-         'labels': ['a', 'b', 'c']},
+        {
+          'workspace': 'g',
+          'repository': 'r',
+          'pr': 3,
+          'labels': ['a', 'b', 'c']
+        },
       );
       expect(added, ['a', 'b', 'c']);
     });
@@ -328,8 +347,8 @@ void ciGithubTests() {
         'github_trigger_workflow': (args) {
           expect(args['workflowId'], 'ci.yml');
           expect(args['ref'], 'main');
-          final inputs = jsonDecode(args['inputs'] as String)
-              as Map<String, dynamic>;
+          final inputs =
+              jsonDecode(args['inputs'] as String) as Map<String, dynamic>;
           expect(inputs['issue'], '17');
           expect(inputs['count'], '3',
               reason: 'non-string values are stringified at the boundary');
@@ -347,8 +366,11 @@ void ciGithubTests() {
       });
       final out = decode(
         tools.handlers['ci_trigger_workflow']!(
-          {'workflow': 'ci.yml', 'ref': 'main',
-           'inputs': {'issue': 17, 'count': 3}},
+          {
+            'workflow': 'ci.yml',
+            'ref': 'main',
+            'inputs': {'issue': 17, 'count': 3}
+          },
         ),
       );
       expect(out['runId'], 991);
@@ -421,8 +443,12 @@ void ciGithubTests() {
       });
       final out = decode(
         tools.handlers['ci_list_runs']!(
-          {'workspace': 'o', 'repository': 'r', 'workflow': 'ci.yml',
-           'status': 'completed'},
+          {
+            'workspace': 'o',
+            'repository': 'r',
+            'workflow': 'ci.yml',
+            'status': 'completed'
+          },
         ),
       );
       final runs = out['runs'] as List;
@@ -476,7 +502,8 @@ void ciGithubTests() {
       expect(out['verdict'], 'pass');
     });
 
-    test('ci_get_verdict sha-probe falls back to workflow runs matched on '
+    test(
+        'ci_get_verdict sha-probe falls back to workflow runs matched on '
         'head_sha (the stale-verdict probe)', () {
       final tools = ghSubject({
         'github_get_commit_check_runs': (args) => '{"check_runs": []}',
@@ -502,8 +529,12 @@ void ciGithubTests() {
       });
       final out = decode(
         tools.handlers['ci_get_verdict']!(
-          {'workspace': 'o', 'repository': 'r', 'sha': 'abc',
-           'workflow': 'ci.yml'},
+          {
+            'workspace': 'o',
+            'repository': 'r',
+            'sha': 'abc',
+            'workflow': 'ci.yml'
+          },
         ),
       );
       expect(out['verdict'], 'fail');
@@ -516,8 +547,12 @@ void ciGithubTests() {
       });
       final out = decode(
         tools.handlers['ci_get_verdict']!(
-          {'workspace': 'o', 'repository': 'r', 'sha': 'abc',
-           'workflow': 'ci.yml'},
+          {
+            'workspace': 'o',
+            'repository': 'r',
+            'sha': 'abc',
+            'workflow': 'ci.yml'
+          },
         ),
       );
       expect(out['verdict'], 'none');
@@ -563,15 +598,18 @@ void ciGitlabTests() {
       final tools = glSubject({
         'gitlab_trigger_pipeline': (args) {
           expect(args['ref'], 'main');
-          final vars =
-              jsonDecode(args['variablesJson'] as String) as Map;
+          final vars = jsonDecode(args['variablesJson'] as String) as Map;
           expect(vars['issue'], '17');
           return jsonEncode({'id': 551, 'status': 'pending'});
         },
       });
       final out = decode(
         tools.handlers['ci_trigger_workflow']!(
-          {'workflow': 'ignored.yml', 'ref': 'main', 'inputs': {'issue': 17}},
+          {
+            'workflow': 'ignored.yml',
+            'ref': 'main',
+            'inputs': {'issue': 17}
+          },
         ),
       );
       expect(out['runId'], 551);
@@ -621,7 +659,8 @@ void ciGitlabTests() {
       expect(out['provider'], 'gitlab');
     });
 
-    test('ci_get_verdict runId-form reads pipeline jobs and names the '
+    test(
+        'ci_get_verdict runId-form reads pipeline jobs and names the '
         'provider on not-found (E3)', () {
       final tools = glSubject({
         'gitlab_get_pipeline_jobs': (args) {
@@ -681,20 +720,21 @@ void ciGitlabTests() {
 /// Edge contracts from the ticket's test plan.
 void edgeContractTests() {
   group('edge contracts', () {
-    test('E1: provider env set but creds missing → alias present, provider '
+    test(
+        'E1: provider env set but creds missing → alias present, provider '
         'auth error (not tool-not-found)', () {
       // Real provider handlers, empty overrides → the concrete config
       // error surfaces through the alias unchanged.
       PropertyReader.setOverrides({'DEFAULT_SCM': 'github'});
       final tools = ScmCiSyncTools(scmProvider: 'github');
-      final out =
-          decode(tools.handlers['scm_get_pr']!(
-            {'workspace': 'o', 'repository': 'r', 'pr': 1},
-          ));
+      final out = decode(tools.handlers['scm_get_pr']!(
+        {'workspace': 'o', 'repository': 'r', 'pr': 1},
+      ));
       expect(out['error'], 'GitHub not configured');
     });
 
-    test('E2: a GitHub-shaped raw state is rejected — the normalized enum '
+    test(
+        'E2: a GitHub-shaped raw state is rejected — the normalized enum '
         'is the only accepted shape', () {
       final tools = ghSubject({
         'github_list_prs': (args) =>
@@ -708,8 +748,7 @@ void edgeContractTests() {
       expect(out['error'], contains('open, closed, merged, all'));
     });
 
-    test('E2 (positive): the enum accepts case-insensitive valid values',
-        () {
+    test('E2 (positive): the enum accepts case-insensitive valid values', () {
       final tools = ghSubject({
         'github_list_prs': (args) {
           expect(args['state'], 'open');

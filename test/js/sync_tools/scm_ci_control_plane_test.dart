@@ -14,8 +14,10 @@ import 'scm_ci_sync_tools_fixture.dart';
 void main() {
   withScmCiEnv(() {
     ciGithubTriggerTests();
+    ciGithubTriggerValidationTests();
     ciGithubListRunsTests();
     ciGithubVerdictTests();
+    ciGithubVerdictEdgeTests();
     ciGithubMergeStateTests();
     ciGitlabTriggerTests();
     ciGitlabVerdictTests();
@@ -78,7 +80,7 @@ void ciGithubTriggerTests() {
   });
 }
 
-void ciGithubListRunsTests() {
+void ciGithubTriggerValidationTests() {
   group('ci_* → github actions (control plane)', () {
     test('ci_trigger_workflow returns the trigger error untouched', () {
       final tools = ghSubject({
@@ -94,7 +96,11 @@ void ciGithubListRunsTests() {
       );
       expect(out['error'], contains('422'));
     });
+  });
+}
 
+void ciGithubListRunsTests() {
+  group('ci_* → github actions (control plane)', () {
     test('ci_list_runs normalizes run fields and pins the verdict enum', () {
       final tools = ghSubject({
         'github_list_workflow_runs': (args) {
@@ -192,7 +198,11 @@ void ciGithubVerdictTests() {
       );
       expect(out['verdict'], 'pass');
     });
+  });
+}
 
+void ciGithubVerdictEdgeTests() {
+  group('ci_* → github actions (control plane)', () {
     test(
         'ci_get_verdict sha-probe falls back to workflow runs matched on '
         'head_sha (the stale-verdict probe)', () {

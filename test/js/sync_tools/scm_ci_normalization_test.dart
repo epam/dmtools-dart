@@ -15,14 +15,16 @@ import 'package:dmtools/src/integrations/scm/ci_normalization.dart';
 import 'package:test/test.dart';
 
 void main() {
-  verdictTableTests();
-  verdictRollupTests();
+  ghVerdictTableTests();
+  glVerdictTableTests();
+  ghVerdictRollupTests();
+  glVerdictRollupTests();
   ghMergeStateTests();
   gitlabMergeStateTests();
 }
 
 /// AC6 — every GH conclusion value maps to exactly one of the 4 verdicts.
-void verdictTableTests() {
+void ghVerdictTableTests() {
   group('GH conclusion → verdict table', () {
     test('conclusive values', () {
       expect(ghConclusionVerdict('success'), 'pass');
@@ -73,6 +75,9 @@ void verdictTableTests() {
     });
   });
 
+}
+
+void glVerdictTableTests() {
   group('GL status → verdict table', () {
     test('conclusive values', () {
       expect(gitlabStatusVerdict('success'), 'pass');
@@ -108,8 +113,9 @@ void verdictTableTests() {
   });
 }
 
+
 /// Rollup semantics across several checks for one head.
-void verdictRollupTests() {
+void ghVerdictRollupTests() {
   group('check-run rollup', () {
     test('empty rollup is none — no evidence at all', () {
       expect(ghCheckRunsVerdict(const []), 'none');
@@ -165,6 +171,9 @@ void verdictRollupTests() {
     });
   });
 
+}
+
+void glVerdictRollupTests() {
   group('GL status-list rollup', () {
     test('empty is none', () {
       expect(gitlabStatusListVerdict(const []), 'none');
@@ -191,6 +200,7 @@ void verdictRollupTests() {
     });
   });
 }
+
 
 /// AC7 — the merge-state enum the SM already speaks.
 void ghMergeStateTests() {

@@ -84,6 +84,14 @@ const List<String> ciAliasToolNames = [
 
 /// The `scm_*` tool definitions — normalized data-plane schemas.
 List<ToolDefinition> scmAliasTools() => [
+      ..._scmPrCoreTools(),
+      ..._scmLabelTools(),
+      ..._scmIssueTools(),
+      ..._scmBranchTools(),
+    ];
+
+/// PR lifecycle: list/get/merge/diff.
+List<ToolDefinition> _scmPrCoreTools() => [
       _scm(
         'scm_list_prs',
         'List pull requests / merge requests. State filter is the '
@@ -133,6 +141,10 @@ List<ToolDefinition> scmAliasTools() => [
         'Raw unified diff text of a pull request / merge request.',
         [_workspace(), _repository(), _pr()],
       ),
+    ];
+
+/// Labels + PR comments.
+List<ToolDefinition> _scmLabelTools() => [
       _scm(
         'scm_add_labels',
         'Add labels to a PR/MR or issue. Labels are plain strings.',
@@ -165,6 +177,10 @@ List<ToolDefinition> scmAliasTools() => [
         'List comments of a pull request / merge request.',
         [_workspace(), _repository(), _pr()],
       ),
+    ];
+
+/// The issue area: comment/fetch/search/close.
+List<ToolDefinition> _scmIssueTools() => [
       _scm(
         'scm_create_comment',
         'Comment on an issue (the SM issue-carrier channel).',
@@ -195,6 +211,19 @@ List<ToolDefinition> scmAliasTools() => [
         ],
       ),
       _scm(
+        'scm_close_issue',
+        'Close an issue (SM close-on-merge finishing move).',
+        [
+          _workspace(),
+          _repository(),
+          ToolParam(name: 'issue', description: 'Issue number'),
+        ],
+      ),
+    ];
+
+/// Branches, reviews and approvals.
+List<ToolDefinition> _scmBranchTools() => [
+      _scm(
         'scm_list_branches',
         'List repository branches (name + head sha).',
         [_workspace(), _repository()],
@@ -218,21 +247,18 @@ List<ToolDefinition> scmAliasTools() => [
           ),
         ],
       ),
-      _scm(
-        'scm_close_issue',
-        'Close an issue (SM close-on-merge finishing move).',
-        [
-          _workspace(),
-          _repository(),
-          ToolParam(name: 'issue', description: 'Issue number'),
-        ],
-      ),
     ];
 
 /// The `ci_*` tool definitions — normalized control-plane schemas with
 /// semantic normalization (the verdict / merge-state enums), NOT a
 /// passthrough.
 List<ToolDefinition> ciAliasTools() => [
+      ..._ciRunTools(),
+      ..._ciVerdictTools(),
+    ];
+
+/// Run handling: trigger + list.
+List<ToolDefinition> _ciRunTools() => [
       _ci(
         'ci_trigger_workflow',
         'Trigger a CI run (fire-and-return run handle). `inputs` is a flat '
@@ -281,6 +307,10 @@ List<ToolDefinition> ciAliasTools() => [
           ),
         ],
       ),
+    ];
+
+/// Semantic reads: verdict + merge state.
+List<ToolDefinition> _ciVerdictTools() => [
       _ci(
         'ci_get_verdict',
         'THE CI verdict for a run: pass | fail | pending | none. Call with '

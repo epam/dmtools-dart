@@ -25,7 +25,8 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
 
   availabilityTests();
-  schemaTests();
+  scmSchemaTests();
+  ciSchemaTests();
   catalogParityTests();
 }
 
@@ -102,8 +103,8 @@ void availabilityTests() {
 
 /// The alias schemas are the NORMALIZED shape — not the GitHub shape
 /// copied (gh-339 invariant 2).
-void schemaTests() {
-  group('normalized schemas', () {
+void scmSchemaTests() {
+  group('normalized schemas (scm)', () {
     test('every scm/ci alias resolves in a configured registry', () {
       final r = buildRegistry(
         overrides: {'DEFAULT_SCM': 'github', 'DEFAULT_CI': 'actions'},
@@ -134,7 +135,13 @@ void schemaTests() {
         contains('open, closed, merged, all'),
       );
     });
+  });
+}
 
+/// The `ci_*` schemas are normalized too — semantic enums, not vendor
+/// passthrough (gh-339 invariant 2).
+void ciSchemaTests() {
+  group('normalized schemas (ci)', () {
     test('ci_trigger_workflow takes workflow/ref/inputs, not workflowId', () {
       final r = buildRegistry(overrides: {'DEFAULT_CI': 'actions'});
       final t = r.registry.getTool('ci_trigger_workflow')!;
@@ -161,10 +168,7 @@ void schemaTests() {
     });
 
     test('alias tools own the scm/ci integrations for list filtering', () {
-      final catalog = [
-        ...scmAliasTools(),
-        ...ciAliasTools(),
-      ];
+      final catalog = [...scmAliasTools(), ...ciAliasTools()];
       expect(
           catalog.every((t) => t.integration == 'scm' || t.integration == 'ci'),
           isTrue);

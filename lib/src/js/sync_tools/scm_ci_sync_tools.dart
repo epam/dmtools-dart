@@ -41,6 +41,11 @@ typedef Handler = String Function(Map<String, dynamic> args);
 /// the only accepted shape — a raw provider spelling is rejected).
 const String kScmStateEnum = 'open, closed, merged, all';
 
+// Provider ids used as dispatch keys and as the `provider` field the
+// bridge rewrites to. Named so the sync surface stays literal-light.
+const String providerGithub = 'github';
+const String providerGitlab = 'gitlab';
+
 /// Translates `scm_*`/`ci_*` calls to the configured provider.
 class ScmCiSyncTools {
   final PropertyReader _reader;
@@ -89,10 +94,10 @@ class ScmCiSyncTools {
       };
 
   Map<String, Handler> _scmRoute() =>
-      _scm == 'gitlab' ? _scmGitlab() : _scmGithub();
+      _scm == providerGitlab ? _scmGitlab() : _scmGithub();
 
   Map<String, Handler> _ciRoute() =>
-      _ci == 'gitlab' ? _ciGitlab() : _ciGithub();
+      _ci == providerGitlab ? _ciGitlab() : _ciGithub();
 
   // ── scm_* → github ────────────────────────────────────────────────────
 
@@ -205,7 +210,7 @@ class ScmCiSyncTools {
                 mergeableState: body['mergeable_state'] as String?,
                 mergeStateStatus: body['mergeStateStatus'] as String?,
               ),
-              extra: {'provider': 'github'},
+              extra: {'provider': providerGithub},
             ),
       };
 
@@ -221,7 +226,7 @@ class ScmCiSyncTools {
         },
         a);
     if (raw.contains('"error"')) return raw;
-    return _triggerResult('github', _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
+    return _triggerResult(providerGithub, _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
   }
 
   /// Best-effort run handle after a GitHub dispatch (the API returns no
@@ -274,9 +279,9 @@ class ScmCiSyncTools {
     if (runId != null) {
       final raw = _ghCall('github_get_workflow_run', {'runId': runId}, a);
       final body = _decode(raw);
-      if (body['error'] != null) return _runMismatch(raw, 'github', runId);
+      if (body['error'] != null) return _runMismatch(raw, providerGithub, runId);
       return jsonEncode({
-        'provider': 'github',
+        'provider': providerGithub,
         'verdict': ghRunVerdict(
             body['status'] as String?, body['conclusion'] as String?),
       });
@@ -295,11 +300,11 @@ class ScmCiSyncTools {
     final runs = cr['check_runs'] as List? ?? const [];
     if (runs.isNotEmpty) {
       return jsonEncode(
-          {'provider': 'github', 'verdict': ghCheckRunsVerdict(runs)});
+          {'provider': providerGithub, 'verdict': ghCheckRunsVerdict(runs)});
     }
     final wf = a['workflow'];
     if (wf == null) {
-      return jsonEncode({'provider': 'github', 'verdict': verdictNone});
+      return jsonEncode({'provider': providerGithub, 'verdict': verdictNone});
     }
     final raw = _ghCall(
         'github_list_workflow_runs', {'workflowId': wf, 'perPage': '30'}, a);
@@ -307,11 +312,11 @@ class ScmCiSyncTools {
         .whereType<Map>()
         .where((r) => r['head_sha'] == sha);
     if (mine.isEmpty) {
-      return jsonEncode({'provider': 'github', 'verdict': verdictNone});
+      return jsonEncode({'provider': providerGithub, 'verdict': verdictNone});
     }
     final top = mine.first;
     return jsonEncode({
-      'provider': 'github',
+      'provider': providerGithub,
       'verdict':
           ghRunVerdict(top['status'] as String?, top['conclusion'] as String?),
     });
@@ -336,7 +341,7 @@ class ScmCiSyncTools {
               },
               a);
           if (raw.contains('"error"')) return raw;
-          return _triggerResult('gitlab', _decode(raw)['id'], raw);
+          return _triggerResult(providerGitlab, _decode(raw)['id'], raw);
         },
         'ci_list_runs': (a) {
           final raw = _glCall(
@@ -370,7 +375,7 @@ class ScmCiSyncTools {
                 detailedMergeStatus: body['detailed_merge_status'] as String?,
                 hasConflicts: body['has_conflicts'],
               ),
-              extra: {'provider': 'gitlab'},
+              extra: {'provider': providerGitlab},
             ),
       };
 
@@ -379,13 +384,13 @@ class ScmCiSyncTools {
     if (runId != null) {
       final raw = _glCall('gitlab_get_pipeline_jobs', {'pipelineId': runId}, a);
       final body = _decode(raw);
-      if (body['error'] != null) return _runMismatch(raw, 'gitlab', runId);
+      if (body['error'] != null) return _runMismatch(raw, providerGitlab, runId);
       final jobs = body['jobs'] as List? ?? const [];
       final statuses = [
         for (final j in jobs.whereType<Map>()) {'status': j['status']},
       ];
       return jsonEncode({
-        'provider': 'gitlab',
+        'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(statuses),
       });
     }
@@ -393,7 +398,7 @@ class ScmCiSyncTools {
       final raw = _glCall(
           'gitlab_get_mr_pipelines', {'pullRequestId': '${a['pr']}'}, a);
       return jsonEncode({
-        'provider': 'gitlab',
+        'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
       });
     }
@@ -401,7 +406,7 @@ class ScmCiSyncTools {
       final raw =
           _glCall('gitlab_get_commit_statuses', {'commitSha': a['sha']}, a);
       return jsonEncode({
-        'provider': 'gitlab',
+        'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
       });
     }

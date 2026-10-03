@@ -29,8 +29,10 @@ void main() {
   availabilityTests();
   scmGithubTests();
   scmGitlabTests();
-  ciGithubTests();
-  ciGitlabTests();
+  ciGithubTriggerTests();
+  ciGithubVerdictTests();
+  ciGitlabTriggerTests();
+  ciGitlabVerdictTests();
   edgeContractTests();
 }
 
@@ -340,7 +342,7 @@ void scmGitlabTests() {
   });
 }
 
-void ciGithubTests() {
+void ciGithubTriggerTests() {
   group('ci_* → github actions (control plane)', () {
     test('ci_trigger_workflow stringifies the inputs map (pinned fact)', () {
       final tools = ghSubject({
@@ -462,6 +464,9 @@ void ciGithubTests() {
       expect(runs[1]['verdict'], 'pending');
     });
 
+}
+
+void ciGithubVerdictTests() {
     test('ci_get_verdict by runId reads the run conclusion', () {
       final tools = ghSubject({
         'github_get_workflow_run': (args) {
@@ -589,10 +594,9 @@ void ciGithubTests() {
       expect(out['mergeState'], 'BLOCKED');
       expect(out['reason'], 'required-checks-pending');
     });
-  });
-}
+  });}
 
-void ciGitlabTests() {
+void ciGitlabTriggerTests() {
   group('ci_* → gitlab ci (control plane)', () {
     test('ci_trigger_workflow triggers a pipeline with variables', () {
       final tools = glSubject({
@@ -640,6 +644,9 @@ void ciGitlabTests() {
       expect(runs.single['verdict'], 'pass');
     });
 
+}
+
+void ciGitlabVerdictTests() {
     test('ci_get_verdict pr-probe rolls MR pipelines up to the enum', () {
       final tools = glSubject({
         'gitlab_get_mr_pipelines': (args) {
@@ -714,8 +721,7 @@ void ciGitlabTests() {
       expect(out['mergeState'], 'BLOCKED');
       expect(out['reason'], 'ci-still-running');
     });
-  });
-}
+  });}
 
 /// Edge contracts from the ticket's test plan.
 void edgeContractTests() {

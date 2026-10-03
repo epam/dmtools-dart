@@ -150,10 +150,29 @@ class MergeState {
 }
 
 const _ghBlockedReasons = {
+  'blocked': 'required-checks-pending',
   'has_hooks': 'has-hooks',
   'draft': 'draft',
   'unstable': 'unstable',
 };
+
+/// GitHub merge-state tokens that map straight to a state (no reason).
+const _ghSimpleStates = {
+  'clean': stateClean,
+  'dirty': stateDirty,
+  'behind': stateBehind,
+};
+
+/// Normalized lowercase state token from the REST (`mergeable_state`) /
+/// GraphQL (`mergeStateStatus`) spellings — GraphQL wins when both are
+/// present.
+String _ghStateToken(String? mergeStateStatus, String? mergeableState) {
+  final raw = mergeStateStatus ??
+      (mergeableState != null && mergeableState.isNotEmpty
+          ? mergeableState.toUpperCase()
+          : '');
+  return raw.trim().toLowerCase();
+}
 
 /// GitHub merge state from a PR body (`mergeable`, REST
 /// `mergeable_state`, GraphQL `mergeStateStatus`).
@@ -167,21 +186,13 @@ MergeState ghMergeState({
   String? mergeStateStatus,
 }) {
   if (mergeable == false) return const MergeState(stateDirty);
-  final raw = (mergeStateStatus ??
-          (mergeableState != null && mergeableState.isNotEmpty
-              ? mergeableState.toUpperCase()
-              : null)) ??
-      '';
-  final ms = raw.trim().toLowerCase();
-  if (ms == 'clean') return const MergeState(stateClean);
-  if (ms == 'dirty') return const MergeState(stateDirty);
-  if (ms == 'behind') return const MergeState(stateBehind);
-  if (ms == 'blocked') {
-    return const MergeState(stateBlocked, reason: 'required-checks-pending');
-  }
+  final ms = _ghStateToken(mergeStateStatus, mergeableState);
+  final simple = _ghSimpleStates[ms];
+  if (simple != null) return MergeState(simple);
   final blockedReason = _ghBlockedReasons[ms];
-  if (blockedReason != null)
+  if (blockedReason != null) {
     return MergeState(stateBlocked, reason: blockedReason);
+  }
   return MergeState(mergeable == true ? stateClean : stateUnknown);
 }
 
@@ -194,7 +205,22 @@ const _glBlockedReasons = {
   'pinned_thread': 'pinned-thread',
 };
 
-const _glDirtyDetailedStatuses = {'has_conflicts', 'broken_status'};
+/// GL `detailed_merge_status` values that map straight to a state.
+const _glDetailedStates = {
+  'checking': stateUnknown,
+  'has_conflicts': stateDirty,
+  'broken_status': stateDirty,
+};
+
+/// GL `merge_status` values that map straight to a state.
+const _glMergeStatusStates = {
+  'can_be_merged': stateClean,
+  'cannot_be_merged': stateDirty,
+  'cannot_be_merged_rechecking': stateDirty,
+};
+
+/// Trimmed, lowercased provider status spelling.
+String _normalizeStatus(String? raw) => raw?.trim().toLowerCase() ?? '';
 
 /// GitLab merge state from an MR body (`merge_status`,
 /// `detailed_merge_status`, `has_conflicts`).
@@ -209,20 +235,18 @@ MergeState gitlabMergeState({
   String? detailedMergeStatus,
   dynamic hasConflicts,
 }) {
-  final ms = mergeStatus?.trim().toLowerCase() ?? '';
-  if (ms == 'not_open') return const MergeState('UNKNOWN');
+  if (_normalizeStatus(mergeStatus) == 'not_open') {
+    return const MergeState(stateUnknown);
+  }
   if (hasConflicts == true) return const MergeState(stateDirty);
-  final detailed = detailedMergeStatus?.trim().toLowerCase() ?? '';
+  final detailed = _normalizeStatus(detailedMergeStatus);
   final blockedReason = _glBlockedReasons[detailed];
-  if (blockedReason != null)
+  if (blockedReason != null) {
     return MergeState(stateBlocked, reason: blockedReason);
-  if (_glDirtyDetailedStatuses.contains(detailed)) {
-    return const MergeState(stateDirty);
   }
-  if (detailed == 'checking') return const MergeState('UNKNOWN');
-  if (ms == 'can_be_merged') return const MergeState(stateClean);
-  if (ms == 'cannot_be_merged' || ms == 'cannot_be_merged_rechecking') {
-    return const MergeState(stateDirty);
-  }
-  return const MergeState('UNKNOWN');
+  return MergeState(
+    _glDetailedStates[detailed] ??
+        _glMergeStatusStates[_normalizeStatus(mergeStatus)] ??
+        stateUnknown,
+  );
 }

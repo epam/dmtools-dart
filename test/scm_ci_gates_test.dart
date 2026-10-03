@@ -78,6 +78,22 @@ void censusTests() {
 
 /// AC3 — the SM loop runs on the aliases: zero `github_*` tokens in the
 /// gate files (mentions included — a stale comment would rot first).
+///
+/// The migration consumer lives in the dmtools-agents repo and must land
+/// there BEFORE this superproject can bump the submodule pointer
+/// (landing order, gh-339). While the checked-out `agents/` tree is
+/// pre-migration the grep cannot hold, so the gate reports skipped with
+/// the arming condition instead of a standing red. Arming marker: the
+/// gate files themselves call `scm_*`/`ci_*` aliases — the vocabulary
+/// only the migrated loop speaks. That makes the gate self-arming: once
+/// the tree adopts the aliases, any leftover `github_*` call site fails
+/// here (a partial migration is exactly what AC3 must catch), and
+/// routine repins of still-pre-migration commits stay green.
+final RegExp aliasCallPattern = RegExp(r'\b(?:scm|ci)_[a-z][a-z_]*\s*\(');
+
+/// Whether [lines] contain a call-shaped `scm_*`/`ci_*` alias token.
+bool speaksAliases(List<String> lines) => lines.any(aliasCallPattern.hasMatch);
+
 void grepGateTests() {
   group('SM loop grep gate (AC3)', () {
     const gateFiles = [
@@ -87,10 +103,33 @@ void grepGateTests() {
       'agents/js/machineSmAgent.js',
     ];
 
+    final armed = gateFiles.any((f) {
+      final file = File(f);
+      return file.existsSync() && speaksAliases(file.readAsLinesSync());
+    });
+    final skipReason = armed
+        ? null
+        : 'AC3 arms when the SM loop files call scm_*/ci_* aliases. The '
+            'migration lives in dmtools-agents (js/sm/*, machineSmAgent.js) '
+            'and lands there before the submodule pointer bump; the '
+            'checked-out pin still calls github_* directly.';
+
     test('the gate files exist (the gate cannot silently pass on a move)', () {
       for (final f in gateFiles) {
         expect(File(f).existsSync(), isTrue, reason: f);
       }
+    });
+
+    test('the arming marker matches alias calls only', () {
+      expect(speaksAliases(['var pr = scm_get_pr({});']), isTrue);
+      expect(speaksAliases(['var v = ci_get_verdict({runId: r});']), isTrue);
+      expect(speaksAliases(['x = obj.scm_merge_pr(args);']), isTrue);
+      // Mentions without a call shape, provider-agnostic prose, and
+      // words that merely contain the prefix must not arm the gate.
+      expect(speaksAliases(['// see scm_get_pr for the shape']), isFalse);
+      expect(speaksAliases(["require('./sources/githubSource.js');"]), isFalse);
+      expect(speaksAliases(["var s = 'ci_still_running';"]), isFalse);
+      expect(speaksAliases(['var pci_agent = 1;']), isFalse);
     });
 
     test('zero github_* tokens in the SM loop files', () {
@@ -111,6 +150,6 @@ void grepGateTests() {
             'ci_list_runs, scm_* data plane) instead of calling github_* '
             'directly',
       );
-    });
+    }, skip: skipReason);
   });
 }

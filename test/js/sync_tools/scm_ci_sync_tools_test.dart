@@ -19,9 +19,11 @@ void main() {
   withScmCiEnv(() {
     availabilityTests();
     scmGithubTests();
+    scmGithubStateTests();
     scmGithubLabelTests();
     scmGitlabTests();
     scmGitlabBranchTests();
+    scmGitlabCarrierTests();
     edgeContractTests();
   });
 }
@@ -97,7 +99,11 @@ void scmGithubTests() {
       );
       expect(decode(out)['merged'], isTrue);
     });
+  });
+}
 
+void scmGithubStateTests() {
+  group('scm_* → github (data plane)', () {
     test('scm_list_prs validates the normalized state enum (E2)', () {
       final tools = ghSubject({
         'github_list_prs': (args) {
@@ -169,7 +175,9 @@ void scmGithubLabelTests() {
       h['scm_get_reviews']!(pr);
       h['scm_remove_label']!({...pr, 'label': 'ai_validating'});
       h['scm_add_pr_comment']!({...pr, 'text': 'note'});
-      h['scm_get_pr_comments']!(pr);
+      final out = h['scm_get_pr_comments']!(pr);
+      expect(decode(out), {'value': []},
+          reason: 'every alias rides its pinned concrete call');
     });
   });
 }
@@ -235,7 +243,11 @@ void scmGitlabBranchTests() {
       );
       expect(decode(out)['error'], contains('non-empty labels array'));
     });
+  });
+}
 
+void scmGitlabCarrierTests() {
+  group('scm_* → gitlab (data plane) — carrier tools & gaps', () {
     test('issue-carrier aliases ride the MR-note shape; gaps error', () {
       final tools = glSubject({
         'gitlab_get_mr_diff_text': (args) {

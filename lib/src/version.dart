@@ -5,7 +5,7 @@
 library;
 
 /// Current package version, mirroring `pubspec.yaml`.
-const String dmtoolsVersion = '0.1.33';
+const String dmtoolsVersion = '0.1.34';
 
 /// Returns the version line printed by `dmtools --version`.
 String versionLine() => 'dmtools $dmtoolsVersion';

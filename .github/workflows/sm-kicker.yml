@@ -17,6 +17,15 @@ on:
     branches-ignore: [main]
   schedule:
     - cron: '13,43 * * * *'
+  # Event-driven wake-up (2026-10-03): GitHub starved BOTH crons (machine-sm
+  # AND this kicker) for 100 minutes on a quiet afternoon — a green
+  # validation verdict sat unlatched the whole time and dart#337 stalled
+  # until a manual dispatch. Validation verdicts arrive as Quality
+  # conclusions; reacting to them closes the gap: latch/merge happens
+  # within seconds of the CI finishing, cron or no cron.
+  workflow_run:
+    workflows: [Quality]
+    types: [completed]
   workflow_dispatch:
 
 permissions:

@@ -24,6 +24,7 @@ void main() {
     scmGitlabTests();
     scmGitlabBranchTests();
     scmGitlabCarrierTests();
+    scmGitlabGapTests();
     edgeContractTests();
   });
 }
@@ -112,7 +113,7 @@ void scmGithubTests() {
           {'workspace': 'o', 'repository': 'r', 'pr': 9},
         ),
       );
-      expect(out, 'diff --git a/x b/x');
+      expect(out, {'value': 'diff --git a/x b/x'});
     });
   });
 }
@@ -305,7 +306,11 @@ void scmGitlabCarrierTests() {
       h['scm_approve']!({...repo, 'pr': 5});
       expect(decode(h['scm_merge_pr']!({...repo, 'pr': 5}))['merged'], isTrue);
     });
+  });
+}
 
+void scmGitlabGapTests() {
+  group('scm_* → gitlab (data plane) — carrier tools & gaps', () {
     test('v1 gaps name the tool honestly (documented degradation)', () {
       final tools = glSubject(const {});
       const repo = {'workspace': 'g', 'repository': 'r'};

@@ -19,8 +19,11 @@ void main() {
     ciGithubVerdictTests();
     ciGithubVerdictEdgeTests();
     ciGithubMergeStateTests();
+    ciGithubMergeStateAc7Tests();
     ciGitlabTriggerTests();
+    ciGitlabTriggerInputTests();
     ciGitlabVerdictTests();
+    ciGitlabVerdictRunIdTests();
     ciGitlabMergeStateTests();
   });
 }
@@ -304,7 +307,11 @@ void ciGithubMergeStateTests() {
       expect(out['error'], contains('runId'));
       expect(out['error'], contains('sha'));
     });
+  });
+}
 
+void ciGithubMergeStateAc7Tests() {
+  group('ci_* → github actions (control plane)', () {
     test(
         'sha-probe without check runs and without workflow is none '
         '(no speculative listing)', () {
@@ -392,7 +399,11 @@ void ciGitlabTriggerTests() {
       );
       expect(out['runId'], 551);
     });
+  });
+}
 
+void ciGitlabTriggerInputTests() {
+  group('ci_* → gitlab ci (control plane)', () {
     test('ci_list_runs normalizes pipeline payloads', () {
       final tools = glSubject({
         'gitlab_list_pipeline_runs': (args) {
@@ -458,7 +469,11 @@ void ciGitlabVerdictTests() {
       expect(out['error'], contains('GitLab'));
       expect(out['error'], contains('different provider'));
     });
+  });
+}
 
+void ciGitlabVerdictRunIdTests() {
+  group('ci_* → gitlab ci (control plane)', () {
     test('ci_get_verdict runId-form rolls the job statuses up (multi-job)', () {
       final tools = glSubject({
         'gitlab_get_pipeline_jobs': (args) {

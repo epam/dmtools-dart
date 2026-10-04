@@ -21,6 +21,7 @@ void main() {
   glVerdictRollupTests();
   ghMergeStateTests();
   gitlabMergeStateTests();
+  gitlabMergeStateTransientTests();
 }
 
 /// AC6 — every GH conclusion value maps to exactly one of the 4 verdicts.
@@ -235,6 +236,18 @@ void ghMergeStateTests() {
     test('unknown/absent verdict falls back to mergeable', () {
       expect(ghMergeState(mergeable: true).state, 'CLEAN');
       expect(ghMergeState(mergeable: null).state, 'UNKNOWN');
+    });
+
+    test("the mergeability-computing transient 'unknown' is never CLEAN", () {
+      expect(
+        ghMergeState(mergeableState: 'unknown', mergeable: true).state,
+        'UNKNOWN',
+        reason: 'GitHub reports mergeable_state unknown while '
+            'mergeability is still being computed — mapping it to CLEAN '
+            '(via the mergeable tiebreaker) would let the SM arm on an '
+            'uncomputed PR; the tiebreaker is for genuinely unrecognized '
+            'tokens only',
+      );
     });
 
     test('garbage state never crashes — UNKNOWN', () {

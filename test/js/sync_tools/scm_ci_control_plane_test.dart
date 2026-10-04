@@ -46,7 +46,12 @@ void ciGithubTriggerTests() {
           expect(args['workflowId'], 'ci.yml');
           return jsonEncode({
             'workflow_runs': [
-              {'id': 991, 'head_branch': 'main'},
+              {
+                'id': 991,
+                'head_branch': 'main',
+                'event': 'workflow_dispatch',
+                'created_at': DateTime.now().toUtc().toIso8601String(),
+              },
               {'id': 990, 'head_branch': 'other'},
             ],
           });
@@ -119,8 +124,16 @@ void ciGithubTriggerValidationTests() {
           expect(args['inputs'], '{"input":"42"}');
           return '"ok"';
         },
-        'github_list_workflow_runs': (args) =>
-            '{"workflow_runs":[{"id":7,"head_branch":"main"}]}',
+        'github_list_workflow_runs': (args) => jsonEncode({
+              'workflow_runs': [
+                {
+                  'id': 7,
+                  'head_branch': 'main',
+                  'event': 'workflow_dispatch',
+                  'created_at': DateTime.now().toUtc().toIso8601String(),
+                },
+              ],
+            }),
       });
       final out = decode(
         tools.handlers['ci_trigger_workflow']!(

@@ -183,11 +183,15 @@ List<ToolDefinition> _scmLabelTools() => [
 List<ToolDefinition> _scmIssueTools() => [
       _scm(
         'scm_create_comment',
-        'Comment on an issue (the SM issue-carrier channel).',
+        'Comment on an issue (the SM issue-carrier channel). GitLab: rides '
+            'the MR-note shape — `issue` is the MR iid (the SM state '
+            'carrier), not a GitLab issue number (the iid namespaces are '
+            'separate).',
         [
           _workspace(required: false),
           _repository(required: false),
-          ToolParam(name: 'issue', description: 'Issue number'),
+          ToolParam(
+              name: 'issue', description: 'Issue number (GitLab: MR iid)'),
           ToolParam(name: 'body', description: 'Comment body'),
         ],
       ),
@@ -265,6 +269,8 @@ List<ToolDefinition> _ciRunTools() => [
             'string map (object or JSON string); non-string values are '
             'stringified at the alias boundary.',
         [
+          _workspace(),
+          _repository(),
           ToolParam(name: 'workflow', description: 'Workflow file / id'),
           ToolParam(
             name: 'ref',

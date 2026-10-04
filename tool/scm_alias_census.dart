@@ -80,10 +80,28 @@ List<String> writeCensusFixture() {
     '# One line per github_* call site covered by the v1 core alias',
     '# subset: <github_tool> <alias> <path>:<line>.',
     '# Regenerate: dart run tool/scm_alias_census.dart',
+    '# The gate compares (tool, alias, path) triples — line numbers are',
+    '# documentation only (agents/ is a foreign submodule; its repins',
+    '# shift lines constantly without changing the covered site set).',
   ];
   File('test/fixtures/scm_alias_usage_census.txt')
       .writeAsStringSync('${header.join('\n')}\n${lines.join('\n')}\n');
   return lines;
+}
+
+/// The `(tool, alias, path)` covered set of census lines — what AC2
+/// actually pins. Line numbers are stripped (and duplicates per site
+/// collapsed): `agents/` is the dmtools-agents submodule, so every
+/// routine repin shifts lines without changing the covered sites, and a
+/// line-granular comparison would turn unrelated repin PRs red.
+Set<String> censusSites(Iterable<String> lines) => {
+      for (final line in lines)
+        if (line.trim().isNotEmpty && !line.startsWith('#')) _censusSite(line),
+    };
+
+String _censusSite(String line) {
+  final parts = line.trim().split(' ');
+  return '${parts.first} ${parts[1]} ${parts.last.split(':').first}';
 }
 
 void main(List<String> args) {
@@ -91,13 +109,10 @@ void main(List<String> args) {
       args.contains('--check') ? computeCensus() : writeCensusFixture();
   final fixture = File('test/fixtures/scm_alias_usage_census.txt');
   if (args.contains('--check')) {
-    final current = fixture
-        .readAsLinesSync()
-        .where((l) => l.trim().isNotEmpty && !l.startsWith('#'))
-        .toList()
-      ..sort();
-    final same = current.length == lines.length &&
-        current.indexed.every((e) => lines[e.$1] == e.$2);
+    final committedSites = censusSites(fixture.readAsLinesSync());
+    final computedSites = censusSites(lines);
+    final same = committedSites.length == computedSites.length &&
+        committedSites.containsAll(computedSites);
     stdout.writeln(same ? 'census fixture is current' : 'census fixture STALE');
     exit(same ? 0 : 1);
   }

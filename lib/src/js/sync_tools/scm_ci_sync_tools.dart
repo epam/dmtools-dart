@@ -31,8 +31,8 @@ import '../../integrations/scm/ci_normalization.dart';
 import '../../integrations/scm/scm_ci_alias_catalog.dart'
     show resolveCiProvider, resolveScmProvider;
 import 'github_sync_tools.dart';
-import 'sync_request_helpers.dart' show syncTryDecode;
 import 'gitlab_sync_tools.dart';
+import 'sync_request_helpers.dart' show syncTryDecode;
 
 /// One translated tool executor.
 typedef Handler = String Function(Map<String, dynamic> args);
@@ -48,6 +48,10 @@ const String providerGithub = 'github';
 /// GitLab provider id (dispatch key + the `provider` field the bridge
 /// rewrites to).
 const String providerGitlab = 'gitlab';
+
+/// Slack for the post-dispatch `created_at` comparison: the cutoff is a
+/// locally captured clock, GitHub's `created_at` is server-side.
+const Duration _runLookupSkew = Duration(minutes: 2);
 
 /// Translates `scm_*`/`ci_*` calls to the configured provider.
 class ScmCiSyncTools {
@@ -195,7 +199,7 @@ class ScmCiSyncTools {
     for (final label in labels) {
       last = _glCall('gitlab_add_mr_label',
           {'pullRequestId': '${a['pr']}', 'label': '$label'}, a);
-      if (last.contains('"error"')) return last;
+      if (_isErr(last)) return last;
     }
     return last;
   }
@@ -220,6 +224,9 @@ class ScmCiSyncTools {
   String _ghTrigger(Map<String, dynamic> a) {
     final inputs = _stringifiedInputs(a);
     if (inputs == null) return _err('ci_trigger_workflow: invalid inputs JSON');
+    // Captured before the trigger call: a run created during the listing
+    // is ours (the skew slack covers local-vs-server clock drift).
+    final dispatchedAt = DateTime.now().toUtc();
     final raw = _ghCall(
         'github_trigger_workflow',
         {
@@ -228,22 +235,43 @@ class ScmCiSyncTools {
           if (inputs.isNotEmpty) 'inputs': inputs,
         },
         a);
-    if (raw.contains('"error"')) return raw;
-    return _triggerResult(
-        providerGithub, _ghRunIdLookup(a, a['ref'] ?? 'main'), raw);
+    if (_isErr(raw)) return raw;
+    return _triggerResult(providerGithub,
+        _ghRunIdLookup(a, a['ref'] ?? 'main', dispatchedAt), raw);
   }
 
   /// Best-effort run handle after a GitHub dispatch (the API returns no
-  /// id): the newest run of the workflow on the dispatched ref.
-  dynamic _ghRunIdLookup(Map<String, dynamic> a, String ref) {
+  /// id): the newest `workflow_dispatch` run of the workflow on the
+  /// dispatched ref, created at/after the dispatch moment.
+  ///
+  /// The listing lags the dispatch by seconds — until the fresh run
+  /// appears, the newest match would be the PREVIOUS run (an older head
+  /// sha), and `ci_get_verdict` by runId never re-checks the sha, so a
+  /// plausible-but-wrong handle would surface a stale verdict as
+  /// authoritative (the fa #762 failure class). A push to the same ref
+  /// is never ours either. No provably-fresh run → the honest null
+  /// handle (`runId: null`); the SM's race-safe path is the sha probe.
+  dynamic _ghRunIdLookup(
+    Map<String, dynamic> a,
+    String ref,
+    DateTime dispatchedAt,
+  ) {
+    final cutoff = dispatchedAt.subtract(_runLookupSkew);
     try {
       final raw = _ghCall('github_list_workflow_runs',
           {'workflowId': a['workflow'], 'perPage': '5'}, a);
       final runs = (_decode(raw)['workflow_runs'] as List? ?? const [])
           .whereType<Map>()
-          .where((r) => r['head_branch'] == ref);
+          .where((r) => r['head_branch'] == ref)
+          .where((r) => r['event'] == 'workflow_dispatch')
+          .where((r) {
+        final at = DateTime.tryParse('${r['created_at']}');
+        return at != null && !at.isBefore(cutoff);
+      });
       return runs.isEmpty ? null : runs.first['id'];
     } catch (_) {
+      // Best-effort by contract: an unparsable or unavailable listing
+      // must never fail an accepted trigger — the handle is null.
       return null;
     }
   }
@@ -257,7 +285,17 @@ class ScmCiSyncTools {
           if (a['limit'] != null) 'perPage': a['limit'],
         },
         a);
-    final runs = _decode(raw)['workflow_runs'] as List? ?? const [];
+    // E1: a provider error envelope passes through — an unconfigured or
+    // failing provider must not read as a repo with no CI runs.
+    if (_isErr(raw)) return raw;
+    // The concrete tool has no server-side ref filter: answering with
+    // unfiltered runs *labeled* as ref-filtered would make a wrong-branch
+    // run look legitimate to the SM, so the alias filters client-side
+    // (the same head_branch match `_ghRunIdLookup` uses).
+    final ref = a['ref'];
+    final runs = (_decode(raw)['workflow_runs'] as List? ?? const [])
+        .whereType<Map>()
+        .where((r) => ref == null || r['head_branch'] == ref);
     return jsonEncode({
       'runs': [
         for (final r in runs.whereType<Map>())
@@ -298,11 +336,14 @@ class ScmCiSyncTools {
 
   /// The `(sha[, workflow])` probe: check-run rollup first; when the
   /// head carries no check runs, the workflow-runs fallback matched on
-  /// head_sha (the SM's stale-verdict probe, live fa #762).
+  /// head_sha (the SM's stale-verdict probe, live fa #762). Provider
+  /// error envelopes pass through (E1) — they never read as "no check
+  /// runs" / `none`.
   String _ghShaVerdict(Map<String, dynamic> a, String sha) {
-    final cr =
-        _decode(_ghCall('github_get_commit_check_runs', {'commitSha': sha}, a));
-    final runs = cr['check_runs'] as List? ?? const [];
+    final crRaw =
+        _ghCall('github_get_commit_check_runs', {'commitSha': sha}, a);
+    if (_isErr(crRaw)) return crRaw;
+    final runs = _decode(crRaw)['check_runs'] as List? ?? const [];
     if (runs.isNotEmpty) {
       return jsonEncode(
           {'provider': providerGithub, 'verdict': ghCheckRunsVerdict(runs)});
@@ -313,6 +354,7 @@ class ScmCiSyncTools {
     }
     final raw = _ghCall(
         'github_list_workflow_runs', {'workflowId': wf, 'perPage': '30'}, a);
+    if (_isErr(raw)) return raw;
     final mine = (_decode(raw)['workflow_runs'] as List? ?? const [])
         .whereType<Map>()
         .where((r) => r['head_sha'] == sha);
@@ -345,7 +387,7 @@ class ScmCiSyncTools {
                 if (inputs.isNotEmpty) 'variablesJson': inputs,
               },
               a);
-          if (raw.contains('"error"')) return raw;
+          if (_isErr(raw)) return raw;
           return _triggerResult(providerGitlab, _decode(raw)['id'], raw);
         },
         'ci_list_runs': (a) {
@@ -357,6 +399,10 @@ class ScmCiSyncTools {
                 if (a['limit'] != null) 'limit': a['limit'],
               },
               a);
+          // E1 + the List type-cast guard: an error envelope is a map,
+          // and `map as List?` would crash the alias with a TypeError
+          // instead of the provider's message.
+          if (_isErr(raw)) return raw;
           final runs = _decode(raw) as List? ?? const [];
           return jsonEncode({
             'runs': [
@@ -387,7 +433,18 @@ class ScmCiSyncTools {
   String _glVerdict(Map<String, dynamic> a) {
     final runId = a['runId'];
     if (runId != null) {
-      final raw = _glCall('gitlab_get_pipeline_jobs', {'pipelineId': runId}, a);
+      final jobsHandler = _gl['gitlab_get_pipeline_jobs'];
+      if (jobsHandler == null) {
+        // The concrete pipeline-jobs tool has no sync surface yet (it is
+        // still in the Java-parity gap list) — an honest gap error beats
+        // a null-check crash on the primary runId form. The pr/sha
+        // probes below are fully served.
+        return _err('ci_get_verdict by runId is not available on the '
+            'GitLab route in v1 — the concrete gitlab_get_pipeline_jobs '
+            'tool has no GitLab sync surface yet; poll via the pr or sha '
+            'probe form instead');
+      }
+      final raw = jobsHandler(_withRepo({'pipelineId': runId}, a));
       final body = _decode(raw);
       if (body['error'] != null)
         return _runMismatch(raw, providerGitlab, runId);
@@ -403,6 +460,8 @@ class ScmCiSyncTools {
     if (a['pr'] != null) {
       final raw = _glCall(
           'gitlab_get_mr_pipelines', {'pullRequestId': '${a['pr']}'}, a);
+      // E1 + the List type-cast guard (see ci_list_runs).
+      if (_isErr(raw)) return raw;
       return jsonEncode({
         'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
@@ -411,6 +470,7 @@ class ScmCiSyncTools {
     if (a['sha'] != null) {
       final raw =
           _glCall('gitlab_get_commit_statuses', {'commitSha': a['sha']}, a);
+      if (_isErr(raw)) return raw;
       return jsonEncode({
         'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
@@ -517,12 +577,16 @@ class ScmCiSyncTools {
         '$provider — was it created by a different provider?)');
   }
 
-  /// Normalizes a provider body through [map] and merges [extra].
+  /// Normalizes a provider body through [map] and merges [extra]. An
+  /// error envelope passes through unchanged (E1): `UNKNOWN`/`none` are
+  /// semantically meaningful answers for the SM, so a provider failure
+  /// must never be normalized into one.
   String _verdictJson(
     String raw,
     MergeState Function(Map<String, dynamic> body) map, {
     Map<String, dynamic> extra = const {},
   }) {
+    if (_isErr(raw)) return raw;
     final out = map(_decode(raw)).toJson();
     return jsonEncode({...out, ...extra});
   }
@@ -538,6 +602,15 @@ class ScmCiSyncTools {
 /// Decodes a provider response; non-map JSON wraps under `value` shape
 /// is avoided — the alias only decodes where a map/array is expected.
 dynamic _decode(String raw) => syncTryDecode(raw) ?? <String, dynamic>{};
+
+/// The decoded error-envelope check — the one error convention in this
+/// class. Never a substring sniff (`raw.contains('"error"')`): a success
+/// payload may legitimately contain the literal `"error"` token, and the
+/// envelope spelling is the provider's contract, not a text shape.
+bool _isErr(String raw) {
+  final body = _decode(raw);
+  return body is Map && body['error'] != null;
+}
 
 /// Best-effort JSON decode (null when the payload is not JSON).
 dynamic _tryDecode(String raw) {

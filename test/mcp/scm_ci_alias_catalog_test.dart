@@ -142,13 +142,21 @@ void scmSchemaTests() {
 /// passthrough (gh-339 invariant 2).
 void ciSchemaTests() {
   group('normalized schemas (ci)', () {
-    test('ci_trigger_workflow takes workflow/ref/inputs, not workflowId', () {
+    test(
+        'ci_trigger_workflow takes workspace/repository + workflow/ref/inputs, '
+        'not workflowId', () {
       final r = buildRegistry(overrides: {'DEFAULT_CI': 'actions'});
       final t = r.registry.getTool('ci_trigger_workflow')!;
       final names = t.params.map((p) => p.name).toSet();
       expect(names, containsAll(['workflow', 'ref', 'inputs']));
       expect(names, isNot(contains('workflowId')));
-      expect(t.requiredParams, ['workflow']);
+      // The concrete guarded handlers require workspace/repository
+      // (kGithubRequiredParams / kGitlabRequiredParams) — the schema must
+      // declare them or a schema-following caller dies in the guard
+      // before ever reaching the provider (gh-339 review, BLOCKING).
+      expect(t.requiredParams, ['workspace', 'repository', 'workflow'],
+          reason: 'consistent with the ci_list_runs/ci_get_verdict '
+              'siblings — the guarded concrete tools need them');
     });
 
     test('ci_get_verdict accepts runId XOR (sha[, workflow])', () {

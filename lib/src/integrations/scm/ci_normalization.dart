@@ -157,10 +157,14 @@ const _ghBlockedReasons = {
 };
 
 /// GitHub merge-state tokens that map straight to a state (no reason).
+/// `unknown` is the mergeability-computing transient: it must never ride
+/// the `mergeable` tiebreaker into an optimistic CLEAN (AC7: checks
+/// settling ⇒ BLOCKED/UNKNOWN).
 const _ghSimpleStates = {
   'clean': stateClean,
   'dirty': stateDirty,
   'behind': stateBehind,
+  'unknown': stateUnknown,
 };
 
 /// Normalized lowercase state token from the REST (`mergeable_state`) /
@@ -179,7 +183,10 @@ String _ghStateToken(String? mergeStateStatus, String? mergeableState) {
 ///
 /// `mergeable === false` is the deterministic DIRTY override; `blocked`
 /// survives as `BLOCKED` (`required-checks-pending`) — masking it as
-/// CLEAN deadlocked armed fresh PRs (live dart #195).
+/// CLEAN deadlocked armed fresh PRs (live dart #195). `unknown` (REST
+/// mergeability still being computed) is UNKNOWN for the same reason;
+/// the `mergeable` tiebreaker answers only genuinely unrecognized
+/// tokens.
 MergeState ghMergeState({
   dynamic mergeable,
   String? mergeableState,

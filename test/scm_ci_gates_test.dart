@@ -31,6 +31,7 @@ void main() {
 
   censusTests();
   grepGateTests();
+  gateFileInventoryTests();
 }
 
 /// AC2 — the census is the tiering witness for the core alias subset.
@@ -38,14 +39,11 @@ void censusTests() {
   group('scm alias usage census (AC2)', () {
     test('the committed fixture is current (regenerate when js/ changes)', () {
       final computed = computeCensus();
-      final committed = File('test/fixtures/scm_alias_usage_census.txt')
-          .readAsLinesSync()
-          .where((l) => l.trim().isNotEmpty && !l.startsWith('#'))
-          .toList()
-        ..sort();
+      final committed =
+          File('test/fixtures/scm_alias_usage_census.txt').readAsLinesSync();
       expect(
-        committed,
-        computed,
+        censusSites(committed),
+        censusSites(computed),
         reason: 'test/fixtures/scm_alias_usage_census.txt is stale — '
             'regenerate with: dart run tool/scm_alias_census.dart',
       );
@@ -94,15 +92,20 @@ final RegExp aliasCallPattern = RegExp(r'\b(?:scm|ci)_[a-z][a-z_]*\s*\(');
 /// Whether [lines] contain a call-shaped `scm_*`/`ci_*` alias token.
 bool speaksAliases(List<String> lines) => lines.any(aliasCallPattern.hasMatch);
 
+/// The AC3 gate files. `smAgent.js` is in the ticket's AC3 list ("the
+/// smAgent rule files") and is the single largest `github_*` consumer in
+/// the committed census — it must be gated like the loop files, or a
+/// leftover/reintroduced direct call there stays green forever.
+const gateFiles = [
+  'agents/js/sm/sources/githubSource.js',
+  'agents/js/sm/mergeBot.js',
+  'agents/js/sm/sourceResolver.js',
+  'agents/js/machineSmAgent.js',
+  'agents/js/smAgent.js',
+];
+
 void grepGateTests() {
   group('SM loop grep gate (AC3)', () {
-    const gateFiles = [
-      'agents/js/sm/sources/githubSource.js',
-      'agents/js/sm/mergeBot.js',
-      'agents/js/sm/sourceResolver.js',
-      'agents/js/machineSmAgent.js',
-    ];
-
     final armed = gateFiles.any((f) {
       final file = File(f);
       return file.existsSync() && speaksAliases(file.readAsLinesSync());
@@ -113,12 +116,6 @@ void grepGateTests() {
             'migration lives in dmtools-agents (js/sm/*, machineSmAgent.js) '
             'and lands there before the submodule pointer bump; the '
             'checked-out pin still calls github_* directly.';
-
-    test('the gate files exist (the gate cannot silently pass on a move)', () {
-      for (final f in gateFiles) {
-        expect(File(f).existsSync(), isTrue, reason: f);
-      }
-    });
 
     test('the arming marker matches alias calls only', () {
       expect(speaksAliases(['var pr = scm_get_pr({});']), isTrue);
@@ -151,5 +148,18 @@ void grepGateTests() {
             'directly',
       );
     }, skip: skipReason);
+  });
+}
+
+/// The gate files must exist: a rename/move must fail the gate loudly
+/// instead of silently scanning nothing (and the census proves smAgent.js
+/// is part of the SM surface, so it cannot be a stale path).
+void gateFileInventoryTests() {
+  group('SM loop grep gate (AC3)', () {
+    test('the gate files exist (the gate cannot silently pass on a move)', () {
+      for (final f in gateFiles) {
+        expect(File(f).existsSync(), isTrue, reason: f);
+      }
+    });
   });
 }

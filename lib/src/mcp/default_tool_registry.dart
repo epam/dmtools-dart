@@ -18,6 +18,7 @@ import '../integrations/jenkins/jenkins_tools.dart';
 import '../integrations/jira/jira_tools.dart';
 import '../integrations/kb/kb_tools.dart';
 import '../integrations/mermaid/mermaid_tools.dart';
+import '../integrations/scm/scm_ci_alias_catalog.dart';
 import '../integrations/sharepoint/sharepoint_tools.dart';
 import '../integrations/teams/teams_tools.dart';
 import '../integrations/testrail/testrail_tools.dart';
@@ -29,6 +30,12 @@ import 'tool_registry.dart';
 ///
 /// Catalog order mirrors the Java `MCPToolRegistry` module list; the registry
 /// itself sorts tools by name for `dmtools list`.
+///
+/// The `scm_*`/`ci_*` alias families (gh-339) are appended when
+/// `DEFAULT_SCM`/`DEFAULT_CI` resolve to a known provider — unset means
+/// the family is absent from the catalog and `dmtools list` (AC1). The
+/// concrete `github_*`/`gitlab_*` tools stay bit-identical either way
+/// (AC4).
 List<ToolDefinition> defaultToolCatalog() => [
       ...jiraTools(),
       ...githubTools(),
@@ -47,6 +54,7 @@ List<ToolDefinition> defaultToolCatalog() => [
       ...xrayTools(),
       ...kbTools(),
       ...mermaidTools(),
+      ...scmCiAliasCatalog(),
     ];
 
 /// Creates a [ToolRegistry] with every integration catalog registered.

@@ -68,6 +68,7 @@ void main() {
   guardedTriggerSchemaTests();
   gitlabRunIdGapTests();
   gitlabEnvelopeSmokeTests();
+  githubEnvelopeSmokeTests();
 }
 
 /// The alias must not die in the required-param guard: the schema
@@ -153,6 +154,38 @@ void gitlabEnvelopeSmokeTests() {
       final result =
           jsonDecode(bridge.execute(call.$1, call.$2)) as Map<String, dynamic>;
       expect(result['error'], 'GitLab not configured', reason: call.$1);
+    }
+  });
+}
+
+/// Mirrors the `scm_get_pr` E1 pin for the GitHub control-plane reads:
+/// a provider error envelope must reach the caller verbatim — `{runs: []}`
+/// / `verdict: none` / `mergeState: UNKNOWN` are semantically meaningful
+/// "no CI evidence" answers, so a misconfigured environment must never be
+/// normalized into one (gh-339 review, IMPORTANT).
+void githubEnvelopeSmokeTests() {
+  test(
+      'DEFAULT_CI=actions: ci_* reads through the REAL handlers surface '
+      'the provider auth error (E1) — never a success-shaped no-evidence', () {
+    PropertyReader.setOverrides({'DEFAULT_CI': 'actions'});
+    final bridge = ToolBridge(registry: createDefaultToolRegistry());
+    for (final call in [
+      ('ci_list_runs', {'workspace': 'o', 'repository': 'r'}),
+      ('ci_get_verdict', {'workspace': 'o', 'repository': 'r', 'sha': 'abc'}),
+      (
+        'ci_get_verdict',
+        {
+          'workspace': 'o',
+          'repository': 'r',
+          'sha': 'abc',
+          'workflow': 'ci.yml'
+        },
+      ),
+      ('ci_get_merge_state', {'workspace': 'o', 'repository': 'r', 'pr': 4}),
+    ]) {
+      final result =
+          jsonDecode(bridge.execute(call.$1, call.$2)) as Map<String, dynamic>;
+      expect(result['error'], 'GitHub not configured', reason: call.$1);
     }
   });
 }

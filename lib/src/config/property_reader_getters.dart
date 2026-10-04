@@ -108,6 +108,14 @@ extension PropertyReaderGetters on PropertyReader {
   /// Default source-code system type. Key: `DEFAULT_SOURCE_CODE`.
   String? getDefaultSourceCode() => getValue('DEFAULT_SOURCE_CODE');
 
+  /// Default SCM provider for `scm_*` aliases. Key: `DEFAULT_SCM`
+  /// (`github` | `gitlab`).
+  String? getDefaultScm() => getValue('DEFAULT_SCM');
+
+  /// Default CI provider for `ci_*` aliases. Key: `DEFAULT_CI`
+  /// (`actions` | `gitlab-ci`).
+  String? getDefaultCi() => getValue('DEFAULT_CI');
+
   // --- Jira ---
 
   /// Base64-encoded Jira credentials from email+token, or pre-built token.

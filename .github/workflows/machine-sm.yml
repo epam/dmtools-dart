@@ -44,7 +44,7 @@ jobs:
     #   vars.AGENTS_VERSION  — dmtools-agents release tag ('latest' default)
     #   vars.DMTOOLS_VERSION — dmtools-dart CLI release tag ('latest' default)
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
-    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-sm.yml@fd84ab196cfbd394eed7f2202022f2510d1ce523
+    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-sm.yml@main
     with:
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: bitrise-runner-dmtools-ci

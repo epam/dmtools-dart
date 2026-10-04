@@ -121,7 +121,7 @@ jobs:
     #            submodule gitlink). Bumps in lockstep with the submodule.
     # A branch ref would execute an unreviewed branch head at run start —
     # keep both immutable SHAs.
-    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-teammate.yml@fd84ab196cfbd394eed7f2202022f2510d1ce523
+    uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-teammate.yml@main
     with:
       # The literal uses-ref: the factory requires it (it cannot derive its
       # own ref — github.workflow_ref in a called workflow is the CALLER's).

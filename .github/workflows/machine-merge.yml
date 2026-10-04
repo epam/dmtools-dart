@@ -35,7 +35,7 @@ jobs:
       github.event.action != 'labeled' ||
       contains(github.event.label.name, 'ai_') ||
       contains(github.event.label.name, 'pr_approved')
-    # Frozen machine loop (same freeze contract as machine-sm.yml: agents
+    # Machine loop — same always-latest contract as machine-sm.yml (agents
     # resolve from dmtools-agents RELEASES by vars.AGENTS_VERSION).
     # Guarded by test/machine_kit/factory_stub_ref_test.dart.
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge.yml@main

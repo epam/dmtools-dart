@@ -37,9 +37,10 @@ permissions:
 
 jobs:
   sm:
-    # Frozen machine loop — pinned to the immutable SHA of
-    # IstiN/dmtools-agentic-workflows main. Agent code and the dmtools CLI
-    # are NOT tied to this SHA: they resolve from RELEASES at run time by
+    # Machine loop — tracks IstiN/dmtools-agentic-workflows main
+    # (always-latest policy, owner directive 2026-10-04: fixes go live on
+    # merge; awf pushes stay review-gated). Agent code and the dmtools CLI
+    # are NOT tied to this ref: they resolve from RELEASES at run time by
     # repo variables (bump = repo-settings edit, zero workflow changes):
     #   vars.AGENTS_VERSION  — dmtools-agents release tag ('latest' default)
     #   vars.DMTOOLS_VERSION — dmtools-dart CLI release tag ('latest' default)

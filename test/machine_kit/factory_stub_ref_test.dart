@@ -1,34 +1,32 @@
 /// Factory-stub ref guards for the machine loop (gh-146 review threads
 /// 1, 2 and 7), reworked for the agents-by-version migration (owner
-/// directive 2026-09-28).
+/// directive 2026-09-28) and again for the always-latest policy (owner
+/// directive 2026-10-04).
 ///
-/// Freeze model (two repos, two pins):
+/// Track-main model:
 ///
-/// - `machine-sm.yml` / `machine-merge.yml` call the FROZEN machine loop
-///   in IstiN/dmtools-agentic-workflows, pinned to an immutable SHA. The
-///   SHA freezes the WORKFLOW ONLY — agent code and the dmtools CLI
-///   resolve from RELEASES at run time (vars.AGENTS_VERSION /
-///   vars.DMTOOLS_VERSION on this repo, 'latest' defaults), so a frozen
-///   SHA never goes stale.
-/// - `ai-teammate.yml` calls the factory home (dmtools-agentic-workflows)
-///   pinned to its own immutable SHA; the `agents` submodule gitlink rides
-///   the `factory_ref` input as the ENGINE pin — the two pins are
-///   independent and must never be conflated (uses-SHA ≠ factory_ref by
-///   design now).
+/// - Every stub (`machine-sm.yml`, `machine-merge.yml`, `merge-trigger.yml`,
+///   `ai-teammate.yml`) calls its workflow in IstiN/dmtools-agentic-workflows
+///   at the `main` branch ref — fixes in the factory home go live on merge,
+///   with no re-pin ceremony per consumer (the 2026-10-04 kicker outages
+///   (#13/#14) took ~1h to propagate through three manual re-pin PRs).
+/// - Agent code and the dmtools CLI still resolve from RELEASES at run time
+///   (vars.AGENTS_VERSION / vars.DMTOOLS_VERSION, 'latest' defaults) — the
+///   `agents` submodule gitlink rides `factory_ref` as the ENGINE pin and
+///   stays an immutable SHA (uses-ref ≠ factory_ref by design).
+/// - Trade-off accepted by the owner: awf main is load-bearing for all
+///   factories; awf pushes stay review-gated.
 ///
-/// A reusable-workflow `uses:` ref is resolved at run start — a branch
-/// ref executes whatever sits at the branch head, which has already
-/// diverged. The guards keep the stubs on immutable SHAs.
+/// The guards keep every awf `uses:` ref on `main` (never a stale SHA, never
+/// a random branch/tag).
 library;
 
 import 'dart:io';
 
 import 'package:test/test.dart';
 
-/// The frozen machine-loop home and the immutable main SHA it is pinned to.
-/// Bump = merge the agents-by-version change in dmtools-agentic-workflows,
-/// then update this constant in the same PR (one review, enforced here).
-const _agenticWorkflowsPin = 'e611e5f4240e9c8a5cdbf10721562eb04513d006';
+/// The factory home all stubs track at the `main` branch ref.
+const _agenticWorkflowsRef = 'main';
 
 /// Stub → frozen-loop calls (agentic-workflows home).
 const _frozenStubs = {
@@ -61,13 +59,13 @@ void main() {
   });
 }
 
-/// Both frozen stubs pin uses: to the agentic-workflows immutable SHA.
+/// Both machine-loop stubs track the factory home at the `main` ref.
 void _frozenPinUsesSha() {
-  test('pin uses: to the agentic-workflows immutable SHA', () {
+  test('pin uses: to the agentic-workflows main ref (always-latest)', () {
     expect(
-      _agenticWorkflowsPin,
-      matches(RegExp(r'^[0-9a-f]{40}$')),
-      reason: 'pin must be a full SHA, never a branch ref',
+      _agenticWorkflowsRef,
+      'main',
+      reason: 'always-latest policy: the factory home is tracked at main',
     );
     for (final entry in _frozenStubs.entries) {
       final yml = File(entry.key).readAsStringSync();
@@ -84,10 +82,10 @@ void _frozenPinUsesSha() {
       );
       expect(
         match.group(2),
-        _agenticWorkflowsPin,
-        reason: '${entry.key} must pin the immutable SHA constant '
-            '(got ${match.group(2)}) — bump the constant in the same '
-            'PR that merges the loop change',
+        _agenticWorkflowsRef,
+        reason: '${entry.key} must track the factory home at main '
+            '(got ${match.group(2)}) — never a stale SHA or random ref '
+            '(owner directive 2026-10-04)',
       );
     }
   });
@@ -147,11 +145,10 @@ void _frozenSecretsMapped() {
   });
 }
 
-/// merge-trigger.yml is the fourth called-workflow stub: it must pin the
-/// AW factory-merge-trigger at an immutable full SHA (own pin — it moves
-/// when the merge-trigger home changes, not in lockstep with the others).
+/// merge-trigger.yml is the fourth called-workflow stub: it must track the
+/// AW factory-merge-trigger at the `main` ref (always-latest policy).
 void _mergeTriggerPin() {
-  test('pins uses: to the AW factory-merge-trigger at an immutable SHA', () {
+  test('pins uses: to the AW factory-merge-trigger at the main ref', () {
     final yml = File(_mergeTriggerStub).readAsStringSync();
     final match = _agenticUsesRe.firstMatch(yml);
     expect(match, isNotNull,
@@ -163,9 +160,9 @@ void _mergeTriggerPin() {
     );
     expect(
       match.group(2),
-      matches(RegExp(r'^[0-9a-f]{40}$')),
-      reason: 'the merge-trigger home pin must be an immutable full SHA '
-          '(got ${match.group(2)})',
+      _agenticWorkflowsRef,
+      reason: 'the merge-trigger home must track main '
+          '(got ${match.group(2)}) — always-latest (owner 2026-10-04)',
     );
   });
 }
@@ -192,9 +189,9 @@ void _teammateLockstepPin() {
     );
     expect(
       match.group(2),
-      matches(RegExp(r'^[0-9a-f]{40}$')),
-      reason: 'the factory home pin must be an immutable full SHA '
-          '(got ${match.group(2)})',
+      _agenticWorkflowsRef,
+      reason: 'the factory home must track main '
+          '(got ${match.group(2)}) — always-latest (owner 2026-10-04)',
     );
     final refLine = RegExp(r'factory_ref:\s*([0-9a-f]{40})').firstMatch(yml);
     expect(

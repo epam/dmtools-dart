@@ -139,7 +139,9 @@ class SyncHttpClient {
     while (true) {
       final resp = _transport(method, url,
           headers: headers, body: body, followRedirects: followRedirects);
-      if (!policy.shouldRetry(attempt, resp.statusCode)) return resp;
+      if (!policy.shouldRetry(attempt, resp.statusCode, resp.body)) {
+        return resp;
+      }
       final delayMs = resp.statusCode == 0
           ? policy.connectionDelayMs(attempt)
           : policy.statusDelayMs(attempt, resp.headers, resp.statusCode);

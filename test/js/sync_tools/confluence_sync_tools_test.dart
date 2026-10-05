@@ -471,6 +471,7 @@ void _testWriteToolsV2() {
     _writeV2UpdateTests();
     _writeV2TitleTests();
     _writeV2SpaceLookupFailureTests();
+    _writeV2TransportFailureTest();
     _writeV2FindOrCreateTests();
     _writeV2AttachmentTests();
     _writeV2MiscTests();
@@ -633,9 +634,9 @@ void _writeV2SpaceLookupFailureTests() {
   test(
       'a 401 from the spaces endpoint surfaces the lookup failure, never '
       '"space not found"', () {
-    // dt-unauth answers 401 like a granular/scoped token missing the
-    // read:space:confluence scope — the resolver must report the auth
-    // failure, not mask it as an unknown key.
+    // dt-unauth answers 401 like a scoped token missing
+    // read:space:confluence — the resolver must report the auth failure,
+    // not mask it as an unknown key.
     expect(
       () => tools.dispatch('confluence_content_by_title_and_space', {
         'title': 'My Page',
@@ -653,13 +654,16 @@ void _writeV2SpaceLookupFailureTests() {
       ),
     );
   });
+}
 
+/// v2 transport failure: a curl-level error (nothing listening on the
+/// port) surfaces the lookup failure instead of "space not found".
+void _writeV2TransportFailureTest() {
   test(
       'a curl transport failure surfaces the lookup failure, never "space '
       'not found"', () {
-    // Port 9 is the discard port (nothing listens there): curl fails at
-    // the transport level, which the resolver must report instead of
-    // funneling into "space not found".
+    // Port 9 (discard) has nothing listening: curl fails at the transport
+    // level and the resolver must report it, not "space not found".
     PropertyReader.setOverrides({
       ..._config(9),
       'CONFLUENCE_AUTH_TYPE': 'Bearer',

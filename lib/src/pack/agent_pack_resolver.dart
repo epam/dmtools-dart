@@ -624,15 +624,23 @@ class AgentPackResolver {
     if (name.startsWith('/') || name.contains('..') || p.isAbsolute(name)) {
       throw AgentPackException('Zip-slip entry rejected: $name');
     }
-    if (entry.isSymbolicLink ||
-        (entry.mode & _unixSymlinkMode) == _unixSymlinkMode) {
-      throw AgentPackException('Symlink entry rejected: $name');
-    }
+    _rejectSymlinkEntry(entry);
     final target = File(p.normalize(p.join(targetDir.path, name)));
     if (!p.isWithin(targetRoot, target.path) && target.path != targetRoot) {
       throw AgentPackException('Entry escapes target dir: $name');
     }
     return target;
+  }
+
+  /// Rejects symlink entries: via the archive package's flag (unix-made
+  /// zips) or the unix mode type bits directly (commons-compress parity —
+  /// the Dart zip encoder writes an MS-DOS versionMadeBy, so the flag alone
+  /// would miss symlinks from any non-unix toolchain).
+  void _rejectSymlinkEntry(ArchiveFile entry) {
+    if (entry.isSymbolicLink ||
+        (entry.mode & _unixSymlinkMode) == _unixSymlinkMode) {
+      throw AgentPackException('Symlink entry rejected: ${entry.name}');
+    }
   }
 
   /// Verifies entry size caps and the manifest sha256; returns the new total.

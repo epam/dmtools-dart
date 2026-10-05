@@ -211,7 +211,11 @@ void preCliThrowTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void preCliBusinessSkipTests() {
+  group('CliAgent loud mode — preCliJSAction business skip', () {
     test(
         'returning {success:false} is a business skip — CLI and '
         'postJSAction skipped, but no unexpected-setup marker (#580)',
@@ -264,7 +268,11 @@ void preCliThrowTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void preCliSuccessTests() {
+  group('CliAgent loud mode — preCliJSAction success', () {
     test('a successful preCliJSAction leaves the lifecycle untouched',
         () async {
       final tmp = await _createTempDir();
@@ -288,7 +296,9 @@ void preCliThrowTests() {
       }
     });
   });
+}
 
+void preJsAdvisoryLoudTests() {
   group('CliAgent loud mode — preJSAction', () {
     test(
         'uncaught exception stays advisory (Java Teammate parity — the '
@@ -319,7 +329,7 @@ void preCliThrowTests() {
 // TeammateJob — job-level loud semantics
 // ======================================================================
 
-void teammateJobLoudModeTests() {
+void teammatePreCliAbortTests() {
   group('TeammateJob — preCliJSAction uncaught exception (#580)', () {
     test(
         'all tickets are attempted, then the job aborts with the '
@@ -366,7 +376,11 @@ void teammateJobLoudModeTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void teammatePreCliMultiTicketTests() {
+  group('TeammateJob — preCliJSAction multi-ticket abort', () {
     test('multiple failing tickets are all listed in the abort message',
         () async {
       final tmp = await _createTempDir();
@@ -391,7 +405,11 @@ void teammateJobLoudModeTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void teammateSingleRunAbortTests() {
+  group('TeammateJob — issues-driven preCliJSAction abort', () {
     test('issues-driven single run aborts with the same message', () async {
       final tmp = await _createTempDir();
       try {
@@ -418,7 +436,9 @@ void teammateJobLoudModeTests() {
       }
     });
   });
+}
 
+void teammatePostJsAbortTests() {
   group('TeammateJob — postJSAction uncaught exception (#585)', () {
     test(
         'the job fails immediately and remaining tickets are not '

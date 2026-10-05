@@ -23,7 +23,10 @@ class GithubHttpClient extends BaseHttpClient {
   /// Creates a client from [reader]'s GitHub configuration.
   ///
   /// Pass [dio] to inject a custom HTTP transport (tests); production code
-  /// omits it and gets a default [Dio] with 60s timeouts.
+  /// omits it and gets a default [Dio] with 60s timeouts. Either way the
+  /// transport gets a [GithubRateLimitRetryInterceptor] so GitHub 429
+  /// rate-limit responses are retried after honoring the server-mandated
+  /// wait (Java fix fab5b0ea, gh-351).
   ///
   /// Throws [StateError] when `SOURCE_GITHUB_TOKEN` is missing or empty.
   factory GithubHttpClient(PropertyReader reader, {Dio? dio}) {
@@ -34,11 +37,36 @@ class GithubHttpClient extends BaseHttpClient {
         'GitHub auth not configured (SOURCE_GITHUB_TOKEN is required)',
       );
     }
+    final clientDio = dio ?? BaseHttpClient.createDefaultDio();
+    clientDio.interceptors.add(GithubRateLimitRetryInterceptor(
+      dio: clientDio,
+      policy: SyncRetryPolicy(
+        maxAttempts: GithubRateLimitRetryInterceptor.defaultMaxAttempts,
+        baseDelayMs: 1000,
+        maxDelayMs: 600,
+        backoffMultiplier: 2.0,
+        jitterFactor: 0.3,
+        rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(reader),
+        random: Random(),
+      ),
+    ));
     return GithubHttpClient._(
-      dio: dio ?? BaseHttpClient.createDefaultDio(),
+      dio: clientDio,
       basePath: basePath,
       token: token,
     );
+  }
+
+  /// Java `RetryPolicy.resolveRateLimitMaxWaitSeconds`: parses the
+  /// `RATE_LIMIT_MAX_WAIT_SECONDS` property through [reader]'s resolution
+  /// chain, falling back to [SyncRetryPolicy.defaultRateLimitMaxWaitSeconds]
+  /// when unset, unparsable, or `<= 0`.
+  static int _rateLimitMaxWaitSeconds(PropertyReader reader) {
+    final value = (reader.getValue('RATE_LIMIT_MAX_WAIT_SECONDS') ?? '').trim();
+    final parsed = int.tryParse(value);
+    return (parsed != null && parsed > 0)
+        ? parsed
+        : SyncRetryPolicy.defaultRateLimitMaxWaitSeconds;
   }
 
   GithubHttpClient._({

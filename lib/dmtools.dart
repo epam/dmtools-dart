@@ -48,7 +48,7 @@ export 'src/integrations/bearer_http_client.dart';
 export 'src/integrations/file/file_tools.dart';
 export 'src/integrations/github/github_client.dart';
 export 'src/integrations/github/github_http_client.dart';
-export 'src/integrations/github/github_rate_limit_retry.dart';
+export 'src/integrations/github_rate_limit_retry.dart';
 export 'src/integrations/github/github_tools.dart';
 export 'src/integrations/confluence/confluence_client.dart';
 export 'src/integrations/confluence/confluence_http_client.dart';

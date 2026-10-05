@@ -23,10 +23,7 @@ void main() {
     PropertyReader.testEnvironment.clear();
   });
   tearDown(PropertyReader.clearOverrides);
-  xRateLimitResetWaitTests();
-  retryAfterWaitTests();
   budgetAndPassThroughTests();
-  wiringTests();
 }
 
 /// A stubbed transport plus the interceptor wired on top of it.

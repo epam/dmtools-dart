@@ -31,6 +31,7 @@ void main() {
     _explicitVersionTests();
     _latestResolutionTests();
     _unknownAgentTests();
+    _availableAgentsListingTests();
     _redirectResolutionTests();
     _catalogCharsetTests();
     _malformedCatalogTests();
@@ -148,7 +149,9 @@ void _unknownAgentTests() {
       server.isolate.kill();
     }
   });
+}
 
+void _availableAgentsListingTests() {
   test('unknown-agent error lists the available catalog names sorted',
       () async {
     // Java parity (dm.ai e97ff0f2): the catalog is external input — the

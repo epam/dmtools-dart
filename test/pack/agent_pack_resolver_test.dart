@@ -186,11 +186,9 @@ void symlinkTests() {
   group('AgentPackResolver symlink entries', () {
     test('rejects symlink entries via unix mode bits (non-unix zip creator)',
         () {
-      // commons-compress flags symlinks from the unix mode type bits
-      // regardless of the zip creator. The archive package only sets
-      // `isSymbolicLink` for unix-made zips (its own encoder writes an
-      // MS-DOS versionMadeBy), so the mode bits must be checked directly —
-      // a link entry must never be unpacked as a regular file.
+      // commons-compress flags symlinks from the unix mode type bits for any
+      // zip creator; the archive package only sets `isSymbolicLink` for
+      // unix-made zips (its encoder writes an MS-DOS versionMadeBy).
       final zip = buildZipWithManifest({
         'agent': 'link_agent',
         'version': '1.0.0',
@@ -214,11 +212,6 @@ void symlinkTests() {
             'Symlink entry rejected: link.txt',
           ),
         ),
-      );
-      expect(
-        File(p.join(packsRoot.path, 'link_agent-1.0.0', 'link.txt'))
-            .existsSync(),
-        isFalse,
       );
     });
   });

@@ -475,9 +475,18 @@ class ToolBridge {
     }
   }
 
+  /// Java `FileTools.writeFile` parity (gh-361): creates missing parent
+  /// directories before writing, so a write to a nested non-existent path
+  /// (e.g. the token-usage reporter's `outputs/token_usage/` cache)
+  /// succeeds instead of failing with `PathNotFoundException`.
   String _writeFile(String path, String content) {
     try {
-      File(_resolve(path)).writeAsStringSync(content);
+      final resolved = _resolve(path);
+      final parent = File(resolved).parent;
+      if (!parent.existsSync()) {
+        parent.createSync(recursive: true);
+      }
+      File(resolved).writeAsStringSync(content);
       return _successJson;
     } catch (e) {
       return _err(e.toString());

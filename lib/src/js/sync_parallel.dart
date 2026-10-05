@@ -17,6 +17,18 @@
 /// - a pool that was never booted reports `ready == false`; callers are
 ///   expected to fall back to running jobs inline on the calling isolate.
 ///
+/// The worker entry must be a top-level (or static) function — like
+/// `Isolate.spawn` entries everywhere it cannot capture instance state —
+/// so each domain defines a tiny entry that delegates to [serveSyncWorker]
+/// with its own [SyncWorkerRunner]. Runner closures cannot ride the spawn
+/// message; the entry binds them in the worker isolate instead.
+///
+/// Transport: each job carries its own single-slot reply [Mailbox] (the
+/// primitive is one-message deep, so a shared response mailbox cannot
+/// serve concurrent workers); the caller collects replies in submission
+/// order — already-finished jobs answer instantly, so collection costs
+/// about as much as the slowest job.
+///
 /// Boot discipline: [boot] must complete while the event loop is alive
 /// (the CLI awaits it at startup, next to `SyncHttpBridge.shared.boot()`).
 /// Workers additionally warm their per-isolate [SyncHttpBridge] so their
@@ -34,7 +46,8 @@ import 'package:native_synchronization/sendable.dart';
 
 import 'sync_http_bridge.dart';
 
-/// Executes one pool job; implemented by the domain that owns the pool.
+/// Executes one pool job; bound to the worker entry by the domain that
+/// owns the pool.
 ///
 /// Must be synchronous (it runs inside blocked FFI contexts on the
 /// calling isolate as the inline fallback and inside worker isolates).
@@ -44,19 +57,21 @@ typedef SyncWorkerRunner = Map<String, dynamic>? Function(
   Map<String, dynamic> args,
 );
 
-/// Registry of named runners: `Isolate.spawn` arguments must be sendable,
-/// so the runner function cannot ride the spawn message — the trampoline
-/// resolves it here by name instead.
-final Map<String, SyncWorkerRunner> _syncRunnerRegistry =
-    <String, SyncWorkerRunner>{};
+/// Worker entry point handed to [SyncWorkerPool]; top-level or static so
+/// `Isolate.spawn` can resolve it by symbol (no captured state).
+typedef SyncWorkerEntry = Future<void> Function(SyncWorkerBoot boot);
 
-/// Registers [runner] under [name] for [SyncWorkerPool] workers.
-///
-/// Registration is process-global and idempotent (re-registering [name]
-/// replaces the runner); names should be prefixed with the owning domain
-/// (e.g. `confluence`).
-void registerSyncWorkerRunner(String name, SyncWorkerRunner runner) =>
-    _syncRunnerRegistry[name] = runner;
+/// Boot payload handed to every [SyncWorkerEntry].
+class SyncWorkerBoot {
+  /// Creates the boot payload for one worker isolate.
+  const SyncWorkerBoot({required this.handshake, required this.workerName});
+
+  /// Reply port: the worker sends its job-inbox [SendPort] here once.
+  final SendPort handshake;
+
+  /// Worker name (diagnostics).
+  final String workerName;
+}
 
 /// One unit of parallel work: [kind] selects the runner's handler,
 /// [args] is the handler's argument map, [index] restores input order in
@@ -79,43 +94,38 @@ class SyncParallelJob {
   final Map<String, dynamic> args;
 }
 
-/// Spawn message for [_syncPoolWorkerTrampoline]: sendable only.
+/// Spawn message for a worker entry: sendable only.
 class _PoolSpawnArgs {
-  _PoolSpawnArgs({
-    required this.runnerName,
-    required this.handshake,
-    required this.responses,
-    required this.workerName,
-  });
+  _PoolSpawnArgs({required this.entry, required this.boot});
 
-  final String runnerName;
-  final SendPort handshake;
-  final Sendable<Mailbox> responses;
-  final String workerName;
+  final SyncWorkerEntry entry;
+  final SyncWorkerBoot boot;
 }
 
-/// Pool worker body: handshake the inbox port, then serve jobs until
-/// shutdown. Every job is answered on the shared response mailbox (the
-/// caller is parked in a blocking `Mailbox.take()` and must always wake).
-Future<void> _syncPoolWorkerTrampoline(_PoolSpawnArgs args) async {
+/// The serve-forever loop behind every [SyncWorkerEntry]: handshakes the
+/// job inbox, then answers each job on its own reply mailbox until the
+/// pool shuts the inbox down.
+///
+/// Every failure path answers — the caller is parked in a blocking
+/// `Mailbox.take()` and must always wake.
+Future<void> serveSyncWorker(SyncWorkerBoot boot, SyncWorkerRunner runner) async {
   await SyncHttpBridge.shared.boot();
-  final runner = _syncRunnerRegistry[args.runnerName];
   final inbox = ReceivePort();
-  args.handshake.send(inbox.sendPort);
-  final responses = args.responses.materialize();
+  boot.handshake.send(inbox.sendPort);
   await for (final message in inbox) {
-    if (identical(message, 'shutdown')) return;
-    final job = (message as Map).cast<String, dynamic>();
+    if (message is! Map) continue; // shutdown sentinel / foreign traffic
+    final job = message.cast<String, dynamic>();
+    final reply = (job['reply'] as Sendable<Mailbox>).materialize();
     Map<String, dynamic>? result;
     try {
-      result = runner?.call(
+      result = runner(
         job['kind'] as String,
         (job['args'] as Map).cast<String, dynamic>(),
       );
     } catch (_) {
       result = null; // Java parity: a failing task yields null, not abort.
     }
-    responses.put(Uint8List.fromList(
+    reply.put(Uint8List.fromList(
       utf8.encode(jsonEncode(<String, dynamic>{'i': job['i'], 'r': result})),
     ));
   }
@@ -123,16 +133,14 @@ Future<void> _syncPoolWorkerTrampoline(_PoolSpawnArgs args) async {
 
 /// A bounded pool of worker isolates serving synchronous parallel jobs.
 class SyncWorkerPool {
-  /// Creates a pool whose workers resolve [runnerName] from the
-  /// [registerSyncWorkerRunner] registry.
+  /// Creates a pool booting [entry] workers.
   SyncWorkerPool(
-    this.runnerName, {
+    this._entry, {
     this.name = 'sync-worker',
     this.workerCount = 4,
   });
 
-  /// Registry key of the runner serving this pool's jobs.
-  final String runnerName;
+  final SyncWorkerEntry _entry;
 
   /// Worker/thread name prefix (diagnostics).
   final String name;
@@ -140,7 +148,6 @@ class SyncWorkerPool {
   /// Number of worker isolates; jobs run concurrently up to this bound.
   final int workerCount;
 
-  final Mailbox _responses = Mailbox();
   final List<SendPort> _inboxes = <SendPort>[];
   Future<void>? _booting;
   var _next = 0;
@@ -158,12 +165,13 @@ class SyncWorkerPool {
     for (var i = 0; i < workers; i++) {
       final handshake = ReceivePort();
       await Isolate.spawn(
-        _syncPoolWorkerTrampoline,
+        _syncPoolSpawnTrampoline,
         _PoolSpawnArgs(
-          runnerName: runnerName,
-          handshake: handshake.sendPort,
-          responses: _responses.asSendable,
-          workerName: '$name-${i + 1}',
+          entry: _entry,
+          boot: SyncWorkerBoot(
+            handshake: handshake.sendPort,
+            workerName: '$name-${i + 1}',
+          ),
         ),
       );
       _inboxes.add(await handshake.first as SendPort);
@@ -182,32 +190,36 @@ class SyncWorkerPool {
       throw StateError('SyncWorkerPool "$name" is not booted');
     }
     if (jobs.isEmpty) return const <Map<String, dynamic>>[];
-    _submit(jobs);
-    return _collect(jobs.length);
+    final replies = _submit(jobs);
+    return _collect(replies);
   }
 
-  /// Sends every job to a worker inbox, round-robin.
-  void _submit(List<SyncParallelJob> jobs) {
+  /// Sends every job to a worker inbox (round-robin) with its own reply
+  /// mailbox; returns the mailboxes aligned with [jobs].
+  List<Mailbox> _submit(List<SyncParallelJob> jobs) {
+    final replies = <Mailbox>[];
     for (final job in jobs) {
+      final reply = Mailbox();
+      replies.add(reply);
       _inboxes[_next].send(<String, dynamic>{
         'i': job.index,
         'kind': job.kind,
         'args': job.args,
+        'reply': reply.asSendable,
       });
       _next = (_next + 1) % _inboxes.length;
     }
+    return replies;
   }
 
-  /// Parks this thread until [count] job envelopes arrived and restores
-  /// their input order.
-  List<Map<String, dynamic>?> _collect(int count) {
-    final results = List<Map<String, dynamic>?>.filled(count, null);
-    var remaining = count;
-    while (remaining > 0) {
+  /// Parks this thread until every job answered and restores input order;
+  /// jobs that already finished answer instantly.
+  List<Map<String, dynamic>?> _collect(List<Mailbox> replies) {
+    final results = List<Map<String, dynamic>?>.filled(replies.length, null);
+    for (var i = 0; i < replies.length; i++) {
       final env =
-          jsonDecode(utf8.decode(_responses.take())) as Map<String, dynamic>;
+          jsonDecode(utf8.decode(replies[i].take())) as Map<String, dynamic>;
       results[env['i'] as int] = env['r'] as Map<String, dynamic>?;
-      remaining--;
     }
     return results;
   }

@@ -63,16 +63,19 @@ class _PageDownloader {
     if (_downloadAttachments) {
       _attachmentPages.add((contentId: id, pageFolder: fileName));
     }
-    if (depth > 1) {
-      // Child pages carry no body unless the request expands it — without
-      // the expand param every child bails at the `value is! String` guard
-      // below and the subtree is silently dropped (gh-191 review).
-      final resp = _contentGet(
-          _config, '$id/child/page?limit=100&expand=$_contentExpand');
-      for (final child in _childrenResults(syncBodyOrError(resp)) ??
-          const <Map<String, dynamic>>[]) {
-        _downloadPage(child, depth - 1);
-      }
+    if (depth > 1) _downloadChildren(id, depth - 1);
+  }
+
+  /// Recurses into the child pages of [id]. Child pages carry no body
+  /// unless the request expands it — without the expand param every child
+  /// bails at the `value is! String` guard in [_downloadPage] and the
+  /// subtree is silently dropped (gh-191 review).
+  void _downloadChildren(String id, int depth) {
+    final resp =
+        _contentGet(_config, '$id/child/page?limit=100&expand=$_contentExpand');
+    for (final child in _childrenResults(syncBodyOrError(resp)) ??
+        const <Map<String, dynamic>>[]) {
+      _downloadPage(child, depth);
     }
   }
 

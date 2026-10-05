@@ -84,8 +84,8 @@ void _retryGiveUpAndFailFastTests() {
     final resp = fetchConfluenceAttachmentWithRetry(
       'http://x/att',
       const {},
-      fetch: scriptedResponses(
-          [SyncHttpResponse(0, 'unexpected end of stream')]),
+      fetch:
+          scriptedResponses([SyncHttpResponse(0, 'unexpected end of stream')]),
       sleepDelay: sleeps.add,
       baseDelayMs: 10,
       random: _zeroJitter(),
@@ -191,35 +191,18 @@ void _poolBackedDownloads() {
       server.stop();
     });
 
-    _poolDownloadPagesTest();
-    _poolContentsByUrlsTest();
-  });
-}
-
-void _poolDownloadPagesTest() {
-  test('download_pages mirrors pages and attachments through the pool', () {
-    {
+    test('download_pages mirrors pages and attachments through the pool', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dlp_');
       addTearDown(() => out.deleteSync(recursive: true));
-      final base = 'http://127.0.0.1:${server.port}';
       final result = tools.dispatch('confluence_download_pages', {
-        'urlStrings': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'urlStrings': [
+          'http://127.0.0.1:${server.port}/wiki/spaces/ENG/pages/777/Hi',
+        ],
         'outputPath': out.path,
         'depth': 1,
       });
       expect(result, 'Downloaded 1 Confluence page(s) to ${out.path}');
-      expect(File('${out.path}/Hi Page.md').readAsStringSync(), 'hi');
-      // The worker-side attachment fetch honors the foreign-host rule:
-      // evil.txt points at `localhost` (vs the configured 127.0.0.1), so
-      // the Confluence credentials must stay home.
-      expect(
-        File('${out.path}/Hi Page-attachments/shot.png').readAsBytesSync(),
-        utf8.encode('PNG-fixture-bytes'),
-      );
-      expect(
-        File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync(),
-        'CLEAN',
-      );
+      _expectMirroredAttachments(out);
     });
 
     test('contents_by_urls resolves concurrently and keeps input order', () {
@@ -239,6 +222,23 @@ void _poolDownloadPagesTest() {
       expect(results.single['id'], '777');
     });
   });
+}
+
+/// The attachment-file assertions of the pool-backed download: bytes land
+/// verbatim and the foreign-host attachment arrives credential-free.
+void _expectMirroredAttachments(Directory out) {
+  expect(File('${out.path}/Hi Page.md').readAsStringSync(), 'hi');
+  // The worker-side attachment fetch honors the foreign-host rule:
+  // evil.txt points at `localhost` (vs the configured 127.0.0.1), so the
+  // Confluence credentials must stay home.
+  expect(
+    File('${out.path}/Hi Page-attachments/shot.png').readAsBytesSync(),
+    utf8.encode('PNG-fixture-bytes'),
+  );
+  expect(
+    File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync(),
+    'CLEAN',
+  );
 }
 
 /// gh-348 (dm.ai 8cbf550d): an attachment whose endpoint keeps failing
@@ -265,16 +265,12 @@ void _failingAttachmentCleanup() {
       server.stop();
     });
 
-    test('inline (unbooted pool)', () {
+    test('inline and booted pool both leave no partial file', () async {
+      expect(confluenceSyncWorkerPool.ready, isFalse);
       _expectFlakyPageOnly(tools, server.port);
-    });
-
-    test('over the booted parallel pool', () async {
       await confluenceSyncWorkerPool.boot();
-      addTearDown(() {
-        confluenceSyncWorkerPool.dispose();
-        PropertyReader.clearOverrides();
-      });
+      addTearDown(confluenceSyncWorkerPool.dispose);
+      expect(confluenceSyncWorkerPool.ready, isTrue);
       _expectFlakyPageOnly(tools, server.port);
     });
   });

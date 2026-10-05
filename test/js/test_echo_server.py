@@ -251,6 +251,21 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 }
             }
         elif (self.command == "GET"
+              and "/wiki/rest/api/content/666" in self.path
+              and "/child/" not in self.path):
+            # gh-348: a page whose only attachment always fails with 500 —
+            # the downloader must give up (after its transient-retry
+            # schedule) and leave no partial file behind.
+            payload.clear()
+            payload["id"] = "666"
+            payload["title"] = "Flaky Page"
+            payload["body"] = {
+                "storage": {
+                    "value": "<p>flaky</p>",
+                    "representation": "storage",
+                }
+            }
+        elif (self.command == "GET"
               and "/wiki/rest/api/content/888" in self.path
               and "/child/" not in self.path):
             # gh-347 conversion-fix fixture: a page whose storage holds an
@@ -520,28 +535,52 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         elif self.command == "GET" and "/child/attachment" in self.path:
             port = self.server.server_address[1]
             payload.clear()
-            payload["results"] = [
-                {"id": "a1", "title": "exists.txt"},
-                {
-                    "id": "a2",
-                    "title": "shot.png",
-                    "_links": {
-                        "download": "/download/attachments/123/shot.png"
+            if "/content/666/" in self.path:
+                # gh-348: one attachment whose download endpoint answers
+                # 500 forever (transient-class failure for the retry
+                # schedule; the file must never appear on disk).
+                payload["results"] = [
+                    {
+                        "id": "a6",
+                        "title": "flaky.png",
+                        "_links": {
+                            "download": "/download/always500.png"
+                        },
                     },
-                },
-                {
-                    "id": "a3",
-                    "title": "evil.txt",
-                    "_links": {
-                        "download":
-                            "http://localhost:%d/download/evil.bin" % port
+                ]
+            else:
+                payload["results"] = [
+                    {"id": "a1", "title": "exists.txt"},
+                    {
+                        "id": "a2",
+                        "title": "shot.png",
+                        "_links": {
+                            "download": "/download/attachments/123/shot.png"
+                        },
                     },
-                },
-            ]
+                    {
+                        "id": "a3",
+                        "title": "evil.txt",
+                        "_links": {
+                            "download":
+                                "http://localhost:%d/download/evil.bin" % port
+                        },
+                    },
+                ]
         if self.path.startswith("/download/evil.bin"):
             leaked = self.headers.get("Authorization") is not None
             self._send(b"LEAKED" if leaked else b"CLEAN",
                        "application/octet-stream")
+            return
+        if self.path.startswith("/download/always500.png"):
+            # gh-348: a download endpoint that never recovers — answers a
+            # bare 500 (a transient-class code for the attachment retry).
+            encoded = b'{"error": "boom"}'
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
             return
         if self.path.startswith("/download/attachments/"):
             self._send(b"PNG-fixture-bytes", "application/octet-stream")

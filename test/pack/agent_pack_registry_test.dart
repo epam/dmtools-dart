@@ -30,6 +30,8 @@ void main() {
     _registrationShapeTests();
     _explicitVersionTests();
     _latestResolutionTests();
+    _unknownAgentTests();
+    _availableAgentsListingTests();
     _redirectResolutionTests();
     _catalogCharsetTests();
     _malformedCatalogTests();
@@ -121,7 +123,9 @@ void _latestResolutionTests() {
       server.isolate.kill();
     }
   });
+}
 
+void _unknownAgentTests() {
   test('@latest with an unknown agent fails naming the agent', () async {
     final server = await startRegistryServer({
       '/catalog.json': utf8.encode(jsonEncode({'other_agent': '1.0.0'})),
@@ -139,6 +143,48 @@ void _latestResolutionTests() {
             'message',
             contains('unknown_agent'),
           ),
+        ),
+      );
+    } finally {
+      server.isolate.kill();
+    }
+  });
+}
+
+void _availableAgentsListingTests() {
+  test('unknown-agent error lists the available catalog names sorted',
+      () async {
+    // Java parity (dm.ai e97ff0f2): the catalog is external input — the
+    // error must name what the registry actually offers, flat + nested,
+    // with the 'agents' holder key excluded.
+    final server = await startRegistryServer({
+      '/catalog.json': utf8.encode(
+        jsonEncode({
+          'other': '2.0.0',
+          'misc': '1.0.0',
+          'agents': {'zeta': '3.0.0'},
+        }),
+      ),
+    });
+    try {
+      final r = AgentPackResolver(
+        packsRoot: packsRoot,
+        registryBaseUrl: 'http://127.0.0.1:${server.port}',
+      );
+      expect(
+        () => r.resolve('demo@latest'),
+        throwsA(
+          isA<AgentPackException>()
+              .having(
+                (e) => e.message,
+                'message',
+                contains("Agent 'demo' not found in registry catalog"),
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('Available agents: misc, other, zeta'),
+              ),
         ),
       );
     } finally {

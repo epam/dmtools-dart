@@ -17,12 +17,16 @@ import 'package:dmtools/src/mcp/default_tool_registry.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-void main() {
-  late Directory dir;
+late Directory dir;
 
+void main() {
   setUp(() => dir = Directory.systemTemp.createTempSync('dmtools_fbridge'));
   tearDown(() => dir.deleteSync(recursive: true));
+  fileListTests();
+  fileExistsTests();
+}
 
+void fileListTests() {
   group('JS-bridge file_list (Java FileTools parity, dm.ai#635)', () {
     test('returns absolute, sorted entries as {"entries": [...]}', () {
       File('${dir.path}/b.txt').writeAsStringSync('b');
@@ -76,7 +80,9 @@ void main() {
       expect(result['error'], isA<String>());
     });
   });
+}
 
+void fileExistsTests() {
   group('JS-bridge file_exists (Java FileTools parity, dm.ai#635)', () {
     test('reports true for an existing file and false for a missing one', () {
       final file = File('${dir.path}/a.txt')..writeAsStringSync('a');

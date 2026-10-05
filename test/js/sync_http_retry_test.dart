@@ -21,6 +21,7 @@ void main() {
   rateLimitRetryAfterTests();
   deterministicRetryTests();
   retryIntegrationTests();
+  successGateTests();
 }
 
 /// Java `RetryPolicyTest` additions from epam/dm.ai 3fa210e6 (#635):
@@ -433,14 +434,24 @@ void retryIntegrationTests() {
           .value;
       expect(retryAfter, '0');
     });
+  });
+}
 
-    test(
-        'a 200 whose body mentions rate limiting is not retried '
-        '(gh-356 review: success gate)', () {
-      // The body check in the retry policy only applies to failed
-      // requests — Java runs it on the exception path of a failed call.
-      // End-to-end guard: the dispatch loop must return this response as
-      // is, without re-issuing it with backoff.
+/// gh-356 review (dm.ai#635 port): the response-body check must never
+/// fire for a successful 2xx/3xx — Java only runs it on the exception
+/// path of a failed request.
+void successGateTests() {
+  group('SyncHttpClient success-response gate', () {
+    late EchoServer server;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    test('a 200 whose body mentions rate limiting is not retried', () {
       final resp = SyncHttpClient.get(
           'http://127.0.0.1:${server.port}/dt-200ratelimit/a');
       expect(resp.statusCode, 200);

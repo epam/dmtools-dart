@@ -468,8 +468,11 @@ void _testWriteToolsV2() {
     });
 
     _writeV2PageTests();
+    _writeV2UpdateTests();
     _writeV2TitleTests();
-    _writeV2AttachmentMiscTests();
+    _writeV2FindOrCreateTests();
+    _writeV2AttachmentTests();
+    _writeV2MiscTests();
   });
 }
 
@@ -479,223 +482,236 @@ void _writeV2PageTests() {
   test(
       'confluence_create_page resolves the space id and posts the v2 '
       'payload', () async {
-      final body = jsonDecode(tools.dispatch('confluence_create_page', {
-        'title': 'New Page',
-        'parentId': '7',
-        'body': '<p>hello</p>',
-        'space': 'ENG',
-      })) as Map<String, dynamic>;
-      expect(body['method'], 'POST');
-      expect(body['path'], '/wiki/api/v2/pages');
-      final payload =
-          jsonDecode(body['body'] as String) as Map<String, dynamic>;
-      expect(payload['spaceId'], '456');
-      expect(payload['status'], 'current');
-      expect(payload['title'], 'New Page');
-      expect(payload['parentId'], '7');
-      expect(payload['body'],
-          {'representation': 'storage', 'value': '<p>hello</p>'});
-      expect(payload.containsKey('ancestors'), isFalse);
-      final log = await _requestLog();
-      expect(log.first, startsWith('/wiki/api/v2/spaces?keys=ENG'));
-      expect(log.last, '/wiki/api/v2/pages');
-    });
+    final body = jsonDecode(tools.dispatch('confluence_create_page', {
+      'title': 'New Page',
+      'parentId': '7',
+      'body': '<p>hello</p>',
+      'space': 'ENG',
+    })) as Map<String, dynamic>;
+    expect(body['method'], 'POST');
+    expect(body['path'], '/wiki/api/v2/pages');
+    final payload = jsonDecode(body['body'] as String) as Map<String, dynamic>;
+    expect(payload['spaceId'], '456');
+    expect(payload['status'], 'current');
+    expect(payload['title'], 'New Page');
+    expect(payload['parentId'], '7');
+    expect(payload['body'],
+        {'representation': 'storage', 'value': '<p>hello</p>'});
+    expect(payload.containsKey('ancestors'), isFalse);
+    final log = await _requestLog();
+    expect(log.first, startsWith('/wiki/api/v2/spaces?keys=ENG'));
+    expect(log.last, '/wiki/api/v2/pages');
+  });
 
-    test('confluence_create_page omits parentId when empty', () {
-      final body = jsonDecode(tools.dispatch('confluence_create_page', {
-        'title': 'New Page',
-        'body': '<p>hello</p>',
-        'space': 'ENG',
-      })) as Map<String, dynamic>;
-      final payload =
-          jsonDecode(body['body'] as String) as Map<String, dynamic>;
-      expect(payload.containsKey('parentId'), isFalse);
-    });
+  test('confluence_create_page omits parentId when empty', () {
+    final body = jsonDecode(tools.dispatch('confluence_create_page', {
+      'title': 'New Page',
+      'body': '<p>hello</p>',
+      'space': 'ENG',
+    })) as Map<String, dynamic>;
+    final payload = jsonDecode(body['body'] as String) as Map<String, dynamic>;
+    expect(payload.containsKey('parentId'), isFalse);
+  });
 
-    test('confluence_create_page errors when the space key is unknown',
-        () async {
-      final result = jsonDecode(tools.dispatch('confluence_create_page', {
-        'title': 'New Page',
-        'body': '<p>hello</p>',
-        'space': 'NOPE',
-      }));
-      expect(
-        result,
-        {'error': 'Confluence space not found by key: NOPE'},
-      );
-      expect(await _requestLog(), hasLength(1));
-    });
+  test('confluence_create_page errors when the space key is unknown', () async {
+    final result = jsonDecode(tools.dispatch('confluence_create_page', {
+      'title': 'New Page',
+      'body': '<p>hello</p>',
+      'space': 'NOPE',
+    }));
+    expect(
+      result,
+      {'error': 'Confluence space not found by key: NOPE'},
+    );
+    expect(await _requestLog(), hasLength(1));
+  });
+}
 
-    test(
-        'confluence_update_page reads the version via v2 then PUTs the '
-        'incremented payload', () async {
-      final body = jsonDecode(tools.dispatch('confluence_update_page', {
-        'contentId': '42',
-        'title': 'Up',
-        'parentId': '7',
-        'body': '<p>up</p>',
-        'space': 'ENG',
-      })) as Map<String, dynamic>;
-      expect(body['method'], 'PUT');
-      expect(body['path'], '/wiki/api/v2/pages/42');
-      final payload =
-          jsonDecode(body['body'] as String) as Map<String, dynamic>;
-      expect(payload['id'], '42');
-      expect(payload['status'], 'current');
-      expect(payload['title'], 'Up');
-      expect(payload['version']['number'], 4);
-      expect(payload['body']['value'], '<p>up</p>');
-      expect(payload.containsKey('ancestors'), isFalse);
-      expect(payload.containsKey('space'), isFalse);
-      expect(await _requestLog(), [
-        '/wiki/api/v2/pages/42',
-        '/wiki/api/v2/pages/42',
-      ]);
-    });
+/// v2 update routing: the current version is read via
+/// `GET /wiki/api/v2/pages/{id}` and the PUT carries the v2 payload
+/// (no ancestors/space, explicit `current` status).
+void _writeV2UpdateTests() {
+  test(
+      'confluence_update_page reads the version via v2 then PUTs the '
+      'incremented payload', () async {
+    final body = jsonDecode(tools.dispatch('confluence_update_page', {
+      'contentId': '42',
+      'title': 'Up',
+      'parentId': '7',
+      'body': '<p>up</p>',
+      'space': 'ENG',
+    })) as Map<String, dynamic>;
+    expect(body['method'], 'PUT');
+    expect(body['path'], '/wiki/api/v2/pages/42');
+    final payload = jsonDecode(body['body'] as String) as Map<String, dynamic>;
+    expect(payload['id'], '42');
+    expect(payload['status'], 'current');
+    expect(payload['title'], 'Up');
+    expect(payload['version']['number'], 4);
+    expect(payload['body']['value'], '<p>up</p>');
+    expect(payload.containsKey('ancestors'), isFalse);
+    expect(payload.containsKey('space'), isFalse);
+    expect(await _requestLog(), [
+      '/wiki/api/v2/pages/42',
+      '/wiki/api/v2/pages/42',
+    ]);
+  });
 
-    test('confluence_update_page_with_history carries the comment', () {
-      final body =
-          jsonDecode(tools.dispatch('confluence_update_page_with_history', {
-        'contentId': '42',
-        'title': 'Up',
-        'parentId': '7',
-        'body': '<p>up</p>',
-        'space': 'ENG',
-        'historyComment': 'my comment',
-      })) as Map<String, dynamic>;
-      final payload =
-          jsonDecode(body['body'] as String) as Map<String, dynamic>;
-      expect(payload['version']['message'], 'my comment');
-    });
+  test('confluence_update_page_with_history carries the comment', () {
+    final body =
+        jsonDecode(tools.dispatch('confluence_update_page_with_history', {
+      'contentId': '42',
+      'title': 'Up',
+      'parentId': '7',
+      'body': '<p>up</p>',
+      'space': 'ENG',
+      'historyComment': 'my comment',
+    })) as Map<String, dynamic>;
+    final payload = jsonDecode(body['body'] as String) as Map<String, dynamic>;
+    expect(payload['version']['message'], 'my comment');
+  });
+}
 
-    test(
-        'confluence_content_by_title_and_space queries v2 pages by title '
-        'and spaceId', () async {
-      final result =
-          jsonDecode(tools.dispatch('confluence_content_by_title_and_space', {
-        'title': 'My Page',
-        'space': 'ENG',
-      })) as Map<String, dynamic>;
-      expect((result['results'] as List), hasLength(2));
-      expect(await _requestLog(), [
-        '/wiki/api/v2/spaces?keys=ENG',
-        '/wiki/api/v2/pages?title=My+Page&spaceId=456&body-format=storage',
-      ]);
-    });
+/// v2 title lookup: `pages?title=&spaceId=&body-format=storage` with the
+/// space id resolved from the key; an empty space omits `spaceId`.
+void _writeV2TitleTests() {
+  test(
+      'confluence_content_by_title_and_space queries v2 pages by title '
+      'and spaceId', () async {
+    final result =
+        jsonDecode(tools.dispatch('confluence_content_by_title_and_space', {
+      'title': 'My Page',
+      'space': 'ENG',
+    })) as Map<String, dynamic>;
+    expect((result['results'] as List), hasLength(2));
+    expect(await _requestLog(), [
+      '/wiki/api/v2/spaces?keys=ENG',
+      '/wiki/api/v2/pages?title=My+Page&spaceId=456&body-format=storage',
+    ]);
+  });
 
-    test(
-        'confluence_content_by_title_and_space omits spaceId for an empty '
-        'space', () async {
-      jsonDecode(tools.dispatch('confluence_content_by_title_and_space', {
-        'title': 'My Page',
-        'space': '',
-      }));
-      expect(await _requestLog(), [
-        '/wiki/api/v2/pages?title=My+Page&body-format=storage',
-      ]);
-    });
+  test(
+      'confluence_content_by_title_and_space omits spaceId for an empty '
+      'space', () async {
+    jsonDecode(tools.dispatch('confluence_content_by_title_and_space', {
+      'title': 'My Page',
+      'space': '',
+    }));
+    expect(await _requestLog(), [
+      '/wiki/api/v2/pages?title=My+Page&body-format=storage',
+    ]);
+  });
+}
 
-    test('confluence_find_or_create creates via v2 when not found', () async {
-      PropertyReader.setOverrides({
-        ..._config(server.port),
-        'CONFLUENCE_AUTH_TYPE': 'Bearer',
-        'CONFLUENCE_API_VERSION': 'v2',
-        'CONFLUENCE_DEFAULT_SPACE': 'ENG',
-      });
-      final body = jsonDecode(tools.dispatch('confluence_find_or_create', {
-        'title': 'Nope',
-        'parentId': '7',
-        'body': '<p>new</p>',
-      })) as Map<String, dynamic>;
-      expect(body['method'], 'POST');
-      expect(body['path'], '/wiki/api/v2/pages');
-      final payload =
-          jsonDecode(body['body'] as String) as Map<String, dynamic>;
-      expect(payload['spaceId'], '456');
-      expect(payload['title'], 'Nope');
-      final log = await _requestLog();
-      expect(log[0], startsWith('/wiki/api/v2/spaces?keys=ENG'));
-      expect(log[1], contains('/wiki/api/v2/pages?title=Nope'));
-      expect(log.last, '/wiki/api/v2/pages');
+/// v2 `find_or_create`: a missing title falls through to the v2 create
+/// (spaces resolution + POST pages).
+void _writeV2FindOrCreateTests() {
+  test('confluence_find_or_create creates via v2 when not found', () async {
+    PropertyReader.setOverrides({
+      ..._config(server.port),
+      'CONFLUENCE_AUTH_TYPE': 'Bearer',
+      'CONFLUENCE_API_VERSION': 'v2',
+      'CONFLUENCE_DEFAULT_SPACE': 'ENG',
     });
+    final body = jsonDecode(tools.dispatch('confluence_find_or_create', {
+      'title': 'Nope',
+      'parentId': '7',
+      'body': '<p>new</p>',
+    })) as Map<String, dynamic>;
+    expect(body['method'], 'POST');
+    expect(body['path'], '/wiki/api/v2/pages');
+    final payload = jsonDecode(body['body'] as String) as Map<String, dynamic>;
+    expect(payload['spaceId'], '456');
+    expect(payload['title'], 'Nope');
+    final log = await _requestLog();
+    expect(log[0], startsWith('/wiki/api/v2/spaces?keys=ENG'));
+    expect(log[1], contains('/wiki/api/v2/pages?title=Nope'));
+    expect(log.last, '/wiki/api/v2/pages');
+  });
+}
 
-    test('confluence_get_content_attachments uses the v2 endpoint', () async {
-      final results =
-          jsonDecode(tools.dispatch('confluence_get_content_attachments', {
-        'contentId': '42',
-      })) as List<dynamic>;
-      expect(results.map((a) => (a as Map)['title']),
-          containsAll(['exists.txt', 'shot.png']));
-      expect(await _requestLog(), ['/wiki/api/v2/pages/42/attachments']);
+/// v2 attachments read from `pages/{id}/attachments` (listing + upload
+/// skip/overwrite policy), while the multipart upload POST intentionally
+/// stays on the v1 endpoint (Java AttachmentHelper has no v2 uploader).
+void _writeV2AttachmentTests() {
+  test('confluence_get_content_attachments uses the v2 endpoint', () async {
+    final results =
+        jsonDecode(tools.dispatch('confluence_get_content_attachments', {
+      'contentId': '42',
+    })) as List<dynamic>;
+    expect(results.map((a) => (a as Map)['title']),
+        containsAll(['exists.txt', 'shot.png']));
+    expect(await _requestLog(), ['/wiki/api/v2/pages/42/attachments']);
+  });
+
+  test(
+      'confluence_upload_attachment lists via v2 but uploads via the '
+      'v1 multipart endpoint', () async {
+    final file = tempUploadFile('exists.txt');
+    final skipped = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+      'contentId': '42',
+      'file': file.path,
+    })) as Map<String, dynamic>;
+    expect(skipped['status'], 'skipped');
+    expect(await _requestLog(), ['/wiki/api/v2/pages/42/attachments']);
+
+    final updated = jsonDecode(tools.dispatch('confluence_upload_attachment', {
+      'contentId': '42',
+      'file': file.path,
+      'updateIfExists': true,
+    })) as Map<String, dynamic>;
+    expect(updated['status'], 'updated');
+    // The update path re-lists via the v2 endpoint before the v1
+    // multipart overwrite POST (Java AttachmentHelper has no v2 uploader).
+    expect(await _requestLog(), [
+      '/wiki/api/v2/pages/42/attachments',
+      '/wiki/api/v2/pages/42/attachments',
+      '/wiki/rest/api/content/42/child/attachment/a1/data',
+    ]);
+  });
+}
+
+/// v2 `/wiki` base-path normalization (no doubled segment), the v1-only
+/// CQL search limitation, and the sync-engine end-to-end shape under v2.
+void _writeV2MiscTests() {
+  test(
+      'confluence_search_content_by_text stays on the v1 CQL path '
+      'under v2', () {
+    final body =
+        jsonDecode(tools.dispatch('confluence_search_content_by_text', {
+      'query': 'foo',
+    })) as Map<String, dynamic>;
+    expect(body['path'], startsWith('/wiki/rest/api/content/search'));
+  });
+
+  test('v2 base URL normalizes a base path ending with /wiki', () {
+    PropertyReader.setOverrides({
+      'CONFLUENCE_BASE_PATH': 'http://127.0.0.1:${server.port}/wiki',
+      'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
+      'CONFLUENCE_API_VERSION': 'v2',
     });
+    final body = jsonDecode(
+            tools.dispatch('confluence_content_by_id', {'contentId': '123456'}))
+        as Map<String, dynamic>;
+    expect(body['path'], startsWith('/wiki/api/v2/pages/123456'));
+    expect(body['path'], isNot(contains('/wiki/wiki/')));
+  });
 
-    test(
-        'confluence_search_content_by_text stays on the v1 CQL path '
-        'under v2', () {
-      final body =
-          jsonDecode(tools.dispatch('confluence_search_content_by_text', {
-        'query': 'foo',
-      })) as Map<String, dynamic>;
-      expect(body['path'], startsWith('/wiki/rest/api/content/search'));
+  test(
+      'confluence_sync_markdown_directory syncs a tree end to end '
+      'under v2', () {
+    final dir = Directory.systemTemp.createTempSync('dmtools_sync_v2_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/index.md').writeAsStringSync('# Root\n\nIntro.');
+    File('${dir.path}/notes.md').writeAsStringSync('# Notes\n\nBody.');
+    final result = tools.dispatch('confluence_sync_markdown_directory', {
+      'directory': dir.path,
+      'parentId': 'root-page',
+      'space': 'ENG',
     });
-
-    test(
-        'confluence_upload_attachment lists via v2 but uploads via the '
-        'v1 multipart endpoint', () async {
-      final file = tempUploadFile('exists.txt');
-      final skipped =
-          jsonDecode(tools.dispatch('confluence_upload_attachment', {
-        'contentId': '42',
-        'file': file.path,
-      })) as Map<String, dynamic>;
-      expect(skipped['status'], 'skipped');
-      expect(await _requestLog(), ['/wiki/api/v2/pages/42/attachments']);
-
-      final updated =
-          jsonDecode(tools.dispatch('confluence_upload_attachment', {
-        'contentId': '42',
-        'file': file.path,
-        'updateIfExists': true,
-      })) as Map<String, dynamic>;
-      expect(updated['status'], 'updated');
-      // The update path re-lists via the v2 endpoint before the v1
-      // multipart overwrite POST (Java AttachmentHelper has no v2 uploader).
-      expect(await _requestLog(), [
-        '/wiki/api/v2/pages/42/attachments',
-        '/wiki/api/v2/pages/42/attachments',
-        '/wiki/rest/api/content/42/child/attachment/a1/data',
-      ]);
-    });
-
-    test('v2 base URL normalizes a base path ending with /wiki', () {
-      PropertyReader.setOverrides({
-        'CONFLUENCE_BASE_PATH': 'http://127.0.0.1:${server.port}/wiki',
-        'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
-        'CONFLUENCE_API_VERSION': 'v2',
-      });
-      final body = jsonDecode(tools
-              .dispatch('confluence_content_by_id', {'contentId': '123456'}))
-          as Map<String, dynamic>;
-      expect(body['path'], startsWith('/wiki/api/v2/pages/123456'));
-      expect(body['path'], isNot(contains('/wiki/wiki/')));
-    });
-
-    test(
-        'confluence_sync_markdown_directory syncs a tree end to end '
-        'under v2', () {
-      final dir = Directory.systemTemp.createTempSync('dmtools_sync_v2_');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      File('${dir.path}/index.md').writeAsStringSync('# Root\n\nIntro.');
-      File('${dir.path}/notes.md').writeAsStringSync('# Notes\n\nBody.');
-      final result = tools.dispatch('confluence_sync_markdown_directory', {
-        'directory': dir.path,
-        'parentId': 'root-page',
-        'space': 'ENG',
-      });
-      final summary = jsonDecode(result) as Map<String, dynamic>;
-      expect(summary['parentId'], 'root-page');
-      expect(summary['expectedPages'], 2);
-      expect(summary['syncedPages'], contains('Notes'));
-    });
+    final summary = jsonDecode(result) as Map<String, dynamic>;
+    expect(summary['parentId'], 'root-page');
+    expect(summary['expectedPages'], 2);
+    expect(summary['syncedPages'], contains('Notes'));
   });
 }

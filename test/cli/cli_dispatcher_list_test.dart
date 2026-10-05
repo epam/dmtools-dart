@@ -37,6 +37,7 @@ void main() {
   });
 
   _testConfigDetectedListing();
+  _testHelpSchema();
   _testListFilters();
 }
 
@@ -90,7 +91,11 @@ JENKINS_API_TOKEN=tok
         {'jira', 'cli'},
       );
     });
+  });
+}
 
+void _testHelpSchema() {
+  group('list help schema', () {
     test(
         'a canonical tool schema is shown even when its integration is '
         'not configured', () async {

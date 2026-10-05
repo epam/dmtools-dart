@@ -394,9 +394,8 @@ void _testConfiguredIntegrations() {
       expect(integrations, isNot(contains('jenkins')));
       expect(integrations, isNot(contains('sharepoint')));
       // Developer machines may export AI keys (CI does not).
-      final aiInOsEnv = _aiVars.any(
-        (k) => (Platform.environment[k] ?? '').trim().isNotEmpty,
-      );
+      final aiInOsEnv =
+          _aiVars.any((k) => (Platform.environment[k] ?? '').trim().isNotEmpty);
       expect(integrations.contains('ai'), aiInOsEnv);
     });
 

@@ -86,6 +86,8 @@ Map<String, dynamic>? _runConfluenceJob(
       return _httpJobEnvelope(fetchConfluenceAttachmentWithRetry(
         args['url'] as String,
         _argsHeaders(args),
+        baseDelayMs:
+            args['baseDelayMs'] as int? ?? confluenceAttachmentRetryBaseDelayMs,
       ));
     case _kJobResolve:
       return _resolveContentJob(args);
@@ -103,6 +105,8 @@ Map<String, dynamic>? _resolveContentJob(Map<String, dynamic> args) {
     baseUrl: args['baseUrl'] as String,
     headers: _argsHeaders(args),
     apiVersion: '${args['apiVersion']}',
+    attachmentRetryBaseDelayMs:
+        args['baseDelayMs'] as int? ?? confluenceAttachmentRetryBaseDelayMs,
   );
   try {
     return _contentFromUrl(config, args['url'] as String);
@@ -127,6 +131,7 @@ Map<String, dynamic> _jobArgsOf(_Conf config) => <String, dynamic>{
       'baseUrl': config.baseUrl,
       'headers': config.headers,
       'apiVersion': config.apiVersion,
+      'baseDelayMs': config.attachmentRetryBaseDelayMs,
     };
 
 /// String map coercion of a job's `headers` argument.

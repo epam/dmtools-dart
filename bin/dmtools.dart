@@ -11,6 +11,11 @@ Future<void> main(List<String> args) async {
   // Must complete while the event loop is alive: once a QuickJS host
   // callback blocks the main isolate, Isolate.spawn can no longer progress.
   await SyncHttpBridge.shared.boot();
+  // Same boot discipline for the Confluence parallel worker pool (gh-348):
+  // attachment downloads and page resolution run on worker isolates, and
+  // Isolate.spawn can no longer progress once a QuickJS host callback
+  // blocks the main isolate.
+  await confluenceSyncWorkerPool.boot();
   // The engine-worker pool (runAsync) boots lazily in CliDispatcher, just
   // before a job whose resolved config sets parallelWorkers >= 2 — the
   // same event-loop-alive guarantee, zero cost for every other command

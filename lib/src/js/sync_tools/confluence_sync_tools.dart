@@ -12,6 +12,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
@@ -19,10 +20,12 @@ import '../../integrations/confluence/confluence_markdown.dart';
 import '../../integrations/confluence/confluence_page_url.dart';
 import '../../integrations/confluence/markdown_confluence_sync.dart';
 import '../sync_http_client.dart';
+import '../sync_parallel.dart';
 import 'sync_request_helpers.dart';
 
 part 'confluence_sync_page_ops.dart';
 part 'confluence_sync_downloader.dart';
+part 'confluence_sync_worker.dart';
 part 'confluence_sync_tools_helpers.dart';
 
 /// Confluence executors: `confluence_*` tool name → JSON result.
@@ -86,6 +89,7 @@ class ConfluenceSyncTools {
         'Content-Type': syncJsonContentType,
       },
       apiVersion: _reader.getConfluenceApiVersion(),
+      attachmentRetryBaseDelayMs: _reader.getConfluenceAttachmentRetryBaseDelayMs(),
     );
   }
 
@@ -362,17 +366,20 @@ class ConfluenceSyncTools {
     });
   }
 
-  /// `confluence_contents_by_urls` — resolve each URL to content, skipping
-  /// failures like Java (`contentsByUrls`).
+  /// `confluence_contents_by_urls` — resolve each URL to content
+  /// concurrently (gh-348, Java `ConfluenceParallel` parity), skipping
+  /// failures like Java (`logger.error` + continue).
   String _contentsByUrls(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final urls = _stringList(args['urlStrings']);
-      final contents = <Map<String, dynamic>>[];
-      for (final url in urls) {
-        if (url.isEmpty) continue;
-        final content = _contentFromUrl(config, url);
-        if (content != null) contents.add(content);
-      }
+      final urls = <String>[
+        for (final url in _stringList(args['urlStrings']))
+          if (url.isNotEmpty) url,
+      ];
+      final resolved = _runConfluenceParallel(_resolveJobs(config, urls));
+      final contents = <Map<String, dynamic>>[
+        for (final content in resolved)
+          if (content != null) Map<String, dynamic>.from(content),
+      ];
       return jsonEncode(_applyFormatToList(contents, args['format']));
     });
   }
@@ -549,6 +556,7 @@ typedef _Conf = ({
   String baseUrl,
   Map<String, String> headers,
   String apiVersion,
+  int attachmentRetryBaseDelayMs,
 });
 
 /// Error payload returned when Confluence config is incomplete.

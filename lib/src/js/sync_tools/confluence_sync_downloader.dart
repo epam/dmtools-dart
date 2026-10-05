@@ -16,9 +16,19 @@ class _PageDownloader {
   final _Conf _config;
   final Directory _output;
   final bool _downloadAttachments;
+  final ConfluenceExcerptInliner _excerptInliner;
+  final ConfluenceMentionResolver _mentionResolver;
 
-  /// Creates a downloader writing under [_output].
-  _PageDownloader(this._config, this._output, this._downloadAttachments);
+  /// Creates a downloader writing under [_output]; the excerpt-include
+  /// inliner and mention resolver reuse one HTTP-backed client (Java
+  /// `ConfluencePageDownloader`, dm.ai 932e0db0 / bb1b51e9).
+  _PageDownloader(this._config, this._output, this._downloadAttachments)
+      : _excerptInliner = ConfluenceExcerptInliner(
+          _SyncConfluenceResolverClient(_config),
+        ),
+        _mentionResolver = ConfluenceMentionResolver(
+          _SyncConfluenceResolverClient(_config),
+        );
 
   int _written = 0;
 
@@ -57,29 +67,39 @@ class _PageDownloader {
     _output.createSync(recursive: true);
     final fileName = _sanitize(content['title']?.toString() ?? id);
     File('${_output.path}/$fileName.md').writeAsStringSync(
-      confluenceStorageToMarkdown(value),
+      confluenceStorageToMarkdown(_resolvedBody(content, value)),
     );
     _written++;
     if (_downloadAttachments) {
       _attachmentPages.add((contentId: id, pageFolder: fileName));
     }
-    if (depth > 1) _downloadChildren(id, depth - 1);
-  }
-
-  /// Recurses into the child pages of [id]. Child pages carry no body
-  /// unless the request expands it — without the expand param every child
-  /// bails at the `value is! String` guard in [_downloadPage] and the
-  /// subtree is silently dropped (gh-191 review).
-  void _downloadChildren(String id, int depth) {
-    final resp =
-        _contentGet(_config, '$id/child/page?limit=100&expand=$_contentExpand');
-    for (final child in _childrenResults(syncBodyOrError(resp)) ??
-        const <Map<String, dynamic>>[]) {
-      _downloadPage(child, depth);
+    if (depth > 1) {
+      // v1 child pages carry no body unless the request expands it —
+      // without the expand param every child bails at the
+      // `value is! String` guard below and the subtree is silently
+      // dropped (gh-191 review). The v2 children listing always carries
+      // bodies (body-format=storage is part of the request).
+      for (final child in _childrenResults(
+              syncBodyOrError(_childrenResponse(_config, id))) ??
+          const <Map<String, dynamic>>[]) {
+        _downloadPage(child, depth - 1);
+      }
     }
   }
 
-  /// Drains [ _attachmentPages]: concurrent listing fetches, then
+  /// The storage body with excerpt includes materialized (resolved in the
+  /// page's own space when the include carries no space key) and user
+  /// mentions replaced by `@Display Name` (Java `ConfluencePageDownloader`
+  /// pipeline: `toMarkdown(mentionResolver.resolve(inliner.inline(…)))`).
+  String _resolvedBody(Map<String, dynamic> content, String storage) {
+    final inlined = _excerptInliner.inline(
+      storage,
+      confluenceSpaceKeyOf(content),
+    );
+    return _mentionResolver.resolve(inlined);
+  }
+
+  /// Drains [_attachmentPages]: concurrent listing fetches, then
   /// concurrent attachment downloads, then ordered file writes.
   void _downloadCollectedAttachments() {
     if (_attachmentPages.isEmpty) return;
@@ -96,7 +116,8 @@ class _PageDownloader {
     }
   }
 
-  /// One listing GET per collected page, keyed by the page position.
+  /// One listing GET per collected page, keyed by the page position
+  /// (v2-aware listing URL — Java `getContentAttachments` parity).
   List<SyncParallelJob> _listingJobs() => <SyncParallelJob>[
         for (var i = 0; i < _attachmentPages.length; i++)
           SyncParallelJob(
@@ -104,8 +125,8 @@ class _PageDownloader {
             kind: _kJobHttpGet,
             args: <String, dynamic>{
               ..._jobArgsOf(_config),
-              'url': '${_config.baseUrl}/content/'
-                  '${_attachmentPages[i].contentId}/child/attachment',
+              'url':
+                  _attachmentsUrl(_config, _attachmentPages[i].contentId),
             },
           ),
       ];

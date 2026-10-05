@@ -6,11 +6,15 @@
 /// `Accept`/`X-GitHub-Api-Version` headers GitHub recommends on every call.
 library;
 
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
+import '../../js/sync_retry_policy.dart';
 import '../base_http_client.dart';
+import '../github_rate_limit_retry.dart';
 
 /// Low-level GitHub HTTP transport used by [GithubClient].
 class GithubHttpClient extends BaseHttpClient {

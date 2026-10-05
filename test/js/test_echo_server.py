@@ -23,6 +23,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
     """Echoes request details as a JSON response."""
 
     DELETE_LOG = []
+    REQUEST_LOG = []
     RETRY_HITS = {}
 
     def _send(self, encoded, content_type="application/json"):
@@ -39,6 +40,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8", errors="replace")
         if self.command == "DELETE":
             EchoHandler.DELETE_LOG.append(self.path)
+        if not self.path.startswith("/__"):
+            EchoHandler.REQUEST_LOG.append(self.path)
         payload = {
             "method": self.command,
             "path": self.path,
@@ -158,6 +161,11 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["transitions"] = [
                 {"id": "31", "name": "Done", "to": {"name": "Done"}}
             ]
+        # Recorded request paths, so tests can assert the exact request
+        # sequence one dispatch produced against this server instance.
+        if self.path == "/__request_log":
+            self._send(json.dumps(EchoHandler.REQUEST_LOG).encode("utf-8"))
+            return
         # Recorded DELETE paths, so tests can assert which deletions the
         # client performed against this server instance.
         if self.path == "/__delete_log":
@@ -322,6 +330,106 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     }
                 }
             payload["results"] = [result]
+        # Confluence v2 REST fixtures (CONFLUENCE_API_VERSION=v2 parity,
+        # Java ConfluenceApiV2Test / #592): the granular/scoped-token
+        # routes. The spaces resolver answers ENG → numeric id 456 and any
+        # other key with an empty listing (spaceIdFromKey must fail).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/spaces" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            key = query.get("keys", [""])[0]
+            payload.clear()
+            if key == "ENG":
+                payload["results"] = [{"id": "456", "key": "ENG"}]
+            else:
+                payload["results"] = []
+        # v2 attachment listing: the v1-compatible results envelope (the
+        # upload policy and the page downloader run against this too).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages/" in self.path
+              and "/attachments" in self.path):
+            payload.clear()
+            payload["results"] = [
+                {"id": "a1", "title": "exists.txt"},
+                {
+                    "id": "a2",
+                    "title": "shot.png",
+                    "_links": {
+                        "download": "/download/attachments/123/shot.png"
+                    },
+                },
+            ]
+        # v2 title lookup: 'Nope' answers empty (not found), 'Parent'
+        # resolves to page 555 (the get_children_by_name parent), anything
+        # else answers two results so first-match / format order is
+        # asserted. Mirrors the v1 title fixture above.
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages?" in self.path
+              and "title=" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            title = query.get("title", [""])[0]
+            payload.clear()
+            if title in ("Nope", "Ghost"):
+                payload["results"] = []
+            elif title == "Parent":
+                payload["results"] = [{
+                    "id": "555",
+                    "title": "Parent",
+                    "body": {
+                        "storage": {
+                            "value": "<p>parent</p>",
+                            "representation": "storage",
+                        }
+                    },
+                }]
+            else:
+                payload["results"] = [
+                    {
+                        "id": "801",
+                        "title": "Found Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>found</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                    {
+                        "id": "802",
+                        "title": "Second Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>second</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                ]
+        # v2 children listing for the sync-engine parent (empty: every
+        # child is created, none is reused or deleted).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages?" in self.path
+              and "parent-id=root-page" in self.path):
+            payload.clear()
+            payload["results"] = []
+        # v2 page object (contentById / updatePage version read / engine
+        # getContent): version, ancestors, and a storage body in one shape.
+        elif (self.command == "GET"
+              and self.path.startswith("/wiki/api/v2/pages/")):
+            page_id = self.path[len("/wiki/api/v2/pages/"):]
+            page_id = page_id.split("?", 1)[0]
+            if page_id in ("42", "123", "root-page"):
+                payload.clear()
+                payload["id"] = page_id
+                payload["title"] = "Fixture Page"
+                payload["version"] = {"number": 3}
+                payload["ancestors"] = [{"id": "root-parent"}]
+                payload["body"] = {
+                    "storage": {
+                        "value": "<p>fixture</p>",
+                        "representation": "storage",
+                    }
+                }
         # Confluence attachment listing: two fixtures — exists.txt (the
         # skip-existing policy) and shot.png carrying a _links.download
         # path (the page-downloader fetches it below). evil.txt carries an

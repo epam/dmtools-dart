@@ -50,12 +50,13 @@ class _PageDownloader {
     _written++;
     if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
     if (depth > 1) {
-      // Child pages carry no body unless the request expands it — without
-      // the expand param every child bails at the `value is! String` guard
-      // below and the subtree is silently dropped (gh-191 review).
-      final resp = _contentGet(
-          _config, '$id/child/page?limit=100&expand=$_contentExpand');
-      for (final child in _childrenResults(syncBodyOrError(resp)) ??
+      // v1 child pages carry no body unless the request expands it —
+      // without the expand param every child bails at the
+      // `value is! String` guard below and the subtree is silently
+      // dropped (gh-191 review). The v2 children listing always carries
+      // bodies (body-format=storage is part of the request).
+      for (final child in _childrenResults(
+              syncBodyOrError(_childrenResponse(_config, id))) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
       }
@@ -75,10 +76,7 @@ class _PageDownloader {
   }
 
   void _downloadAttachmentsOf(String contentId, String pageFolder) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
+    final resp = _attachmentsResponse(_config, contentId);
     final results = _childrenResults(syncBodyOrError(resp)) ??
         const <Map<String, dynamic>>[];
     final baseHost = Uri.tryParse(_config.rootUrl)?.host;

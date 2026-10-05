@@ -21,6 +21,50 @@ SyncHttpResponse _contentGet(_Conf config, String suffix) =>
     SyncHttpClient.get('${config.baseUrl}/content/$suffix',
         headers: config.headers);
 
+/// GETs one page by id (Java `contentById`, v2-aware): v2
+/// `pages/{id}?body-format=storage`, v1 `content/{id}?expand=…`.
+SyncHttpResponse _pageByIdResponse(_Conf config, String id) => _isApiV2(config)
+    ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id?body-format=storage',
+        headers: config.headers)
+    : _contentGet(config, '$id?expand=$_contentExpand');
+
+/// GETs the child page list of [id] (Java `getChildrenOfContentById`,
+/// v2-aware): v2 `pages?parent-id=…&limit=100&body-format=storage` (the
+/// v2 response carries the bodies without an expand param), v1
+/// `content/{id}/child/page?limit=100&expand=…`.
+SyncHttpResponse _childrenResponse(_Conf config, String id) => _isApiV2(config)
+    ? SyncHttpClient.get(
+        '${_baseUrlV2(config)}/pages?parent-id=$id'
+        '&limit=100&body-format=storage',
+        headers: config.headers)
+    : _contentGet(config, '$id/child/page?limit=100&expand=$_contentExpand');
+
+/// GETs the attachment listing of page [id] (Java `getContentAttachments`,
+/// v2-aware): v2 `pages/{id}/attachments`, v1
+/// `content/{id}/child/attachment`.
+SyncHttpResponse _attachmentsResponse(_Conf config, String id) =>
+    _isApiV2(config)
+        ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id/attachments',
+            headers: config.headers)
+        : SyncHttpClient.get('${config.baseUrl}/content/$id/child/attachment',
+            headers: config.headers);
+
+/// Resolves a Confluence space key to the numeric id required by the v2
+/// API via `GET /wiki/api/v2/spaces?keys=…` (Java `spaceIdFromKey`).
+///
+/// Returns `null` when the key is unknown or the matched space carries no
+/// `id`; callers surface the failure with the Java message.
+String? _spaceIdFromKey(_Conf config, String spaceKey) {
+  final resp = SyncHttpClient.get(
+    '${_baseUrlV2(config)}/spaces?keys='
+    '${Uri.encodeQueryComponent(spaceKey)}',
+    headers: config.headers,
+  );
+  final results = _childrenResults(syncBodyOrError(resp));
+  if (results == null || results.isEmpty) return null;
+  return results.first['id']?.toString();
+}
+
 /// Builds the `content` request payload shared by page create/update
 /// (Java wire format: [id]/version keys appear only when given).
 Map<String, dynamic> _contentPayload({
@@ -45,10 +89,55 @@ Map<String, dynamic> _contentPayload({
       },
     };
 
-/// GETs `content/{contentId}?expand=version`.
+/// Builds the v2 page creation payload (Java `createPage` v2 branch):
+/// numeric `spaceId`, explicit `current` status, and the storage body
+/// under `body.value`. [parentId] is omitted when empty — the v2 API
+/// rejects an empty parent id with a 400 (v1 omits `ancestors` the same
+/// way, so both versions agree on the "no parent" input).
+Map<String, dynamic> _pagePayloadV2(
+  String spaceId,
+  String title,
+  String parentId,
+  String body,
+) =>
+    {
+      'spaceId': spaceId,
+      'status': 'current',
+      'title': title,
+      if (parentId.isNotEmpty) 'parentId': parentId,
+      'body': {'representation': 'storage', 'value': body},
+    };
+
+/// Builds the v2 page update payload (Java `updatePage` v2 branch): no
+/// ancestors/space, explicit `current` status, and the bumped version
+/// carrying the history comment.
+Map<String, dynamic> _updatePayloadV2(
+  String contentId,
+  String title,
+  String body,
+  int version,
+  String historyComment,
+) =>
+    {
+      'id': contentId,
+      'status': 'current',
+      'title': title,
+      'body': {'representation': 'storage', 'value': body},
+      'version': {'number': version, 'message': historyComment},
+    };
+
+/// The syncErr message of a failed v2 space resolution (Java
+/// `spaceIdFromKey` IOException text).
+String _spaceNotFound(String spaceKey) =>
+    'Confluence space not found by key: $spaceKey';
+
+/// Reads the current version: v2 GETs `pages/{id}`, v1 expands `version`
+/// on `content/{id}` (Java `updatePage`, v2-aware).
 SyncHttpResponse _versionResponse(_Conf config, String contentId) =>
     SyncHttpClient.get(
-      '${config.baseUrl}/content/$contentId?expand=version',
+      _isApiV2(config)
+          ? '${_baseUrlV2(config)}/pages/$contentId'
+          : '${config.baseUrl}/content/$contentId?expand=version',
       headers: config.headers,
     );
 

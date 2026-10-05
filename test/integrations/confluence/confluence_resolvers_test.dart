@@ -106,7 +106,9 @@ void _excerptInlinerResolutionTests() {
 
     expect(result, '<p>content</p>');
   });
+}
 
+void _excerptInlinerBlankNameTests() {
   test('blank name uses the unnamed excerpt, else all of the kind', () {
     final client = _FakeResolverClient();
     client.pages['SPACE|P1'] = _page(
@@ -135,7 +137,7 @@ void _excerptInlinerResolutionTests() {
   });
 }
 
-void _excerptInlinerGuardTests() {
+void _excerptInlinerFallbackTests() {
   test('unresolvable includes are left untouched', () {
     final client = _FakeResolverClient();
     client.pages['SPACE|Present'] =

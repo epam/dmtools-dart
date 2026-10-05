@@ -30,10 +30,12 @@
 /// about as much as the slowest job.
 ///
 /// Boot discipline: [boot] must complete while the event loop is alive
-/// (the CLI awaits it at startup, next to `SyncHttpBridge.shared.boot()`).
-/// Workers additionally warm their per-isolate [SyncHttpBridge] so their
-/// HTTP calls reuse pooled connections instead of spawning one curl
-/// process per request.
+/// — the CLI boots its pools lazily in `CliDispatcher`, right before a
+/// command that can reach them (`SyncHttpBridge.shared` at startup,
+/// since every sync tool shares it; the Confluence pool only before a
+/// Confluence-capable command). Workers additionally warm their
+/// per-isolate [SyncHttpBridge] so their HTTP calls reuse pooled
+/// connections instead of spawning one curl process per request.
 library;
 
 import 'dart:async';

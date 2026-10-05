@@ -24,6 +24,7 @@ void main() {
   resultShapeTests();
   extractKeysTests();
   commentsHydrateTests();
+  jsHookFixVerificationTests();
   factoryTests();
 }
 
@@ -612,6 +613,114 @@ void factoryTests() {
     });
   });
 }
+
+// ======================================================================
+// JS-hook parity fixes — verified end-to-end through TeammateJob
+// ======================================================================
+
+/// End-to-end verification of the two Java Teammate JS-hook fixes at the
+/// TeammateJob level (the CliAgent-level coverage lives in
+/// `cli_agent_js_actions_test.dart` / `cli_strict_mode_post_action_test.dart`):
+///
+/// - Java epam/dm.ai#454: the config `metadata` must reach the JS
+///   `preJSAction`/`postJSAction` params — TeammateJob additionally pins
+///   `metadata.contextId` to the ticket key per ticket.
+/// - Java epam/dm.ai#409 (`skipFieldUpdate`): with
+///   `requireCliOutputFile=true` and no CLI output response, `postJSAction`
+///   must not run.
+void jsHookFixVerificationTests() {
+  group('TeammateJob JS-hook parity fixes (gh-350)', () {
+    test(
+        'binds per-ticket metadata into preJSAction and postJSAction params '
+        '(Java #454 parity)', () async {
+      final tmp = await _createTempDir();
+      final log = File('${tmp.path}/hooks.log');
+      try {
+        final pre = _hookSpy(tmp, 'pre_meta.js', 'pre');
+        final post = _hookSpy(tmp, 'post_meta.js', 'post');
+        final job = TeammateJob(
+          params: {
+            'inputJql': 'key in (PROJ-1, PROJ-2)',
+            'cliCommands': ['echo done'],
+            'metadata': {'agentId': 'senior-dev'},
+            'preJSAction': pre.path,
+            'postJSAction': post.path,
+            'cleanupInputFolder': false,
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [hydratedTicket, secondTicket()],
+        );
+        final result = await job.run();
+        expect(result['success'], isTrue);
+        // Two tickets → each hook fires per ticket, and TeammateJob pins
+        // metadata.contextId to the ticket key while preserving the
+        // configured agentId.
+        expect(
+          (await log.readAsString()).trim().split('\n'),
+          [
+            'pre=PROJ-1:senior-dev',
+            'post=PROJ-1:senior-dev',
+            'pre=PROJ-2:senior-dev',
+            'post=PROJ-2:senior-dev',
+          ],
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test(
+        'skips postJSAction when strict-mode CLI produces no output '
+        '(Java #409 skipFieldUpdate parity)', () async {
+      final tmp = await _createTempDir();
+      final postLog = File('${tmp.path}/post.log');
+      try {
+        final post = File('${tmp.path}/post_cb.js')
+          ..writeAsStringSync(
+            'function action(params) { '
+            'file_write({path: "${postLog.path}", content: "ran"}); }',
+          );
+        final job = TeammateJob(
+          params: {
+            'inputJql': 'key = PROJ-1',
+            'cliCommands': ['echo agent crashed && exit 7'],
+            'requireCliOutputFile': true,
+            'postJSAction': post.path,
+            'cleanupInputFolder': false,
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [hydratedTicket],
+        );
+        final result = await job.run();
+        expect(
+          postLog.existsSync(),
+          isFalse,
+          reason: 'postJSAction must not run against a missing strict-mode '
+              'CLI output — a post action would move the ticket on a '
+              'genuine CLI failure',
+        );
+        final results = (result['results'] as List).cast<Map>();
+        expect(
+          results.single['response'],
+          startsWith('CLI command executed but did not produce output file'),
+          reason: 'the error summary must still report the failure',
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+/// Writes a JS hook that appends `<label>=<contextId>:<agentId>` to the
+/// shared [log] — proves `params.metadata` reached the hook.
+File _hookSpy(Directory tmp, String name, String label) =>
+    File('${tmp.path}/$name')
+      ..writeAsStringSync(
+        'function action(params) { file_append({path: "${tmp.path}/hooks.log", '
+        'content: "$label=" + params.metadata.contextId + ":" + '
+        'params.metadata.agentId + "\\n"}); }',
+      );
 
 Future<Directory> _createTempDir() async =>
     Directory.systemTemp.createTemp('teammate_job_test');

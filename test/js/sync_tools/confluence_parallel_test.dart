@@ -54,19 +54,12 @@ void _transientFailureClassification() {
 /// attempts), client errors fail fast, and an eventual success wins.
 void _attachmentRetrySchedule() {
   group('fetchConfluenceAttachmentWithRetry', () {
-    SyncHttpResponse Function(String, Map<String, String>) scripted(
-      List<SyncHttpResponse> responses,
-    ) {
-      var call = 0;
-      return (url, headers) => responses[call++ % responses.length];
-    }
-
     test('retries transient failures with doubling backoff, then succeeds', () {
       final sleeps = <int>[];
       final resp = fetchConfluenceAttachmentWithRetry(
         'http://x/att',
         const {'Authorization': 'Basic t'},
-        fetch: scripted([
+        fetch: scriptedResponses([
           SyncHttpResponse(503, 'gw'),
           SyncHttpResponse(429, 'rate'),
           SyncHttpResponse(200, 'ok', const {}, [1, 2, 3]),
@@ -81,50 +74,63 @@ void _attachmentRetrySchedule() {
       expect(sleeps, [100, 200]);
     });
 
-    test('gives up after the fourth attempt on persistent failures', () {
-      final sleeps = <int>[];
-      final resp = fetchConfluenceAttachmentWithRetry(
-        'http://x/att',
-        const {},
-        fetch: scripted([SyncHttpResponse(0, 'unexpected end of stream')]),
-        sleepDelay: sleeps.add,
-        baseDelayMs: 10,
-        random: _zeroJitter(),
-      );
-      expect(resp.statusCode, 0);
-      // 4 attempts → 3 backoff waits: 10ms, 20ms, 40ms.
-      expect(sleeps, [10, 20, 40]);
-    });
-
-    test('client errors fail without a retry', () {
-      final sleeps = <int>[];
-      final resp = fetchConfluenceAttachmentWithRetry(
-        'http://x/att',
-        const {},
-        fetch: scripted([SyncHttpResponse(404, 'gone')]),
-        sleepDelay: sleeps.add,
-        baseDelayMs: 10,
-        random: _zeroJitter(),
-      );
-      expect(resp.statusCode, 404);
-      expect(sleeps, isEmpty);
-    });
-
-    test('network failure then success is retried', () {
-      final resp = fetchConfluenceAttachmentWithRetry(
-        'http://x/att',
-        const {},
-        fetch: scripted([
-          SyncHttpResponse(0, 'connection reset'),
-          SyncHttpResponse(200, 'ok'),
-        ]),
-        sleepDelay: (_) {},
-        baseDelayMs: 1,
-        random: _zeroJitter(),
-      );
-      expect(resp.isOk, isTrue);
-    });
+    _retryGiveUpAndFailFastTests();
   });
+}
+
+void _retryGiveUpAndFailFastTests() {
+  test('gives up after the fourth attempt on persistent failures', () {
+    final sleeps = <int>[];
+    final resp = fetchConfluenceAttachmentWithRetry(
+      'http://x/att',
+      const {},
+      fetch: scriptedResponses(
+          [SyncHttpResponse(0, 'unexpected end of stream')]),
+      sleepDelay: sleeps.add,
+      baseDelayMs: 10,
+      random: _zeroJitter(),
+    );
+    expect(resp.statusCode, 0);
+    // 4 attempts → 3 backoff waits: 10ms, 20ms, 40ms.
+    expect(sleeps, [10, 20, 40]);
+  });
+
+  test('client errors fail without a retry', () {
+    final sleeps = <int>[];
+    final resp = fetchConfluenceAttachmentWithRetry(
+      'http://x/att',
+      const {},
+      fetch: scriptedResponses([SyncHttpResponse(404, 'gone')]),
+      sleepDelay: sleeps.add,
+      baseDelayMs: 10,
+      random: _zeroJitter(),
+    );
+    expect(resp.statusCode, 404);
+    expect(sleeps, isEmpty);
+  });
+
+  test('network failure then success is retried', () {
+    final resp = fetchConfluenceAttachmentWithRetry(
+      'http://x/att',
+      const {},
+      fetch: scriptedResponses([
+        SyncHttpResponse(0, 'connection reset'),
+        SyncHttpResponse(200, 'ok'),
+      ]),
+      sleepDelay: (_) {},
+      baseDelayMs: 1,
+      random: _zeroJitter(),
+    );
+    expect(resp.isOk, isTrue);
+  });
+}
+
+/// A fetch stub replaying [responses] in order (wrapping when exhausted).
+SyncHttpResponse Function(String, Map<String, String>) scriptedResponses(
+  List<SyncHttpResponse> responses,
+) {
+  var call = 0;
+  return (url, headers) => responses[call++ % responses.length];
 }
 
 /// Java `ConfluenceParallelTest.parallelismReadsPropertyWithBounds`:
@@ -185,7 +191,14 @@ void _poolBackedDownloads() {
       server.stop();
     });
 
-    test('download_pages mirrors pages and attachments through the pool', () {
+    _poolDownloadPagesTest();
+    _poolContentsByUrlsTest();
+  });
+}
+
+void _poolDownloadPagesTest() {
+  test('download_pages mirrors pages and attachments through the pool', () {
+    {
       final out = Directory.systemTemp.createTempSync('dmtools_dlp_');
       addTearDown(() => out.deleteSync(recursive: true));
       final base = 'http://127.0.0.1:${server.port}';

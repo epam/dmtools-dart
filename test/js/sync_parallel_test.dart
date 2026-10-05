@@ -23,6 +23,13 @@ Future<void> _sleepWorkerEntry(SyncWorkerBoot boot) =>
 /// concurrency — plus the boot/dispose lifecycle.
 void main() {
   group('SyncWorkerPool', () {
+    _poolSemanticsTests();
+    _poolLifecycleTests();
+  });
+}
+
+void _poolSemanticsTests() {
+  group('semantics', () {
     late SyncWorkerPool pool;
 
     tearDown(() => pool.dispose());
@@ -60,6 +67,14 @@ void main() {
       expect(watch.elapsedMilliseconds, greaterThanOrEqualTo(400));
       expect(watch.elapsedMilliseconds, lessThan(2000));
     });
+  });
+}
+
+void _poolLifecycleTests() {
+  group('lifecycle', () {
+    late SyncWorkerPool pool;
+
+    tearDown(() => pool.dispose());
 
     test('empty input returns an empty result', () async {
       pool = SyncWorkerPool(_sleepWorkerEntry, name: 'empty', workerCount: 2);

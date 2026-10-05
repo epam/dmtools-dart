@@ -221,13 +221,38 @@ void _poolBackedDownloads() {
       expect(results, hasLength(1));
       expect(results.single['id'], '777');
     });
+  });
 
-    test('a mid-write failure stays contained', () {
+  _midWriteFailureTests();
+}
+
+/// The write-side failure path over the booted pool: the attachment write
+/// throws mid-run and the best-effort cleanup keeps the rest of the
+/// mirror intact (gh-348 rework review — the catch-branch cleanup).
+void _midWriteFailureTests() {
+  group('download_pages contains a mid-write failure', () {
+    late EchoServer server;
+    late ConfluenceSyncTools tools;
+
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides(_config(server.port));
+      tools = ConfluenceSyncTools(PropertyReader());
+      await confluenceSyncWorkerPool.boot();
+      addTearDown(confluenceSyncWorkerPool.dispose);
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    test('the leftover is tolerated and the mirror still lands', () {
       // Pre-create the write target of shot.png as a directory: the
       // writeAsBytesSync below throws — the closest a fixture gets to a
       // mid-write I/O error. The best-effort cleanup cannot remove a
-      // directory via File.deleteSync, so the leftover stays; the run
-      // must still complete and the rest of the mirror must land.
+      // directory via File.deleteSync, so the leftover stays.
       final out = Directory.systemTemp.createTempSync('dmtools_dlp_partial_');
       addTearDown(() => out.deleteSync(recursive: true));
       final blocker = Directory('${out.path}/Hi Page-attachments/shot.png')

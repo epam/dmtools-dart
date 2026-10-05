@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:dmtools/src/js/sync_parallel.dart';
+import 'package:native_synchronization/mailbox.dart';
+import 'package:native_synchronization/sendable.dart';
 import 'package:test/test.dart';
 
 /// A [SyncWorkerRunner] for the pool mechanics tests: sleeps the requested
@@ -96,6 +99,65 @@ void _poolLifecycleTests() {
       await pool.boot();
       expect(pool.run(<SyncParallelJob>[_sleepJob(0, 0)]), <dynamic>[null]);
     });
+
+    test('the shutdown sentinel terminates the worker isolate', () async {
+      // Regression guard for the rework review (gh-348): the sentinel used
+      // to be skipped via `continue`, so `dispose()` leaked every worker
+      // (and its per-isolate SyncHttpBridge HTTP worker) forever.
+      final probe = _ShutdownProbe();
+      await Isolate.spawn(_shutdownProbeWorkerEntry, probe.spawnMessage);
+      final inbox = await probe.handshake.first as SendPort;
+      // A live job round-trips first (the worker is up and serving).
+      final reply = Mailbox();
+      inbox.send(<String, dynamic>{
+        'i': 0,
+        'kind': 'sleep',
+        'args': <String, dynamic>{'ms': 0},
+        'reply': reply.asSendable,
+      });
+      expect(reply.take(), isNotNull);
+      // The sentinel must END the serve loop (mirror of
+      // SyncHttpBridge._httpWorkerEntry), not be skipped as foreign
+      // traffic — the probe signals when serveSyncWorker returns.
+      inbox.send('shutdown');
+      await probe.done.first.timeout(_workerExitGrace);
+    }, timeout: _shutdownTestTimeout);
+
+    test('dispose() lets the pool boot fresh workers again', () async {
+      pool = SyncWorkerPool(_sleepWorkerEntry, name: 'reboot', workerCount: 1);
+      await pool.boot();
+      expect(
+        pool.run(<SyncParallelJob>[_sleepJob(0, 0)]),
+        <Map<String, dynamic>?>[
+          <String, dynamic>{'slept': 0},
+        ],
+      );
+      pool.dispose();
+      expect(pool.ready, isFalse);
+      await pool.boot();
+      expect(pool.ready, isTrue);
+      expect(
+        pool.run(<SyncParallelJob>[_sleepJob(0, 0)]),
+        <Map<String, dynamic>?>[
+          <String, dynamic>{'slept': 0},
+        ],
+      );
+    });
+
+    test('a failed boot is not cached — the next boot() retries', () async {
+      pool =
+          SyncWorkerPool(_badHandshakeWorkerEntry, name: 'bad', workerCount: 1);
+      final first = pool.boot();
+      await expectLater(first, throwsA(anything));
+      expect(pool.ready, isFalse);
+      // The dead future must not be served again: a fresh attempt is made
+      // (and fails the same way, the entry stays broken). With the failure
+      // cached, `boot()` handed back the identical errored future forever.
+      final second = pool.boot();
+      expect(identical(first, second), isFalse,
+          reason: 'boot() must retry after a failed boot');
+      await expectLater(second, throwsA(anything));
+    }, timeout: _shutdownTestTimeout);
   });
 }
 
@@ -111,3 +173,37 @@ SyncParallelJob _sleepJob(int index, int ms, {bool fail = false}) =>
 /// coverage without a registered runner).
 Future<void> _voidWorkerEntry(SyncWorkerBoot boot) =>
     serveSyncWorker(boot, (kind, args) => null);
+
+/// Grace period for the worker-exit assertions; the test-level timeout
+/// below fails the case before the 30s suite default on a regression.
+const _workerExitGrace = Duration(seconds: 4);
+const _shutdownTestTimeout = Timeout(Duration(seconds: 10));
+
+/// Spawn payload of the shutdown probe: the worker's handshake reply port
+/// and the port signalling that [serveSyncWorker] returned.
+typedef _ShutdownProbeMessage = ({SendPort handshake, SendPort done});
+
+class _ShutdownProbe {
+  final handshake = ReceivePort();
+  final done = ReceivePort();
+
+  _ShutdownProbeMessage get spawnMessage =>
+      (handshake: handshake.sendPort, done: done.sendPort);
+}
+
+/// Probe worker entry: serves exactly like a pool worker, then signals
+/// [serveSyncWorker]'s return — reached only when the shutdown sentinel
+/// (or a closed inbox) ends the serve loop.
+Future<void> _shutdownProbeWorkerEntry(_ShutdownProbeMessage probe) async {
+  await serveSyncWorker(
+    SyncWorkerBoot(handshake: probe.handshake),
+    _sleepRunner,
+  );
+  probe.done.send('exited');
+}
+
+/// Entry that breaks the boot handshake (sends a non-`SendPort`), so
+/// `_boot` fails with a cast error — the deterministic boot-failure case.
+Future<void> _badHandshakeWorkerEntry(SyncWorkerBoot boot) async {
+  boot.handshake.send(42);
+}

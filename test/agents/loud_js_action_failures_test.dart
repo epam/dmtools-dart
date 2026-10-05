@@ -24,11 +24,13 @@ void main() {
   postJsTicketKeyTests();
   preCliThrowTests();
   preCliBusinessSkipTests();
+  preCliMalformedJsonTests();
   preCliSuccessTests();
   preJsAdvisoryLoudTests();
   teammatePreCliAbortTests();
   teammatePreCliMultiTicketTests();
   teammateSingleRunAbortTests();
+  teammateSingleRunPostJsTests();
   teammatePostJsAbortTests();
 }
 
@@ -268,7 +270,11 @@ void preCliBusinessSkipTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void preCliMalformedJsonTests() {
+  group('CliAgent loud mode — preCliJSAction malformed-JSON result', () {
     test(
         'returning malformed JSON that starts with { is treated as '
         'success — an undecodable marker cannot be a failure signal '
@@ -465,7 +471,9 @@ void teammateSingleRunAbortTests() {
       }
     });
   });
+}
 
+void teammateSingleRunPostJsTests() {
   group('TeammateJob — issues-driven postJSAction abort (#585)', () {
     test(
         'the failing ticket result item is kept in results (same shape '

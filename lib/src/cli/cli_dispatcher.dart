@@ -43,13 +43,12 @@ class CliDispatcher {
   /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
   /// no-argument behaviour (interactive stub on a terminal, help
   /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
-  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]); a test seam
-  /// mirroring [JsRunConfig.pool]. [confluencePool] is the Confluence
-  /// parallel pool booted lazily before a command that can reach a
-  /// Confluence sync tool (defaults to `confluenceSyncWorkerPool`); a
-  /// test seam like [asyncPool]. [errorWriter] receives diagnostics that
-  /// must stay off the machine-parsed stdout (defaults to
-  /// `stderr.writeln`); a test seam like [writer].
+  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]) and
+  /// [confluencePool] the Confluence parallel pool booted lazily before
+  /// Confluence sync tools (defaults to `confluenceSyncWorkerPool`) —
+  /// test seams mirroring [JsRunConfig.pool]. [errorWriter] receives
+  /// diagnostics that must stay off the machine-parsed stdout (defaults
+  /// to `stderr.writeln`); a test seam like [writer].
   CliDispatcher({
     void Function(String line)? writer,
     void Function(String line)? errorWriter,
@@ -73,8 +72,8 @@ class CliDispatcher {
   /// [AsyncJobPool.instance]. Test seam, mirroring [JsRunConfig.pool].
   final AsyncJobPool? _asyncPool;
 
-  /// Confluence parallel pool booted lazily before Confluence sync tools;
-  /// `null` selects `confluenceSyncWorkerPool`. Test seam, like
+  /// Confluence parallel pool booted lazily before Confluence sync
+  /// tools; `null` selects `confluenceSyncWorkerPool`. Test seam, like
   /// [_asyncPool].
   final SyncWorkerPool? _confluencePool;
 
@@ -312,9 +311,9 @@ Options:
   /// Executes the resolved job config: jsrunner → [JsJobRunner], otherwise
   /// create the agent via [AgentFactory] and run it.
   Future<int> _executeJob(String name, Map<String, dynamic> params) async {
-    // Any job's tool calls happen inside QuickJS host callbacks that block
-    // this isolate's event loop — the Confluence pool can no longer boot
-    // from there, so it boots now when the job could reach one.
+    // Any job's tool calls run inside QuickJS host callbacks that block
+    // this isolate's event loop — boot the Confluence pool now if the job
+    // could reach one (see [bootConfluenceSyncPool]).
     await _prepareConfluencePool();
     if (name.toLowerCase() == 'jsrunner') {
       return _executeJsRunner(params);
@@ -559,9 +558,9 @@ Options:
       final params =
           registry.getTool(resolvedTool)?.params ?? const <ToolParam>[];
       final args = _buildToolArgs(params, cleaned);
+      // The tool runs synchronously on this isolate — boot its worker
+      // pool now, while the event loop is still alive (gh-348).
       if (resolvedTool.startsWith('confluence_')) {
-        // The tool runs synchronously on this isolate — boot its worker
-        // pool now, while the event loop is still alive (gh-348).
         await _prepareConfluencePool();
       }
       final result = ToolBridge(registry: registry).execute(resolvedTool, args);
@@ -573,27 +572,10 @@ Options:
     }
   }
 
-  /// Boots the Confluence parallel pool (gh-348) before a command that
-  /// can reach a Confluence sync tool — a direct `confluence_*`
-  /// invocation, or any job run while Confluence is configured (an
-  /// agent's tool calls execute inside QuickJS host callbacks that block
-  /// this isolate's event loop, so the boot cannot happen later).
-  ///
-  /// Lazy like the engine pool (gh-241): every other command — help,
-  /// list, doctor, non-Confluence tools, unconfigured runs — keeps zero
-  /// pool cost. A boot failure degrades to a stderr warning: sync
-  /// Confluence tools then run through the documented inline sequential
-  /// fallback instead of aborting the command.
-  Future<void> _prepareConfluencePool() async {
-    if (!confluenceSyncConfigured(_reader)) return;
-    final pool = _confluencePool ?? confluenceSyncWorkerPool;
-    try {
-      await pool.boot();
-    } catch (e) {
-      _errorWriter('dmtools: Confluence worker pool boot failed '
-          '(confluence tools run sequentially): $e');
-    }
-  }
+  /// Boots the Confluence pool for a command that can reach a Confluence
+  /// sync tool; see [bootConfluenceSyncPool] for the discipline.
+  Future<void> _prepareConfluencePool() => bootConfluenceSyncPool(_reader,
+      pool: _confluencePool, onError: _errorWriter);
 
   /// Builds the tool arguments map, Java `parseToolArguments`-style:
   /// tokens are processed in order (`--data`/`--stdin-data` JSON merge

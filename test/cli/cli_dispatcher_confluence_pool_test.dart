@@ -109,8 +109,7 @@ void _testJobRunBoot() {
   });
 
   group('job runs: Confluence pool boot failure', () {
-    test('a failed boot degrades to the inline sequential fallback',
-        () async {
+    test('a failed boot degrades to the inline sequential fallback', () async {
       PropertyReader.setOverrides(_configured());
       _pool.failBoot = true;
       expect(await _runProbeJob(), 0);

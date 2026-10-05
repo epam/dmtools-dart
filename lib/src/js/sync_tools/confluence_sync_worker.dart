@@ -81,6 +81,31 @@ bool confluenceSyncConfigured(PropertyReader reader) {
   return token != null && token.isNotEmpty;
 }
 
+/// Boots the Confluence parallel pool (gh-348) before a command that can
+/// reach a Confluence sync tool — a direct `confluence_*` invocation, or
+/// any job run while Confluence is configured (an agent's tool calls
+/// execute inside QuickJS host callbacks that block the main isolate's
+/// event loop, so the boot cannot happen later).
+///
+/// Lazy like the engine pool (gh-241): every other command keeps zero
+/// pool cost. A boot failure is reported through [onError] and the
+/// command proceeds — sync Confluence tools then run through the
+/// documented inline sequential fallback ([pool] unbooted) instead of
+/// aborting.
+Future<void> bootConfluenceSyncPool(
+  PropertyReader reader, {
+  SyncWorkerPool? pool,
+  required void Function(String line) onError,
+}) async {
+  if (!confluenceSyncConfigured(reader)) return;
+  try {
+    await (pool ?? confluenceSyncWorkerPool).boot();
+  } catch (e) {
+    onError('dmtools: Confluence worker pool boot failed '
+        '(confluence tools run sequentially): $e');
+  }
+}
+
 /// The Confluence pool runner ([SyncWorkerRunner]): executes one job by
 /// [kind]. Never throws — a failed job reports `null` (Java parity: a
 /// failing task yields null instead of aborting the others).

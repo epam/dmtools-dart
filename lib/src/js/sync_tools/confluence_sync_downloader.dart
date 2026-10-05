@@ -125,8 +125,7 @@ class _PageDownloader {
             kind: _kJobHttpGet,
             args: <String, dynamic>{
               ..._jobArgsOf(_config),
-              'url':
-                  _attachmentsUrl(_config, _attachmentPages[i].contentId),
+              'url': _attachmentsUrl(_config, _attachmentPages[i].contentId),
             },
           ),
       ];
@@ -178,11 +177,8 @@ class _PageDownloader {
     _AttachmentTarget target,
   ) {
     final resp = _httpJobResponse(envelope);
+    if (resp == null || !resp.isOk) return; // never touched the file
     final file = _attachmentFile(target);
-    if (resp == null || !resp.isOk) {
-      _deleteQuietly(file);
-      return;
-    }
     try {
       file.writeAsBytesSync(resp.bodyBytes, flush: true);
     } catch (_) {

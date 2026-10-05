@@ -164,9 +164,8 @@ class SyncWorkerPool {
   /// [boot] call attempts a fresh boot, so a transient failure (isolate
   /// quota, sandbox limit) does not disable the pool for the process
   /// lifetime.
-  Future<void> boot() =>
-      _booting ??= _boot(workerCount < 1 ? 1 : workerCount)
-          .catchError((Object e) {
+  Future<void> boot() => _booting ??=
+          _boot(workerCount < 1 ? 1 : workerCount).catchError((Object e) {
         _booting = null; // let the next boot() retry
         throw e;
       });

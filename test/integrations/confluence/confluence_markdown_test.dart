@@ -7,6 +7,7 @@ void main() {
   _storageToMarkdownTests();
   _roundTripTests();
   _referenceTests();
+  _javaConversionFixParityTests();
 }
 
 void _markdownToStorageTests() {
@@ -313,6 +314,69 @@ void _referenceTests() {
     test('local paths and anchors are internal', () {
       expect(isExternalUrl('images/x.png'), isFalse);
       expect(isExternalUrl('#sec'), isFalse);
+    });
+  });
+}
+
+/// Parity locks for the Java conversion-fix batch (dm.ai 0b658b70 /
+/// 932e0db0 / bb1b51e9, ticket gh-347). The Dart converter holds no
+/// table/code placeholder stash (it parses storage XML directly), so the
+/// placeholder-collision regressions cannot occur — these tests pin that.
+void _javaConversionFixParityTests() {
+  group('Java conversion-fix parity (gh-347)', () {
+    test('time lozenges keep their date inside table cells', () {
+      final md = confluenceStorageToMarkdown(
+        '<table><tbody><tr><th>Date</th><th>Note</th></tr>'
+        '<tr><td><p><time datetime="2024-03-05" local-id="a" /> </p></td>'
+        '<td>after</td></tr></tbody></table>',
+      );
+      expect(md, contains('| 2024-03-05 | after |'));
+    });
+
+    test('whiteboard macro keeps a marker with its url', () {
+      final md = confluenceStorageToMarkdown(
+        '<p>Before</p>'
+        '<ac:structured-macro ac:name="native-embed:whiteboard">'
+        '<ac:parameter ac:name="url">'
+        'https://example.com/wiki/spaces/SP/whiteboard/123'
+        '</ac:parameter>'
+        '<ac:parameter ac:name="height">600</ac:parameter>'
+        '</ac:structured-macro>',
+      );
+      expect(md, contains('Whiteboard'));
+      expect(
+        md,
+        contains('https://example.com/wiki/spaces/SP/whiteboard/123'),
+      );
+      expect(md, isNot(contains('600')));
+    });
+
+    test('many tables stay in place (no placeholder prefix collisions)', () {
+      final buf = StringBuffer();
+      for (var i = 0; i < 13; i++) {
+        buf.write('<p>Section $i</p>'
+            '<table><tbody><tr><th>H</th></tr>'
+            '<tr><td>value-$i</td></tr></tbody></table>');
+      }
+      final md = confluenceStorageToMarkdown(buf.toString());
+      for (var i = 0; i < 13; i++) {
+        expect(
+          md.split('| value-$i |').length - 1,
+          1,
+          reason: 'value-$i must appear exactly once',
+        );
+      }
+      expect(md, isNot(contains('DMTABLEIDX')));
+      expect(md, isNot(contains(RegExp(r'\|\d\n'))));
+    });
+
+    test('code block inside a table cell is restored', () {
+      final md = confluenceStorageToMarkdown(
+        '<table><tbody><tr><th>Formula</th></tr>'
+        '<tr><td><pre>a = b + c</pre></td></tr></tbody></table>',
+      );
+      expect(md, contains('a = b + c'));
+      expect(md, isNot(contains('DMCODEIDX')));
     });
   });
 }

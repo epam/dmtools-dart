@@ -231,6 +231,41 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 }
             }
         elif (self.command == "GET"
+              and "/wiki/rest/api/content/888" in self.path
+              and "/child/" not in self.path):
+            # gh-347 conversion-fix fixture: a page whose storage holds an
+            # excerpt-include of "Source" (space-less ri:page link — must
+            # resolve in the page's own space DOCS, carried only via the
+            # _expandable link like a real v1 response) and a user mention.
+            # The downloader must inline the excerpt body and resolve the
+            # mention to @Jane Roe before converting to Markdown.
+            payload.clear()
+            payload["id"] = "888"
+            payload["title"] = "Main Page"
+            payload["_expandable"] = {"space": "/rest/api/space/DOCS"}
+            payload["body"] = {
+                "storage": {
+                    "value": (
+                        "<p>intro</p>"
+                        "<ac:structured-macro ac:name=\"table-excerpt-include\" "
+                        "ac:schema-version=\"1\">"
+                        "<ac:parameter ac:name=\"page\"><ac:link>"
+                        "<ri:page ri:content-title=\"Source\" />"
+                        "</ac:link></ac:parameter>"
+                        "<ac:parameter ac:name=\"name\">Rules"
+                        "</ac:parameter></ac:structured-macro>"
+                        "<p>Owner: <ac:link><ri:user "
+                        "ri:account-id=\"acc-1\" /></ac:link></p>"
+                    ),
+                    "representation": "storage",
+                }
+            }
+        elif (self.command == "GET"
+              and "/wiki/rest/api/user?" in self.path
+              and "accountId=acc-1" in self.path):
+            self._send(json.dumps({"displayName": "Jane Roe"}).encode("utf-8"))
+            return
+        elif (self.command == "GET"
               and "/wiki/rest/api/content/555" in self.path
               and "/child/" not in self.path):
             payload.clear()
@@ -280,6 +315,32 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload.clear()
             if title in ("Nope", "Ghost"):
                 payload["results"] = []
+            elif title == "Source":
+                # gh-347: excerpt-include target of the 888 page (looked up
+                # by title in space DOCS).
+                payload["results"] = [{
+                    "id": "889",
+                    "title": "Source",
+                    "space": {"key": "DOCS"},
+                    "body": {
+                        "storage": {
+                            "value": (
+                                "<p>source intro</p>"
+                                "<ac:structured-macro ac:name="
+                                "\"table-excerpt\">"
+                                "<ac:parameter ac:name=\"name\">Rules"
+                                "</ac:parameter>"
+                                "<ac:rich-text-body>"
+                                "<table><tbody><tr><th>Key</th></tr>"
+                                "<tr><td>included-value</td></tr>"
+                                "</tbody></table>"
+                                "</ac:rich-text-body>"
+                                "</ac:structured-macro>"
+                            ),
+                            "representation": "storage",
+                        }
+                    },
+                }]
             elif title == "Parent":
                 payload["results"] = [{
                     "id": "555",

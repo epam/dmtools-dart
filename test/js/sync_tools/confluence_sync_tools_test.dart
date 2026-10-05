@@ -23,6 +23,7 @@ void main() {
   if (hasPython3()) {
     _testReadTools();
     _testWriteTools();
+    _testWriteToolsV2();
     uploadPolicyTests();
   }
 }

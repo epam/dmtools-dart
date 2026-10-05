@@ -475,10 +475,17 @@ class ToolBridge {
     }
   }
 
-  /// Java `FileTools.writeFile` parity (gh-361): creates missing parent
-  /// directories before writing, so a write to a nested non-existent path
-  /// (e.g. the token-usage reporter's `outputs/token_usage/` cache)
-  /// succeeds instead of failing with `PathNotFoundException`.
+  /// gh-361: parent-directory behavior of Java `FileTools.writeFile` —
+  /// creates missing parent directories before writing, so a write to a
+  /// nested non-existent path (e.g. the token-usage reporter's
+  /// `outputs/token_usage/` cache) succeeds instead of failing with
+  /// `PathNotFoundException`.
+  ///
+  /// Parity is scoped to that parent creation only: Java `writeFile` also
+  /// normalizes the path and rejects anything outside the working
+  /// directory ("Path traversal attempt blocked"), and this bridge — like
+  /// the whole `file_*` family here — has no such containment check
+  /// (pre-existing gap, tracked in a follow-up issue).
   String _writeFile(String path, String content) {
     try {
       final resolved = _resolve(path);

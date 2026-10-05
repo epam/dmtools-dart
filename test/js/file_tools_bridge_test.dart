@@ -103,23 +103,26 @@ void fileExistsTests() {
 }
 
 void fileWriteTests() {
-  group('JS-bridge file_write (Java FileTools.writeFile parity)', () {
+  group(
+      'JS-bridge file_write (gh-361: parent-dir behavior of Java '
+      'FileTools.writeFile)', () {
     final bridge = ToolBridge(registry: createDefaultToolRegistry());
 
     test('creates missing parent directories before writing (gh-361)', () {
       // Java writeFile: Files.createDirectories(parentDir) before
       // Files.writeString — a write to a nested non-existent path succeeds
       // (the token-usage reporter depends on this for its cache file).
+      // Parent creation only: Java's traversal sandbox is out of scope
+      // here (pre-existing bridge family gap, see follow-up issue).
       final nested = '${dir.path}/outputs/token_usage/cache.json';
 
-      final result = jsonDecode(
-        bridge.execute('file_write', {
+      expect(
+        jsonDecode(bridge.execute('file_write', {
           'path': nested,
           'content': '{"tokens": 42}',
-        }),
-      ) as Map<String, dynamic>;
-
-      expect(result.containsKey('error'), isFalse, reason: '$result');
+        })),
+        {'success': true},
+      );
       expect(File(nested).readAsStringSync(), '{"tokens": 42}');
     });
 

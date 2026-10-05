@@ -156,7 +156,11 @@ class ConfluenceExcerptInliner {
     title = _nonBlank(title) ? title : _macroParamText(macro, 'page-title');
     if (!_nonBlank(title)) return null;
     if (!_nonBlank(targetSpace)) targetSpace = spaceKey;
-    return (title: title!, targetSpace: targetSpace, name: _macroParamText(macro, 'name'));
+    return (
+      title: title!,
+      targetSpace: targetSpace,
+      name: _macroParamText(macro, 'name')
+    );
   }
 
   /// Cached page lookup: the space-specific search first, then the

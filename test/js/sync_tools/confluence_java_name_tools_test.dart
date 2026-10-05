@@ -56,6 +56,8 @@ void main() {
   uploadAttachmentToolTests();
   uploadAttachmentsToolTests();
   downloadPagesToolTests();
+  downloadPagesResolverTests();
+  downloadPagesAttachmentsTests();
 }
 
 void contentByTitleTests() {
@@ -431,7 +433,13 @@ void downloadPagesToolTests() {
         'kid',
       );
     });
+  });
+}
 
+/// gh-347: the downloader pipeline materializes excerpt includes (in the
+/// page's own space) and resolves user mentions before converting.
+void downloadPagesResolverTests() {
+  group('confluence download_pages resolvers', () {
     test('download_pages inlines excerpt includes and resolves mentions', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dl3_');
       addTearDown(() => out.deleteSync(recursive: true));
@@ -452,7 +460,11 @@ void downloadPagesToolTests() {
       expect(markdown, contains('@Jane Roe'));
       expect(markdown, isNot(contains('ri:user')));
     });
+  });
+}
 
+void downloadPagesAttachmentsTests() {
+  group('confluence download_pages attachments', () {
     test('download_pages downloads attachments when asked', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dl2_');
       addTearDown(() => out.deleteSync(recursive: true));

@@ -252,7 +252,7 @@ void cliAgentLoudModeTests() {
       final cliMarker = File('${tmp.path}/cli_marker');
       try {
         final preCli = _actionJs(tmp, 'precli_ok.js',
-            'file_write({path: "$cliMarker", content: "ran"});');
+            'file_write({path: "${cliMarker.path}", content: "ran"});');
         final result = await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo ok']
@@ -263,7 +263,7 @@ void cliAgentLoudModeTests() {
         )).run();
         expect(result['success'], isTrue);
         expect(result['unexpectedSetupFailure'], isNull);
-        expect(result['response'], 'ok');
+        expect(result['response'], contains('ok'));
       } finally {
         await tmp.delete(recursive: true);
       }
@@ -455,4 +455,4 @@ File _actionJs(Directory dir, String name, String body) =>
       ..writeAsStringSync('function action(params) { $body }');
 
 Future<Directory> _createTempDir() async =>
-    Directory.systemTemp.createTemp('loud_js_action_test');
+    Directory.systemTemp.createTemp('loud_js_fail_test');

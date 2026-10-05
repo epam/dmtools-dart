@@ -145,10 +145,7 @@ class TeammateJob {
       // must still fail the job so the CI step actually goes red.
       return {
         'success': false,
-        'error': 'Teammate job aborted: preCliJSAction threw an unexpected '
-            'error (e.g. a git command failure) for ticket(s) '
-            '$unexpectedSetupFailures — see the warnings logged above for '
-            'the underlying error(s).',
+        'error': _abortMessage(unexpectedSetupFailures),
         'results': results,
       };
     }
@@ -169,11 +166,17 @@ class TeammateJob {
     );
     final result = await agent.run();
     final key = _ticketKey(ticket);
-    if (result['postJsActionUncaught'] == true ||
-        result['unexpectedSetupFailure'] == true) {
-      // Java Teammate #580/#585 parity: loud JS-action failures fail the
-      // job — the CI step must go red with the underlying error text.
+    if (result['postJsActionUncaught'] == true) {
       return {'success': false, 'error': result['error'], 'results': []};
+    }
+    if (result['unexpectedSetupFailure'] == true) {
+      // Java Teammate #580 parity: a swallowed uncaught setup exception
+      // fails the job — the CI step must go red.
+      return {
+        'success': false,
+        'error': _abortMessage([key ?? 'unknown']),
+        'results': [],
+      };
     }
     return {
       'success': result['success'] == true,
@@ -182,6 +185,13 @@ class TeammateJob {
       ],
     };
   }
+
+  /// Java Teammate end-of-run hard-stop message (epam/dm.ai#580), listing
+  /// every ticket whose `preCliJSAction` threw an uncaught exception.
+  String _abortMessage(List<String> tickets) =>
+      'Teammate job aborted: preCliJSAction threw an unexpected error '
+      '(e.g. a git command failure) for ticket(s) $tickets — see the '
+      'warnings logged above for the underlying error(s).';
 
   /// The caller-provided ticket at `<workDir>/input/ticket.md`, mapped to
   /// the raw-tracker shape [CliAgent] understands (first line → summary,

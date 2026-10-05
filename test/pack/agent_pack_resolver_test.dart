@@ -30,6 +30,7 @@ void main() {
   localResolutionTests();
   entryOverrideTests();
   zipSlipTests();
+  symlinkTests();
   manifestTests();
   manifestIdentityTests();
   entryContainmentTests();
@@ -174,6 +175,43 @@ void zipSlipTests() {
       expect(
         Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
         isFalse,
+      );
+    });
+  });
+}
+
+/// Symlink entries must be rejected from the unix mode type bits regardless
+/// of the zip creator (Java parity, dm.ai e97ff0f2 `symlinkEntry_isRejected`).
+void symlinkTests() {
+  group('AgentPackResolver symlink entries', () {
+    test('rejects symlink entries via unix mode bits (non-unix zip creator)',
+        () {
+      // commons-compress flags symlinks from the unix mode type bits for any
+      // zip creator; the archive package only sets `isSymbolicLink` for
+      // unix-made zips (its encoder writes an MS-DOS versionMadeBy).
+      final zip = buildZipWithManifest({
+        'agent': 'link_agent',
+        'version': '1.0.0',
+        'defaultEntry': 'a.json',
+        'files': [
+          {'path': 'a.json', 'sha256': sha256Of('{}')},
+          {'path': 'link.txt', 'sha256': sha256Of('a.json')},
+        ],
+      }, {
+        'a.json': utf8.encode('{}'),
+        'link.txt': utf8.encode('a.json'),
+      }, modes: {
+        'link.txt': 0xA1FF, // 0o120777 — symlink with rwxrwxrwx
+      });
+      expect(
+        () => resolver.resolve(zip.path),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            'Symlink entry rejected: link.txt',
+          ),
+        ),
       );
     });
   });

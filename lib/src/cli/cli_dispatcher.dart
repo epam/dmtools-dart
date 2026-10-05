@@ -15,11 +15,13 @@ import 'dart:io';
 import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../agents/teammate_job.dart';
-import '../compile/agent_pack_compiler.dart';
+import 'compile_command.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/async_job_pool.dart';
 import '../js/job_runner.dart';
+import '../js/sync_parallel.dart';
+import '../js/sync_tools/confluence_sync_tools.dart';
 import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_param.dart';
@@ -41,21 +43,25 @@ class CliDispatcher {
   /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
   /// no-argument behaviour (interactive stub on a terminal, help
   /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
-  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]); a test seam
-  /// mirroring [JsRunConfig.pool]. [errorWriter] receives diagnostics that
-  /// must stay off the machine-parsed stdout (defaults to
-  /// `stderr.writeln`); a test seam like [writer].
+  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]) and
+  /// [confluencePool] the Confluence parallel pool booted lazily before
+  /// Confluence sync tools (defaults to `confluenceSyncWorkerPool`) —
+  /// test seams mirroring [JsRunConfig.pool]. [errorWriter] receives
+  /// diagnostics that must stay off the machine-parsed stdout (defaults
+  /// to `stderr.writeln`); a test seam like [writer].
   CliDispatcher({
     void Function(String line)? writer,
     void Function(String line)? errorWriter,
     PropertyReader? propertyReader,
     bool Function()? isTty,
     AsyncJobPool? asyncPool,
+    SyncWorkerPool? confluencePool,
   })  : _writer = writer ?? print,
         _errorWriter = errorWriter ?? stderr.writeln,
         _reader = propertyReader ?? PropertyReader(),
         _isTty = isTty ?? _stdoutIsTty,
-        _asyncPool = asyncPool;
+        _asyncPool = asyncPool,
+        _confluencePool = confluencePool;
 
   final void Function(String line) _writer;
   final void Function(String line) _errorWriter;
@@ -65,6 +71,11 @@ class CliDispatcher {
   /// Engine-worker pool booted lazily for `runAsync` jobs; `null` selects
   /// [AsyncJobPool.instance]. Test seam, mirroring [JsRunConfig.pool].
   final AsyncJobPool? _asyncPool;
+
+  /// Confluence parallel pool booted lazily before Confluence sync
+  /// tools; `null` selects `confluenceSyncWorkerPool`. Test seam, like
+  /// [_asyncPool].
+  final SyncWorkerPool? _confluencePool;
 
   static bool _stdoutIsTty() => stdout.hasTerminal;
 
@@ -127,139 +138,8 @@ class CliDispatcher {
   }
 
   /// Builds a versioned agent pack (zip + manifest + sha256) — dm.ai #595.
-  ///
-  /// Mirrors the Java `CompileCommand`: parses `entry.json` plus
-  /// `--agent-root` / `--version` / `--versions-file` / `--out` /
-  /// `--source-commit` and delegates to [AgentPackCompiler].
-  int _runCompile(List<String> rest) {
-    final guardExit = _compileGuardExit(rest);
-    if (guardExit != null) return guardExit;
-    final agentName = _stripJsonExtension(_basename(rest.first));
-    final agentRoot =
-        _optionValue(rest, '--agent-root') ?? _dirname(rest.first);
-    final version = _resolveCompileVersion(rest, agentName);
-    if (version == null) {
-      _writer(
-          'Error: --version <semver> or --versions-file versions.json is required');
-      return 1;
-    }
-    try {
-      final result = AgentPackCompiler(agentRoot).compile(
-          File(rest.first),
-          version,
-          _optionValue(rest, '--source-commit') ??
-              _detectSourceCommit(agentRoot),
-          Directory(_optionValue(rest, '--out') ?? 'dist'),
-          extraDirs: _optionValues(rest, '--include'));
-      _printCompileResult(agentName, version, result);
-      return 0;
-    } on AgentPackException catch (e) {
-      _writer('Error: ${e.message}');
-      return 1;
-    }
-  }
-
-  /// Handles the help/usage and missing-entry guard cases; returns the exit
-  /// code to short-circuit with, or `null` to proceed with the build.
-  int? _compileGuardExit(List<String> rest) {
-    if (rest.isEmpty || rest.first == '--help' || rest.first == '-h') {
-      _writer(_compileUsage);
-      return rest.isEmpty ? 1 : 0;
-    }
-    if (!File(rest.first).existsSync()) {
-      _writer('Error: entry config not found: ${rest.first}');
-      return 1;
-    }
-    return null;
-  }
-
-  /// Version precedence: explicit `--version`, else the agent's versions.json entry.
-  String? _resolveCompileVersion(List<String> rest, String agentName) =>
-      _optionValue(rest, '--version') ??
-      _versionFromFile(_optionValue(rest, '--versions-file'), agentName);
-
-  /// Prints the successful compile summary.
-  void _printCompileResult(
-      String agentName, String version, PackResult result) {
-    _writer('Agent pack built successfully:');
-    _writer('  agent:    $agentName');
-    _writer('  version:  $version');
-    _writer('  files:    ${result.fileCount}');
-    _writer('  zip:      ${result.zipFile.path}');
-    _writer('  manifest: ${result.manifestFile.path}');
-    _writer('  sha256:   ${result.shaFile.path}');
-  }
-
-  static const String _compileUsage = '''
-Usage: dmtools compile <entry.json> [options]
-
-Build a versioned, self-contained agent pack (zip + manifest + sha256).
-
-Options:
-  --agent-root <dir>             Agents checkout root (default: entry.json's directory)
-  --version <semver>             Pack version (required unless --versions-file)
-  --versions-file versions.json  Per-agent versions map
-  --out <dir>                    Output directory (default: ./dist)
-  --source-commit <sha>          Source commit (default: git rev-parse HEAD)
-  --include <dir>                Embed a whole repo-relative dir (repeatable; for files only `pack:`-consuming children reference)
-''';
-
-  /// Reads the agent's version from a `versions.json` map; `null` when absent.
-  String? _versionFromFile(String? versionsFile, String agentName) {
-    if (versionsFile == null) return null;
-    final file = File(versionsFile);
-    if (!file.existsSync()) return null;
-    try {
-      final decoded = jsonDecode(file.readAsStringSync());
-      if (decoded is Map<String, dynamic>) {
-        final version = decoded[agentName];
-        return version is String ? version : null;
-      }
-    } on FormatException {
-      return null;
-    }
-    return null;
-  }
-
-  /// Best-effort source commit: `git rev-parse HEAD` in the agent root.
-  String _detectSourceCommit(String agentRoot) {
-    try {
-      final result = Process.runSync('git', ['rev-parse', 'HEAD'],
-          workingDirectory: agentRoot);
-      final out = (result.stdout as String).trim();
-      if (result.exitCode == 0 && out.isNotEmpty) return out;
-    } on Object {
-      // fall through — git unavailable or not a repo
-    }
-    return 'unknown';
-  }
-
-  String? _optionValue(List<String> args, String flag) {
-    for (var i = 0; i < args.length - 1; i++) {
-      if (args[i] == flag) return args[i + 1];
-    }
-    return null;
-  }
-
-  /// All values of a repeatable option flag (e.g. `--include`), in order.
-  List<String> _optionValues(List<String> args, String flag) {
-    final values = <String>[];
-    for (var i = 0; i < args.length - 1; i++) {
-      if (args[i] == flag) values.add(args[i + 1]);
-    }
-    return values;
-  }
-
-  String _basename(String path) => path.replaceAll('\\', '/').split('/').last;
-
-  String _dirname(String path) {
-    final idx = path.replaceAll('\\', '/').lastIndexOf('/');
-    return idx >= 0 ? path.substring(0, idx) : '.';
-  }
-
-  String _stripJsonExtension(String fileName) => fileName.endsWith('.json')
-      ? fileName.substring(0, fileName.length - '.json'.length)
-      : fileName;
+  int _runCompile(List<String> rest) =>
+      CompileCommand(writer: _writer).run(rest);
 
   /// Runs a job: resolve config → parse name/params → execute → print result.
   ///
@@ -300,6 +180,10 @@ Options:
   /// Executes the resolved job config: jsrunner → [JsJobRunner], otherwise
   /// create the agent via [AgentFactory] and run it.
   Future<int> _executeJob(String name, Map<String, dynamic> params) async {
+    // Any job's tool calls run inside QuickJS host callbacks that block
+    // this isolate's event loop — boot the Confluence pool now if the job
+    // could reach one (see [bootConfluenceSyncPool]).
+    await _prepareConfluencePool();
     if (name.toLowerCase() == 'jsrunner') {
       return _executeJsRunner(params);
     }
@@ -543,6 +427,11 @@ Options:
       final params =
           registry.getTool(resolvedTool)?.params ?? const <ToolParam>[];
       final args = _buildToolArgs(params, cleaned);
+      // The tool runs synchronously on this isolate — boot its worker
+      // pool now, while the event loop is still alive (gh-348).
+      if (resolvedTool.startsWith('confluence_')) {
+        await _prepareConfluencePool();
+      }
       final result = ToolBridge(registry: registry).execute(resolvedTool, args);
       _writer(result);
       return _isToolError(result) ? 1 : 0;
@@ -551,6 +440,11 @@ Options:
       return 1;
     }
   }
+
+  /// Boots the Confluence pool for a command that can reach a Confluence
+  /// sync tool; see [bootConfluenceSyncPool] for the discipline.
+  Future<void> _prepareConfluencePool() => bootConfluenceSyncPool(_reader,
+      pool: _confluencePool, onError: _errorWriter);
 
   /// Builds the tool arguments map, Java `parseToolArguments`-style:
   /// tokens are processed in order (`--data`/`--stdin-data` JSON merge

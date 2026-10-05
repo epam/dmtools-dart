@@ -39,15 +39,18 @@ SyncHttpResponse _childrenResponse(_Conf config, String id) => _isApiV2(config)
         headers: config.headers)
     : _contentGet(config, '$id/child/page?limit=100&expand=$_contentExpand');
 
-/// GETs the attachment listing of page [id] (Java `getContentAttachments`,
+/// The attachment-listing URL of page [id] (Java `getContentAttachments`,
 /// v2-aware): v2 `pages/{id}/attachments`, v1
-/// `content/{id}/child/attachment`.
+/// `content/{id}/child/attachment`. Shared by [_attachmentsResponse] and
+/// the parallel downloader's listing jobs.
+String _attachmentsUrl(_Conf config, String id) => _isApiV2(config)
+    ? '${_baseUrlV2(config)}/pages/$id/attachments'
+    : '${config.baseUrl}/content/$id/child/attachment';
+
+/// GETs the attachment listing of page [id] (Java `getContentAttachments`,
+/// v2-aware).
 SyncHttpResponse _attachmentsResponse(_Conf config, String id) =>
-    _isApiV2(config)
-        ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id/attachments',
-            headers: config.headers)
-        : SyncHttpClient.get('${config.baseUrl}/content/$id/child/attachment',
-            headers: config.headers);
+    SyncHttpClient.get(_attachmentsUrl(config, id), headers: config.headers);
 
 /// Resolves a Confluence space key to the numeric id required by the v2
 /// API via `GET /wiki/api/v2/spaces?keys=…` (Java `spaceIdFromKey`).

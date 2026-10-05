@@ -16,9 +16,6 @@ part of 'confluence_sync_tools.dart';
 /// Results travel as sendable maps; HTTP responses are wrapped by
 /// [_httpJobEnvelope] and rebuilt by [_httpJobResponse].
 
-/// Registry name of the Confluence pool runner.
-const _kConfluenceRunnerName = 'confluence';
-
 /// Job kind: resolve one page URL to its content object.
 const _kJobResolve = 'resolve';
 
@@ -37,16 +34,17 @@ const _maxConfluenceParallelism = 16;
 /// The shared Confluence pool; boots at CLI startup next to
 /// `SyncHttpBridge.shared.boot()` (both must complete while the event
 /// loop is alive).
-final SyncWorkerPool _confluenceSyncPool = _createConfluencePool();
+final SyncWorkerPool _confluenceSyncPool = SyncWorkerPool(
+  _confluenceSyncWorkerEntry,
+  name: 'confluence-parallel',
+  workerCount: confluenceSyncParallelism(),
+);
 
-SyncWorkerPool _createConfluencePool() {
-  registerSyncWorkerRunner(_kConfluenceRunnerName, _runConfluenceJob);
-  return SyncWorkerPool(
-    _kConfluenceRunnerName,
-    name: 'confluence-parallel',
-    workerCount: confluenceSyncParallelism(),
-  );
-}
+/// Confluence pool worker entry ([Isolate.spawn] target — top-level on
+/// purpose: entries cannot capture state, so the runner binds here in the
+/// worker isolate).
+Future<void> _confluenceSyncWorkerEntry(SyncWorkerBoot boot) =>
+    serveSyncWorker(boot, _runConfluenceJob);
 
 /// The shared Confluence parallel worker pool (gh-348).
 ///
@@ -150,11 +148,12 @@ Map<String, dynamic> _httpJobEnvelope(SyncHttpResponse resp) =>
 /// job failed.
 SyncHttpResponse? _httpJobResponse(Map<String, dynamic>? envelope) {
   if (envelope == null) return null;
+  final bytes = base64Decode(envelope['body'] as String);
   return SyncHttpResponse(
     envelope['status'] as int,
-    '',
+    utf8.decode(bytes, allowMalformed: true),
     (envelope['headers'] as Map).map((k, v) => MapEntry('$k', '$v')),
-    base64Decode(envelope['body'] as String),
+    bytes,
   );
 }
 

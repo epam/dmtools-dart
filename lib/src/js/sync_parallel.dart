@@ -94,14 +94,6 @@ class SyncParallelJob {
   final Map<String, dynamic> args;
 }
 
-/// Spawn message for a worker entry: sendable only.
-class _PoolSpawnArgs {
-  _PoolSpawnArgs({required this.entry, required this.boot});
-
-  final SyncWorkerEntry entry;
-  final SyncWorkerBoot boot;
-}
-
 /// The serve-forever loop behind every [SyncWorkerEntry]: handshakes the
 /// job inbox, then answers each job on its own reply mailbox until the
 /// pool shuts the inbox down.
@@ -132,6 +124,10 @@ Future<void> serveSyncWorker(SyncWorkerBoot boot, SyncWorkerRunner runner) async
 }
 
 /// A bounded pool of worker isolates serving synchronous parallel jobs.
+///
+/// The constructor [entry] must be a top-level function or static method
+/// (the same rule as any `Isolate.spawn` entry — closures capturing state
+/// are rejected at [boot] time).
 class SyncWorkerPool {
   /// Creates a pool booting [entry] workers.
   SyncWorkerPool(
@@ -165,13 +161,10 @@ class SyncWorkerPool {
     for (var i = 0; i < workers; i++) {
       final handshake = ReceivePort();
       await Isolate.spawn(
-        _syncPoolSpawnTrampoline,
-        _PoolSpawnArgs(
-          entry: _entry,
-          boot: SyncWorkerBoot(
-            handshake: handshake.sendPort,
-            workerName: '$name-${i + 1}',
-          ),
+        _entry,
+        SyncWorkerBoot(
+          handshake: handshake.sendPort,
+          workerName: '$name-${i + 1}',
         ),
       );
       _inboxes.add(await handshake.first as SendPort);

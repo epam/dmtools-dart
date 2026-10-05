@@ -14,19 +14,21 @@ Map<String, dynamic>? _sleepRunner(String kind, Map<String, dynamic> args) {
   return <String, dynamic>{'slept': ms};
 }
 
+/// Test pool worker entry ([Isolate.spawn] target — top-level on purpose).
+Future<void> _sleepWorkerEntry(SyncWorkerBoot boot) =>
+    serveSyncWorker(boot, _sleepRunner);
+
 /// Pool mechanics tests mirroring the Java `ConfluenceParallelTest`
 /// (dm.ai d61a4abd) — order preservation, failure isolation, bounded
 /// concurrency — plus the boot/dispose lifecycle.
 void main() {
-  setUpAll(() => registerSyncWorkerRunner('test-sleep', _sleepRunner));
-
   group('SyncWorkerPool', () {
     late SyncWorkerPool pool;
 
     tearDown(() => pool.dispose());
 
     test('keeps input order and yields null for failed tasks', () async {
-      pool = SyncWorkerPool('test-sleep', name: 'order', workerCount: 3);
+      pool = SyncWorkerPool(_sleepWorkerEntry, name: 'order', workerCount: 3);
       await pool.boot();
       final results = pool.run(<SyncParallelJob>[
         _sleepJob(0, 200),
@@ -48,7 +50,7 @@ void main() {
     });
 
     test('runs tasks concurrently but not above the worker bound', () async {
-      pool = SyncWorkerPool('test-sleep', name: 'bound', workerCount: 3);
+      pool = SyncWorkerPool(_sleepWorkerEntry, name: 'bound', workerCount: 3);
       await pool.boot();
       final watch = Stopwatch()..start();
       pool.run(List<SyncParallelJob>.generate(6, (i) => _sleepJob(i, 400)));
@@ -60,13 +62,13 @@ void main() {
     });
 
     test('empty input returns an empty result', () async {
-      pool = SyncWorkerPool('test-sleep', name: 'empty', workerCount: 2);
+      pool = SyncWorkerPool(_sleepWorkerEntry, name: 'empty', workerCount: 2);
       await pool.boot();
       expect(pool.run(const <SyncParallelJob>[]), isEmpty);
     });
 
     test('run before boot throws and inline callers check ready', () async {
-      pool = SyncWorkerPool('test-sleep', name: 'cold', workerCount: 1);
+      pool = SyncWorkerPool(_sleepWorkerEntry, name: 'cold', workerCount: 1);
       expect(pool.ready, isFalse);
       expect(
         () => pool.run(<SyncParallelJob>[_sleepJob(0, 0)]),
@@ -74,8 +76,8 @@ void main() {
       );
     });
 
-    test('an unregistered runner name degrades every job to null', () async {
-      pool = SyncWorkerPool('no-such-runner', name: 'void', workerCount: 1);
+    test('a null-returning runner degrades every job to null', () async {
+      pool = SyncWorkerPool(_voidWorkerEntry, name: 'void', workerCount: 1);
       await pool.boot();
       expect(pool.run(<SyncParallelJob>[_sleepJob(0, 0)]), <dynamic>[null]);
     });
@@ -89,3 +91,8 @@ SyncParallelJob _sleepJob(int index, int ms, {bool fail = false}) =>
       kind: 'sleep',
       args: <String, dynamic>{'ms': ms, if (fail) 'fail': true},
     );
+
+/// Entry whose runner answers `null` for everything (unknown-kind
+/// coverage without a registered runner).
+Future<void> _voidWorkerEntry(SyncWorkerBoot boot) =>
+    serveSyncWorker(boot, (kind, args) => null);

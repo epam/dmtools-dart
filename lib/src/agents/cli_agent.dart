@@ -290,42 +290,56 @@ class CliAgent {
           contextParams: _metadataContextParams(),
         ),
       );
-      if (failOnJsActionErrors &&
-          name == 'preCliJSAction' &&
-          _isPreCliJsActionFailure(result)) {
-        // Java Teammate hard stop (epam/dm.ai#580): the JS action is
-        // responsible for its own failure notification.
-        stderr.writeln('preCliJSAction reported failure — skipping CLI '
-            'execution and postJSAction; the JS action is responsible '
-            'for its own failure notification.');
-        _preCliJsActionSkipped = true;
-      }
+      _checkPreCliBusinessFailure(name, result);
       return result;
     } catch (e) {
-      if (!failOnJsActionErrors) {
-        stderr.writeln('$name failed, continuing: $e');
-        return null;
-      }
-      if (name == 'postJSAction') {
-        // #585: fail the job loudly instead of swallowing — the GHA step
-        // must go red with the JS error text.
-        throw _JsActionUncaughtException(
-          'postJSAction threw an uncaught exception'
-          '${_ticketKeySuffix()}: $e',
-        );
-      }
-      if (name == 'preCliJSAction') {
-        // #580: a genuine crash (e.g. a git checkout failure) must count
-        // as "threw", not a deliberate business skip.
-        stderr.writeln('preCliJSAction threw, treating as setup failure '
-            '(skipping CLI execution and postJSAction): $e');
-        _preCliSetupThrew = true;
-        _preCliJsActionSkipped = true;
-        return null;
-      }
+      return _handleJsActionError(name, e);
+    }
+  }
+
+  /// Loud-mode `preCliJSAction` business-skip check — Java
+  /// `Teammate.isPreCliJSActionFailure` parity: an explicit `false` or an
+  /// object/map containing `success: false` hard-stops the ticket (the JS
+  /// action is responsible for its own failure notification). Any other
+  /// value (including `null`/undefined — actions that don't return a
+  /// structured result) is treated as success.
+  void _checkPreCliBusinessFailure(String name, String? result) {
+    if (!failOnJsActionErrors ||
+        name != 'preCliJSAction' ||
+        !_isPreCliJsActionFailure(result)) {
+      return;
+    }
+    stderr.writeln('preCliJSAction reported failure — skipping CLI '
+        'execution and postJSAction; the JS action is responsible '
+        'for its own failure notification.');
+    _preCliJsActionSkipped = true;
+  }
+
+  /// Error contract for a failed JS action (Java parity).
+  ///
+  /// Default ([failOnJsActionErrors] off — Java `CliAgent`) and
+  /// `preJSAction` in both modes (Java Teammate never checks the uncaught
+  /// marker there): logged, lifecycle continues. Loud mode:
+  /// `postJSAction` rethrows as [_JsActionUncaughtException] so the run
+  /// fails with the full JS error text (epam/dm.ai#585); `preCliJSAction`
+  /// marks the run as an unexpected setup failure and skips the CLI +
+  /// post phases (epam/dm.ai#580).
+  String? _handleJsActionError(String name, Object e) {
+    if (!failOnJsActionErrors || name == 'preJSAction') {
       stderr.writeln('$name failed, continuing: $e');
       return null;
     }
+    if (name == 'postJSAction') {
+      throw _JsActionUncaughtException(
+        'postJSAction threw an uncaught exception'
+        '${_ticketKeySuffix()}: $e',
+      );
+    }
+    stderr.writeln('preCliJSAction threw, treating as setup failure '
+        '(skipping CLI execution and postJSAction): $e');
+    _preCliSetupThrew = true;
+    _preCliJsActionSkipped = true;
+    return null;
   }
 
   /// Java `Teammate.isPreCliJSActionFailure` parity: an explicit `false`

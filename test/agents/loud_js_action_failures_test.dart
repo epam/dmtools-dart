@@ -19,8 +19,17 @@ import 'package:test/test.dart';
 
 void main() {
   cliAgentDefaultModeTests();
-  cliAgentLoudModeTests();
-  teammateJobLoudModeTests();
+  postJsLoudFailureTests();
+  postJsHookOrderTests();
+  postJsTicketKeyTests();
+  preCliThrowTests();
+  preCliBusinessSkipTests();
+  preCliSuccessTests();
+  preJsAdvisoryLoudTests();
+  teammatePreCliAbortTests();
+  teammatePreCliMultiTicketTests();
+  teammateSingleRunAbortTests();
+  teammatePostJsAbortTests();
 }
 
 // ======================================================================
@@ -77,8 +86,8 @@ void cliAgentDefaultModeTests() {
 // CliAgent — loud mode (Java Teammate #580/#585 parity)
 // ======================================================================
 
-void cliAgentLoudModeTests() {
-  group('CliAgent loud mode — postJSAction', () {
+void postJsLoudFailureTests() {
+  group('CliAgent loud mode — postJSAction failure', () {
     test(
         'uncaught exception fails the run with the JS error text '
         '(#585)', () async {
@@ -103,7 +112,11 @@ void cliAgentLoudModeTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void postJsHookOrderTests() {
+  group('CliAgent loud mode — postJSAction hook order', () {
     test(
         'uncaught exception skips the cache hook but still runs reset '
         '(Java runJobImpl finally parity)', () async {
@@ -129,7 +142,11 @@ void cliAgentLoudModeTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void postJsTicketKeyTests() {
+  group('CliAgent loud mode — postJSAction ticket key', () {
     test('error message names the ticket key when ticket data is set',
         () async {
       final tmp = await _createTempDir();
@@ -155,11 +172,13 @@ void cliAgentLoudModeTests() {
       }
     });
   });
+}
 
-  group('CliAgent loud mode — preCliJSAction', () {
+void preCliThrowTests() {
+  group('CliAgent loud mode — preCliJSAction uncaught exception', () {
     test(
-        'uncaught exception skips CLI execution and postJSAction, marks '
-        'the run as an unexpected setup failure (#580)', () async {
+        'skips CLI execution and postJSAction, marks the run as an '
+        'unexpected setup failure (#580)', () async {
       final tmp = await _createTempDir();
       final cliMarker = File('${tmp.path}/cli_marker');
       final postLog = '${tmp.path}/post.log';

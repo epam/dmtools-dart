@@ -485,7 +485,7 @@ class ToolBridge {
   /// normalizes the path and rejects anything outside the working
   /// directory ("Path traversal attempt blocked"), and this bridge — like
   /// the whole `file_*` family here — has no such containment check
-  /// (pre-existing gap, tracked in a follow-up issue).
+  /// (pre-existing gap, tracked in #365).
   String _writeFile(String path, String content) {
     try {
       final resolved = _resolve(path);

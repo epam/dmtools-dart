@@ -113,7 +113,7 @@ void fileWriteTests() {
       // Files.writeString — a write to a nested non-existent path succeeds
       // (the token-usage reporter depends on this for its cache file).
       // Parent creation only: Java's traversal sandbox is out of scope
-      // here (pre-existing bridge family gap, see follow-up issue).
+      // here (pre-existing bridge family gap, #365).
       final nested = '${dir.path}/outputs/token_usage/cache.json';
 
       expect(

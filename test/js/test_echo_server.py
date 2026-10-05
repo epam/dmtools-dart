@@ -239,7 +239,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 "storage": {
                     "value": (
                         "<p>intro</p>"
-                        "<ac:structured-macro ac:name=\"excerpt-include\" "
+                        "<ac:structured-macro ac:name=\"table-excerpt-include\" "
                         "ac:schema-version=\"1\">"
                         "<ac:parameter ac:name=\"page\"><ac:link>"
                         "<ri:page ri:content-title=\"Source\" />"

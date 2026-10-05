@@ -36,8 +36,7 @@ String? confluenceSpaceKeyOf(Map<String, dynamic> content) {
 
 /// Whether [value] is a non-blank string (local helper, mirrors Java
 /// `String.isBlank` negation).
-bool _nonBlank(dynamic value) =>
-    value is String && value.trim().isNotEmpty;
+bool _nonBlank(dynamic value) => value is String && value.trim().isNotEmpty;
 
 /// Materializes `excerpt-include` and `table-excerpt-include` macros in
 /// Confluence storage format (Java `ConfluenceExcerptInliner`).
@@ -119,30 +118,22 @@ class ConfluenceExcerptInliner {
     int level,
     Set<String> path,
   ) {
-    final kind = _macroNameOf(macro)!.toLowerCase() ==
-            'table-excerpt-include'
+    final target = _includeTarget(macro, spaceKey);
+    if (target == null) return null;
+    final (:title, :targetSpace, :name) = target;
+    final page = _findPage(title, targetSpace);
+    final storage = _storageValueOf(page);
+    if (page == null || storage == null) return null;
+
+    final kind = _macroNameOf(macro)!.toLowerCase() == 'table-excerpt-include'
         ? 'table-excerpt'
         : 'excerpt';
-    final pageTag = _firstOpenTag(macro, 'ri:page');
-    var title = pageTag == null ? null : _attrOf(pageTag, 'ri:content-title');
-    var targetSpace = pageTag == null ? null : _attrOf(pageTag, 'ri:space-key');
-    title = _nonBlank(title) ? title : _macroParamText(macro, 'page-title');
-    if (!_nonBlank(title)) return null;
-    if (!_nonBlank(targetSpace)) targetSpace = spaceKey;
-    final name = _macroParamText(macro, 'name');
-
-    final target = _findPage(title!, targetSpace);
-    final storage = _storageValueOf(target);
-    if (target == null || storage == null) return null;
-
-    final visitKey =
-        '${target['id']}|${_normalizeExcerptName(name)}|$kind';
+    final visitKey = '${page['id']}|${_normalizeExcerptName(name)}|$kind';
     if (!path.add(visitKey)) return null; // cycle
     try {
       final bodies = _excerptBodies(storage, kind, name);
       if (bodies.isEmpty) return null;
-      final targetPageSpace =
-          confluenceSpaceKeyOf(target) ?? targetSpace;
+      final targetPageSpace = confluenceSpaceKeyOf(page) ?? targetSpace;
       final sb = StringBuffer();
       for (final body in bodies) {
         sb.write(_inlineNested(body, targetPageSpace, level + 1, path));
@@ -151,6 +142,21 @@ class ConfluenceExcerptInliner {
     } finally {
       path.remove(visitKey);
     }
+  }
+
+  /// The include macro's target title, space, and excerpt name; `null`
+  /// when the macro carries no usable page reference.
+  ({String title, String? targetSpace, String name})? _includeTarget(
+    String macro,
+    String? spaceKey,
+  ) {
+    final pageTag = _firstOpenTag(macro, 'ri:page');
+    var title = pageTag == null ? null : _attrOf(pageTag, 'ri:content-title');
+    var targetSpace = pageTag == null ? null : _attrOf(pageTag, 'ri:space-key');
+    title = _nonBlank(title) ? title : _macroParamText(macro, 'page-title');
+    if (!_nonBlank(title)) return null;
+    if (!_nonBlank(targetSpace)) targetSpace = spaceKey;
+    return (title: title!, targetSpace: targetSpace, name: _macroParamText(macro, 'name'));
   }
 
   /// Cached page lookup: the space-specific search first, then the

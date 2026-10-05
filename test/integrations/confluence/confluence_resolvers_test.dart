@@ -49,7 +49,8 @@ String _excerptMacro(String macro, String name, String body) =>
     '<ac:rich-text-body>$body</ac:rich-text-body>'
     '</ac:structured-macro>';
 
-String _includeMacro(String macro, String title, String? spaceKey, String name) =>
+String _includeMacro(
+        String macro, String title, String? spaceKey, String name) =>
     '<ac:structured-macro ac:name="$macro" ac:schema-version="1">'
     '<ac:parameter ac:name="page"><ac:link><ri:page ri:content-title="$title"'
     '${spaceKey == null ? '' : ' ri:space-key="$spaceKey"'}/></ac:link>'
@@ -63,150 +64,155 @@ const _table =
 
 void _excerptInlinerTests() {
   group('ConfluenceExcerptInliner (Java ConfluenceExcerptInliner parity)', () {
-    test('inlines named table excerpt from target page in source space', () {
-      final client = _FakeResolverClient();
-      final target = '<p>intro</p>'
-          '${_excerptMacro('table-excerpt', 'Rules', _table)}'
-          '${_excerptMacro('table-excerpt', 'Other', '<p>other</p>')}';
-      client.pages['SPACE|Target'] = _page('2', 'SPACE', target);
+    _excerptInlinerResolutionTests();
+    _excerptInlinerGuardTests();
+  });
+}
 
-      final result = ConfluenceExcerptInliner(client).inline(
-        '<p>before</p>'
-        '${_includeMacro('table-excerpt-include', 'Target', null, 'Rules')}'
-        '<p>after</p>',
-        'SPACE',
-      );
+void _excerptInlinerResolutionTests() {
+  test('inlines named table excerpt from target page in source space', () {
+    final client = _FakeResolverClient();
+    final target = '<p>intro</p>'
+        '${_excerptMacro('table-excerpt', 'Rules', _table)}'
+        '${_excerptMacro('table-excerpt', 'Other', '<p>other</p>')}';
+    client.pages['SPACE|Target'] = _page('2', 'SPACE', target);
 
-      expect(result, contains(_table));
-      expect(result, isNot(contains('other')));
-      expect(result, isNot(contains('table-excerpt-include')));
-      expect(result, startsWith('<p>before</p>'));
-      expect(result, endsWith('<p>after</p>'));
-    });
+    final result = ConfluenceExcerptInliner(client).inline(
+      '<p>before</p>'
+          '${_includeMacro('table-excerpt-include', 'Target', null, 'Rules')}'
+          '<p>after</p>',
+      'SPACE',
+    );
 
-    test('name matching ignores case, whitespace and nbsp', () {
-      final client = _FakeResolverClient();
-      client.pages['SPACE|Target'] = _page(
-        '2',
-        'SPACE',
-        _excerptMacro('excerpt', '&nbsp;Flow  Positions ', '<p>content</p>'),
-      );
+    expect(result, contains(_table));
+    expect(result, isNot(contains('other')));
+    expect(result, isNot(contains('table-excerpt-include')));
+    expect(result, startsWith('<p>before</p>'));
+    expect(result, endsWith('<p>after</p>'));
+  });
 
-      final result = ConfluenceExcerptInliner(client).inline(
-        _includeMacro('excerpt-include', 'Target', 'SPACE', 'flow positions'),
-        'SPACE',
-      );
+  test('name matching ignores case, whitespace and nbsp', () {
+    final client = _FakeResolverClient();
+    client.pages['SPACE|Target'] = _page(
+      '2',
+      'SPACE',
+      _excerptMacro('excerpt', '&nbsp;Flow  Positions ', '<p>content</p>'),
+    );
 
-      expect(result, '<p>content</p>');
-    });
+    final result = ConfluenceExcerptInliner(client).inline(
+      _includeMacro('excerpt-include', 'Target', 'SPACE', 'flow positions'),
+      'SPACE',
+    );
 
-    test('blank name uses the unnamed excerpt, else all of the kind', () {
-      final client = _FakeResolverClient();
-      client.pages['SPACE|P1'] = _page(
-        '1',
-        'SPACE',
-        _excerptMacro('excerpt', 'Named', '<p>named</p>') +
-            _excerptMacro('excerpt', '', '<p>unnamed</p>'),
-      );
-      client.pages['SPACE|P2'] = _page(
-        '2',
-        'SPACE',
-        _excerptMacro('table-excerpt', 'A', '<p>a</p>') +
-            _excerptMacro('table-excerpt', 'B', '<p>b</p>'),
-      );
-      final inliner = ConfluenceExcerptInliner(client);
+    expect(result, '<p>content</p>');
+  });
 
-      expect(
-        inliner.inline(
-            _includeMacro('excerpt-include', 'P1', null, ''), 'SPACE'),
-        '<p>unnamed</p>',
-      );
-      expect(
-        inliner.inline(
-            _includeMacro('table-excerpt-include', 'P2', null, ''), 'SPACE'),
-        '<p>a</p><p>b</p>',
-      );
-    });
+  test('blank name uses the unnamed excerpt, else all of the kind', () {
+    final client = _FakeResolverClient();
+    client.pages['SPACE|P1'] = _page(
+      '1',
+      'SPACE',
+      _excerptMacro('excerpt', 'Named', '<p>named</p>') +
+          _excerptMacro('excerpt', '', '<p>unnamed</p>'),
+    );
+    client.pages['SPACE|P2'] = _page(
+      '2',
+      'SPACE',
+      _excerptMacro('table-excerpt', 'A', '<p>a</p>') +
+          _excerptMacro('table-excerpt', 'B', '<p>b</p>'),
+    );
+    final inliner = ConfluenceExcerptInliner(client);
 
-    test('unresolvable includes are left untouched', () {
-      final client = _FakeResolverClient();
-      client.pages['SPACE|Present'] =
-          _page('2', 'SPACE', _excerptMacro('excerpt', 'X', '<p>x</p>'));
-      final inliner = ConfluenceExcerptInliner(client);
+    expect(
+      inliner.inline(_includeMacro('excerpt-include', 'P1', null, ''), 'SPACE'),
+      '<p>unnamed</p>',
+    );
+    expect(
+      inliner.inline(
+          _includeMacro('table-excerpt-include', 'P2', null, ''), 'SPACE'),
+      '<p>a</p><p>b</p>',
+    );
+  });
+}
 
-      final missingPage =
-          _includeMacro('excerpt-include', 'Missing', null, 'X');
-      final missingExcerpt =
-          _includeMacro('excerpt-include', 'Present', null, 'Nope');
-      expect(inliner.inline(missingPage, 'SPACE'), missingPage);
-      expect(inliner.inline(missingExcerpt, 'SPACE'), missingExcerpt);
-    });
+void _excerptInlinerGuardTests() {
+  test('unresolvable includes are left untouched', () {
+    final client = _FakeResolverClient();
+    client.pages['SPACE|Present'] =
+        _page('2', 'SPACE', _excerptMacro('excerpt', 'X', '<p>x</p>'));
+    final inliner = ConfluenceExcerptInliner(client);
 
-    test('falls back to the default lookup when the space is unknown', () {
-      final client = _FakeResolverClient();
-      client.pages['|Target'] =
-          _page('2', null, _excerptMacro('excerpt', 'X', '<p>x</p>'));
+    final missingPage = _includeMacro('excerpt-include', 'Missing', null, 'X');
+    final missingExcerpt =
+        _includeMacro('excerpt-include', 'Present', null, 'Nope');
+    expect(inliner.inline(missingPage, 'SPACE'), missingPage);
+    expect(inliner.inline(missingExcerpt, 'SPACE'), missingExcerpt);
+  });
 
-      final result = ConfluenceExcerptInliner(client).inline(
-        _includeMacro('excerpt-include', 'Target', null, 'X'),
-        null,
-      );
+  test('falls back to the default lookup when the space is unknown', () {
+    final client = _FakeResolverClient();
+    client.pages['|Target'] =
+        _page('2', null, _excerptMacro('excerpt', 'X', '<p>x</p>'));
 
-      expect(result, '<p>x</p>');
-    });
+    final result = ConfluenceExcerptInliner(client).inline(
+      _includeMacro('excerpt-include', 'Target', null, 'X'),
+      null,
+    );
 
-    test('nested includes are resolved with the target page space', () {
-      final client = _FakeResolverClient();
-      client.pages['S1|Outer'] = _page(
-        '1',
-        'S2',
-        _excerptMacro(
-          'excerpt',
-          'Outer',
-          _includeMacro('excerpt-include', 'Inner', null, 'Leaf'),
-        ),
-      );
-      client.pages['S2|Inner'] =
-          _page('2', 'S2', _excerptMacro('excerpt', 'Leaf', '<p>leaf</p>'));
+    expect(result, '<p>x</p>');
+  });
 
-      final result = ConfluenceExcerptInliner(client).inline(
-        _includeMacro('excerpt-include', 'Outer', null, 'Outer'),
-        'S1',
-      );
+  test('nested includes are resolved with the target page space', () {
+    final client = _FakeResolverClient();
+    client.pages['S1|Outer'] = _page(
+      '1',
+      'S2',
+      _excerptMacro(
+        'excerpt',
+        'Outer',
+        _includeMacro('excerpt-include', 'Inner', null, 'Leaf'),
+      ),
+    );
+    client.pages['S2|Inner'] =
+        _page('2', 'S2', _excerptMacro('excerpt', 'Leaf', '<p>leaf</p>'));
 
-      expect(result, '<p>leaf</p>');
-    });
+    final result = ConfluenceExcerptInliner(client).inline(
+      _includeMacro('excerpt-include', 'Outer', null, 'Outer'),
+      'S1',
+    );
 
-    test('include cycles terminate and keep the inner macro', () {
-      final client = _FakeResolverClient();
-      client.pages['SPACE|Loop'] = _page(
-        '1',
-        'SPACE',
-        _excerptMacro(
-          'excerpt',
-          'Loop',
-          _includeMacro('excerpt-include', 'Loop', null, 'Loop'),
-        ),
-      );
+    expect(result, '<p>leaf</p>');
+  });
 
-      final result = ConfluenceExcerptInliner(client).inline(
+  test('include cycles terminate and keep the inner macro', () {
+    final client = _FakeResolverClient();
+    client.pages['SPACE|Loop'] = _page(
+      '1',
+      'SPACE',
+      _excerptMacro(
+        'excerpt',
+        'Loop',
         _includeMacro('excerpt-include', 'Loop', null, 'Loop'),
-        'SPACE',
-      );
+      ),
+    );
 
-      expect(result, contains('excerpt-include'));
-      expect(result.length, lessThan(2000));
-    });
+    final result = ConfluenceExcerptInliner(client).inline(
+      _includeMacro('excerpt-include', 'Loop', null, 'Loop'),
+      'SPACE',
+    );
 
-    test('pages without includes are returned unchanged (no lookups)', () {
-      final client = _FakeResolverClient();
-      final html = '<p>plain</p>';
-      expect(
-        ConfluenceExcerptInliner(client).inline(html, 'SPACE'),
-        same(html),
-      );
-      expect(client.findCalls, isEmpty);
-    });
+    expect(result, contains('excerpt-include'));
+    expect(result.length, lessThan(2000));
+  });
+
+  test('pages without includes are returned unchanged (no lookups)', () {
+    final client = _FakeResolverClient();
+    final html = '<p>plain</p>';
+    expect(
+      ConfluenceExcerptInliner(client).inline(html, 'SPACE'),
+      same(html),
+    );
+    expect(client.findCalls, isEmpty);
   });
 }
 
@@ -257,7 +263,11 @@ void _mentionResolverTests() {
 void _spaceKeyTests() {
   group('confluenceSpaceKeyOf (Java Content.getSpaceKey parity)', () {
     test('reads the expanded space key', () {
-      expect(confluenceSpaceKeyOf(const {'id': '1', 'space': {'key': 'ABC'}}),
+      expect(
+          confluenceSpaceKeyOf(const {
+            'id': '1',
+            'space': {'key': 'ABC'}
+          }),
           'ABC');
     });
 
@@ -273,7 +283,11 @@ void _spaceKeyTests() {
 
     test('returns null when no space information is present', () {
       expect(confluenceSpaceKeyOf(const {'id': '1'}), isNull);
-      expect(confluenceSpaceKeyOf(const {'id': '1', 'space': {'key': '  '}}),
+      expect(
+          confluenceSpaceKeyOf(const {
+            'id': '1',
+            'space': {'key': '  '}
+          }),
           isNull);
     });
   });

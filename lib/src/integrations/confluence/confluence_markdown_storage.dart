@@ -29,13 +29,13 @@ class _XmlNode {
   String get content => children.map(_childContent).join();
 
   /// The text one [child] contributes to [_XmlNode.content].
-String _childContent(_XmlNode child) {
-  if (child.name == null) return unescapeXml(child.text);
-  if (child.name == 'time') return child.attrs['datetime'] ?? child.content;
-  return child.content;
-}
+  String _childContent(_XmlNode child) {
+    if (child.name == null) return unescapeXml(child.text);
+    if (child.name == 'time') return child.attrs['datetime'] ?? child.content;
+    return child.content;
+  }
 
-/// First child element named [tag], or `null`.
+  /// First child element named [tag], or `null`.
   _XmlNode? child(String tag) {
     for (final c in children) {
       if (c.name == tag) return c;

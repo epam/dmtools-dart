@@ -442,8 +442,7 @@ void downloadPagesToolTests() {
         'depth': 1,
       });
       expect(result, 'Downloaded 1 Confluence page(s) to ${out.path}');
-      final markdown =
-          File('${out.path}/Main Page.md').readAsStringSync();
+      final markdown = File('${out.path}/Main Page.md').readAsStringSync();
       // The excerpt-include macro was replaced by the table-excerpt body
       // of "Source", resolved in the page's space DOCS (Java 932e0db0).
       expect(markdown, contains('included-value'));

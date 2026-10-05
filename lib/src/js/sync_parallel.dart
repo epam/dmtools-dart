@@ -100,7 +100,8 @@ class SyncParallelJob {
 ///
 /// Every failure path answers — the caller is parked in a blocking
 /// `Mailbox.take()` and must always wake.
-Future<void> serveSyncWorker(SyncWorkerBoot boot, SyncWorkerRunner runner) async {
+Future<void> serveSyncWorker(
+    SyncWorkerBoot boot, SyncWorkerRunner runner) async {
   await SyncHttpBridge.shared.boot();
   final inbox = ReceivePort();
   boot.handshake.send(inbox.sendPort);
@@ -154,8 +155,7 @@ class SyncWorkerPool {
   /// Boots [workerCount] worker isolates; idempotent.
   ///
   /// Must complete while the event loop is alive (see the library docs).
-  Future<void> boot() =>
-      _booting ??= _boot(workerCount < 1 ? 1 : workerCount);
+  Future<void> boot() => _booting ??= _boot(workerCount < 1 ? 1 : workerCount);
 
   Future<void> _boot(int workers) async {
     for (var i = 0; i < workers; i++) {

@@ -61,8 +61,7 @@ void _attachmentRetrySchedule() {
       return (url, headers) => responses[call++ % responses.length];
     }
 
-    test('retries transient failures with doubling backoff, then succeeds',
-        () {
+    test('retries transient failures with doubling backoff, then succeeds', () {
       final sleeps = <int>[];
       final resp = fetchConfluenceAttachmentWithRetry(
         'http://x/att',
@@ -186,8 +185,7 @@ void _poolBackedDownloads() {
       server.stop();
     });
 
-    test('download_pages mirrors pages and attachments through the pool',
-        () {
+    test('download_pages mirrors pages and attachments through the pool', () {
       final out = Directory.systemTemp.createTempSync('dmtools_dlp_');
       addTearDown(() => out.deleteSync(recursive: true));
       final base = 'http://127.0.0.1:${server.port}';
@@ -211,8 +209,7 @@ void _poolBackedDownloads() {
       );
     });
 
-    test('contents_by_urls resolves concurrently and keeps input order',
-        () {
+    test('contents_by_urls resolves concurrently and keeps input order', () {
       final base = 'http://127.0.0.1:${server.port}';
       final results = jsonDecode(
         tools.dispatch('confluence_contents_by_urls', {

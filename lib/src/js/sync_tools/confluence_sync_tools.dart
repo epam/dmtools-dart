@@ -89,7 +89,8 @@ class ConfluenceSyncTools {
         'Content-Type': syncJsonContentType,
       },
       apiVersion: _reader.getConfluenceApiVersion(),
-      attachmentRetryBaseDelayMs: _reader.getConfluenceAttachmentRetryBaseDelayMs(),
+      attachmentRetryBaseDelayMs:
+          _reader.getConfluenceAttachmentRetryBaseDelayMs(),
     );
   }
 

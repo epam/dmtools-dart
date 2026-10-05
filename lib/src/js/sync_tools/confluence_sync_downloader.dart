@@ -117,8 +117,8 @@ class _PageDownloader {
   ) {
     final resp = _httpJobResponse(envelope);
     if (resp == null || !resp.isOk) return;
-    final results = _childrenResults(resp.body) ??
-        const <Map<String, dynamic>>[];
+    final results =
+        _childrenResults(resp.body) ?? const <Map<String, dynamic>>[];
     final baseHost = Uri.tryParse(_config.rootUrl)?.host;
     for (final attachment in results) {
       final downloadPath = _attachmentDownloadPath(attachment);
@@ -250,10 +250,11 @@ SyncHttpResponse fetchConfluenceAttachmentWithRetry(
   int baseDelayMs = confluenceAttachmentRetryBaseDelayMs,
   Random? random,
 }) {
-  final get = fetch ?? SyncHttpClient.get;
+  final get =
+      fetch ?? (url, headers) => SyncHttpClient.get(url, headers: headers);
   final pause = sleepDelay ?? (ms) => sleep(Duration(milliseconds: ms));
   final rnd = random ?? Random();
-  for (var attempt = 1; ; attempt++) {
+  for (var attempt = 1;; attempt++) {
     final resp = get(url, headers);
     if (resp.isOk ||
         !isConfluenceTransientAttachmentFailure(resp.statusCode) ||

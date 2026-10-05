@@ -19,7 +19,61 @@ void main() {
   jitterDelayTests();
   rateLimitResetWaitTests();
   rateLimitRetryAfterTests();
+  deterministicRetryTests();
   retryIntegrationTests();
+  successGateTests();
+}
+
+/// Java `RetryPolicyTest` additions from epam/dm.ai 3fa210e6 (#635):
+/// retryability is judged by status code and body, never by substrings of
+/// an error message (the message embeds the request URL, so an ephemeral
+/// port like 50312 misfired the old "503" check and retried a 400).
+void deterministicRetryTests() {
+  group('SyncRetryPolicy deterministic retryability (dm.ai#635)', () {
+    const policy = SyncRetryPolicy(
+      maxAttempts: 5,
+      baseDelayMs: 1000,
+      maxDelayMs: 60000,
+      backoffMultiplier: 2.0,
+      jitterFactor: 0.0,
+    );
+
+    test('URL port digits are never read as a retryable status code', () {
+      // Mirrors testRestClientExceptionUrlDigitsAreNotStatusCodes: the
+      // failing message carries the request URL with an ephemeral port.
+      for (final port in ['50312', '42950', '15020', '45043']) {
+        final message = 'printAndCreateException error: '
+            'http://127.0.0.1:$port/keyerror\nbad key\nBad Request\n400';
+        expect(policy.shouldRetry(1, 400, message), isFalse,
+            reason: 'port $port');
+        expect(policy.isRetryableStatus(400, message), isFalse,
+            reason: 'port $port');
+      }
+    });
+
+    test('retryable by status code or rate-limit body', () {
+      // Mirrors testRestClientExceptionRetryableByStatusOrBody.
+      expect(policy.shouldRetry(1, 502), isTrue);
+      expect(policy.shouldRetry(1, 504), isTrue);
+      expect(policy.shouldRetry(1, 400, 'Too Many Requests'), isTrue);
+      expect(policy.shouldRetry(1, 400, 'rate limit exceeded'), isTrue);
+      expect(policy.shouldRetry(1, 404, 'nope'), isFalse);
+      // Body matching is case-insensitive, like Java's toLowerCase.
+      expect(policy.shouldRetry(1, 400, 'Request Was Throttled'), isTrue);
+    });
+
+    test(
+        'successful 2xx/3xx responses are never retried, even with a '
+        'rate-limit body', () {
+      // Java only runs the body check on the exception path of failed
+      // requests; a successful response never reaches it. A 200 whose body
+      // merely mentions throttling (e.g. Jira issues *about* rate limits)
+      // must not be re-issued with backoff.
+      expect(policy.shouldRetry(1, 200, 'rate limit exceeded'), isFalse);
+      expect(policy.shouldRetry(1, 302, 'throttled'), isFalse);
+      expect(policy.shouldRetry(1, 204), isFalse);
+    });
+  });
 }
 
 void policyConfigTests() {
@@ -379,6 +433,32 @@ void retryIntegrationTests() {
           .firstWhere((e) => e.key.toLowerCase() == 'retry-after')
           .value;
       expect(retryAfter, '0');
+    });
+  });
+}
+
+/// gh-356 review (dm.ai#635 port): the response-body check must never
+/// fire for a successful 2xx/3xx — Java only runs it on the exception
+/// path of a failed request.
+void successGateTests() {
+  group('SyncHttpClient success-response gate', () {
+    late EchoServer server;
+
+    setUpAll(() async {
+      server = EchoServer();
+      await server.start();
+    });
+
+    tearDownAll(() => server.stop());
+
+    test('a 200 whose body mentions rate limiting is not retried', () {
+      final resp = SyncHttpClient.get(
+          'http://127.0.0.1:${server.port}/dt-200ratelimit/a');
+      expect(resp.statusCode, 200);
+      final hits = jsonDecode(
+          SyncHttpClient.get('http://127.0.0.1:${server.port}/__retry_hits')
+              .body) as Map<String, dynamic>;
+      expect(hits['/dt-200ratelimit/a'], 1);
     });
   });
 }

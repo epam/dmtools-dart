@@ -25,6 +25,7 @@ import '../config/property_reader_getters.dart';
 import '../integrations/cli/allowed_base.dart';
 import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
+import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 import 'sync_tool_dispatcher.dart';
 
@@ -485,8 +486,13 @@ class ToolBridge {
 
   String _listDir(String path) {
     try {
-      final entries =
-          Directory(_resolve(path)).listSync().map((e) => e.path).toList();
+      // Java FileTools.listFiles parity (dm.ai#635): entries are absolute,
+      // normalized, and sorted.
+      final entries = Directory(_resolve(path))
+          .listSync()
+          .map((e) => p.normalize(e.path))
+          .toList()
+        ..sort();
       return jsonEncode({'entries': entries});
     } catch (e) {
       return _err(e.toString());

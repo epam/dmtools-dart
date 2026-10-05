@@ -89,23 +89,6 @@ class ConfluenceSyncTools {
     );
   }
 
-  /// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
-  /// Granular/scoped tokens require the v2 API; legacy v1 content endpoints
-  /// 401 under them. Java parity: `Confluence.isApiV2`.
-  bool _isApiV2(_Conf config) => config.apiVersion.toLowerCase() == 'v2';
-
-  /// Confluence v2 REST base URL: `{siteRoot}/wiki/api/v2`.
-  ///
-  /// [rootUrl] may already end with `/wiki` (direct site URL) or omit it (the
-  /// granular-token gateway `https://api.atlassian.com/ex/confluence/{id}`).
-  /// Normalize so `/wiki` appears exactly once. Java parity: `Confluence.pathV2`.
-  String _baseUrlV2(_Conf config) {
-    final root = config.rootUrl.endsWith('/wiki')
-        ? config.rootUrl.substring(0, config.rootUrl.length - '/wiki'.length)
-        : config.rootUrl;
-    return '$root/wiki/api/v2';
-  }
-
   /// `confluence_search` — GET `content/search?cql={cql}`.
   String _search(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
@@ -203,7 +186,8 @@ class ConfluenceSyncTools {
     final format = syncAsStr(args['format']);
     // v2: GET /wiki/api/v2/pages?parent-id={id} (granular/scoped tokens).
     // The v2 list response carries the same `results` array shape.
-    final results = _childrenResults(syncBodyOrError(_childrenResponse(config, id)));
+    final results =
+        _childrenResults(syncBodyOrError(_childrenResponse(config, id)));
     if (results == null) {
       return syncErr('Unexpected children response for $id');
     }
@@ -286,7 +270,8 @@ class ConfluenceSyncTools {
         _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
       );
       if (existing.isNotEmpty) return jsonEncode(existing.first);
-      if (_isApiV2(config)) return _createPageV2(config, {...args, 'space': space});
+      if (_isApiV2(config))
+        return _createPageV2(config, {...args, 'space': space});
       return syncBodyOrError(SyncHttpClient.post(
         '${config.baseUrl}/content',
         headers: config.headers,
@@ -599,6 +584,23 @@ const _searchExpand = 'title,body.excerpt,history,space,body.storage';
 /// (Java `IllegalStateException`).
 const _defaultSpaceRequired = 'Default space not set';
 
+/// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
+/// Granular/scoped tokens require the v2 API; legacy v1 content endpoints
+/// 401 under them. Java parity: `Confluence.isApiV2`.
+bool _isApiV2(_Conf config) => config.apiVersion.toLowerCase() == 'v2';
+
+/// Confluence v2 REST base URL: `{siteRoot}/wiki/api/v2`.
+///
+/// [rootUrl] may already end with `/wiki` (direct site URL) or omit it (the
+/// granular-token gateway `https://api.atlassian.com/ex/confluence/{id}`).
+/// Normalize so `/wiki` appears exactly once. Java parity: `Confluence.pathV2`.
+String _baseUrlV2(_Conf config) {
+  final root = config.rootUrl.endsWith('/wiki')
+      ? config.rootUrl.substring(0, config.rootUrl.length - '/wiki'.length)
+      : config.rootUrl;
+  return '$root/wiki/api/v2';
+}
+
 /// GETs `content?expand=…&title=…[&spaceKey=…]` (Java `content(title,
 /// space)`; the spaceKey param is dropped for an empty space).
 ///
@@ -717,7 +719,8 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   if (resolved == null) return null;
   final (:ref, url: _) = resolved;
   if (ref is ConfluencePageIdRef) {
-    final decoded = syncTryDecode(syncBodyOrError(_pageByIdResponse(config, ref.id)));
+    final decoded =
+        syncTryDecode(syncBodyOrError(_pageByIdResponse(config, ref.id)));
     return decoded is Map<String, dynamic> ? decoded : null;
   }
   if (ref is ConfluenceDisplayRef) {

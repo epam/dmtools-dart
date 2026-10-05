@@ -45,8 +45,8 @@ class _PageDownloader {
       // `value is! String` guard below and the subtree is silently
       // dropped (gh-191 review). The v2 children listing always carries
       // bodies (body-format=storage is part of the request).
-      for (final child in _childrenResults(syncBodyOrError(
-              _childrenResponse(_config, id))) ??
+      for (final child in _childrenResults(
+              syncBodyOrError(_childrenResponse(_config, id))) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
       }

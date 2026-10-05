@@ -24,8 +24,7 @@ SyncHttpResponse _contentGet(_Conf config, String suffix) =>
 /// GETs one page by id (Java `contentById`, v2-aware): v2
 /// `pages/{id}?body-format=storage`, v1 `content/{id}?expand=…`.
 SyncHttpResponse _pageByIdResponse(_Conf config, String id) => _isApiV2(config)
-    ? SyncHttpClient.get(
-        '${_baseUrlV2(config)}/pages/$id?body-format=storage',
+    ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id?body-format=storage',
         headers: config.headers)
     : _contentGet(config, '$id?expand=$_contentExpand');
 
@@ -33,24 +32,21 @@ SyncHttpResponse _pageByIdResponse(_Conf config, String id) => _isApiV2(config)
 /// v2-aware): v2 `pages?parent-id=…&limit=100&body-format=storage` (the
 /// v2 response carries the bodies without an expand param), v1
 /// `content/{id}/child/page?limit=100&expand=…`.
-SyncHttpResponse _childrenResponse(_Conf config, String id) =>
-    _isApiV2(config)
-        ? SyncHttpClient.get(
-            '${_baseUrlV2(config)}/pages?parent-id=$id'
-            '&limit=100&body-format=storage',
-            headers: config.headers)
-        : _contentGet(config, '$id/child/page?limit=100&expand=$_contentExpand');
+SyncHttpResponse _childrenResponse(_Conf config, String id) => _isApiV2(config)
+    ? SyncHttpClient.get(
+        '${_baseUrlV2(config)}/pages?parent-id=$id'
+        '&limit=100&body-format=storage',
+        headers: config.headers)
+    : _contentGet(config, '$id/child/page?limit=100&expand=$_contentExpand');
 
 /// GETs the attachment listing of page [id] (Java `getContentAttachments`,
 /// v2-aware): v2 `pages/{id}/attachments`, v1
 /// `content/{id}/child/attachment`.
 SyncHttpResponse _attachmentsResponse(_Conf config, String id) =>
     _isApiV2(config)
-        ? SyncHttpClient.get(
-            '${_baseUrlV2(config)}/pages/$id/attachments',
+        ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id/attachments',
             headers: config.headers)
-        : SyncHttpClient.get(
-            '${config.baseUrl}/content/$id/child/attachment',
+        : SyncHttpClient.get('${config.baseUrl}/content/$id/child/attachment',
             headers: config.headers);
 
 /// Resolves a Confluence space key to the numeric id required by the v2

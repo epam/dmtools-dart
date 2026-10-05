@@ -467,9 +467,18 @@ void _testWriteToolsV2() {
       server.stop();
     });
 
-    test(
-        'confluence_create_page resolves the space id and posts the v2 '
-        'payload', () async {
+    _writeV2PageTests();
+    _writeV2TitleTests();
+    _writeV2AttachmentMiscTests();
+  });
+}
+
+/// v2 create/update routing: the space key resolves through
+/// `/wiki/api/v2/spaces?keys=` and pages post/put to `/wiki/api/v2/pages`.
+void _writeV2PageTests() {
+  test(
+      'confluence_create_page resolves the space id and posts the v2 '
+      'payload', () async {
       final body = jsonDecode(tools.dispatch('confluence_create_page', {
         'title': 'New Page',
         'parentId': '7',
@@ -649,7 +658,10 @@ void _testWriteToolsV2() {
         'updateIfExists': true,
       })) as Map<String, dynamic>;
       expect(updated['status'], 'updated');
+      // The update path re-lists via the v2 endpoint before the v1
+      // multipart overwrite POST (Java AttachmentHelper has no v2 uploader).
       expect(await _requestLog(), [
+        '/wiki/api/v2/pages/42/attachments',
         '/wiki/api/v2/pages/42/attachments',
         '/wiki/rest/api/content/42/child/attachment/a1/data',
       ]);

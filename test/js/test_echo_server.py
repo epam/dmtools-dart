@@ -40,7 +40,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8", errors="replace")
         if self.command == "DELETE":
             EchoHandler.DELETE_LOG.append(self.path)
-        EchoHandler.REQUEST_LOG.append(self.path)
+        if not self.path.startswith("/__"):
+            EchoHandler.REQUEST_LOG.append(self.path)
         payload = {
             "method": self.command,
             "path": self.path,

@@ -24,9 +24,11 @@ void main() {
   });
   tearDown(PropertyReader.clearOverrides);
   xRateLimitResetWaitTests();
+  xRateLimitResetBudgetTests();
   retryAfterWaitTests();
   budgetAndPassThroughTests();
   wiringTests();
+  capResolutionTests();
 }
 
 /// A stubbed transport plus the interceptor wired on top of it.
@@ -153,7 +155,12 @@ void xRateLimitResetWaitTests() {
         reason: 'wait should be ~5s + 1s buffer',
       );
     });
+  });
+}
 
+/// Rate-limit cap and repeated-429 budget — Java fab5b0ea parity (gh-351).
+void xRateLimitResetBudgetTests() {
+  group('GithubRateLimitRetryInterceptor X-RateLimit-Reset cap & budget', () {
     test('caps the wait at the default 3600s rate-limit cap, never aborts',
         () async {
       final f = _thenOk({
@@ -289,7 +296,7 @@ void budgetAndPassThroughTests() {
 }
 
 /// Factory wiring: interceptor attached to every GithubHttpClient transport
-/// and the RATE_LIMIT_MAX_WAIT_SECONDS cap resolved from PropertyReader.
+/// Factory wiring: interceptor attached to every GithubHttpClient transport.
 void wiringTests() {
   group('GithubHttpClient rate-limit wiring (gh-351)', () {
     test('factory attaches the interceptor to injected transports too', () {
@@ -299,40 +306,6 @@ void wiringTests() {
         f.http.dio.interceptors.whereType<GithubRateLimitRetryInterceptor>(),
         hasLength(1),
       );
-    });
-
-    test('RATE_LIMIT_MAX_WAIT_SECONDS override configures the cap', () {
-      PropertyReader.setOverrides({
-        'SOURCE_GITHUB_TOKEN': 't',
-        'RATE_LIMIT_MAX_WAIT_SECONDS': '300',
-      });
-
-      final http = GithubHttpClient(PropertyReader(), dio: Dio());
-      final interceptor = http.dio.interceptors
-          .whereType<GithubRateLimitRetryInterceptor>()
-          .single;
-
-      expect(interceptor.policy.rateLimitMaxWaitSeconds, 300);
-    });
-
-    test('invalid RATE_LIMIT_MAX_WAIT_SECONDS falls back to 3600s', () {
-      for (final value in ['abc', '0', '-10', '']) {
-        PropertyReader.setOverrides({
-          'SOURCE_GITHUB_TOKEN': 't',
-          'RATE_LIMIT_MAX_WAIT_SECONDS': value,
-        });
-
-        final http = GithubHttpClient(PropertyReader(), dio: Dio());
-        final interceptor = http.dio.interceptors
-            .whereType<GithubRateLimitRetryInterceptor>()
-            .single;
-
-        expect(
-          interceptor.policy.rateLimitMaxWaitSeconds,
-          3600,
-          reason: "value '$value' should resolve to the default cap",
-        );
-      }
     });
 
     test('end-to-end: 429 Retry-After then 200 via GithubHttpClient.get',
@@ -353,6 +326,36 @@ void wiringTests() {
 
       expect(body, '{"login":"octo"}');
       expect(adapter.calls, hasLength(2));
+    });
+  });
+}
+
+/// `RATE_LIMIT_MAX_WAIT_SECONDS` resolution — Java fab5b0ea parity (gh-351).
+void capResolutionTests() {
+  group('RATE_LIMIT_MAX_WAIT_SECONDS resolution (gh-351)', () {
+    GithubRateLimitRetryInterceptor interceptorWith(String value) {
+      PropertyReader.setOverrides({
+        'SOURCE_GITHUB_TOKEN': 't',
+        'RATE_LIMIT_MAX_WAIT_SECONDS': value,
+      });
+      final http = GithubHttpClient(PropertyReader(), dio: Dio());
+      return http.dio.interceptors
+          .whereType<GithubRateLimitRetryInterceptor>()
+          .single;
+    }
+
+    test('override configures the cap', () {
+      expect(interceptorWith('300').policy.rateLimitMaxWaitSeconds, 300);
+    });
+
+    test('invalid values fall back to 3600s', () {
+      for (final value in ['abc', '0', '-10', '']) {
+        expect(
+          interceptorWith(value).policy.rateLimitMaxWaitSeconds,
+          3600,
+          reason: "value '$value' should resolve to the default cap",
+        );
+      }
     });
   });
 }

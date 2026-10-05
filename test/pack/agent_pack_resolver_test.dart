@@ -30,6 +30,7 @@ void main() {
   localResolutionTests();
   entryOverrideTests();
   zipSlipTests();
+  symlinkTests();
   manifestTests();
   manifestIdentityTests();
   entryContainmentTests();
@@ -176,15 +177,20 @@ void zipSlipTests() {
         isFalse,
       );
     });
+  });
+}
 
+/// Symlink entries must be rejected from the unix mode type bits regardless
+/// of the zip creator (Java parity, dm.ai e97ff0f2 `symlinkEntry_isRejected`).
+void symlinkTests() {
+  group('AgentPackResolver symlink entries', () {
     test('rejects symlink entries via unix mode bits (non-unix zip creator)',
         () {
-      // Java parity (dm.ai e97ff0f2, symlinkEntry_isRejected): commons-compress
-      // flags symlinks from the unix mode type bits regardless of the zip
-      // creator. The archive package only sets `isSymbolicLink` for unix-made
-      // zips (its own encoder writes an MS-DOS versionMadeBy), so the mode
-      // bits must be checked directly — a `pack:`-style link entry must never
-      // be unpacked as a regular file.
+      // commons-compress flags symlinks from the unix mode type bits
+      // regardless of the zip creator. The archive package only sets
+      // `isSymbolicLink` for unix-made zips (its own encoder writes an
+      // MS-DOS versionMadeBy), so the mode bits must be checked directly —
+      // a link entry must never be unpacked as a regular file.
       final zip = buildZipWithManifest({
         'agent': 'link_agent',
         'version': '1.0.0',

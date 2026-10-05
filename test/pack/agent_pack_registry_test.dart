@@ -30,6 +30,7 @@ void main() {
     _registrationShapeTests();
     _explicitVersionTests();
     _latestResolutionTests();
+    _unknownAgentTests();
     _redirectResolutionTests();
     _catalogCharsetTests();
     _malformedCatalogTests();
@@ -121,7 +122,9 @@ void _latestResolutionTests() {
       server.isolate.kill();
     }
   });
+}
 
+void _unknownAgentTests() {
   test('@latest with an unknown agent fails naming the agent', () async {
     final server = await startRegistryServer({
       '/catalog.json': utf8.encode(jsonEncode({'other_agent': '1.0.0'})),

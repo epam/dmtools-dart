@@ -24,6 +24,7 @@ import 'sync_request_helpers.dart';
 part 'confluence_sync_page_ops.dart';
 part 'confluence_sync_downloader.dart';
 part 'confluence_sync_tools_helpers.dart';
+part 'confluence_sync_resolvers.dart';
 
 /// Confluence executors: `confluence_*` tool name → JSON result.
 class ConfluenceSyncTools {

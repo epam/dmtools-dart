@@ -37,6 +37,7 @@ void main() {
   });
 
   _testConfigDetectedListing();
+  _testScmCiVisibility();
   _testHelpSchema();
   _testListFilters();
 }
@@ -91,10 +92,14 @@ JENKINS_API_TOKEN=tok
         {'jira', 'cli'},
       );
     });
+  });
+}
 
+void _testScmCiVisibility() {
+  group('list gh-339 scm_/ci_ visibility', () {
     test(
-        'gh-339: scm_/ci_ alias families stay visible under config '
-        'detection when DEFAULT_SCM/DEFAULT_CI resolve', () async {
+        'alias families stay visible under config detection when '
+        'DEFAULT_SCM/DEFAULT_CI resolve', () async {
       // Regression: 'scm'/'ci' are registry integration tags of the
       // env-gated gh-339 alias families, not doctor-checkable
       // integrations. Registration is already gated on DEFAULT_SCM /
@@ -110,8 +115,8 @@ JENKINS_API_TOKEN=tok
     });
 
     test(
-        'gh-339: scm_/ci_ families stay absent when their default '
-        'provider does not resolve', () async {
+        'families stay absent when their default provider does not '
+        'resolve', () async {
       // gh-339 semantics intact: no DEFAULT_SCM/DEFAULT_CI → the
       // families are not registered → absent from the list.
       expect(await _dispatcher.dispatch(['list']), 0);

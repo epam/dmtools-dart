@@ -30,6 +30,7 @@ void main() {
   _testTeams();
   _testJenkinsAndSharePoint();
   _testConfiguredIntegrations();
+  _testAlwaysAvailableIntegrations();
 }
 
 DoctorCommand _command() =>
@@ -381,13 +382,6 @@ TEAMS_TENANT_ID=tenant-id
 /// config-detected `dmtools list` fallback.
 void _testConfiguredIntegrations() {
   group('configuredIntegrations', () {
-    test('token-less integrations are always available', () {
-      expect(
-        _command().configuredIntegrations(),
-        containsAll(<String>['cli', 'file', 'other', 'teams_auth']),
-      );
-    });
-
     test('unconfigured integrations are absent', () {
       final integrations = _command().configuredIntegrations();
       expect(integrations, isNot(contains('jira')));
@@ -435,6 +429,22 @@ TEAMS_TENANT_ID=tenant-id
       expect(
         _command().configuredIntegrations(),
         containsAll(<String>['teams', 'teams_auth', 'sharepoint']),
+      );
+    });
+  });
+}
+
+/// `scm`/`ci` carry no credentials: the gh-339 alias families they tag
+/// register only when DEFAULT_SCM/DEFAULT_CI resolve, so allowing the
+/// tags keeps registered families listable (gh-352 review: they must
+/// not be config-gated away).
+void _testAlwaysAvailableIntegrations() {
+  group('configuredIntegrations (always available)', () {
+    test('token-less integrations are always available', () {
+      expect(
+        _command().configuredIntegrations(),
+        containsAll(
+            <String>['cli', 'file', 'other', 'teams_auth', 'scm', 'ci']),
       );
     });
   });

@@ -59,6 +59,17 @@ class DoctorCommand {
       'Xray',
       ['XRAY_CLIENT_ID', 'XRAY_CLIENT_SECRET', 'XRAY_BASE_PATH']
     ),
+    // dm.ai #570: raw base-path check — the getter defaults to
+    // localhost:8080 and would never report the variable as missing.
+    'jenkins': (
+      'Jenkins',
+      ['JENKINS_BASE_PATH', 'JENKINS_USER', 'JENKINS_API_TOKEN']
+    ),
+    // SharePoint reuses the Teams (TEAMS_*) OAuth configuration.
+    'sharepoint': (
+      'SharePoint via Teams OAuth credentials',
+      ['TEAMS_CLIENT_ID', 'TEAMS_TENANT_ID']
+    ),
   };
 
   /// Runs all checks and returns the full report text.
@@ -82,6 +93,65 @@ class DoctorCommand {
   static const String _note =
       'Note: doctor checks configuration presence. Connectivity tests '
       'require Phase 3 integrations.';
+
+  /// Registry integrations whose credentials are present in the local
+  /// configuration — Java `ConfigDoctor.getConfiguredIntegrations()` parity
+  /// (dm.ai #570). Presence of tokens/paths only: no network calls and no
+  /// client construction. Used by `dmtools list` when
+  /// `DMTOOLS_INTEGRATIONS` is unset, so the listing reflects what this
+  /// machine can actually run (e.g. Jenkins tools show up exactly when
+  /// `JENKINS_*` is configured).
+  Set<String> configuredIntegrations() {
+    final checks = <String, _IntegrationCheck>{
+      for (final check in _runChecks()) check.name: check,
+    };
+    final integrations = <String>{..._alwaysAvailable};
+    for (final entry in _configuredMapping.entries) {
+      final ready = entry.value.every((name) => checks[name]?.configured ==
+          true);
+      if (ready) integrations.addAll(entry.key);
+    }
+    return integrations;
+  }
+
+  /// Registry integrations that need no external credentials and are
+  /// therefore always listable — Java `ALWAYS_AVAILABLE_INTEGRATIONS`.
+  /// `teams_auth` stays: `teams_auth_start` is the bootstrap entry point
+  /// used to obtain the Teams configuration itself. kb/mermaid are
+  /// deliberately NOT here: their core tools are AI-driven, so they
+  /// follow the `ai` readiness below.
+  static const Set<String> _alwaysAvailable = {
+    'cli',
+    'file',
+    'other',
+    'teams_auth',
+  };
+
+  /// Registry integration names → the doctor checks that must all pass.
+  /// A single check maps to itself; compound readiness (xray needs jira,
+  /// ai unlocks kb/mermaid, teams unlocks sharepoint) is expressed by
+  /// listing every required check.
+  static const Map<Set<String>, List<String>> _configuredMapping = {
+    {'jira'}: ['jira'],
+    // Xray tools run against the Jira host and need both credential sets.
+    {'jira_xray'}: ['jira', 'xray'],
+    {'confluence'}: ['confluence'],
+    {'figma'}: ['figma'],
+    {'github'}: ['github'],
+    {'gitlab'}: ['gitlab'],
+    {'bitbucket'}: ['bitbucket'],
+    {'ado'}: ['ado'],
+    {'rally'}: ['rally'],
+    {'testrail'}: ['testrail'],
+    {'bitrise'}: ['bitrise'],
+    {'jenkins'}: ['jenkins'],
+    // kb and mermaid core tools are AI-driven (KB analysis agents,
+    // mermaid_index_generate) — without an AI provider they have no
+    // useful functionality, so they follow ai readiness.
+    {'ai', 'kb', 'mermaid'}: ['ai'],
+    // SharePoint reuses the Teams (TEAMS_*) OAuth configuration.
+    {'teams', 'teams_auth', 'sharepoint'}: ['teams'],
+  };
 
   void _writeCheck(StringBuffer buf, _IntegrationCheck check) {
     final state = check.configured ? 'configured' : 'incomplete';

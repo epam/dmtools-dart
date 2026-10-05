@@ -80,7 +80,7 @@ void fromConfigTests() {
       PropertyReader.setOverrides({'TEAMS_CLIENT_ID': 'client-id'});
       final client = SharepointClient.fromConfig(
         PropertyReader(),
-        token: [REDACTED:Sensitive Value]'access-token'],
+        token: 'access-token',
       );
       expect(client, isA<SharepointClient>());
     });

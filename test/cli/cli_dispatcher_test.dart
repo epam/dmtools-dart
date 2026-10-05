@@ -266,20 +266,78 @@ void _testRunCliAgent() {
 
 void _testList() {
   group('list', () {
-    test('prints the full MCP tool catalog as JSON', () async {
+    test('falls back to config-detected integrations when '
+        'DMTOOLS_INTEGRATIONS is unset', () async {
+      // Java #570 parity: with no override the list reflects what this
+      // machine can run — token-less integrations only in a tokenless env.
       expect(await _dispatcher.dispatch(['list']), 0);
       final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
-      final tools = decoded['tools'] as List;
-      expect(tools.length, greaterThan(250));
-      final names = tools
-          .map((t) => (t as Map<String, dynamic>)['name'] as String)
-          .toSet();
+      final tools = (decoded['tools'] as List).cast<Map<String, dynamic>>();
+      expect(tools, isNotEmpty);
+      final integrations = tools.map((t) => t['integration'] as String).toSet();
+      expect(
+        integrations.difference(const {'cli', 'file', 'other', 'teams_auth'}),
+        isEmpty,
+      );
+      expect(
+        tools.map((t) => t['name'] as String),
+        isNot(contains('jira_get_ticket')),
+      );
+    });
+
+    test('config-detected list includes jenkins once JENKINS_* is set', () async {
+      File('${_tmp.path}/dmtools.env').writeAsStringSync('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
+      final tools = (decoded['tools'] as List).cast<Map<String, dynamic>>();
+      final jenkins = tools
+          .where((t) => (t['integration'] as String) == 'jenkins')
+          .toList();
+      expect(jenkins, isNotEmpty);
+      expect(jenkins.every((t) => (t['name'] as String).startsWith('jenkins_')),
+          isTrue);
+    });
+
+    test('DMTOOLS_INTEGRATIONS still wins verbatim over config detection',
+        () async {
+      // Documented override: jenkins is fully configured, but an explicit
+      // env subset hides it (Java #570 verified behavior).
+      File('${_tmp.path}/dmtools.env').writeAsStringSync('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira,cli'});
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
+      final tools = (decoded['tools'] as List).cast<Map<String, dynamic>>();
+      expect(
+        tools.map((t) => t['integration'] as String).toSet(),
+        {'jira', 'cli'},
+      );
+    });
+
+    test('a canonical tool schema is shown even when its integration is '
+        'not configured', () async {
+      // dm.ai #570: getToolSchema reads the FULL registry, so usage hints
+      // keep working for tools outside the config-detected list.
+      expect(await _dispatcher.dispatch(['jira_get_ticket', '--help']), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final names = (result['tools'] as List)
+          .cast<Map<String, dynamic>>()
+          .map((t) => t['name'] as String);
       expect(names, contains('jira_get_ticket'));
-      expect(names, contains('github_create_pr'));
     });
 
     test('filters the catalog by a case-insensitive substring', () async {
-      expect(await _dispatcher.dispatch(['list', 'COMMENT']), 0);
+      // 'contents' appears in the file_read description but not its name;
+      // file tools are token-less, so the filter matches regardless of
+      // which integrations are configured (dm.ai #570 test note).
+      expect(await _dispatcher.dispatch(['list', 'contents']), 0);
       final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
       final tools = decoded['tools'] as List;
       expect(tools, isNotEmpty);
@@ -287,8 +345,8 @@ void _testList() {
         final map = t as Map<String, dynamic>;
         final matches = (map['name'] as String)
                 .toLowerCase()
-                .contains('comment') ||
-            (map['description'] as String).toLowerCase().contains('comment');
+                .contains('contents') ||
+            (map['description'] as String).toLowerCase().contains('contents');
         expect(matches, isTrue);
       }
     });

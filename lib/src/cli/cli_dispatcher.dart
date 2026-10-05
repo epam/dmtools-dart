@@ -122,7 +122,7 @@ class CliDispatcher {
   }
 
   int _runDoctor() {
-    _writer(DoctorCommand(reader: _reader).run());
+    _writer(_doctor.run());
     return 0;
   }
 
@@ -372,13 +372,21 @@ Options:
       // gh-136: help/list resolution mirrors invocation resolution — an
       // alias filter (tracker_get_ticket) resolves to its carrier so
       // `dmtools <alias> --help` shows the backend tool's schema instead
-      // of an empty list. Candidates narrow to DMTOOLS_INTEGRATIONS so the
-      // fallback picks a carrier the filtered list actually shows.
+      // of an empty list. Candidates narrow to DMTOOLS_INTEGRATIONS so
+      // the fallback picks a carrier the filtered list actually shows.
       // Unknown text (partial names, free text) stays a raw substring
       // filter.
       final resolved = _resolveToolName(rest.first,
           registry: registry, integrations: integrations);
-      response = registry.filterToolsList(response, resolved ?? rest.first);
+      if (resolved != null) {
+        // dm.ai #570: a resolved name's schema comes from the FULL
+        // registry, not the listable subset — usage hints keep working
+        // for tools whose integration is not configured on this machine.
+        response = registry.filterToolsList(
+            registry.generateToolsListResponse(), resolved);
+      } else {
+        response = registry.filterToolsList(response, rest.first);
+      }
     }
     _writer(const JsonEncoder.withIndent('  ').convert(response));
     return 0;
@@ -487,19 +495,30 @@ Options:
   /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration
   /// names.
   ///
-  /// Returns `null` (meaning "all integrations") when the variable is unset
-  /// or empty; otherwise a lower-case set parsed from the comma-separated
+  /// When the variable is set it wins verbatim (an explicit restriction of
+  /// the tool surface): a lower-case set parsed from the comma-separated
   /// value (e.g. `"jira,confluence"` → `{"jira", "confluence"}`).
-  Set<String>? _resolveIntegrations() {
+  /// Otherwise — Java `McpCliHandler.resolveAvailableIntegrations` parity
+  /// (dm.ai #570) — the set is config-detected via [DoctorCommand]
+  /// (presence of the required tokens/paths only, no network calls) plus
+  /// token-less integrations, so `dmtools list` shows exactly what this
+  /// machine can run.
+  Set<String> _resolveIntegrations() {
     final raw = _reader.getValue('DMTOOLS_INTEGRATIONS');
-    if (raw == null || raw.trim().isEmpty) return null;
+    if (raw == null || raw.trim().isEmpty) {
+      return _doctor.configuredIntegrations();
+    }
     final set = raw
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .where((s) => s.isNotEmpty)
         .toSet();
-    return set.isEmpty ? null : set;
+    return set.isEmpty ? _doctor.configuredIntegrations() : set;
   }
+
+  /// Doctor over the dispatcher's configuration — backs the
+  /// config-detected integration list (dm.ai #570).
+  late final DoctorCommand _doctor = DoctorCommand(reader: _reader);
 
   int _interactiveStub() {
     _writer('Interactive mode requires Phase 4 (terminal picker)');

@@ -175,9 +175,12 @@ class SyncRetryPolicy {
 
   /// Whether a failed request at 1-based [attempt] with [statusCode]
   /// (`0` = transport failure) and response [body] should be retried.
+  /// Successful 2xx/3xx responses are never retried — Java only runs the
+  /// body check on the exception path of failed requests.
   bool shouldRetry(int attempt, int statusCode, [String? body]) {
     if (!canRetryAfter(attempt)) return false;
     if (statusCode == 0) return true;
+    if (statusCode >= 200 && statusCode < 400) return false;
     return isRetryableStatus(statusCode, body);
   }
 

@@ -4,7 +4,9 @@
 ///
 /// Java `FileTools.listFiles` returns `{"entries": [absolute paths,
 /// sorted]}`; `fileExists` returns a boolean (false for paths outside the
-/// sandbox). The Dart bridge answers both as JSON strings.
+/// sandbox). The Dart bridge answers both as JSON strings. Note: Java
+/// `listFiles` returns `null` for unlistable dirs; the Dart bridge returns
+/// the `{"error": …}` envelope instead — a deliberate Dart convention.
 library;
 
 import 'dart:convert';
@@ -34,12 +36,36 @@ void main() {
 
       final entries = (result['entries'] as List).cast<String>();
       expect(entries, hasLength(3));
-      expect(entries, orderedEquals([...entries]..sort()));
+      // Pin the exact expected order — sorting a copy of the
+      // implementation's own output would not catch a wrong comparator.
+      expect(entries.map(p.basename),
+          orderedEquals(['a.txt', 'b.txt', 'sub']));
       for (final entry in entries) {
         expect(p.isAbsolute(entry), isTrue, reason: entry);
+        // Java parity (dm.ai#635): toAbsolutePath().normalize() per entry.
+        expect(p.normalize(entry), entry, reason: entry);
       }
-      expect(entries.any((e) => e.endsWith('a.txt')), isTrue);
-      expect(entries.any((e) => e.endsWith('sub')), isTrue);
+    });
+
+    test('entries are normalized (no . or .. segments), like Java '
+        'toAbsolutePath().normalize()', () {
+      File('${dir.path}/b.txt').writeAsStringSync('b');
+      Directory('${dir.path}/sub').createSync();
+
+      // The redundant "/." segment must not leak into the reported entries.
+      final result = jsonDecode(
+        ToolBridge(registry: createDefaultToolRegistry())
+            .execute('file_list', {'path': '${dir.path}/.'}),
+      ) as Map<String, dynamic>;
+
+      final entries = (result['entries'] as List).cast<String>();
+      expect(
+        entries,
+        orderedEquals([
+          p.normalize('${dir.path}/b.txt'),
+          p.normalize('${dir.path}/sub'),
+        ]),
+      );
     });
 
     test('unlistable path yields the error envelope, not a crash', () {

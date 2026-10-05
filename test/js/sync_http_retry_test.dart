@@ -60,6 +60,17 @@ void deterministicRetryTests() {
       // Body matching is case-insensitive, like Java's toLowerCase.
       expect(policy.shouldRetry(1, 400, 'Request Was Throttled'), isTrue);
     });
+
+    test('successful 2xx/3xx responses are never retried, even with a '
+        'rate-limit body', () {
+      // Java only runs the body check on the exception path of failed
+      // requests; a successful response never reaches it. A 200 whose body
+      // merely mentions throttling (e.g. Jira issues *about* rate limits)
+      // must not be re-issued with backoff.
+      expect(policy.shouldRetry(1, 200, 'rate limit exceeded'), isFalse);
+      expect(policy.shouldRetry(1, 302, 'throttled'), isFalse);
+      expect(policy.shouldRetry(1, 204), isFalse);
+    });
   });
 }
 

@@ -31,9 +31,12 @@ const _defaultConfluenceParallelism = 4;
 /// Java `ConfluenceParallel.MAX_PARALLELISM` (dm.ai d61a4abd).
 const _maxConfluenceParallelism = 16;
 
-/// The shared Confluence pool; boots at CLI startup next to
-/// `SyncHttpBridge.shared.boot()` (both must complete while the event
-/// loop is alive).
+/// The shared Confluence pool; boots lazily from `CliDispatcher` right
+/// before a command that can reach a Confluence sync tool (direct
+/// `confluence_*` invocation, or any job run while Confluence is
+/// configured) — the same event-loop-alive guarantee as the engine pool:
+/// once a QuickJS host callback blocks the main isolate, `Isolate.spawn`
+/// can no longer progress.
 final SyncWorkerPool _confluenceSyncPool = SyncWorkerPool(
   _confluenceSyncWorkerEntry,
   name: 'confluence-parallel',
@@ -48,9 +51,10 @@ Future<void> _confluenceSyncWorkerEntry(SyncWorkerBoot boot) =>
 
 /// The shared Confluence parallel worker pool (gh-348).
 ///
-/// Booted by the CLI before any JS runs; when unbooted (tests, embedded
-/// use) every parallel call falls back to inline sequential execution
-/// with identical semantics.
+/// Booted by the CLI lazily, just before a command that can reach a
+/// Confluence sync tool; when unbooted (tests, embedded use, commands
+/// that never touch Confluence) every parallel call falls back to inline
+/// sequential execution with identical semantics.
 SyncWorkerPool get confluenceSyncWorkerPool => _confluenceSyncPool;
 
 /// Java `ConfluenceParallel.parallelism()` parity (dm.ai d61a4abd):
@@ -64,6 +68,17 @@ int confluenceSyncParallelism([PropertyReader? reader]) {
   if (parsed < 1) return 1;
   if (parsed > _maxConfluenceParallelism) return _maxConfluenceParallelism;
   return parsed;
+}
+
+/// Whether Confluence sync tools can run at all: the resolved config
+/// carries a base path and credentials (the same guard as `_config()` —
+/// unconfigured calls fail before any pool use, so a pool boot would be
+/// pure waste). Gates the CLI's lazy pool boot.
+bool confluenceSyncConfigured(PropertyReader reader) {
+  final basePath = reader.getConfluenceBasePath();
+  if (basePath == null || basePath.isEmpty) return false;
+  final token = reader.getConfluenceLoginPassToken();
+  return token != null && token.isNotEmpty;
 }
 
 /// The Confluence pool runner ([SyncWorkerRunner]): executes one job by

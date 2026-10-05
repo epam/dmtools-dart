@@ -163,8 +163,16 @@ class _PageDownloader {
     }
   }
 
-  /// Writes one downloaded attachment next to its page; drops partial
-  /// files on failure (Java `RestClient.downloadFile` cleanup, 8cbf550d).
+  /// Writes one downloaded attachment next to its page.
+  ///
+  /// An HTTP-level failure never touches the disk: the body is buffered
+  /// in memory and written once below, so unlike the Java
+  /// truncate-then-stream download (`RestClient.downloadFile`, 8cbf550d)
+  /// this port cannot leave a partial file behind — and a file that IS
+  /// present is a complete attachment of an earlier successful run, which
+  /// a failed re-download must keep (a stale local copy beats no copy).
+  /// Only a mid-write I/O error can produce a partial file; that partial
+  /// is removed so it never looks "already downloaded" to the next run.
   void _writeAttachment(
     Map<String, dynamic>? envelope,
     _AttachmentTarget target,
@@ -172,15 +180,13 @@ class _PageDownloader {
     final resp = _httpJobResponse(envelope);
     final file = _attachmentFile(target);
     if (resp == null || !resp.isOk) {
-      // A leftover partial file would look "already downloaded" to the
-      // next run — remove it (Java parity: truncate-then-fail cleanup).
       _deleteQuietly(file);
       return;
     }
     try {
       file.writeAsBytesSync(resp.bodyBytes, flush: true);
     } catch (_) {
-      _deleteQuietly(file);
+      _deleteQuietly(file); // we may have left a partial behind
     }
   }
 

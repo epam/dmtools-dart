@@ -64,13 +64,10 @@ typedef SyncWorkerEntry = Future<void> Function(SyncWorkerBoot boot);
 /// Boot payload handed to every [SyncWorkerEntry].
 class SyncWorkerBoot {
   /// Creates the boot payload for one worker isolate.
-  const SyncWorkerBoot({required this.handshake, required this.workerName});
+  const SyncWorkerBoot({required this.handshake});
 
   /// Reply port: the worker sends its job-inbox [SendPort] here once.
   final SendPort handshake;
-
-  /// Worker name (diagnostics).
-  final String workerName;
 }
 
 /// One unit of parallel work: [kind] selects the runner's handler,
@@ -106,7 +103,15 @@ Future<void> serveSyncWorker(
   final inbox = ReceivePort();
   boot.handshake.send(inbox.sendPort);
   await for (final message in inbox) {
-    if (message is! Map) continue; // shutdown sentinel / foreign traffic
+    if (message == 'shutdown') {
+      // The pool's dispose sentinel: stop serving and tear down this
+      // worker's per-isolate HTTP worker (mirror of
+      // SyncHttpBridge._httpWorkerEntry — the sentinel must end the loop,
+      // or every dispose leaks the worker isolates).
+      SyncHttpBridge.shared.dispose();
+      return;
+    }
+    if (message is! Map) continue; // foreign traffic
     final job = message.cast<String, dynamic>();
     final reply = (job['reply'] as Sendable<Mailbox>).materialize();
     Map<String, dynamic>? result;
@@ -155,17 +160,24 @@ class SyncWorkerPool {
   /// Boots [workerCount] worker isolates; idempotent.
   ///
   /// Must complete while the event loop is alive (see the library docs).
-  Future<void> boot() => _booting ??= _boot(workerCount < 1 ? 1 : workerCount);
+  /// A failed boot is not cached: the error propagates and the next
+  /// [boot] call attempts a fresh boot, so a transient failure (isolate
+  /// quota, sandbox limit) does not disable the pool for the process
+  /// lifetime.
+  Future<void> boot() =>
+      _booting ??= _boot(workerCount < 1 ? 1 : workerCount)
+          .catchError((Object e) {
+        _booting = null; // let the next boot() retry
+        throw e;
+      });
 
   Future<void> _boot(int workers) async {
     for (var i = 0; i < workers; i++) {
       final handshake = ReceivePort();
       await Isolate.spawn(
         _entry,
-        SyncWorkerBoot(
-          handshake: handshake.sendPort,
-          workerName: '$name-${i + 1}',
-        ),
+        SyncWorkerBoot(handshake: handshake.sendPort),
+        debugName: '$name-${i + 1}',
       );
       _inboxes.add(await handshake.first as SendPort);
       handshake.close();

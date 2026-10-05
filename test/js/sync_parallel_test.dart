@@ -3,7 +3,6 @@ import 'dart:isolate';
 
 import 'package:dmtools/src/js/sync_parallel.dart';
 import 'package:native_synchronization/mailbox.dart';
-import 'package:native_synchronization/sendable.dart';
 import 'package:test/test.dart';
 
 /// A [SyncWorkerRunner] for the pool mechanics tests: sleeps the requested

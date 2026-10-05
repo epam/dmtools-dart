@@ -273,6 +273,27 @@ void _failingAttachmentCleanup() {
       expect(confluenceSyncWorkerPool.ready, isTrue);
       _expectFlakyPageOnly(tools, server.port);
     });
+
+    test('a failed re-download keeps the previous run\'s file', () {
+      // Rework review (gh-348): this port buffers the full body in memory
+      // and writes once, so an HTTP-level failure never produces a partial
+      // file — the only file present is a COMPLETE attachment of an
+      // earlier successful run, which the failure path must keep.
+      final out = Directory.systemTemp.createTempSync('dmtools_dlf_keep_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final attachment = File('${out.path}/Flaky Page-attachments/flaky.png')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('previous-good-run');
+      final result = tools.dispatch('confluence_download_pages', {
+        'urlStrings': [
+          'http://127.0.0.1:${server.port}/wiki/spaces/ENG/pages/666/Flaky',
+        ],
+        'outputPath': out.path,
+        'depth': 1,
+      });
+      expect(result, 'Downloaded 1 Confluence page(s) to ${out.path}');
+      expect(attachment.readAsStringSync(), 'previous-good-run');
+    });
   });
 }
 

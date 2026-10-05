@@ -221,6 +221,35 @@ void _poolBackedDownloads() {
       expect(results, hasLength(1));
       expect(results.single['id'], '777');
     });
+
+    test('a mid-write failure stays contained', () {
+      // Pre-create the write target of shot.png as a directory: the
+      // writeAsBytesSync below throws — the closest a fixture gets to a
+      // mid-write I/O error. The best-effort cleanup cannot remove a
+      // directory via File.deleteSync, so the leftover stays; the run
+      // must still complete and the rest of the mirror must land.
+      final out = Directory.systemTemp.createTempSync('dmtools_dlp_partial_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final blocker = Directory('${out.path}/Hi Page-attachments/shot.png')
+        ..createSync(recursive: true);
+      final result = tools.dispatch('confluence_download_pages', {
+        'urlStrings': [
+          'http://127.0.0.1:${server.port}/wiki/spaces/ENG/pages/777/Hi',
+        ],
+        'outputPath': out.path,
+        'depth': 1,
+      });
+      expect(result, 'Downloaded 1 Confluence page(s) to ${out.path}');
+      // The rest of the mirror is unaffected (page + foreign-host
+      // attachment still land).
+      expect(File('${out.path}/Hi Page.md').readAsStringSync(), 'hi');
+      expect(
+        File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync(),
+        'CLEAN',
+      );
+      expect(blocker.existsSync(), isTrue,
+          reason: 'an unremovable leftover is tolerated, never fatal');
+    });
   });
 }
 

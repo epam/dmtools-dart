@@ -183,7 +183,16 @@ class TeammateJob {
     final result = await agent.run();
     final key = _ticketKey(ticket);
     if (result['postJsActionUncaught'] == true) {
-      return {'success': false, 'error': result['error'], 'results': []};
+      // Same shape as the JQL batch path (_runTickets): keep the failing
+      // ticket's result item so the caller can still see its
+      // response/contextId alongside the error.
+      return {
+        'success': false,
+        'error': result['error'],
+        'results': [
+          {'ticket': key, 'success': false, ...result}
+        ],
+      };
     }
     if (result['unexpectedSetupFailure'] == true) {
       // Java Teammate #580 parity: a swallowed uncaught setup exception

@@ -268,6 +268,35 @@ void preCliBusinessSkipTests() {
         await tmp.delete(recursive: true);
       }
     });
+
+    test(
+        'returning malformed JSON that starts with { is treated as '
+        'success — an undecodable marker cannot be a failure signal '
+        '(Java parity, FormatException fallback)', () async {
+      final tmp = await _createTempDir();
+      final cliMarker = File('${tmp.path}/cli_marker');
+      try {
+        final preCli =
+            _actionJs(tmp, 'precli_bad.js', "return '{success: false}';");
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo ran > cli_marker']
+            ..preCliJSAction = preCli.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+          failOnJsActionErrors: true,
+        )).run();
+        // Garbage result = success: the CLI phase still runs and no skip
+        // or unexpected-setup marker is set.
+        expect(cliMarker.existsSync(), isTrue);
+        expect(result['success'], isTrue);
+        expect(result['unexpectedSetupFailure'], isNull);
+        expect(result['response'],
+            isNot('Skipped: preCliJSAction reported failure'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
   });
 }
 
@@ -431,6 +460,43 @@ void teammateSingleRunAbortTests() {
         expect(result['error'] as String,
             contains('Teammate job aborted: preCliJSAction threw'));
         expect(result['error'] as String, contains('gh-345'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+
+  group('TeammateJob — issues-driven postJSAction abort (#585)', () {
+    test(
+        'the failing ticket result item is kept in results (same shape '
+        'as the JQL batch path)', () async {
+      final tmp = await _createTempDir();
+      try {
+        Directory('${tmp.path}/input').createSync(recursive: true);
+        File('${tmp.path}/input/ticket.md')
+            .writeAsStringSync('Do the thing\nbody');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final job = TeammateJob(
+          params: {
+            'metadata': {'contextId': 'gh-345'},
+            'cliCommands': ['echo ok'],
+            'postJSAction': post.path,
+          },
+          workingDirectory: tmp.path,
+        );
+        final result = await job.run();
+        expect(result['success'], isFalse);
+        expect(result['error'] as String,
+            contains('postJSAction threw an uncaught exception'));
+        // Mirrors _runTickets: the caller can still see the ticket's
+        // result fields (response/contextId/…) alongside the error.
+        final results = (result['results'] as List).cast<Map>();
+        expect(results, hasLength(1));
+        expect(results[0]['ticket'], 'gh-345');
+        expect(results[0]['success'], isFalse);
+        expect(results[0]['postJsActionUncaught'], isTrue);
+        expect(results[0]['error'] as String, contains('boom'));
       } finally {
         await tmp.delete(recursive: true);
       }

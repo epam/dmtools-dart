@@ -14,7 +14,9 @@
 /// `cliExecutionErrorJSAction` (on a non-zero exit), and `cliOutputLineJSAction`
 /// (per output line; returning `true` stops the batch). Errors in hooks and
 /// actions are caught and logged (the lifecycle continues); only CLI command
-/// failures can fail the run.
+/// failures can fail the run — unless [CliAgent.failOnJsActionErrors] is on
+/// (Java `Teammate` parity, epam/dm.ai#580/#585), in which case an uncaught
+/// exception in `preCliJSAction` or `postJSAction` fails the run visibly.
 ///
 /// Strict mode (`requireCliOutputFile=true`) with no CLI output file skips
 /// `postJSAction` entirely (Java `skipFieldUpdate` parity, epam/dm.ai#622) —

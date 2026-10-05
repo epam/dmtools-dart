@@ -384,7 +384,12 @@ void _testConfiguredIntegrations() {
     test('token-less integrations are always available', () {
       expect(
         _command().configuredIntegrations(),
-        containsAll(<String>['cli', 'file', 'other', 'teams_auth']),
+        // 'scm'/'ci' carry no credentials: the gh-339 alias families
+        // they tag register only when DEFAULT_SCM/DEFAULT_CI resolve,
+        // so allowing the tags keeps registered families listable
+        // (gh-352 review: they must not be config-gated away).
+        containsAll(
+            <String>['cli', 'file', 'other', 'teams_auth', 'scm', 'ci']),
       );
     });
 

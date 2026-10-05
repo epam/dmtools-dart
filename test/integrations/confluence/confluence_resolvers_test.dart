@@ -65,7 +65,9 @@ const _table =
 void _excerptInlinerTests() {
   group('ConfluenceExcerptInliner (Java ConfluenceExcerptInliner parity)', () {
     _excerptInlinerResolutionTests();
-    _excerptInlinerGuardTests();
+    _excerptInlinerBlankNameTests();
+    _excerptInlinerFallbackTests();
+    _excerptInlinerNestingTests();
   });
 }
 
@@ -151,6 +153,23 @@ void _excerptInlinerFallbackTests() {
     expect(inliner.inline(missingExcerpt, 'SPACE'), missingExcerpt);
   });
 
+  test('self-closing excerpt macros carry no body and are skipped', () {
+    final client = _FakeResolverClient();
+    client.pages['SPACE|Target'] = _page(
+      '2',
+      'SPACE',
+      '<ac:structured-macro ac:name="excerpt"/>'
+          '${_excerptMacro('excerpt', 'X', '<p>x</p>')}',
+    );
+
+    final result = ConfluenceExcerptInliner(client).inline(
+      _includeMacro('excerpt-include', 'Target', null, 'X'),
+      'SPACE',
+    );
+
+    expect(result, '<p>x</p>');
+  });
+
   test('falls back to the default lookup when the space is unknown', () {
     final client = _FakeResolverClient();
     client.pages['|Target'] =
@@ -163,7 +182,9 @@ void _excerptInlinerFallbackTests() {
 
     expect(result, '<p>x</p>');
   });
+}
 
+void _excerptInlinerNestingTests() {
   test('nested includes are resolved with the target page space', () {
     final client = _FakeResolverClient();
     client.pages['S1|Outer'] = _page(

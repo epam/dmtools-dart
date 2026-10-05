@@ -29,6 +29,13 @@ class SharepointClient {
   /// empty client id — a login that can never succeed. [token] must be a
   /// resolved Graph access token (see [TeamsOAuth.resolveAccessToken]);
   /// pass [dio] to inject a custom HTTP transport (tests).
+  ///
+  /// Wiring status: the Dart runtime does not construct SharePoint
+  /// clients yet (the `sharepoint_*` surface is catalog-only — no sync
+  /// dispatch route exists), so this fail-fast activates with the future
+  /// dispatch wiring. Until then, construct clients ONLY through this
+  /// factory — a direct `SharepointClient(TeamsHttpClient(...))` bypasses
+  /// the dm.ai #567 validation by design.
   factory SharepointClient.fromConfig(
     PropertyReader reader, {
     Dio? dio,
@@ -43,6 +50,10 @@ class SharepointClient {
   /// Validates that the Teams/SharePoint client id is configured —
   /// Java `BasicSharePointClient.validateClientId` parity (dm.ai #567).
   ///
+  /// This is the enforcement point behind [SharepointClient.fromConfig];
+  /// the Dart runtime wiring does not construct SharePoint clients yet
+  /// (see [fromConfig]'s wiring-status note), so call it explicitly when
+  /// building a client outside the factory.
   /// Throws [StateError] when [clientId] is null or blank.
   static void validateClientId(String? clientId) {
     if (clientId == null || clientId.trim().isEmpty) {

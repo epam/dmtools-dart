@@ -120,8 +120,15 @@ class DoctorCommand {
   /// used to obtain the Teams configuration itself. kb/mermaid are
   /// deliberately NOT here: their core tools are AI-driven, so they
   /// follow the `ai` readiness below.
+  /// `scm`/`ci` are here too although they hold no credentials: their
+  /// tools are the env-gated gh-339 alias families, registered only when
+  /// `DEFAULT_SCM`/`DEFAULT_CI` resolve. Allowing the tags keeps those
+  /// registered families visible under the config-detected list; an
+  /// unresolved provider simply leaves the family unregistered.
   static const Set<String> _alwaysAvailable = {
     'cli',
+    'scm',
+    'ci',
     'file',
     'other',
     'teams_auth',

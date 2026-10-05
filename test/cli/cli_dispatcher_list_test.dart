@@ -91,6 +91,34 @@ JENKINS_API_TOKEN=tok
         {'jira', 'cli'},
       );
     });
+
+    test(
+        'gh-339: scm_/ci_ alias families stay visible under config '
+        'detection when DEFAULT_SCM/DEFAULT_CI resolve', () async {
+      // Regression: 'scm'/'ci' are registry integration tags of the
+      // env-gated gh-339 alias families, not doctor-checkable
+      // integrations. Registration is already gated on DEFAULT_SCM /
+      // DEFAULT_CI resolving, so the config-detected filter must allow
+      // the tags — otherwise the registered families vanish from the
+      // listing in exactly this ticket's scenario (env var unset).
+      PropertyReader.setOverrides(
+          {'DEFAULT_SCM': 'github', 'DEFAULT_CI': 'actions'});
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final names = _decodedTools().map((t) => t['name'] as String);
+      expect(names, contains('scm_list_prs'));
+      expect(names, contains('ci_get_merge_state'));
+    });
+
+    test(
+        'gh-339: scm_/ci_ families stay absent when their default '
+        'provider does not resolve', () async {
+      // gh-339 semantics intact: no DEFAULT_SCM/DEFAULT_CI → the
+      // families are not registered → absent from the list.
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final names = _decodedTools().map((t) => t['name'] as String);
+      expect(names.where((n) => n.startsWith('scm_')), isEmpty);
+      expect(names.where((n) => n.startsWith('ci_')), isEmpty);
+    });
   });
 }
 

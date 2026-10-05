@@ -146,7 +146,7 @@ void _testListFilters() {
       // file tools are token-less, so the filter matches regardless of
       // which integrations are configured (dm.ai #570 test note).
       expect(await _dispatcher.dispatch(['list', 'contents']), 0);
-      final tools = _decodedTools(raw: true);
+      final tools = _decodedTools(lastLineOnly: true);
       expect(tools, isNotEmpty);
       for (final t in tools) {
         final matches =
@@ -172,9 +172,12 @@ void _testListFilters() {
 void _writeEnv(String content) =>
     File('${_tmp.path}/dmtools.env').writeAsStringSync(content);
 
-/// Decodes the `tools` array of the last written JSON response.
-List<Map<String, dynamic>> _decodedTools({bool raw = false}) {
-  final decoded =
-      jsonDecode(raw ? _lines.last : _lines.join('\n')) as Map<String, dynamic>;
+/// Decodes the `tools` array of the last written JSON response. When
+/// [lastLineOnly] is set only the final line is parsed (single-line
+/// responses); otherwise every collected line is joined first
+/// (multi-line pretty-printed responses).
+List<Map<String, dynamic>> _decodedTools({bool lastLineOnly = false}) {
+  final decoded = jsonDecode(lastLineOnly ? _lines.last : _lines.join('\n'))
+      as Map<String, dynamic>;
   return (decoded['tools'] as List).cast<Map<String, dynamic>>();
 }

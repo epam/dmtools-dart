@@ -93,36 +93,80 @@ class TeammateJob {
       _consumePreparedInput();
       return _runSingle(prepared);
     }
-    final github = looksLikeGithubQuery(inputJql);
-    _sourceIsGithub = github;
-    final source =
-        ticketSource ?? (github ? githubIssueTicketSource : jiraTicketSource);
+    _sourceIsGithub = looksLikeGithubQuery(inputJql);
+    final source = ticketSource ??
+        (_sourceIsGithub ? githubIssueTicketSource : jiraTicketSource);
     final tickets = await source(inputJql);
+    return _runTickets(tickets);
+  }
+
+  /// Runs every resolved ticket through a loud [CliAgent], then applies
+  /// the Java Teammate end-of-run hard stop (epam/dm.ai#580): all matched
+  /// tickets are attempted, but if any `preCliJSAction` threw an uncaught
+  /// exception the overall job fails so the CI step actually goes red.
+  Future<Map<String, dynamic>> _runTickets(
+      List<Map<String, dynamic>> tickets) async {
     final results = <Map<String, dynamic>>[];
+    final unexpectedSetupFailures = <String>[];
     for (final ticket in tickets) {
-      final key = _ticketKey(ticket);
-      if (key == null || key.isEmpty) {
-        results.add({
-          'ticket': null,
+      final outcome = await _runTicket(ticket);
+      if (outcome.postJsError != null) {
+        // #585 parity: Java's RuntimeException propagates out of
+        // runJobImpl — the job fails immediately and the remaining
+        // tickets are never attempted.
+        results.add(outcome.result);
+        return {
           'success': false,
-          'error': 'search result without a ticket key',
-        });
-        continue;
+          'error': outcome.postJsError,
+          'results': results,
+        };
       }
-      await _postTraceComment(key);
-      final agent = CliAgent(
-        params: _paramsForTicket(key),
-        workingDirectory: workingDirectory,
-        ticketData: ticket,
-        propertyReader: propertyReader,
-        jsRunner: jsRunner,
-      );
-      final result = await agent.run();
-      results.add(
-          {'ticket': key, 'success': result['success'] == true, ...result});
+      if (outcome.key != null && outcome.setupThrew) {
+        unexpectedSetupFailures.add(outcome.key!);
+      }
+      results.add(outcome.result);
+    }
+    if (unexpectedSetupFailures.isNotEmpty) {
+      return {
+        'success': false,
+        'error': _abortMessage(unexpectedSetupFailures),
+        'results': results,
+      };
     }
     final ok = results.isNotEmpty && results.every((r) => r['success'] == true);
     return {'success': ok, 'results': results};
+  }
+
+  /// Runs one ticket: trace comment, then a loud [CliAgent] (Java
+  /// Teammate epam/dm.ai#580/#585 parity — uncaught JS-action exceptions
+  /// fail the job visibly instead of being swallowed into warnings).
+  Future<_TicketOutcome> _runTicket(Map<String, dynamic> ticket) async {
+    final key = _ticketKey(ticket);
+    if (key == null || key.isEmpty) {
+      return _TicketOutcome.resultOnly({
+        'ticket': null,
+        'success': false,
+        'error': 'search result without a ticket key',
+      });
+    }
+    await _postTraceComment(key);
+    final agent = CliAgent(
+      params: _paramsForTicket(key),
+      workingDirectory: workingDirectory,
+      ticketData: ticket,
+      propertyReader: propertyReader,
+      jsRunner: jsRunner,
+      failOnJsActionErrors: true,
+    );
+    final result = await agent.run();
+    return _TicketOutcome(
+      key: key,
+      result: {'ticket': key, 'success': result['success'] == true, ...result},
+      setupThrew: result['unexpectedSetupFailure'] == true,
+      postJsError: result['postJsActionUncaught'] == true
+          ? result['error'] as String?
+          : null,
+    );
   }
 
   /// Runs one [CliAgent] against a single prepared [ticket] (no per-ticket
@@ -134,9 +178,22 @@ class TeammateJob {
       ticketData: ticket,
       propertyReader: propertyReader,
       jsRunner: jsRunner,
+      failOnJsActionErrors: true,
     );
     final result = await agent.run();
     final key = _ticketKey(ticket);
+    if (result['postJsActionUncaught'] == true) {
+      return {'success': false, 'error': result['error'], 'results': []};
+    }
+    if (result['unexpectedSetupFailure'] == true) {
+      // Java Teammate #580 parity: a swallowed uncaught setup exception
+      // fails the job — the CI step must go red.
+      return {
+        'success': false,
+        'error': _abortMessage([key ?? 'unknown']),
+        'results': [],
+      };
+    }
     return {
       'success': result['success'] == true,
       'results': [
@@ -144,6 +201,13 @@ class TeammateJob {
       ],
     };
   }
+
+  /// Java Teammate end-of-run hard-stop message (epam/dm.ai#580), listing
+  /// every ticket whose `preCliJSAction` threw an uncaught exception.
+  String _abortMessage(List<String> tickets) =>
+      'Teammate job aborted: preCliJSAction threw an unexpected error '
+      '(e.g. a git command failure) for ticket(s) $tickets — see the '
+      'warnings logged above for the underlying error(s).';
 
   /// The caller-provided ticket at `<workDir>/input/ticket.md`, mapped to
   /// the raw-tracker shape [CliAgent] understands (first line → summary,
@@ -364,4 +428,34 @@ Map<String, dynamic>? _decodeMap(String? raw) {
   if (decoded is Map<String, dynamic>) return decoded;
   if (decoded is Map) return decoded.cast<String, dynamic>();
   return null;
+}
+
+/// Per-ticket outcome of [_runTicket] — the result item plus the two
+/// loud-mode failure signals Teammate's job-level semantics act on
+/// (epam/dm.ai#580 unexpected setup failure, #585 postJSAction uncaught).
+class _TicketOutcome {
+  _TicketOutcome({
+    required this.result,
+    this.key,
+    this.setupThrew = false,
+    this.postJsError,
+  });
+
+  _TicketOutcome.resultOnly(this.result)
+      : key = null,
+        setupThrew = false,
+        postJsError = null;
+
+  /// The per-ticket result item merged into the job's `results` list.
+  final Map<String, dynamic> result;
+
+  /// The ticket key, or null for a keyless search result.
+  final String? key;
+
+  /// The ticket's `preCliJSAction` crashed with an uncaught exception.
+  final bool setupThrew;
+
+  /// The ticket's `postJSAction` crashed with an uncaught exception —
+  /// the job must fail immediately (Java's RuntimeException parity).
+  final String? postJsError;
 }

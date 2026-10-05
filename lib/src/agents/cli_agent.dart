@@ -51,12 +51,19 @@ class CliAgent {
   ///   real run this is fetched from Jira/ADO via the tracker client.
   /// - [propertyReader] — property resolution; defaults to a new reader.
   /// - [jsRunner] — JS execution engine; defaults to [JsJobRunner].
+  /// - [failOnJsActionErrors] — loud JS-action failure propagation (default
+  ///   `false`): when on, an uncaught exception in `preCliJSAction` or
+  ///   `postJSAction` fails the run visibly instead of being logged and
+  ///   swallowed. This is Java `Teammate` parity (epam/dm.ai#580, #585);
+  ///   the Java `CliAgent` — and this class with the flag off — keeps the
+  ///   swallow-and-continue contract. `TeammateJob` always turns it on.
   CliAgent({
     required this.params,
     this.workingDirectory,
     this.ticketData,
     PropertyReader? propertyReader,
     JsJobRunner? jsRunner,
+    this.failOnJsActionErrors = false,
   })  : propertyReader = propertyReader ?? PropertyReader(),
         jsRunner = jsRunner ?? const JsJobRunner();
 
@@ -78,6 +85,23 @@ class CliAgent {
 
   /// JS runner for `.js` actions and hooks.
   final JsJobRunner jsRunner;
+
+  /// Loud JS-action failure propagation — Java `Teammate` parity
+  /// (epam/dm.ai#580, #585): when on, an uncaught exception in
+  /// `preCliJSAction` or `postJSAction` fails the run visibly; when off
+  /// (Java `CliAgent` parity) every JS-action error is logged and the
+  /// lifecycle continues.
+  final bool failOnJsActionErrors;
+
+  /// Set when [failOnJsActionErrors] is on and `preCliJSAction` failed
+  /// (uncaught exception or a business `{success:false}`/`false`) — the
+  /// CLI phase and `postJSAction` are skipped (Java Teammate hard stop).
+  bool _preCliJsActionSkipped = false;
+
+  /// Set together with [_preCliJsActionSkipped] when the failure was an
+  /// uncaught exception rather than a deliberate business skip — Teammate
+  /// reports these as `unexpectedSetupFailures` and aborts the job.
+  bool _preCliSetupThrew = false;
 
   /// Result of the `cliCommands` phase — used by the reset hook.
   CliExecutionResult? _cliResult;
@@ -117,6 +141,15 @@ class CliAgent {
   Future<Map<String, dynamic>> _runGuarded() async {
     try {
       return await _runLifecycle(_resolveWorkingDirectory());
+    } on _JsActionUncaughtException catch (e) {
+      // Java Teammate #585 parity: a postJSAction uncaught exception must
+      // fail the job (and the CI step) with the full JS error text —
+      // never degrade into a swallowed warning.
+      return {
+        'success': false,
+        'error': e.toString(),
+        'postJsActionUncaught': true,
+      };
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -140,32 +173,13 @@ class CliAgent {
         workDir,
         skip: params.skipPreCliJSAction,
       );
-      response = await _executeCliCommands(workDir);
-      if (_strictModeMissingOutput) {
-        // Java `skipFieldUpdate` parity (epam/dm.ai#622, #409): in strict
-        // mode, never run postJSAction against the failed/missing CLI
-        // response — a post action like closeQuestionTicket would move
-        // tickets to Done on a genuine CLI failure. The error summary in
-        // `response` reports the failure instead.
-        stderr.writeln(
-          'Skipping postJSAction due to missing CLI output file '
-          '(requireCliOutputFile=true)',
-        );
-      } else {
-        _executeJsAction(
-          'postJSAction',
-          params.postJSAction,
-          response,
-          _inputContextPath,
-          workDir,
-          skip: params.skipPostJSAction,
-        );
-      }
+      response = await _runResponsePhase(workDir);
       await _executeScriptHook('cache', params.cache, workDir, response);
       return {
         'success': true,
         'contextId': params.contextId,
         'response': response,
+        if (_preCliSetupThrew) 'unexpectedSetupFailure': true,
       };
     } finally {
       await _executeScriptHook(
@@ -239,9 +253,20 @@ class CliAgent {
   ///
   /// Binds a top-level `metadata` into the JS `params` object
   /// ([_metadataContextParams] — Java `TrackerParams.METADATA` binding,
-  /// epam/dm.ai#623 parity). Errors are caught and logged — the lifecycle
-  /// continues (mirrors Java `executeJsAction`).
-  void _executeJsAction(
+  /// epam/dm.ai#623 parity).
+  ///
+  /// Error contract (Java parity):
+  /// - Default ([failOnJsActionErrors] off — Java `CliAgent`): errors are
+  ///   caught and logged, the lifecycle continues.
+  /// - Loud mode (Java `Teammate`, epam/dm.ai#580/#585): an uncaught
+  ///   exception in `postJSAction` is rethrown as
+  ///   [_JsActionUncaughtException] so the run fails with the full JS
+  ///   error text; an uncaught exception in `preCliJSAction` marks the run
+  ///   as an unexpected setup failure and skips the CLI + post phases; a
+  ///   deliberate `false` / `{success:false}` from `preCliJSAction` skips
+  ///   those phases as a business skip. `preJSAction` stays advisory in
+  ///   both modes — Java Teammate never checks the uncaught marker there.
+  String? _executeJsAction(
     String name,
     String? actionPath,
     String? response,
@@ -251,11 +276,11 @@ class CliAgent {
   }) {
     if (skip) {
       stderr.writeln('Skipping $name (skip${_flagName(name)}=true)');
-      return;
+      return null;
     }
-    if (actionPath == null || actionPath.trim().isEmpty) return;
+    if (actionPath == null || actionPath.trim().isEmpty) return null;
     try {
-      jsRunner.runScript(
+      final result = jsRunner.runScript(
         scriptPath: actionPath,
         jobParams: _buildJobParams(response, inputFolderPath),
         ticket: _resolvedTicketData ?? ticketData,
@@ -265,9 +290,66 @@ class CliAgent {
           contextParams: _metadataContextParams(),
         ),
       );
+      if (failOnJsActionErrors &&
+          name == 'preCliJSAction' &&
+          _isPreCliJsActionFailure(result)) {
+        // Java Teammate hard stop (epam/dm.ai#580): the JS action is
+        // responsible for its own failure notification.
+        stderr.writeln('preCliJSAction reported failure — skipping CLI '
+            'execution and postJSAction; the JS action is responsible '
+            'for its own failure notification.');
+        _preCliJsActionSkipped = true;
+      }
+      return result;
     } catch (e) {
+      if (!failOnJsActionErrors) {
+        stderr.writeln('$name failed, continuing: $e');
+        return null;
+      }
+      if (name == 'postJSAction') {
+        // #585: fail the job loudly instead of swallowing — the GHA step
+        // must go red with the JS error text.
+        throw _JsActionUncaughtException(
+          'postJSAction threw an uncaught exception'
+          '${_ticketKeySuffix()}: $e',
+        );
+      }
+      if (name == 'preCliJSAction') {
+        // #580: a genuine crash (e.g. a git checkout failure) must count
+        // as "threw", not a deliberate business skip.
+        stderr.writeln('preCliJSAction threw, treating as setup failure '
+            '(skipping CLI execution and postJSAction): $e');
+        _preCliSetupThrew = true;
+        _preCliJsActionSkipped = true;
+        return null;
+      }
       stderr.writeln('$name failed, continuing: $e');
+      return null;
     }
+  }
+
+  /// Java `Teammate.isPreCliJSActionFailure` parity: an explicit `false`
+  /// or an object/map containing `success: false`. Any other value
+  /// (including `null`/undefined — actions that don't return a structured
+  /// result) is treated as success.
+  bool _isPreCliJsActionFailure(String? result) {
+    if (result == null) return false;
+    final trimmed = result.trim();
+    if (trimmed == 'false') return true;
+    if (!trimmed.startsWith('{')) return false;
+    try {
+      final decoded = jsonDecode(trimmed);
+      return decoded is Map && decoded['success'] == false;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// `' for ticket <key>'` when ticket data carries a key — used to build
+  /// the Java-parity postJSAction error message (epam/dm.ai#585).
+  String _ticketKeySuffix() {
+    final key = _resolvedTicketData?['key'] ?? ticketData?['key'];
+    return key is String && key.isNotEmpty ? ' for ticket $key' : '';
   }
 
   /// The config key of the skip flag for a JS action name — `preJSAction`
@@ -278,6 +360,40 @@ class CliAgent {
   // ------------------------------------------------------------------
   // CLI command phase
   // ------------------------------------------------------------------
+
+  /// Runs the response phase: the CLI commands, then `postJSAction`.
+  ///
+  /// When `preCliJSAction` failed (loud mode), both are skipped — Java
+  /// Teammate hard stop: the JS action has already posted its own failure
+  /// notification, so nothing downstream should run (epam/dm.ai#580).
+  /// Returns the response (or the Java-parity skip label).
+  Future<String> _runResponsePhase(String workDir) async {
+    if (_preCliJsActionSkipped) {
+      return 'Skipped: preCliJSAction reported failure';
+    }
+    final response = await _executeCliCommands(workDir);
+    if (_strictModeMissingOutput) {
+      // Java `skipFieldUpdate` parity (epam/dm.ai#622, #409): in strict
+      // mode, never run postJSAction against the failed/missing CLI
+      // response — a post action like closeQuestionTicket would move
+      // tickets to Done on a genuine CLI failure. The error summary in
+      // `response` reports the failure instead.
+      stderr.writeln(
+        'Skipping postJSAction due to missing CLI output file '
+        '(requireCliOutputFile=true)',
+      );
+      return response;
+    }
+    _executeJsAction(
+      'postJSAction',
+      params.postJSAction,
+      response,
+      _inputContextPath,
+      workDir,
+      skip: params.skipPostJSAction,
+    );
+    return response;
+  }
 
   /// Builds and executes CLI commands, returning the extracted response.
   ///
@@ -638,4 +754,18 @@ class CliAgent {
       if (params.customParams != null) 'customParams': params.customParams,
     };
   }
+}
+
+/// A JS action crashed with an uncaught exception while
+/// [CliAgent.failOnJsActionErrors] is on — Java Teammate epam/dm.ai#585
+/// parity: the message carries the full JS error text so the failing CI
+/// step shows what actually broke.
+class _JsActionUncaughtException implements Exception {
+  const _JsActionUncaughtException(this.message);
+
+  /// The full error text (action name, ticket, JS error).
+  final String message;
+
+  @override
+  String toString() => message;
 }

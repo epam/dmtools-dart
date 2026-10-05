@@ -29,11 +29,13 @@ void main() {
 
 void cliAgentDefaultModeTests() {
   group('CliAgent default mode — JS action failures stay advisory', () {
-    test('postJSAction uncaught exception does not fail the run '
+    test(
+        'postJSAction uncaught exception does not fail the run '
         '(Java CliAgent parity)', () async {
       final tmp = await _createTempDir();
       try {
-        final post = _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
         final result = await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo done']
@@ -47,7 +49,8 @@ void cliAgentDefaultModeTests() {
       }
     });
 
-    test('preCliJSAction uncaught exception does not skip the CLI phase '
+    test(
+        'preCliJSAction uncaught exception does not skip the CLI phase '
         '(Java CliAgent parity)', () async {
       final tmp = await _createTempDir();
       final marker = File('${tmp.path}/marker');
@@ -76,11 +79,13 @@ void cliAgentDefaultModeTests() {
 
 void cliAgentLoudModeTests() {
   group('CliAgent loud mode — postJSAction', () {
-    test('uncaught exception fails the run with the JS error text '
+    test(
+        'uncaught exception fails the run with the JS error text '
         '(#585)', () async {
       final tmp = await _createTempDir();
       try {
-        final post = _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
         final result = await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo done']
@@ -99,13 +104,15 @@ void cliAgentLoudModeTests() {
       }
     });
 
-    test('uncaught exception skips the cache hook but still runs reset '
+    test(
+        'uncaught exception skips the cache hook but still runs reset '
         '(Java runJobImpl finally parity)', () async {
       final tmp = await _createTempDir();
       final cacheLog = '${tmp.path}/cache.log';
       final resetLog = '${tmp.path}/reset.log';
       try {
-        final post = _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
         await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo done']
@@ -127,7 +134,8 @@ void cliAgentLoudModeTests() {
         () async {
       final tmp = await _createTempDir();
       try {
-        final post = _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
         final result = await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo done']
@@ -149,14 +157,15 @@ void cliAgentLoudModeTests() {
   });
 
   group('CliAgent loud mode — preCliJSAction', () {
-    test('uncaught exception skips CLI execution and postJSAction, marks '
+    test(
+        'uncaught exception skips CLI execution and postJSAction, marks '
         'the run as an unexpected setup failure (#580)', () async {
       final tmp = await _createTempDir();
       final cliMarker = File('${tmp.path}/cli_marker');
       final postLog = '${tmp.path}/post.log';
       try {
-        final preCli =
-            _actionJs(tmp, 'precli_throw.js', 'throw new Error("git exploded");');
+        final preCli = _actionJs(
+            tmp, 'precli_throw.js', 'throw new Error("git exploded");');
         final post = _actionJs(
           tmp,
           'post_ok.js',
@@ -177,16 +186,17 @@ void cliAgentLoudModeTests() {
         // Java parity: the ticket itself is a "Skipped" result item — the
         // job-level abort happens in Teammate after the ticket loop.
         expect(result['success'], isTrue);
-        expect(result['response'],
-            'Skipped: preCliJSAction reported failure');
+        expect(result['response'], 'Skipped: preCliJSAction reported failure');
         expect(result['unexpectedSetupFailure'], isTrue);
       } finally {
         await tmp.delete(recursive: true);
       }
     });
 
-    test('returning {success:false} is a business skip — CLI and '
-        'postJSAction skipped, but no unexpected-setup marker (#580)', () async {
+    test(
+        'returning {success:false} is a business skip — CLI and '
+        'postJSAction skipped, but no unexpected-setup marker (#580)',
+        () async {
       final tmp = await _createTempDir();
       final cliMarker = File('${tmp.path}/cli_marker');
       try {
@@ -205,15 +215,15 @@ void cliAgentLoudModeTests() {
         )).run();
         expect(cliMarker.existsSync(), isFalse);
         expect(result['success'], isTrue);
-        expect(result['response'],
-            'Skipped: preCliJSAction reported failure');
+        expect(result['response'], 'Skipped: preCliJSAction reported failure');
         expect(result['unexpectedSetupFailure'], isNull);
       } finally {
         await tmp.delete(recursive: true);
       }
     });
 
-    test('returning false is a business skip too '
+    test(
+        'returning false is a business skip too '
         '(Java isPreCliJSActionFailure parity)', () async {
       final tmp = await _createTempDir();
       final cliMarker = File('${tmp.path}/cli_marker');
@@ -229,8 +239,7 @@ void cliAgentLoudModeTests() {
         )).run();
         expect(cliMarker.existsSync(), isFalse);
         expect(result['success'], isTrue);
-        expect(result['response'],
-            'Skipped: preCliJSAction reported failure');
+        expect(result['response'], 'Skipped: preCliJSAction reported failure');
         expect(result['unexpectedSetupFailure'], isNull);
       } finally {
         await tmp.delete(recursive: true);
@@ -242,8 +251,8 @@ void cliAgentLoudModeTests() {
       final tmp = await _createTempDir();
       final cliMarker = File('${tmp.path}/cli_marker');
       try {
-        final preCli =
-            _actionJs(tmp, 'precli_ok.js', 'file_write({path: "$cliMarker", content: "ran"});');
+        final preCli = _actionJs(tmp, 'precli_ok.js',
+            'file_write({path: "$cliMarker", content: "ran"});');
         final result = await (CliAgent(
           params: CliAgentParams()
             ..cliCommands = ['echo ok']
@@ -262,7 +271,8 @@ void cliAgentLoudModeTests() {
   });
 
   group('CliAgent loud mode — preJSAction', () {
-    test('uncaught exception stays advisory (Java Teammate parity — the '
+    test(
+        'uncaught exception stays advisory (Java Teammate parity — the '
         'marker is only checked for preCliJSAction and postJSAction)',
         () async {
       final tmp = await _createTempDir();
@@ -292,7 +302,8 @@ void cliAgentLoudModeTests() {
 
 void teammateJobLoudModeTests() {
   group('TeammateJob — preCliJSAction uncaught exception (#580)', () {
-    test('all tickets are attempted, then the job aborts with the '
+    test(
+        'all tickets are attempted, then the job aborts with the '
         'unexpected-setup-failure message', () async {
       final tmp = await _createTempDir();
       final cliLog = '${tmp.path}/cli.log';
@@ -301,7 +312,7 @@ void teammateJobLoudModeTests() {
           tmp,
           'precli_cond.js',
           'if (params.ticket.key === "PROJ-1") '
-          'throw new Error("git checkout failed");',
+              'throw new Error("git checkout failed");',
         );
         final job = TeammateJob(
           params: {
@@ -328,8 +339,8 @@ void teammateJobLoudModeTests() {
         final results = (result['results'] as List).cast<Map>();
         expect(results, hasLength(2));
         expect(results[0]['ticket'], 'PROJ-1');
-        expect(results[0]['response'],
-            'Skipped: preCliJSAction reported failure');
+        expect(
+            results[0]['response'], 'Skipped: preCliJSAction reported failure');
         expect(results[1]['ticket'], 'PROJ-2');
         expect(results[1]['success'], isTrue);
       } finally {
@@ -341,7 +352,8 @@ void teammateJobLoudModeTests() {
         () async {
       final tmp = await _createTempDir();
       try {
-        final preCli = _actionJs(tmp, 'precli_throw.js', 'throw new Error("x");');
+        final preCli =
+            _actionJs(tmp, 'precli_throw.js', 'throw new Error("x");');
         final job = TeammateJob(
           params: {
             'inputJql': 'key in (PROJ-1, PROJ-2)',
@@ -354,7 +366,8 @@ void teammateJobLoudModeTests() {
         );
         final result = await job.run();
         expect(result['success'], isFalse);
-        expect(result['error'] as String, contains('for ticket(s) [PROJ-1, PROJ-2]'));
+        expect(result['error'] as String,
+            contains('for ticket(s) [PROJ-1, PROJ-2]'));
       } finally {
         await tmp.delete(recursive: true);
       }
@@ -366,7 +379,8 @@ void teammateJobLoudModeTests() {
         Directory('${tmp.path}/input').createSync(recursive: true);
         File('${tmp.path}/input/ticket.md')
             .writeAsStringSync('Do the thing\nbody');
-        final preCli = _actionJs(tmp, 'precli_throw.js', 'throw new Error("x");');
+        final preCli =
+            _actionJs(tmp, 'precli_throw.js', 'throw new Error("x");');
         final job = TeammateJob(
           params: {
             'metadata': {'contextId': 'gh-345'},
@@ -387,12 +401,14 @@ void teammateJobLoudModeTests() {
   });
 
   group('TeammateJob — postJSAction uncaught exception (#585)', () {
-    test('the job fails immediately and remaining tickets are not '
+    test(
+        'the job fails immediately and remaining tickets are not '
         'processed (Java Teammate parity)', () async {
       final tmp = await _createTempDir();
       final cliLog = '${tmp.path}/cli.log';
       try {
-        final post = _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
+        final post =
+            _actionJs(tmp, 'post_throw.js', 'throw new Error("boom");');
         final job = TeammateJob(
           params: {
             'inputJql': 'key in (PROJ-1, PROJ-2)',

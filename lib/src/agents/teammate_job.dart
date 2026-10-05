@@ -99,6 +99,7 @@ class TeammateJob {
         ticketSource ?? (github ? githubIssueTicketSource : jiraTicketSource);
     final tickets = await source(inputJql);
     final results = <Map<String, dynamic>>[];
+    final unexpectedSetupFailures = <String>[];
     for (final ticket in tickets) {
       final key = _ticketKey(ticket);
       if (key == null || key.isEmpty) {
@@ -116,10 +117,40 @@ class TeammateJob {
         ticketData: ticket,
         propertyReader: propertyReader,
         jsRunner: jsRunner,
+        // Java Teammate loud JS-action semantics (epam/dm.ai#580, #585):
+        // uncaught exceptions in preCliJSAction/postJSAction fail the job
+        // visibly instead of being swallowed into warnings.
+        failOnJsActionErrors: true,
       );
       final result = await agent.run();
       results.add(
           {'ticket': key, 'success': result['success'] == true, ...result});
+      if (result['postJsActionUncaught'] == true) {
+        // #585 parity: Java's RuntimeException propagates out of
+        // runJobImpl — the job fails immediately and the remaining
+        // tickets are never attempted.
+        return {
+          'success': false,
+          'error': result['error'],
+          'results': results,
+        };
+      }
+      if (result['unexpectedSetupFailure'] == true) {
+        unexpectedSetupFailures.add(key);
+      }
+    }
+    if (unexpectedSetupFailures.isNotEmpty) {
+      // #580 parity (Java Teammate end-of-run hard stop): all matched
+      // tickets were attempted, but a swallowed uncaught setup exception
+      // must still fail the job so the CI step actually goes red.
+      return {
+        'success': false,
+        'error': 'Teammate job aborted: preCliJSAction threw an unexpected '
+            'error (e.g. a git command failure) for ticket(s) '
+            '$unexpectedSetupFailures — see the warnings logged above for '
+            'the underlying error(s).',
+        'results': results,
+      };
     }
     final ok = results.isNotEmpty && results.every((r) => r['success'] == true);
     return {'success': ok, 'results': results};
@@ -134,9 +165,16 @@ class TeammateJob {
       ticketData: ticket,
       propertyReader: propertyReader,
       jsRunner: jsRunner,
+      failOnJsActionErrors: true,
     );
     final result = await agent.run();
     final key = _ticketKey(ticket);
+    if (result['postJsActionUncaught'] == true ||
+        result['unexpectedSetupFailure'] == true) {
+      // Java Teammate #580/#585 parity: loud JS-action failures fail the
+      // job — the CI step must go red with the underlying error text.
+      return {'success': false, 'error': result['error'], 'results': []};
+    }
     return {
       'success': result['success'] == true,
       'results': [

@@ -1,4 +1,5 @@
-/// JS-bridge `file_list`/`file_exists` parity with Java `FileTools`
+/// JS-bridge `file_list`/`file_exists`/`file_write` parity with Java
+/// `FileTools`
 /// (epam/dm.ai 3fa210e6, #635): the tools the agents suite relies on,
 /// exposed through the same `executeToolViaJava` path the JS side uses.
 ///
@@ -24,6 +25,7 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
   fileListTests();
   fileExistsTests();
+  fileWriteTests();
 }
 
 void fileListTests() {
@@ -96,6 +98,67 @@ void fileExistsTests() {
         jsonDecode(bridge.execute('file_exists', {'path': '${dir.path}/nope'})),
         {'exists': false},
       );
+    });
+  });
+}
+
+void fileWriteTests() {
+  group(
+      'JS-bridge file_write (gh-361: parent-dir behavior of Java '
+      'FileTools.writeFile)', () {
+    final bridge = ToolBridge(registry: createDefaultToolRegistry());
+
+    test('creates missing parent directories before writing (gh-361)', () {
+      // Java writeFile: Files.createDirectories(parentDir) before
+      // Files.writeString — a write to a nested non-existent path succeeds
+      // (the token-usage reporter depends on this for its cache file).
+      // Parent creation only: Java's traversal sandbox is out of scope
+      // here (pre-existing bridge family gap, #365).
+      final nested = '${dir.path}/outputs/token_usage/cache.json';
+
+      expect(
+        jsonDecode(bridge.execute('file_write', {
+          'path': nested,
+          'content': '{"tokens": 42}',
+        })),
+        {'success': true},
+      );
+      expect(File(nested).readAsStringSync(), '{"tokens": 42}');
+    });
+
+    test('creates multi-level parents in one call', () {
+      final nested = '${dir.path}/a/b/c/d/e.txt';
+
+      expect(
+        jsonDecode(bridge.execute('file_write', {
+          'path': nested,
+          'content': 'deep',
+        })),
+        {'success': true},
+      );
+      expect(File(nested).readAsStringSync(), 'deep');
+    });
+
+    test('overwrites an existing file without touching the parent', () {
+      Directory('${dir.path}/sub').createSync();
+      final existing = '${dir.path}/sub/a.txt';
+      File(existing).writeAsStringSync('old');
+
+      expect(
+        jsonDecode(bridge.execute('file_write', {
+          'path': existing,
+          'content': 'new',
+        })),
+        {'success': true},
+      );
+      expect(File(existing).readAsStringSync(), 'new');
+    });
+
+    test('rejects an empty path with the error envelope', () {
+      final result = jsonDecode(
+        bridge.execute('file_write', {'path': '', 'content': 'x'}),
+      ) as Map<String, dynamic>;
+      expect(result['error'], isA<String>());
     });
   });
 }

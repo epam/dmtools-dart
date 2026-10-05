@@ -1,0 +1,147 @@
+/// Unit tests for `dmtools list` integration filtering — Java
+/// `McpCliHandler.getAvailableIntegrations` parity (dm.ai #570/#572):
+/// `DMTOOLS_INTEGRATIONS` wins verbatim when set; when unset the list is
+/// config-detected (doctor token presence) plus token-less integrations.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dmtools/dmtools.dart';
+import 'package:test/test.dart';
+
+late Directory _tmp;
+late List<String> _lines;
+late CliDispatcher _dispatcher;
+
+void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
+  setUp(() {
+    _tmp = Directory.systemTemp.createTempSync('dmtools_cli_list_');
+    PropertyReader.setOverrides({});
+    _lines = [];
+    _dispatcher = CliDispatcher(
+      writer: _lines.add,
+      propertyReader: PropertyReader(basePath: _tmp.path),
+      isTty: () => false,
+    );
+  });
+
+  tearDown(() {
+    PropertyReader.clearOverrides();
+    if (_tmp.existsSync()) _tmp.deleteSync(recursive: true);
+  });
+
+  _testConfigDetectedListing();
+  _testListFilters();
+}
+
+void _testConfigDetectedListing() {
+  group('list integration detection', () {
+    test(
+        'falls back to config-detected integrations when '
+        'DMTOOLS_INTEGRATIONS is unset', () async {
+      // With no override the list reflects what this machine can run —
+      // token-less integrations only in a tokenless env.
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final tools = _decodedTools();
+      expect(tools, isNotEmpty);
+      final integrations = tools.map((t) => t['integration'] as String).toSet();
+      expect(
+        integrations.difference(const {'cli', 'file', 'other', 'teams_auth'}),
+        isEmpty,
+      );
+      expect(tools.map((t) => t['name'] as String),
+          isNot(contains('jira_get_ticket')));
+    });
+
+    test('config-detected list includes jenkins once JENKINS_* is set',
+        () async {
+      _writeEnv('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final jenkins =
+          _decodedTools().where((t) => t['integration'] == 'jenkins').toList();
+      expect(jenkins, isNotEmpty);
+      expect(jenkins.every((t) => (t['name'] as String).startsWith('jenkins_')),
+          isTrue);
+    });
+
+    test('DMTOOLS_INTEGRATIONS still wins verbatim over config detection',
+        () async {
+      // Documented override: jenkins is fully configured, but an explicit
+      // env subset hides it (dm.ai #570 verified behavior).
+      _writeEnv('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira,cli'});
+      expect(await _dispatcher.dispatch(['list']), 0);
+      expect(
+        _decodedTools().map((t) => t['integration'] as String).toSet(),
+        {'jira', 'cli'},
+      );
+    });
+
+    test(
+        'a canonical tool schema is shown even when its integration is '
+        'not configured', () async {
+      // dm.ai #570: getToolSchema reads the FULL registry, so usage hints
+      // keep working for tools outside the config-detected list.
+      expect(await _dispatcher.dispatch(['jira_get_ticket', '--help']), 0);
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      final names = (result['tools'] as List)
+          .cast<Map<String, dynamic>>()
+          .map((t) => t['name'] as String);
+      expect(names, contains('jira_get_ticket'));
+    });
+  });
+}
+
+void _testListFilters() {
+  group('list filters', () {
+    test('filters the catalog by a case-insensitive substring', () async {
+      // 'contents' appears in the file_read description but not its name;
+      // file tools are token-less, so the filter matches regardless of
+      // which integrations are configured (dm.ai #570 test note).
+      expect(await _dispatcher.dispatch(['list', 'contents']), 0);
+      final tools = _decodedTools(raw: true);
+      expect(tools, isNotEmpty);
+      for (final t in tools) {
+        final matches =
+            (t['name'] as String).toLowerCase().contains('contents') ||
+                (t['description'] as String).toLowerCase().contains('contents');
+        expect(matches, isTrue);
+      }
+    });
+
+    test('honors the DMTOOLS_INTEGRATIONS filter', () async {
+      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira'});
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final tools = _decodedTools();
+      expect(tools, isNotEmpty);
+      for (final t in tools) {
+        expect(t['integration'], 'jira');
+      }
+    });
+  });
+}
+
+/// Writes a `dmtools.env` into the dispatcher's base directory.
+void _writeEnv(String content) =>
+    File('${_tmp.path}/dmtools.env').writeAsStringSync(content);
+
+/// Decodes the `tools` array of the last written JSON response.
+List<Map<String, dynamic>> _decodedTools({bool raw = false}) {
+  final decoded =
+      jsonDecode(raw ? _lines.last : _lines.join('\n')) as Map<String, dynamic>;
+  return (decoded['tools'] as List).cast<Map<String, dynamic>>();
+}

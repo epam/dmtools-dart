@@ -49,8 +49,9 @@ void validateClientIdTests() {
         () => SharepointClient.validateClientId(null),
         throwsA(
           predicate<StateError>(
-            (e) => e.message!.contains('TEAMS_CLIENT_ID') &&
-                e.message!.contains('Teams authentication configuration'),
+            (e) =>
+                e.message.contains('TEAMS_CLIENT_ID') &&
+                e.message.contains('Teams authentication configuration'),
           ),
         ),
       );

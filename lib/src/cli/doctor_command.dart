@@ -107,8 +107,8 @@ class DoctorCommand {
     };
     final integrations = <String>{..._alwaysAvailable};
     for (final entry in _configuredMapping.entries) {
-      final ready = entry.value.every((name) => checks[name]?.configured ==
-          true);
+      final ready =
+          entry.value.every((name) => checks[name]?.configured == true);
       if (ready) integrations.addAll(entry.key);
     }
     return integrations;

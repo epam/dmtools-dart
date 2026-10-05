@@ -203,8 +203,7 @@ JIRA_BASE_PATH=https://test.atlassian.net
 JIRA_EMAIL=user@test.com
 JIRA_API_TOKEN=abc123
 ''');
-      final result =
-          await _dispatchTool(['list', 'jira_search'], code: 0);
+      final result = await _dispatchTool(['list', 'jira_search'], code: 0);
       final names = _toolNames(result);
       expect(names, contains('jira_search_by_jql'));
       expect(names.every((name) => name.startsWith('jira_search')), isTrue);

@@ -62,7 +62,7 @@ class GithubRateLimitRetryInterceptor extends Interceptor {
             SyncRetryPolicy(
               maxAttempts: maxAttempts,
               baseDelayMs: 1000,
-              maxDelayMs: 600,
+              maxDelayMs: 60000,
               backoffMultiplier: 2.0,
               jitterFactor: 0.3,
               random: Random(),

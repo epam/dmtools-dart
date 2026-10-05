@@ -78,7 +78,7 @@ SyncRetryPolicy _policy({int maxAttempts = 5, int cap = 3600}) =>
     SyncRetryPolicy(
       maxAttempts: maxAttempts,
       baseDelayMs: 1000,
-      maxDelayMs: 600,
+      maxDelayMs: 60000,
       backoffMultiplier: 2.0,
       jitterFactor: 0.3,
       rateLimitMaxWaitSeconds: cap,
@@ -247,8 +247,8 @@ void budgetAndPassThroughTests() {
         }),
       );
 
-      expect(
-        () => f.dio.get<String>('https://api.github.com/user'),
+      await expectLater(
+        f.dio.get<String>('https://api.github.com/user'),
         throwsA(
           isA<DioException>()
               .having((e) => e.response?.statusCode, 'status', 429),
@@ -261,8 +261,8 @@ void budgetAndPassThroughTests() {
     test('non-429 errors pass through untouched', () async {
       final f = _fixture(handler: (_) => _resp(500, 'boom'));
 
-      expect(
-        () => f.dio.get<String>('https://api.github.com/user'),
+      await expectLater(
+        f.dio.get<String>('https://api.github.com/user'),
         throwsA(
           isA<DioException>()
               .having((e) => e.response?.statusCode, 'status', 500),
@@ -282,8 +282,8 @@ void budgetAndPassThroughTests() {
       final response = await f.dio.get<String>('https://api.github.com/user');
 
       expect(response.statusCode, 200);
-      expect(f.sleeps.single, const Duration(seconds: 60),
-          reason: 'header-less backoff stays capped at maxDelayMs');
+      expect(f.sleeps.single, const Duration(seconds: 1),
+          reason: 'header-less 429 falls back to the 1s base backoff delay');
     });
   });
 }

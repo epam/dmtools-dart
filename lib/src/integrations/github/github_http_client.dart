@@ -43,7 +43,7 @@ class GithubHttpClient extends BaseHttpClient {
       policy: SyncRetryPolicy(
         maxAttempts: GithubRateLimitRetryInterceptor.defaultMaxAttempts,
         baseDelayMs: 1000,
-        maxDelayMs: 600,
+        maxDelayMs: 60000,
         backoffMultiplier: 2.0,
         jitterFactor: 0.3,
         rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(reader),

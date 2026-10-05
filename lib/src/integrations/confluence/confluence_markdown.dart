@@ -12,8 +12,14 @@
 /// (footnotes, definition lists, raw HTML in Markdown) pass through escaped.
 library;
 
+import 'dart:convert';
+
 /// Storage → Markdown internals live in the part file below.
 part 'confluence_markdown_storage.dart';
+
+/// Excerpt-include / mention resolvers (Java `ConfluenceExcerptInliner` /
+/// `ConfluenceMentionResolver` parity).
+part 'confluence_markdown_resolvers.dart';
 
 /// File extensions Confluence treats as downloadable attachments.
 const attachmentExtensions = {

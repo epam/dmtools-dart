@@ -24,6 +24,7 @@ import 'sync_request_helpers.dart';
 part 'confluence_sync_page_ops.dart';
 part 'confluence_sync_downloader.dart';
 part 'confluence_sync_tools_helpers.dart';
+part 'confluence_sync_resolvers.dart';
 
 /// Confluence executors: `confluence_*` tool name → JSON result.
 class ConfluenceSyncTools {
@@ -89,23 +90,6 @@ class ConfluenceSyncTools {
     );
   }
 
-  /// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
-  /// Granular/scoped tokens require the v2 API; legacy v1 content endpoints
-  /// 401 under them. Java parity: `Confluence.isApiV2`.
-  bool _isApiV2(_Conf config) => config.apiVersion.toLowerCase() == 'v2';
-
-  /// Confluence v2 REST base URL: `{siteRoot}/wiki/api/v2`.
-  ///
-  /// [rootUrl] may already end with `/wiki` (direct site URL) or omit it (the
-  /// granular-token gateway `https://api.atlassian.com/ex/confluence/{id}`).
-  /// Normalize so `/wiki` appears exactly once. Java parity: `Confluence.pathV2`.
-  String _baseUrlV2(_Conf config) {
-    final root = config.rootUrl.endsWith('/wiki')
-        ? config.rootUrl.substring(0, config.rootUrl.length - '/wiki'.length)
-        : config.rootUrl;
-    return '$root/wiki/api/v2';
-  }
-
   /// `confluence_search` — GET `content/search?cql={cql}`.
   String _search(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
@@ -129,14 +113,37 @@ class ConfluenceSyncTools {
 
   /// `confluence_create_page` — POST `content` with the storage-format page
   /// (Java `createPage`; `ancestors` included when `parentId` is given).
+  ///
+  /// Under `CONFLUENCE_API_VERSION=v2` resolves the space key to its
+  /// numeric id and POSTs `/wiki/api/v2/pages` (required for
+  /// granular/scoped tokens).
   String _createPage(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
+      if (_isApiV2(config)) return _createPageV2(config, args);
       return syncBodyOrError(SyncHttpClient.post(
         '${config.baseUrl}/content',
         headers: config.headers,
         body: jsonEncode(_pagePayload(args)),
       ));
     });
+  }
+
+  /// The v2 `confluence_create_page` tail: resolves the space key via the
+  /// v2 spaces endpoint, then POSTs the v2 pages payload.
+  String _createPageV2(_Conf config, Map<String, dynamic> args) {
+    final space = syncAsStr(args['space']);
+    final spaceId = _spaceIdFromKey(config, space);
+    if (spaceId == null) return syncErr(_spaceNotFound(space));
+    return syncBodyOrError(SyncHttpClient.post(
+      '${_baseUrlV2(config)}/pages',
+      headers: config.headers,
+      body: jsonEncode(_pagePayloadV2(
+        spaceId,
+        syncAsStr(args['title']),
+        syncAsStr(args['parentId'] ?? args['parentPageId']),
+        syncAsStr(args['body']),
+      )),
+    ));
   }
 
   /// `confluence_update_page` — PUT `content/{contentId}` with a bumped
@@ -155,11 +162,7 @@ class ConfluenceSyncTools {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final id = syncAsStr(args['contentId']);
       if (_isApiV2(config)) {
-        final body = syncBodyOrError(
-          SyncHttpClient.get(
-              '${_baseUrlV2(config)}/pages/$id?body-format=storage',
-              headers: config.headers),
-        );
+        final body = syncBodyOrError(_pageByIdResponse(config, id));
         return _applyFormat(body, args['format']);
       }
       final body = syncBodyOrError(
@@ -184,15 +187,8 @@ class ConfluenceSyncTools {
     final format = syncAsStr(args['format']);
     // v2: GET /wiki/api/v2/pages?parent-id={id} (granular/scoped tokens).
     // The v2 list response carries the same `results` array shape.
-    final resp = _isApiV2(config)
-        ? SyncHttpClient.get(
-            '${_baseUrlV2(config)}/pages?parent-id=$id&limit=100&body-format=storage',
-            headers: config.headers)
-        : _contentGet(
-            config,
-            '$id/child/page?limit=100&expand=$_contentExpand',
-          );
-    final results = _childrenResults(syncBodyOrError(resp));
+    final results =
+        _childrenResults(syncBodyOrError(_childrenResponse(config, id)));
     if (results == null) {
       return syncErr('Unexpected children response for $id');
     }
@@ -275,6 +271,8 @@ class ConfluenceSyncTools {
         _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
       );
       if (existing.isNotEmpty) return jsonEncode(existing.first);
+      if (_isApiV2(config))
+        return _createPageV2(config, {...args, 'space': space});
       return syncBodyOrError(SyncHttpClient.post(
         '${config.baseUrl}/content',
         headers: config.headers,
@@ -301,15 +299,14 @@ class ConfluenceSyncTools {
   }
 
   /// `confluence_get_content_attachments` — GET
-  /// `content/{contentId}/child/attachment`, returning the `results` array.
+  /// `content/{contentId}/child/attachment` (v1) or
+  /// `/wiki/api/v2/pages/{contentId}/attachments` (v2), returning the
+  /// `results` array.
   String _getContentAttachments(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final id = syncAsStr(args['contentId']);
-      final resp = SyncHttpClient.get(
-        '${config.baseUrl}/content/$id/child/attachment',
-        headers: config.headers,
-      );
-      final results = _childrenResults(syncBodyOrError(resp));
+      final results =
+          _childrenResults(syncBodyOrError(_attachmentsResponse(config, id)));
       if (results == null) {
         return syncErr('Unexpected attachments response for $id');
       }
@@ -370,7 +367,12 @@ class ConfluenceSyncTools {
       final contents = <Map<String, dynamic>>[];
       for (final url in urls) {
         if (url.isEmpty) continue;
-        final content = _contentFromUrl(config, url);
+        Map<String, dynamic>? content;
+        try {
+          content = _contentFromUrl(config, url);
+        } on Object {
+          content = null; // Java skips URLs that fail to resolve.
+        }
         if (content != null) contents.add(content);
       }
       return jsonEncode(_applyFormatToList(contents, args['format']));
@@ -393,6 +395,11 @@ class ConfluenceSyncTools {
   /// The shared `update_page*` tail: bumps the current version of the page
   /// and PUTs the merged payload (Java `updatePage`; the history-comment
   /// variant adds `version.message`).
+  ///
+  /// Under `CONFLUENCE_API_VERSION=v2` reads the version via
+  /// `GET /wiki/api/v2/pages/{id}` and PUTs `/wiki/api/v2/pages/{id}` with
+  /// the v2 payload (no ancestors/space, explicit `current` status) —
+  /// required for granular/scoped tokens.
   String _updateWithVersion(
     _Conf config,
     Map<String, dynamic> args, {
@@ -402,6 +409,19 @@ class ConfluenceSyncTools {
     final version = _currentVersion(config, contentId);
     if (version == null) {
       return syncErr('Failed to fetch version for $contentId');
+    }
+    if (_isApiV2(config)) {
+      return syncBodyOrError(SyncHttpClient.put(
+        '${_baseUrlV2(config)}/pages/$contentId',
+        headers: config.headers,
+        body: jsonEncode(_updatePayloadV2(
+          contentId,
+          syncAsStr(args['title']),
+          syncAsStr(args['body']),
+          version + 1,
+          historyComment,
+        )),
+      ));
     }
     return syncBodyOrError(SyncHttpClient.put(
       '${config.baseUrl}/content/$contentId',
@@ -565,19 +585,54 @@ const _searchExpand = 'title,body.excerpt,history,space,body.storage';
 /// (Java `IllegalStateException`).
 const _defaultSpaceRequired = 'Default space not set';
 
+/// True when v2 content endpoints are in use (`CONFLUENCE_API_VERSION=v2`).
+/// Granular/scoped tokens require the v2 API; legacy v1 content endpoints
+/// 401 under them. Java parity: `Confluence.isApiV2`.
+bool _isApiV2(_Conf config) => config.apiVersion.toLowerCase() == 'v2';
+
+/// Confluence v2 REST base URL: `{siteRoot}/wiki/api/v2`.
+///
+/// [rootUrl] may already end with `/wiki` (direct site URL) or omit it (the
+/// granular-token gateway `https://api.atlassian.com/ex/confluence/{id}`).
+/// Normalize so `/wiki` appears exactly once. Java parity: `Confluence.pathV2`.
+String _baseUrlV2(_Conf config) {
+  final root = config.rootUrl.endsWith('/wiki')
+      ? config.rootUrl.substring(0, config.rootUrl.length - '/wiki'.length)
+      : config.rootUrl;
+  return '$root/wiki/api/v2';
+}
+
 /// GETs `content?expand=…&title=…[&spaceKey=…]` (Java `content(title,
 /// space)`; the spaceKey param is dropped for an empty space).
+///
+/// Under `CONFLUENCE_API_VERSION=v2` queries
+/// `/wiki/api/v2/pages?title=…&spaceId=…&body-format=storage` instead —
+/// v2 filters by numeric space id resolved from the key via the spaces
+/// endpoint (Java `spaceIdFromKey`; a resolution failure throws, matching
+/// the Java IOException). Required for granular/scoped tokens.
 SyncHttpResponse _titleAndSpaceResponse(
   _Conf config,
   String title,
   String space,
-) =>
-    SyncHttpClient.get(
-      '${config.baseUrl}/content?expand=${Uri.encodeQueryComponent(_contentExpand)}'
-      '&title=${Uri.encodeQueryComponent(title)}'
-      '${space.isEmpty ? '' : '&spaceKey=${Uri.encodeQueryComponent(space)}'}',
-      headers: config.headers,
-    );
+) {
+  if (_isApiV2(config)) {
+    final url = StringBuffer('${_baseUrlV2(config)}/pages?title='
+        '${Uri.encodeQueryComponent(title)}');
+    if (space.isNotEmpty) {
+      final spaceId = _spaceIdFromKey(config, space);
+      if (spaceId == null) throw StateError(_spaceNotFound(space));
+      url.write('&spaceId=$spaceId');
+    }
+    url.write('&body-format=storage');
+    return SyncHttpClient.get(url.toString(), headers: config.headers);
+  }
+  return SyncHttpClient.get(
+    '${config.baseUrl}/content?expand=${Uri.encodeQueryComponent(_contentExpand)}'
+    '&title=${Uri.encodeQueryComponent(title)}'
+    '${space.isEmpty ? '' : '&spaceKey=${Uri.encodeQueryComponent(space)}'}',
+    headers: config.headers,
+  );
+}
 
 /// The content objects of a title/space listing.
 List<Map<String, dynamic>> _contentList(SyncHttpResponse resp) {
@@ -665,10 +720,8 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   if (resolved == null) return null;
   final (:ref, url: _) = resolved;
   if (ref is ConfluencePageIdRef) {
-    final decoded = syncTryDecode(syncBodyOrError(_contentGet(
-      config,
-      '${ref.id}?expand=$_contentExpand',
-    )));
+    final decoded =
+        syncTryDecode(syncBodyOrError(_pageByIdResponse(config, ref.id)));
     return decoded is Map<String, dynamic> ? decoded : null;
   }
   if (ref is ConfluenceDisplayRef) {

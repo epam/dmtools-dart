@@ -23,10 +23,17 @@ class _XmlNode {
         children = [],
         text = '';
 
-  /// Concatenated descendant text (entities unescaped).
-  String get content => children
-      .map((c) => c.name == null ? unescapeXml(c.text) : c.content)
-      .join();
+  /// Concatenated descendant text (entities unescaped; `<time>` date
+  /// lozenges contribute their `datetime` attribute — the Java preprocess
+  /// substitutes them before rendering, bb1b51e9).
+  String get content => children.map(_childContent).join();
+
+  /// The text one [child] contributes to [_XmlNode.content].
+  String _childContent(_XmlNode child) {
+    if (child.name == null) return unescapeXml(child.text);
+    if (child.name == 'time') return child.attrs['datetime'] ?? child.content;
+    return child.content;
+  }
 
   /// First child element named [tag], or `null`.
   _XmlNode? child(String tag) {
@@ -113,6 +120,7 @@ String _wrapStorage(_XmlNode node, List<String> parts) {
   return _wrapHeadingOrParagraph(node, inner) ??
       _wrapListOrStructural(node, inner) ??
       _wrapConfluenceBlock(node, inner) ??
+      _wrapTimeTag(node, inner) ??
       _wrapAdfNode(node, inner) ??
       _wrapAnchorOrImage(node) ??
       _wrapInlineStyle(node, inner);
@@ -165,6 +173,15 @@ String? _wrapConfluenceBlock(_XmlNode node, String inner) {
       return inner;
   }
   return null;
+}
+
+/// `<time datetime="…">` date lozenges (Java bb1b51e9): the date lives only
+/// in the attribute, so it is rendered verbatim (an absent attribute falls
+/// back to the element's inner text); `null` for anything else.
+String? _wrapTimeTag(_XmlNode node, String inner) {
+  if (node.name != 'time') return null;
+  final datetime = node.attrs['datetime'];
+  return datetime == null ? inner : datetime;
 }
 
 /// `ac:adf-node` wrappers (Java dm.ai #596 parity): a synced block
@@ -245,6 +262,9 @@ String _taskToMarkdown(_XmlNode node) {
 
 /// Renders a `code` macro (or other macros as fenced plain text).
 String _macroToMarkdown(_XmlNode node) {
+  if (node.attrs['ac:name'] == 'native-embed:whiteboard') {
+    return _whiteboardMarker(node);
+  }
   final body = node.child('ac:plain-text-body')?.content ??
       node.child('ac:rich-text-body')?.content ??
       '';
@@ -253,6 +273,22 @@ String _macroToMarkdown(_XmlNode node) {
       : '';
   final fence = lang.isEmpty ? '```' : '```$lang';
   return '\n\n$fence\n$body\n```\n\n';
+}
+
+/// `[Whiteboard (content not available via API)…]` marker for
+/// `native-embed:whiteboard` macros (Java 932e0db0): whiteboard content is
+/// not exposed by the Confluence API, so only a marker with the whiteboard
+/// `url` parameter (when present) is kept.
+String _whiteboardMarker(_XmlNode node) {
+  for (final param in node.children) {
+    if (param.name == 'ac:parameter' && param.attrs['ac:name'] == 'url') {
+      final url = param.content.trim();
+      if (url.isNotEmpty) {
+        return '\n[Whiteboard (content not available via API): $url]\n';
+      }
+    }
+  }
+  return '\n[Whiteboard (content not available via API)]\n';
 }
 
 /// Renders a `<table>` subtree as a GFM pipe table.

@@ -250,7 +250,8 @@ class AgentPackResolver {
         catalog is Map ? _versionFromCatalogMap(catalog, agent) : null;
     if (version == null || version.isEmpty) {
       throw AgentPackException(
-          "Agent '$agent' not found in registry catalog $catalogUrl");
+          "Agent '$agent' not found in registry catalog $catalogUrl. "
+          'Available agents: ${_availableAgentNames(catalog)}');
     }
     return version;
   }
@@ -264,6 +265,26 @@ class AgentPackResolver {
     if (agents is! Map) return null;
     final nested = agents[agent];
     return nested is String && nested.isNotEmpty ? nested : null;
+  }
+
+  /// The catalog's offer, sorted for a stable message: every flat key except
+  /// the `agents` holder, plus the nested map's keys (Java parity —
+  /// `availableAgentNames`, dm.ai e97ff0f2).
+  String _availableAgentNames(Object? catalog) {
+    final names = <String>{};
+    if (catalog is Map) {
+      for (final key in catalog.keys) {
+        if (key != 'agents' && key is String) names.add(key);
+      }
+      final agents = catalog['agents'];
+      if (agents is Map) {
+        for (final key in agents.keys) {
+          if (key is String) names.add(key);
+        }
+      }
+    }
+    final sorted = names.toList()..sort();
+    return sorted.join(', ');
   }
 
   /// The catalog is an external input interpolated into the download URL —
@@ -376,6 +397,12 @@ class AgentPackResolver {
 
   /// A segment made only of dots (`.` / `..` / `...`) is a traversal vector.
   static final RegExp _dotsOnly = RegExp(r'^\.+$');
+
+  /// Unix mode file-type mask for symlink entries (0o120000) — checked
+  /// directly, like the Java `AgentPackResolver` (commons-compress), because
+  /// the archive package only flags `isSymbolicLink` for unix-made zips
+  /// (its own encoder writes an MS-DOS versionMadeBy).
+  static const int _unixSymlinkMode = 0xA000;
 
   /// Rejects unsafe manifest `agent`/`version` values BEFORE any cache path
   /// is built from them.
@@ -597,7 +624,8 @@ class AgentPackResolver {
     if (name.startsWith('/') || name.contains('..') || p.isAbsolute(name)) {
       throw AgentPackException('Zip-slip entry rejected: $name');
     }
-    if (entry.isSymbolicLink) {
+    if (entry.isSymbolicLink ||
+        (entry.mode & _unixSymlinkMode) == _unixSymlinkMode) {
       throw AgentPackException('Symlink entry rejected: $name');
     }
     final target = File(p.normalize(p.join(targetDir.path, name)));

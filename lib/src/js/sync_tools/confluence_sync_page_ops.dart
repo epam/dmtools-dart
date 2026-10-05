@@ -14,14 +14,25 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
     String body,
     String space,
   ) {
-    final resp = SyncHttpClient.post(
-      '${_config.baseUrl}/content',
-      headers: _config.headers,
-      body: jsonEncode(
-        _contentPayload(
-            title: title, parentId: parentId, body: body, space: space),
-      ),
-    );
+    final SyncHttpResponse resp;
+    if (_isApiV2(_config)) {
+      final spaceId = _spaceIdFromKey(_config, space);
+      if (spaceId == null) throw StateError(_spaceNotFound(space));
+      resp = SyncHttpClient.post(
+        '${_baseUrlV2(_config)}/pages',
+        headers: _config.headers,
+        body: jsonEncode(_pagePayloadV2(spaceId, title, parentId, body)),
+      );
+    } else {
+      resp = SyncHttpClient.post(
+        '${_config.baseUrl}/content',
+        headers: _config.headers,
+        body: jsonEncode(
+          _contentPayload(
+              title: title, parentId: parentId, body: body, space: space),
+        ),
+      );
+    }
     return _decodeOrThrow(resp, 'createPage');
   }
 
@@ -34,28 +45,37 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
     String space, [
     String historyComment = '',
   ]) {
-    final version = _fetchVersion(contentId);
-    final resp = SyncHttpClient.put(
-      '${_config.baseUrl}/content/$contentId',
-      headers: _config.headers,
-      body: jsonEncode(_contentPayload(
-        id: contentId,
-        title: title,
-        parentId: parentId,
-        body: body,
-        space: space,
-        version: {'number': version + 1, 'message': historyComment},
-      )),
-    );
+    final SyncHttpResponse resp;
+    if (_isApiV2(_config)) {
+      final version = _fetchVersion(contentId);
+      resp = SyncHttpClient.put(
+        '${_baseUrlV2(_config)}/pages/$contentId',
+        headers: _config.headers,
+        body: jsonEncode(
+          _updatePayloadV2(contentId, title, body, version + 1, historyComment),
+        ),
+      );
+    } else {
+      final version = _fetchVersion(contentId);
+      resp = SyncHttpClient.put(
+        '${_config.baseUrl}/content/$contentId',
+        headers: _config.headers,
+        body: jsonEncode(_contentPayload(
+          id: contentId,
+          title: title,
+          parentId: parentId,
+          body: body,
+          space: space,
+          version: {'number': version + 1, 'message': historyComment},
+        )),
+      );
+    }
     return _decodeOrThrow(resp, 'updatePage');
   }
 
   @override
   List<Map<String, dynamic>> getChildren(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/page?limit=100',
-      headers: _config.headers,
-    );
+    final resp = _childrenResponse(_config, contentId);
     final decoded = _decodeOrThrow(resp, 'getChildren');
     final results = decoded['results'];
     if (results is! List) return const [];
@@ -70,11 +90,7 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
 
   @override
   Map<String, dynamic> getContent(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId'
-      '?expand=body.storage,ancestors,version',
-      headers: _config.headers,
-    );
+    final resp = _pageByIdResponse(_config, contentId);
     return _decodeOrThrow(resp, 'getContent');
   }
 
@@ -102,10 +118,7 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
 
   @override
   List<String> listAttachmentNames(String contentId) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
+    final resp = _attachmentsResponse(_config, contentId);
     if (!resp.isOk) return const [];
     final decoded = syncTryDecode(resp.body);
     final results = decoded is Map ? decoded['results'] : null;
@@ -179,10 +192,7 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
 
   /// The existing attachment object with [name] on [contentId], if any.
   Map<String, dynamic>? _existingByName(String contentId, String name) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
-    );
+    final resp = _attachmentsResponse(_config, contentId);
     if (!resp.isOk) return null;
     final results = _childrenResults(resp.body) ?? const [];
     for (final attachment in results) {

@@ -19,7 +19,48 @@ void main() {
   jitterDelayTests();
   rateLimitResetWaitTests();
   rateLimitRetryAfterTests();
+  deterministicRetryTests();
   retryIntegrationTests();
+}
+
+/// Java `RetryPolicyTest` additions from epam/dm.ai 3fa210e6 (#635):
+/// retryability is judged by status code and body, never by substrings of
+/// an error message (the message embeds the request URL, so an ephemeral
+/// port like 50312 misfired the old "503" check and retried a 400).
+void deterministicRetryTests() {
+  group('SyncRetryPolicy deterministic retryability (dm.ai#635)', () {
+    const policy = SyncRetryPolicy(
+      maxAttempts: 5,
+      baseDelayMs: 1000,
+      maxDelayMs: 60000,
+      backoffMultiplier: 2.0,
+      jitterFactor: 0.0,
+    );
+
+    test('URL port digits are never read as a retryable status code', () {
+      // Mirrors testRestClientExceptionUrlDigitsAreNotStatusCodes: the
+      // failing message carries the request URL with an ephemeral port.
+      for (final port in ['50312', '42950', '15020', '45043']) {
+        final message = 'printAndCreateException error: '
+            'http://127.0.0.1:$port/keyerror\nbad key\nBad Request\n400';
+        expect(policy.shouldRetry(1, 400, message), isFalse,
+            reason: 'port $port');
+        expect(policy.isRetryableStatus(400, message), isFalse,
+            reason: 'port $port');
+      }
+    });
+
+    test('retryable by status code or rate-limit body', () {
+      // Mirrors testRestClientExceptionRetryableByStatusOrBody.
+      expect(policy.shouldRetry(1, 502), isTrue);
+      expect(policy.shouldRetry(1, 504), isTrue);
+      expect(policy.shouldRetry(1, 400, 'Too Many Requests'), isTrue);
+      expect(policy.shouldRetry(1, 400, 'rate limit exceeded'), isTrue);
+      expect(policy.shouldRetry(1, 404, 'nope'), isFalse);
+      // Body matching is case-insensitive, like Java's toLowerCase.
+      expect(policy.shouldRetry(1, 400, 'Request Was Throttled'), isTrue);
+    });
+  });
 }
 
 void policyConfigTests() {

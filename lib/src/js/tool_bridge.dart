@@ -485,8 +485,13 @@ class ToolBridge {
 
   String _listDir(String path) {
     try {
-      final entries =
-          Directory(_resolve(path)).listSync().map((e) => e.path).toList();
+      // Java FileTools.listFiles parity (dm.ai#635): entries are absolute,
+      // normalized, and sorted.
+      final entries = Directory(_resolve(path))
+          .listSync()
+          .map((e) => File(e.path).absolute.path)
+          .toList()
+        ..sort();
       return jsonEncode({'entries': entries});
     } catch (e) {
       return _err(e.toString());

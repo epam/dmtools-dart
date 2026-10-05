@@ -1,0 +1,69 @@
+/// JS-bridge `file_list`/`file_exists` parity with Java `FileTools`
+/// (epam/dm.ai 3fa210e6, #635): the tools the agents suite relies on,
+/// exposed through the same `executeToolViaJava` path the JS side uses.
+///
+/// Java `FileTools.listFiles` returns `{"entries": [absolute paths,
+/// sorted]}`; `fileExists` returns a boolean (false for paths outside the
+/// sandbox). The Dart bridge answers both as JSON strings.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dmtools/src/js/tool_bridge.dart';
+import 'package:dmtools/src/mcp/default_tool_registry.dart';
+import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
+
+void main() {
+  late Directory dir;
+
+  setUp(() => dir = Directory.systemTemp.createTempSync('dmtools_fbridge'));
+  tearDown(() => dir.deleteSync(recursive: true));
+
+  group('JS-bridge file_list (Java FileTools parity, dm.ai#635)', () {
+    test('returns absolute, sorted entries as {"entries": [...]}', () {
+      File('${dir.path}/b.txt').writeAsStringSync('b');
+      File('${dir.path}/a.txt').writeAsStringSync('a');
+      Directory('${dir.path}/sub').createSync();
+
+      final result = jsonDecode(
+        ToolBridge(registry: createDefaultToolRegistry())
+            .execute('file_list', {'path': dir.path}),
+      ) as Map<String, dynamic>;
+
+      final entries = (result['entries'] as List).cast<String>();
+      expect(entries, hasLength(3));
+      expect(entries, orderedEquals([...entries]..sort()));
+      for (final entry in entries) {
+        expect(p.isAbsolute(entry), isTrue, reason: entry);
+      }
+      expect(entries.any((e) => e.endsWith('a.txt')), isTrue);
+      expect(entries.any((e) => e.endsWith('sub')), isTrue);
+    });
+
+    test('unlistable path yields the error envelope, not a crash', () {
+      final result = jsonDecode(
+        ToolBridge(registry: createDefaultToolRegistry())
+            .execute('file_list', {'path': '${dir.path}/missing'}),
+      ) as Map<String, dynamic>;
+      expect(result['error'], isA<String>());
+    });
+  });
+
+  group('JS-bridge file_exists (Java FileTools parity, dm.ai#635)', () {
+    test('reports true for an existing file and false for a missing one', () {
+      final file = File('${dir.path}/a.txt')..writeAsStringSync('a');
+      final bridge = ToolBridge(registry: createDefaultToolRegistry());
+
+      expect(
+        jsonDecode(bridge.execute('file_exists', {'path': file.path})),
+        {'exists': true},
+      );
+      expect(
+        jsonDecode(bridge.execute('file_exists', {'path': '${dir.path}/nope'})),
+        {'exists': false},
+      );
+    });
+  });
+}

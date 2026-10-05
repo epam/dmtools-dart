@@ -58,6 +58,21 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(encoded)
             return
+        # gh-356 review fixture: a SUCCESS response (200) whose body merely
+        # mentions rate limiting. The retry policy must not re-issue it —
+        # the body check only applies to failed requests (Java runs the
+        # body check on the exception path only). Hit counts are exposed
+        # via /__retry_hits so the test can assert a single request.
+        if "dt-200ratelimit" in self.path:
+            hits = EchoHandler.RETRY_HITS.get(self.path, 0)
+            EchoHandler.RETRY_HITS[self.path] = hits + 1
+            encoded = b'{"note": "tickets about rate limit throttling"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         if "dt-retryfail" in self.path:
             hits = EchoHandler.RETRY_HITS.get(self.path, 0)
             EchoHandler.RETRY_HITS[self.path] = hits + 1
@@ -162,6 +177,11 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         # client performed against this server instance.
         if self.path == "/__delete_log":
             self._send(json.dumps(EchoHandler.DELETE_LOG).encode("utf-8"))
+            return
+        # Recorded request-hit counts per path (gh-356 review: the 200
+        # rate-limit fixture must be requested exactly once).
+        if self.path == "/__retry_hits":
+            self._send(json.dumps(EchoHandler.RETRY_HITS).encode("utf-8"))
             return
         # ADO build-timeline stub for the pipeline-logs tests (build 12):
         # the timeline answers mixed record types (Stage records are skipped

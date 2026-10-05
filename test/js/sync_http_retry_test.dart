@@ -61,7 +61,8 @@ void deterministicRetryTests() {
       expect(policy.shouldRetry(1, 400, 'Request Was Throttled'), isTrue);
     });
 
-    test('successful 2xx/3xx responses are never retried, even with a '
+    test(
+        'successful 2xx/3xx responses are never retried, even with a '
         'rate-limit body', () {
       // Java only runs the body check on the exception path of failed
       // requests; a successful response never reaches it. A 200 whose body
@@ -431,6 +432,22 @@ void retryIntegrationTests() {
           .firstWhere((e) => e.key.toLowerCase() == 'retry-after')
           .value;
       expect(retryAfter, '0');
+    });
+
+    test(
+        'a 200 whose body mentions rate limiting is not retried '
+        '(gh-356 review: success gate)', () {
+      // The body check in the retry policy only applies to failed
+      // requests — Java runs it on the exception path of a failed call.
+      // End-to-end guard: the dispatch loop must return this response as
+      // is, without re-issuing it with backoff.
+      final resp = SyncHttpClient.get(
+          'http://127.0.0.1:${server.port}/dt-200ratelimit/a');
+      expect(resp.statusCode, 200);
+      final hits = jsonDecode(
+          SyncHttpClient.get('http://127.0.0.1:${server.port}/__retry_hits')
+              .body) as Map<String, dynamic>;
+      expect(hits['/dt-200ratelimit/a'], 1);
     });
   });
 }

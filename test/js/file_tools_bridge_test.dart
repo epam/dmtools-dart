@@ -38,8 +38,7 @@ void main() {
       expect(entries, hasLength(3));
       // Pin the exact expected order — sorting a copy of the
       // implementation's own output would not catch a wrong comparator.
-      expect(entries.map(p.basename),
-          orderedEquals(['a.txt', 'b.txt', 'sub']));
+      expect(entries.map(p.basename), orderedEquals(['a.txt', 'b.txt', 'sub']));
       for (final entry in entries) {
         expect(p.isAbsolute(entry), isTrue, reason: entry);
         // Java parity (dm.ai#635): toAbsolutePath().normalize() per entry.
@@ -47,7 +46,8 @@ void main() {
       }
     });
 
-    test('entries are normalized (no . or .. segments), like Java '
+    test(
+        'entries are normalized (no . or .. segments), like Java '
         'toAbsolutePath().normalize()', () {
       File('${dir.path}/b.txt').writeAsStringSync('b');
       Directory('${dir.path}/sub').createSync();

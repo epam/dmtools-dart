@@ -151,22 +151,37 @@ class SyncRetryPolicy {
         : SyncRetryPolicy.fromEnvironment(get, random);
   }
 
-  /// Whether [status] is retryable — Java `RetryPolicy.isRetryable` maps
-  /// rate-limit/transient messages onto exactly these codes (429, and the
-  /// 502/503/504 gateway family).
-  bool isRetryableStatus(int status) =>
-      status == 429 || status == 502 || status == 503 || status == 504;
+  /// Whether [status] is retryable — Java `RetryPolicy.isRetryableStatus`
+  /// (dm.ai#635): 429 and the 502/503/504 gateway family, or a response
+  /// [body] that reads as a rate-limit/throttle signal ("rate limit",
+  /// "too many requests", "throttl", case-insensitive). The decision is
+  /// driven by the numeric status and the body only — never by substrings
+  /// of an error message: the message embeds the request URL (host:port,
+  /// ids), so an ephemeral port like 50312 misfired the old "503"
+  /// substring check and retried a 400 five times.
+  bool isRetryableStatus(int status, [String? body]) {
+    if (status == 429 || status == 502 || status == 503 || status == 504) {
+      return true;
+    }
+    final lower = (body ?? '').toLowerCase();
+    return lower.contains('rate limit') ||
+        lower.contains('too many requests') ||
+        lower.contains('throttl');
+  }
 
   /// Whether another attempt may be made after [attempt] (1-based) failed:
   /// Java retries while `attemptNumber < maxRetries`.
   bool canRetryAfter(int attempt) => attempt < maxAttempts;
 
   /// Whether a failed request at 1-based [attempt] with [statusCode]
-  /// (`0` = transport failure) should be retried.
-  bool shouldRetry(int attempt, int statusCode) {
+  /// (`0` = transport failure) and response [body] should be retried.
+  /// Successful 2xx/3xx responses are never retried — Java only runs the
+  /// body check on the exception path of failed requests.
+  bool shouldRetry(int attempt, int statusCode, [String? body]) {
     if (!canRetryAfter(attempt)) return false;
     if (statusCode == 0) return true;
-    return isRetryableStatus(statusCode);
+    if (statusCode >= 200 && statusCode < 400) return false;
+    return isRetryableStatus(statusCode, body);
   }
 
   /// Delay before the next attempt after a retryable-status [attempt]

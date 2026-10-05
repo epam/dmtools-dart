@@ -53,14 +53,24 @@ SyncHttpResponse _attachmentsResponse(_Conf config, String id) =>
 /// API via `GET /wiki/api/v2/spaces?keys=…` (Java `spaceIdFromKey`).
 ///
 /// Returns `null` when the key is unknown or the matched space carries no
-/// `id`; callers surface the failure with the Java message.
+/// `id`; callers surface the failure with the Java message. Throws
+/// [StateError] when the lookup itself fails — a curl transport error or
+/// a non-2xx response (e.g. 401 from a granular/scoped token missing the
+/// `read:space:confluence` scope) — so the real reason is never masked as
+/// "space not found" (the async `ConfluenceClient` surfaces it the same
+/// way: dio throws before the results parse).
 String? _spaceIdFromKey(_Conf config, String spaceKey) {
   final resp = SyncHttpClient.get(
     '${_baseUrlV2(config)}/spaces?keys='
     '${Uri.encodeQueryComponent(spaceKey)}',
     headers: config.headers,
   );
-  final results = _childrenResults(syncBodyOrError(resp));
+  if (resp.statusCode == 0 || !resp.isOk) {
+    throw StateError(
+      'Confluence space lookup failed for key $spaceKey: ${resp.body}',
+    );
+  }
+  final results = _childrenResults(resp.body);
   if (results == null || results.isEmpty) return null;
   return results.first['id']?.toString();
 }

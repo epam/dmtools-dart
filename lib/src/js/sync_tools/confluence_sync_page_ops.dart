@@ -45,9 +45,9 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
     String space, [
     String historyComment = '',
   ]) {
+    final version = _fetchVersion(contentId);
     final SyncHttpResponse resp;
     if (_isApiV2(_config)) {
-      final version = _fetchVersion(contentId);
       resp = SyncHttpClient.put(
         '${_baseUrlV2(_config)}/pages/$contentId',
         headers: _config.headers,
@@ -56,7 +56,6 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
         ),
       );
     } else {
-      final version = _fetchVersion(contentId);
       resp = SyncHttpClient.put(
         '${_config.baseUrl}/content/$contentId',
         headers: _config.headers,

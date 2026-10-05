@@ -341,6 +341,20 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload.clear()
             if key == "ENG":
                 payload["results"] = [{"id": "456", "key": "ENG"}]
+            elif key == "dt-unauth":
+                # Scoped/granular token without read:space:confluence: the
+                # spaces lookup 401s. The sync resolver must surface the
+                # auth failure, never mask it as "space not found"
+                # (gh-357 review thread 1).
+                encoded = json.dumps(
+                    {"error": "missing read:space:confluence scope"}
+                ).encode("utf-8")
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
             else:
                 payload["results"] = []
         # v2 attachment listing: the v1-compatible results envelope (the

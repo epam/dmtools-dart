@@ -470,6 +470,7 @@ void _testWriteToolsV2() {
     _writeV2PageTests();
     _writeV2UpdateTests();
     _writeV2TitleTests();
+    _writeV2SpaceLookupFailureTests();
     _writeV2FindOrCreateTests();
     _writeV2AttachmentTests();
     _writeV2MiscTests();
@@ -600,6 +601,84 @@ void _writeV2TitleTests() {
     expect(await _requestLog(), [
       '/wiki/api/v2/pages?title=My+Page&body-format=storage',
     ]);
+  });
+}
+
+/// v2 space-resolution failure paths: an unknown key keeps the Java
+/// "space not found" message, while a 401 (scoped token missing
+/// `read:space:confluence`) surfaces the lookup failure instead of being
+/// masked as "space not found".
+void _writeV2SpaceLookupFailureTests() {
+  test(
+      'confluence_content_by_title_and_space throws the Java message when '
+      'the space key is unknown', () {
+    // Unknown key → empty v2 listing → the title lookup throws (a
+    // different surface than create_page's syncErr envelope); the JS
+    // bridge turns this into `Tool execution failed: Bad state: …`.
+    expect(
+      () => tools.dispatch('confluence_content_by_title_and_space', {
+        'title': 'My Page',
+        'space': 'NOPE',
+      }),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          'Confluence space not found by key: NOPE',
+        ),
+      ),
+    );
+  });
+
+  test(
+      'a 401 from the spaces endpoint surfaces the lookup failure, never '
+      '"space not found"', () {
+    // dt-unauth answers 401 like a granular/scoped token missing the
+    // read:space:confluence scope — the resolver must report the auth
+    // failure, not mask it as an unknown key.
+    expect(
+      () => tools.dispatch('confluence_content_by_title_and_space', {
+        'title': 'My Page',
+        'space': 'dt-unauth',
+      }),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          allOf(
+            contains('Confluence space lookup failed for key dt-unauth'),
+            contains('missing read:space:confluence scope'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  test(
+      'a curl transport failure surfaces the lookup failure, never "space '
+      'not found"', () {
+    // Port 9 is the discard port (nothing listens there): curl fails at
+    // the transport level, which the resolver must report instead of
+    // funneling into "space not found".
+    PropertyReader.setOverrides({
+      ..._config(9),
+      'CONFLUENCE_AUTH_TYPE': 'Bearer',
+      'CONFLUENCE_API_VERSION': 'v2',
+    });
+    expect(
+      () => tools.dispatch('confluence_create_page', {
+        'title': 'New Page',
+        'body': '<p>hello</p>',
+        'space': 'ENG',
+      }),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('Confluence space lookup failed for key ENG'),
+        ),
+      ),
+    );
   });
 }
 

@@ -99,29 +99,6 @@ void _poolLifecycleTests() {
       expect(pool.run(<SyncParallelJob>[_sleepJob(0, 0)]), <dynamic>[null]);
     });
 
-    test('the shutdown sentinel terminates the worker isolate', () async {
-      // Regression guard for the rework review (gh-348): the sentinel used
-      // to be skipped via `continue`, so `dispose()` leaked every worker
-      // (and its per-isolate SyncHttpBridge HTTP worker) forever.
-      final probe = _ShutdownProbe();
-      await Isolate.spawn(_shutdownProbeWorkerEntry, probe.spawnMessage);
-      final inbox = await probe.handshake.first as SendPort;
-      // A live job round-trips first (the worker is up and serving).
-      final reply = Mailbox();
-      inbox.send(<String, dynamic>{
-        'i': 0,
-        'kind': 'sleep',
-        'args': <String, dynamic>{'ms': 0},
-        'reply': reply.asSendable,
-      });
-      expect(reply.take(), isNotNull);
-      // The sentinel must END the serve loop (mirror of
-      // SyncHttpBridge._httpWorkerEntry), not be skipped as foreign
-      // traffic — the probe signals when serveSyncWorker returns.
-      inbox.send('shutdown');
-      await probe.done.first.timeout(_workerExitGrace);
-    }, timeout: _shutdownTestTimeout);
-
     test('dispose() lets the pool boot fresh workers again', () async {
       pool = SyncWorkerPool(_sleepWorkerEntry, name: 'reboot', workerCount: 1);
       await pool.boot();
@@ -142,16 +119,60 @@ void _poolLifecycleTests() {
         ],
       );
     });
+  });
+
+  _poolShutdownSentinelTests();
+  _poolBootFailureTests();
+}
+
+/// Regression guards for the rework review (gh-348): the shutdown
+/// sentinel used to be skipped via `continue`, so `dispose()` leaked
+/// every worker (and its per-isolate SyncHttpBridge HTTP worker) forever.
+void _poolShutdownSentinelTests() {
+  group('lifecycle: shutdown', () {
+    test('the shutdown sentinel terminates the worker isolate', () async {
+      final probe = _ShutdownProbe();
+      await Isolate.spawn(_shutdownProbeWorkerEntry, probe.spawnMessage);
+      final inbox = await probe.handshake.first as SendPort;
+      // A live job round-trips first (the worker is up and serving).
+      final reply = Mailbox();
+      inbox.send(<String, dynamic>{
+        'i': 0,
+        'kind': 'sleep',
+        'args': <String, dynamic>{'ms': 0},
+        'reply': reply.asSendable,
+      });
+      expect(reply.take(), isNotNull);
+      // The sentinel must END the serve loop (mirror of
+      // SyncHttpBridge._httpWorkerEntry), not be skipped as foreign
+      // traffic — the probe signals when serveSyncWorker returns.
+      inbox.send('shutdown');
+      await probe.done.first.timeout(_workerExitGrace);
+    }, timeout: _shutdownTestTimeout);
+  });
+}
+
+/// The failed-boot recovery contract: a boot error propagates and the
+/// next `boot()` attempts a fresh boot instead of serving the dead future.
+void _poolBootFailureTests() {
+  group('lifecycle: boot failure', () {
+    late SyncWorkerPool pool;
+
+    tearDown(() => pool.dispose());
 
     test('a failed boot is not cached — the next boot() retries', () async {
-      pool =
-          SyncWorkerPool(_badHandshakeWorkerEntry, name: 'bad', workerCount: 1);
+      pool = SyncWorkerPool(
+        _badHandshakeWorkerEntry,
+        name: 'bad',
+        workerCount: 1,
+      );
       final first = pool.boot();
       await expectLater(first, throwsA(anything));
       expect(pool.ready, isFalse);
       // The dead future must not be served again: a fresh attempt is made
-      // (and fails the same way, the entry stays broken). With the failure
-      // cached, `boot()` handed back the identical errored future forever.
+      // (and fails the same way, the entry stays broken). With the
+      // failure cached, boot() handed back the identical errored future
+      // forever.
       final second = pool.boot();
       expect(identical(first, second), isFalse,
           reason: 'boot() must retry after a failed boot');

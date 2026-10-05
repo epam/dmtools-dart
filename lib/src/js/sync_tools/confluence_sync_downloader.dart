@@ -1,9 +1,17 @@
 part of 'confluence_sync_tools.dart';
 
-/// Depth-first page downloader: writes each page as Markdown and optionally
-/// mirrors its attachments, then recurses into child pages down to
-/// [depth] levels (Java `ConfluencePageDownloader`, limited to the child
-/// graph).
+/// Depth-first page downloader: writes each page as Markdown and
+/// optionally mirrors its attachments, then recurses into child pages
+/// down to [depth] levels (Java `ConfluencePageDownloader`, limited to
+/// the child graph).
+///
+/// gh-348 (dm.ai d61a4abd / 8cbf550d parity):
+/// - Seed URLs resolve concurrently (one `resolve` pool job each).
+/// - Attachment work is collected during the page walk and drained
+///   afterwards: listing fetches for all pages go out together, then
+///   every attachment downloads concurrently with the transient-failure
+///   retry schedule; results are written in listing order.
+/// - A failed download never leaves a partial file behind.
 class _PageDownloader {
   final _Conf _config;
   final Directory _output;
@@ -24,14 +32,28 @@ class _PageDownloader {
 
   int _written = 0;
 
+  /// Pages whose attachments still need downloading (content id + the
+  /// sanitized page title used as its folder name).
+  final List<({String contentId, String pageFolder})> _attachmentPages =
+      <({String contentId, String pageFolder})>[];
+
   /// Downloads every seed [urls] subtree; returns the pages written.
   int download(List<String> urls, int depth) {
-    for (final url in urls) {
-      final content = _contentFromUrl(_config, url);
-      if (content == null) continue;
-      _downloadPage(content, depth);
+    for (final content in _resolveSeeds(urls)) {
+      if (content != null) _downloadPage(content, depth);
     }
+    _downloadCollectedAttachments();
     return _written;
+  }
+
+  /// Resolves the non-empty seed [urls] to content objects concurrently
+  /// (input order; `null` entries failed and are skipped like Java).
+  List<Map<String, dynamic>?> _resolveSeeds(List<String> urls) {
+    final candidates = <String>[
+      for (final url in urls)
+        if (url.trim().isNotEmpty) url,
+    ];
+    return _runConfluenceParallel(_resolveJobs(_config, candidates));
   }
 
   void _downloadPage(Map<String, dynamic> content, int depth) {
@@ -48,7 +70,9 @@ class _PageDownloader {
       confluenceStorageToMarkdown(_resolvedBody(content, value)),
     );
     _written++;
-    if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
+    if (_downloadAttachments) {
+      _attachmentPages.add((contentId: id, pageFolder: fileName));
+    }
     if (depth > 1) {
       // v1 child pages carry no body unless the request expands it —
       // without the expand param every child bails at the
@@ -75,15 +99,106 @@ class _PageDownloader {
     return _mentionResolver.resolve(inlined);
   }
 
-  void _downloadAttachmentsOf(String contentId, String pageFolder) {
-    final resp = _attachmentsResponse(_config, contentId);
-    final results = _childrenResults(syncBodyOrError(resp)) ??
-        const <Map<String, dynamic>>[];
+  /// Drains [_attachmentPages]: concurrent listing fetches, then
+  /// concurrent attachment downloads, then ordered file writes.
+  void _downloadCollectedAttachments() {
+    if (_attachmentPages.isEmpty) return;
+    final listings = _runConfluenceParallel(_listingJobs());
+    final downloads = <SyncParallelJob>[];
+    final targets = <_AttachmentTarget>[];
+    for (var i = 0; i < listings.length; i++) {
+      _collectAttachmentJobs(
+          listings[i], _attachmentPages[i], downloads, targets);
+    }
+    final responses = _runConfluenceParallel(downloads);
+    for (var i = 0; i < responses.length; i++) {
+      _writeAttachment(responses[i], targets[i]);
+    }
+  }
+
+  /// One listing GET per collected page, keyed by the page position
+  /// (v2-aware listing URL — Java `getContentAttachments` parity).
+  List<SyncParallelJob> _listingJobs() => <SyncParallelJob>[
+        for (var i = 0; i < _attachmentPages.length; i++)
+          SyncParallelJob(
+            index: i,
+            kind: _kJobHttpGet,
+            args: <String, dynamic>{
+              ..._jobArgsOf(_config),
+              'url': _attachmentsUrl(_config, _attachmentPages[i].contentId),
+            },
+          ),
+      ];
+
+  /// Parses one page's listing [envelope] and appends a download job +
+  /// write target per attachment carrying a `_links.download` path.
+  void _collectAttachmentJobs(
+    Map<String, dynamic>? envelope,
+    ({String contentId, String pageFolder}) page,
+    List<SyncParallelJob> downloads,
+    List<_AttachmentTarget> targets,
+  ) {
+    final resp = _httpJobResponse(envelope);
+    if (resp == null || !resp.isOk) return;
+    final results =
+        _childrenResults(resp.body) ?? const <Map<String, dynamic>>[];
     final baseHost = Uri.tryParse(_config.rootUrl)?.host;
     for (final attachment in results) {
       final downloadPath = _attachmentDownloadPath(attachment);
       if (downloadPath == null) continue;
-      _downloadOneAttachment(attachment, downloadPath, baseHost, pageFolder);
+      downloads.add(SyncParallelJob(
+        index: downloads.length,
+        kind: _kJobAttachmentGet,
+        args: <String, dynamic>{
+          ..._jobArgsOf(_config),
+          'url': _attachmentUrl(downloadPath, _config.rootUrl),
+          'headers': _attachmentHeaders(downloadPath, baseHost),
+        },
+      ));
+      targets.add((
+        pageFolder: page.pageFolder,
+        title: _sanitize(attachment['title']?.toString() ?? 'file'),
+      ));
+    }
+  }
+
+  /// Writes one downloaded attachment next to its page.
+  ///
+  /// An HTTP-level failure never touches the disk: the body is buffered
+  /// in memory and written once below, so unlike the Java
+  /// truncate-then-stream download (`RestClient.downloadFile`, 8cbf550d)
+  /// this port cannot leave a partial file behind — and a file that IS
+  /// present is a complete attachment of an earlier successful run, which
+  /// a failed re-download must keep (a stale local copy beats no copy).
+  /// Only a mid-write I/O error can produce a partial file; that partial
+  /// is removed so it never looks "already downloaded" to the next run.
+  void _writeAttachment(
+    Map<String, dynamic>? envelope,
+    _AttachmentTarget target,
+  ) {
+    final resp = _httpJobResponse(envelope);
+    if (resp == null || !resp.isOk) return; // never touched the file
+    final file = _attachmentFile(target);
+    try {
+      file.writeAsBytesSync(resp.bodyBytes, flush: true);
+    } catch (_) {
+      _deleteQuietly(file); // we may have left a partial behind
+    }
+  }
+
+  /// The target file of one attachment inside its page's folder.
+  File _attachmentFile(_AttachmentTarget target) {
+    final dir = Directory('${_output.path}/${target.pageFolder}-attachments')
+      ..createSync(recursive: true);
+    return File('${dir.path}/${target.title}');
+  }
+
+  /// Best-effort [file] removal (partial-download cleanup).
+  void _deleteQuietly(File file) {
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {
+      // Unremovable leftovers are logged by the caller's skip, not thrown.
     }
   }
 
@@ -97,19 +212,18 @@ class _PageDownloader {
         : null;
   }
 
-  /// Fetches and writes one attachment next to its page.
-  void _downloadOneAttachment(
-    Map<String, dynamic> attachment,
+  /// The fetch URL of an attachment: `_links.download` is relative to the
+  /// site root (`/download/…`) unless it is already absolute.
+  static String _attachmentUrl(String downloadPath, String rootUrl) =>
+      downloadPath.startsWith('http') ? downloadPath : '$rootUrl$downloadPath';
+
+  /// Headers for one attachment fetch. `_links.download` is
+  /// server-controlled content: the Confluence credentials never travel
+  /// to a foreign host.
+  Map<String, String> _attachmentHeaders(
     String downloadPath,
     String? baseHost,
-    String pageFolder,
   ) {
-    // `_links.download` is relative to the site root (`/download/…`).
-    final url = downloadPath.startsWith('http')
-        ? downloadPath
-        : '${_config.rootUrl}$downloadPath';
-    // `_links.download` is server-controlled content: the Confluence
-    // credentials never travel to a foreign host.
     var headers = _config.headers;
     if (downloadPath.startsWith('http') &&
         Uri.tryParse(downloadPath)?.host != baseHost) {
@@ -117,15 +231,63 @@ class _PageDownloader {
           (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
         );
     }
-    final resp = SyncHttpClient.get(url, headers: headers);
-    if (!resp.isOk) return;
-    final dir = Directory('${_output.path}/$pageFolder-attachments')
-      ..createSync(recursive: true);
-    File('${dir.path}/${_sanitize(attachment['title']?.toString() ?? 'file')}')
-        .writeAsBytesSync(resp.bodyBytes);
+    return headers;
   }
 
   /// Filesystem-safe file name from a page title.
   static String _sanitize(String title) =>
       title.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_').trim();
+}
+
+/// Where one downloaded attachment lands: its page folder + file name.
+typedef _AttachmentTarget = ({String pageFolder, String title});
+
+/// Java `Confluence.ATTACHMENT_DOWNLOAD_ATTEMPTS` (dm.ai 8cbf550d):
+/// total tries for one attachment download.
+const confluenceAttachmentDownloadAttempts = 4;
+
+/// Java `Confluence.ATTACHMENT_RETRY_BASE_DELAY_MS` (dm.ai 8cbf550d):
+/// the backoff base; attempt `n` waits `base * 2^(n-1) + jitter(base/2)`.
+const confluenceAttachmentRetryBaseDelayMs = 1000;
+
+/// Java `Confluence.isTransientDownloadFailure` parity (dm.ai 8cbf550d):
+/// 429/408, 5xx, and transport failures (`statusCode == 0` — any network
+/// error surfaces as such in [SyncHttpResponse]) may succeed on retry;
+/// other 4xx will not.
+bool isConfluenceTransientAttachmentFailure(int statusCode) =>
+    statusCode == 0 ||
+    statusCode == 408 ||
+    statusCode == 429 ||
+    statusCode >= 500;
+
+/// Downloads one attachment with the Java retry schedule (dm.ai
+/// 8cbf550d): up to [confluenceAttachmentDownloadAttempts] tries, backing
+/// off `baseDelayMs * 2^(attempt-1) + jitter(baseDelayMs / 2)` between
+/// transient failures and giving up immediately on client errors.
+///
+/// [fetch], [sleepDelay], and [random] are injectable for tests. The
+/// default transport ([SyncHttpClient.get]) applies its own retry policy
+/// on top, so the schedules compose rather than conflict.
+SyncHttpResponse fetchConfluenceAttachmentWithRetry(
+  String url,
+  Map<String, String> headers, {
+  SyncHttpResponse Function(String url, Map<String, String> headers)? fetch,
+  void Function(int delayMs)? sleepDelay,
+  int baseDelayMs = confluenceAttachmentRetryBaseDelayMs,
+  Random? random,
+}) {
+  final get =
+      fetch ?? (url, headers) => SyncHttpClient.get(url, headers: headers);
+  final pause = sleepDelay ?? (ms) => sleep(Duration(milliseconds: ms));
+  final rnd = random ?? Random();
+  for (var attempt = 1;; attempt++) {
+    final resp = get(url, headers);
+    if (resp.isOk ||
+        !isConfluenceTransientAttachmentFailure(resp.statusCode) ||
+        attempt >= confluenceAttachmentDownloadAttempts) {
+      return resp;
+    }
+    final jitter = baseDelayMs < 2 ? 1 : rnd.nextInt(baseDelayMs ~/ 2);
+    pause(baseDelayMs * (1 << (attempt - 1)) + jitter);
+  }
 }

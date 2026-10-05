@@ -350,6 +350,19 @@ extension PropertyReaderGetters on PropertyReader {
     return (v != null && v.trim().isNotEmpty) ? v.trim().toLowerCase() : 'v1';
   }
 
+  /// Base delay in milliseconds between Confluence attachment download
+  /// retries (transient 429/408/5xx/network failures; the backoff doubles
+  /// per attempt plus up to half the base as jitter).
+  /// Key: `CONFLUENCE_ATTACHMENT_RETRY_BASE_DELAY_MS`, default: 1000.
+  /// Java parity: `Confluence.ATTACHMENT_RETRY_BASE_DELAY_MS` (a constant
+  /// in dm.ai 8cbf550d); the env override is a Dart addition so tests and
+  /// operators can shorten the schedule — the default matches Java.
+  int getConfluenceAttachmentRetryBaseDelayMs() {
+    final v = getValue('CONFLUENCE_ATTACHMENT_RETRY_BASE_DELAY_MS');
+    final parsed = int.tryParse((v ?? '').trim());
+    return (parsed != null && parsed > 0) ? parsed : 1000;
+  }
+
   // --- ADO ---
 
   /// Azure DevOps organization. Key: `ADO_ORGANIZATION`.

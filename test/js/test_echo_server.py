@@ -23,6 +23,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
     """Echoes request details as a JSON response."""
 
     DELETE_LOG = []
+    REQUEST_LOG = []
     RETRY_HITS = {}
 
     def _send(self, encoded, content_type="application/json"):
@@ -39,6 +40,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             body = self.rfile.read(length).decode("utf-8", errors="replace")
         if self.command == "DELETE":
             EchoHandler.DELETE_LOG.append(self.path)
+        if not self.path.startswith("/__"):
+            EchoHandler.REQUEST_LOG.append(self.path)
         payload = {
             "method": self.command,
             "path": self.path,
@@ -173,6 +176,11 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["transitions"] = [
                 {"id": "31", "name": "Done", "to": {"name": "Done"}}
             ]
+        # Recorded request paths, so tests can assert the exact request
+        # sequence one dispatch produced against this server instance.
+        if self.path == "/__request_log":
+            self._send(json.dumps(EchoHandler.REQUEST_LOG).encode("utf-8"))
+            return
         # Recorded DELETE paths, so tests can assert which deletions the
         # client performed against this server instance.
         if self.path == "/__delete_log":
@@ -243,6 +251,41 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 }
             }
         elif (self.command == "GET"
+              and "/wiki/rest/api/content/888" in self.path
+              and "/child/" not in self.path):
+            # gh-347 conversion-fix fixture: a page whose storage holds an
+            # excerpt-include of "Source" (space-less ri:page link — must
+            # resolve in the page's own space DOCS, carried only via the
+            # _expandable link like a real v1 response) and a user mention.
+            # The downloader must inline the excerpt body and resolve the
+            # mention to @Jane Roe before converting to Markdown.
+            payload.clear()
+            payload["id"] = "888"
+            payload["title"] = "Main Page"
+            payload["_expandable"] = {"space": "/rest/api/space/DOCS"}
+            payload["body"] = {
+                "storage": {
+                    "value": (
+                        "<p>intro</p>"
+                        "<ac:structured-macro ac:name=\"table-excerpt-include\" "
+                        "ac:schema-version=\"1\">"
+                        "<ac:parameter ac:name=\"page\"><ac:link>"
+                        "<ri:page ri:content-title=\"Source\" />"
+                        "</ac:link></ac:parameter>"
+                        "<ac:parameter ac:name=\"name\">Rules"
+                        "</ac:parameter></ac:structured-macro>"
+                        "<p>Owner: <ac:link><ri:user "
+                        "ri:account-id=\"acc-1\" /></ac:link></p>"
+                    ),
+                    "representation": "storage",
+                }
+            }
+        elif (self.command == "GET"
+              and "/wiki/rest/api/user?" in self.path
+              and "accountId=acc-1" in self.path):
+            self._send(json.dumps({"displayName": "Jane Roe"}).encode("utf-8"))
+            return
+        elif (self.command == "GET"
               and "/wiki/rest/api/content/555" in self.path
               and "/child/" not in self.path):
             payload.clear()
@@ -292,6 +335,32 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload.clear()
             if title in ("Nope", "Ghost"):
                 payload["results"] = []
+            elif title == "Source":
+                # gh-347: excerpt-include target of the 888 page (looked up
+                # by title in space DOCS).
+                payload["results"] = [{
+                    "id": "889",
+                    "title": "Source",
+                    "space": {"key": "DOCS"},
+                    "body": {
+                        "storage": {
+                            "value": (
+                                "<p>source intro</p>"
+                                "<ac:structured-macro ac:name="
+                                "\"table-excerpt\">"
+                                "<ac:parameter ac:name=\"name\">Rules"
+                                "</ac:parameter>"
+                                "<ac:rich-text-body>"
+                                "<table><tbody><tr><th>Key</th></tr>"
+                                "<tr><td>included-value</td></tr>"
+                                "</tbody></table>"
+                                "</ac:rich-text-body>"
+                                "</ac:structured-macro>"
+                            ),
+                            "representation": "storage",
+                        }
+                    },
+                }]
             elif title == "Parent":
                 payload["results"] = [{
                     "id": "555",
@@ -342,6 +411,106 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     }
                 }
             payload["results"] = [result]
+        # Confluence v2 REST fixtures (CONFLUENCE_API_VERSION=v2 parity,
+        # Java ConfluenceApiV2Test / #592): the granular/scoped-token
+        # routes. The spaces resolver answers ENG → numeric id 456 and any
+        # other key with an empty listing (spaceIdFromKey must fail).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/spaces" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            key = query.get("keys", [""])[0]
+            payload.clear()
+            if key == "ENG":
+                payload["results"] = [{"id": "456", "key": "ENG"}]
+            else:
+                payload["results"] = []
+        # v2 attachment listing: the v1-compatible results envelope (the
+        # upload policy and the page downloader run against this too).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages/" in self.path
+              and "/attachments" in self.path):
+            payload.clear()
+            payload["results"] = [
+                {"id": "a1", "title": "exists.txt"},
+                {
+                    "id": "a2",
+                    "title": "shot.png",
+                    "_links": {
+                        "download": "/download/attachments/123/shot.png"
+                    },
+                },
+            ]
+        # v2 title lookup: 'Nope' answers empty (not found), 'Parent'
+        # resolves to page 555 (the get_children_by_name parent), anything
+        # else answers two results so first-match / format order is
+        # asserted. Mirrors the v1 title fixture above.
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages?" in self.path
+              and "title=" in self.path):
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            title = query.get("title", [""])[0]
+            payload.clear()
+            if title in ("Nope", "Ghost"):
+                payload["results"] = []
+            elif title == "Parent":
+                payload["results"] = [{
+                    "id": "555",
+                    "title": "Parent",
+                    "body": {
+                        "storage": {
+                            "value": "<p>parent</p>",
+                            "representation": "storage",
+                        }
+                    },
+                }]
+            else:
+                payload["results"] = [
+                    {
+                        "id": "801",
+                        "title": "Found Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>found</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                    {
+                        "id": "802",
+                        "title": "Second Page",
+                        "body": {
+                            "storage": {
+                                "value": "<p>second</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    },
+                ]
+        # v2 children listing for the sync-engine parent (empty: every
+        # child is created, none is reused or deleted).
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages?" in self.path
+              and "parent-id=root-page" in self.path):
+            payload.clear()
+            payload["results"] = []
+        # v2 page object (contentById / updatePage version read / engine
+        # getContent): version, ancestors, and a storage body in one shape.
+        elif (self.command == "GET"
+              and self.path.startswith("/wiki/api/v2/pages/")):
+            page_id = self.path[len("/wiki/api/v2/pages/"):]
+            page_id = page_id.split("?", 1)[0]
+            if page_id in ("42", "123", "root-page"):
+                payload.clear()
+                payload["id"] = page_id
+                payload["title"] = "Fixture Page"
+                payload["version"] = {"number": 3}
+                payload["ancestors"] = [{"id": "root-parent"}]
+                payload["body"] = {
+                    "storage": {
+                        "value": "<p>fixture</p>",
+                        "representation": "storage",
+                    }
+                }
         # Confluence attachment listing: two fixtures — exists.txt (the
         # skip-existing policy) and shot.png carrying a _links.download
         # path (the page-downloader fetches it below). evil.txt carries an

@@ -8,9 +8,19 @@ class _PageDownloader {
   final _Conf _config;
   final Directory _output;
   final bool _downloadAttachments;
+  final ConfluenceExcerptInliner _excerptInliner;
+  final ConfluenceMentionResolver _mentionResolver;
 
-  /// Creates a downloader writing under [_output].
-  _PageDownloader(this._config, this._output, this._downloadAttachments);
+  /// Creates a downloader writing under [_output]; the excerpt-include
+  /// inliner and mention resolver reuse one HTTP-backed client (Java
+  /// `ConfluencePageDownloader`, dm.ai 932e0db0 / bb1b51e9).
+  _PageDownloader(this._config, this._output, this._downloadAttachments)
+      : _excerptInliner = ConfluenceExcerptInliner(
+          _SyncConfluenceResolverClient(_config),
+        ),
+        _mentionResolver = ConfluenceMentionResolver(
+          _SyncConfluenceResolverClient(_config),
+        );
 
   int _written = 0;
 
@@ -35,28 +45,38 @@ class _PageDownloader {
     _output.createSync(recursive: true);
     final fileName = _sanitize(content['title']?.toString() ?? id);
     File('${_output.path}/$fileName.md').writeAsStringSync(
-      confluenceStorageToMarkdown(value),
+      confluenceStorageToMarkdown(_resolvedBody(content, value)),
     );
     _written++;
     if (_downloadAttachments) _downloadAttachmentsOf(id, fileName);
     if (depth > 1) {
-      // Child pages carry no body unless the request expands it — without
-      // the expand param every child bails at the `value is! String` guard
-      // below and the subtree is silently dropped (gh-191 review).
-      final resp = _contentGet(
-          _config, '$id/child/page?limit=100&expand=$_contentExpand');
-      for (final child in _childrenResults(syncBodyOrError(resp)) ??
+      // v1 child pages carry no body unless the request expands it —
+      // without the expand param every child bails at the
+      // `value is! String` guard below and the subtree is silently
+      // dropped (gh-191 review). The v2 children listing always carries
+      // bodies (body-format=storage is part of the request).
+      for (final child in _childrenResults(
+              syncBodyOrError(_childrenResponse(_config, id))) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
       }
     }
   }
 
-  void _downloadAttachmentsOf(String contentId, String pageFolder) {
-    final resp = SyncHttpClient.get(
-      '${_config.baseUrl}/content/$contentId/child/attachment',
-      headers: _config.headers,
+  /// The storage body with excerpt includes materialized (resolved in the
+  /// page's own space when the include carries no space key) and user
+  /// mentions replaced by `@Display Name` (Java `ConfluencePageDownloader`
+  /// pipeline: `toMarkdown(mentionResolver.resolve(inliner.inline(…)))`).
+  String _resolvedBody(Map<String, dynamic> content, String storage) {
+    final inlined = _excerptInliner.inline(
+      storage,
+      confluenceSpaceKeyOf(content),
     );
+    return _mentionResolver.resolve(inlined);
+  }
+
+  void _downloadAttachmentsOf(String contentId, String pageFolder) {
+    final resp = _attachmentsResponse(_config, contentId);
     final results = _childrenResults(syncBodyOrError(resp)) ??
         const <Map<String, dynamic>>[];
     final baseHost = Uri.tryParse(_config.rootUrl)?.host;

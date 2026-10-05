@@ -194,6 +194,15 @@ void _testAliasList() {
 
     test('dmtools list keeps substring semantics for unknown filters',
         () async {
+      // Free text filters the listable (config-detected) subset, so jira
+      // must be configured for jira_search_by_jql to be listable
+      // (dm.ai #570: without DMTOOLS_INTEGRATIONS the list is
+      // config-detected).
+      _writeEnv('''
+JIRA_BASE_PATH=https://test.atlassian.net
+JIRA_EMAIL=user@test.com
+JIRA_API_TOKEN=abc123
+''');
       final result = await _dispatchTool(['list', 'jira_search'], code: 0);
       final names = _toolNames(result);
       expect(names, contains('jira_search_by_jql'));

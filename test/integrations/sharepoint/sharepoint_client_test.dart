@@ -8,6 +8,8 @@ import 'sharepoint_test_support.dart';
 /// Coverage + behavior tests for [SharepointClient].
 void main() {
   tearDown(PropertyReader.clearOverrides);
+  validateClientIdTests();
+  fromConfigTests();
   testConnectionTests();
   getDriveTests();
   getSiteTests();
@@ -20,6 +22,70 @@ void main() {
   searchDriveTests();
   deleteDriveItemTests();
   copyItemTests();
+}
+
+/// Java `BasicSharePointClient.validateClientId` parity (dm.ai #567):
+/// SharePoint reuses the Teams (TEAMS_*) auth configuration; without a
+/// client id the client would start an OAuth flow that can never succeed.
+void validateClientIdTests() {
+  group('SharepointClient.validateClientId', () {
+    test('rejects null, empty, and blank client ids', () {
+      expect(
+        () => SharepointClient.validateClientId(null),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => SharepointClient.validateClientId(''),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        () => SharepointClient.validateClientId('   '),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('error message names TEAMS_CLIENT_ID and the Teams reuse', () {
+      expect(
+        () => SharepointClient.validateClientId(null),
+        throwsA(
+          predicate<StateError>(
+            (e) =>
+                e.message.contains('TEAMS_CLIENT_ID') &&
+                e.message.contains('Teams authentication configuration'),
+          ),
+        ),
+      );
+    });
+
+    test('accepts a configured client id', () {
+      expect(() => SharepointClient.validateClientId('some-client-id'),
+          returnsNormally);
+    });
+  });
+}
+
+/// Fail-fast construction from configuration — the Dart equivalent of
+/// `BasicSharePointClient.getInstance()` throwing before any OAuth flow
+/// starts (regression guard for dm.ai #567).
+void fromConfigTests() {
+  group('SharepointClient.fromConfig', () {
+    test('fails fast when TEAMS_CLIENT_ID is not configured', () {
+      PropertyReader.setOverrides({'TEAMS_CLIENT_ID': ''});
+      expect(
+        () => SharepointClient.fromConfig(PropertyReader()),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('builds a client when client id and token are present', () {
+      PropertyReader.setOverrides({'TEAMS_CLIENT_ID': 'client-id'});
+      final client = SharepointClient.fromConfig(
+        PropertyReader(),
+        token: 'access-token',
+      );
+      expect(client, isA<SharepointClient>());
+    });
+  });
 }
 
 /// `sharepoint_test` — connectivity check via GET `me/drive`.

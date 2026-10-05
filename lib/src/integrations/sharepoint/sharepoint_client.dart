@@ -7,6 +7,10 @@ library;
 
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+
+import '../../config/property_reader.dart';
+import '../../config/property_reader_getters.dart';
 import '../teams/teams_http_client.dart';
 
 /// SharePoint API methods exposed to the MCP tool runtime.
@@ -15,6 +19,51 @@ class SharepointClient {
 
   /// Creates a client backed by [_http].
   SharepointClient(this._http);
+
+  /// Builds a client from [reader]'s configuration — the Dart equivalent
+  /// of Java `BasicSharePointClient.getInstance()` (dm.ai #567).
+  ///
+  /// Fails fast with [StateError] when `TEAMS_CLIENT_ID` is not
+  /// configured: SharePoint reuses the Teams (TEAMS_*) auth configuration,
+  /// and without a client id the OAuth flow would still start with an
+  /// empty client id — a login that can never succeed. [token] must be a
+  /// resolved Graph access token (see [TeamsOAuth.resolveAccessToken]);
+  /// pass [dio] to inject a custom HTTP transport (tests).
+  ///
+  /// Wiring status: the Dart runtime does not construct SharePoint
+  /// clients yet (the `sharepoint_*` surface is catalog-only — no sync
+  /// dispatch route exists), so this fail-fast activates with the future
+  /// dispatch wiring. Until then, construct clients ONLY through this
+  /// factory — a direct `SharepointClient(TeamsHttpClient(...))` bypasses
+  /// the dm.ai #567 validation by design.
+  factory SharepointClient.fromConfig(
+    PropertyReader reader, {
+    Dio? dio,
+    String? token,
+  }) {
+    validateClientId(reader.getTeamsClientId());
+    return SharepointClient(
+      TeamsHttpClient(reader, dio: dio, token: token),
+    );
+  }
+
+  /// Validates that the Teams/SharePoint client id is configured —
+  /// Java `BasicSharePointClient.validateClientId` parity (dm.ai #567).
+  ///
+  /// This is the enforcement point behind [SharepointClient.fromConfig];
+  /// the Dart runtime wiring does not construct SharePoint clients yet
+  /// (see [fromConfig]'s wiring-status note), so call it explicitly when
+  /// building a client outside the factory.
+  /// Throws [StateError] when [clientId] is null or blank.
+  static void validateClientId(String? clientId) {
+    if (clientId == null || clientId.trim().isEmpty) {
+      throw StateError(
+        'TEAMS_CLIENT_ID environment variable is required for the '
+        'SharePoint integration (SharePoint reuses the Teams '
+        'authentication configuration).',
+      );
+    }
+  }
 
   /// URL-encodes a drive identifier for safe path-segment use.
   String _encodeId(String id) => Uri.encodeComponent(id);

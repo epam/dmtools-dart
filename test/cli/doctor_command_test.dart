@@ -28,6 +28,9 @@ void main() {
   _testExtraIntegrations();
   _testAi();
   _testTeams();
+  _testJenkinsAndSharePoint();
+  _testConfiguredIntegrations();
+  _testAlwaysAvailableIntegrations();
 }
 
 DoctorCommand _command() =>
@@ -48,7 +51,7 @@ void _testEmptyConfiguration() {
         isTrue,
       );
       expect(
-        RegExp(r'^Integrations ready: \d+ / 13$', multiLine: true)
+        RegExp(r'^Integrations ready: \d+ / 15$', multiLine: true)
             .hasMatch(out),
         isTrue,
       );
@@ -61,20 +64,20 @@ void _testEmptyConfiguration() {
       );
     });
 
-    test('reports a status line for all 13 integrations', () {
+    test('reports a status line for all 15 integrations', () {
       final out = _command().run();
-      expect(RegExp(r'^[✓✗] ', multiLine: true).allMatches(out).length, 13);
+      expect(RegExp(r'^[✓✗] ', multiLine: true).allMatches(out).length, 15);
     });
   });
 }
 
 void _testDefaultConstructor() {
   group('default constructor', () {
-    test('loads from the working directory chain and still reports 13 checks',
+    test('loads from the working directory chain and still reports 15 checks',
         () {
       final out = DoctorCommand().run();
       expect(out, startsWith('DMTools Configuration Check'));
-      expect(RegExp(r'^[✓✗] ', multiLine: true).allMatches(out).length, 13);
+      expect(RegExp(r'^[✓✗] ', multiLine: true).allMatches(out).length, 15);
     });
   });
 }
@@ -317,6 +320,132 @@ TEAMS_TENANT_ID=tenant-id
     test('tenant id presence is checked raw (getter defaults to common)', () {
       _writeEnv('TEAMS_CLIENT_ID=client-id\n');
       expect(_command().run(), contains('    missing: TEAMS_TENANT_ID'));
+    });
+  });
+}
+
+void _testJenkinsAndSharePoint() {
+  group('jenkins', () {
+    test('configured with base path + user + api token', () {
+      _writeEnv('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      expect(
+        _command().run(),
+        contains('✓ jenkins - Jenkins authentication configured'),
+      );
+    });
+
+    test('base path is checked raw (getter defaults to localhost)', () {
+      _writeEnv('''
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      final out = _command().run();
+      expect(out, contains('✗ jenkins - Jenkins authentication incomplete'));
+      expect(out, contains('    missing: JENKINS_BASE_PATH'));
+    });
+  });
+
+  group('sharepoint', () {
+    test('configured via the reused Teams OAuth credentials', () {
+      _writeEnv('''
+TEAMS_CLIENT_ID=client-id
+TEAMS_TENANT_ID=tenant-id
+''');
+      expect(
+        _command().run(),
+        contains(
+          '✓ sharepoint - SharePoint via Teams OAuth credentials authentication configured',
+        ),
+      );
+    });
+
+    test('reports the missing Teams variables', () {
+      final out = _command().run();
+      expect(
+        out,
+        contains(
+          '✗ sharepoint - SharePoint via Teams OAuth credentials authentication incomplete',
+        ),
+      );
+      expect(out, contains('    missing: TEAMS_CLIENT_ID'));
+      expect(out, contains('    missing: TEAMS_TENANT_ID'));
+    });
+  });
+}
+
+/// Java `ConfigDoctor.getConfiguredIntegrations()` parity (dm.ai #570):
+/// token presence only, no network calls — the source of the
+/// config-detected `dmtools list` fallback.
+void _testConfiguredIntegrations() {
+  group('configuredIntegrations', () {
+    test('unconfigured integrations are absent', () {
+      final integrations = _command().configuredIntegrations();
+      expect(integrations, isNot(contains('jira')));
+      expect(integrations, isNot(contains('jenkins')));
+      expect(integrations, isNot(contains('sharepoint')));
+      // Developer machines may export AI keys (CI does not).
+      final aiInOsEnv =
+          _aiVars.any((k) => (Platform.environment[k] ?? '').trim().isNotEmpty);
+      expect(integrations.contains('ai'), aiInOsEnv);
+    });
+
+    test('a fully configured integration shows up (jenkins regression)', () {
+      _writeEnv('JENKINS_USER=ci\nJENKINS_API_TOKEN=tok\n');
+      expect(_command().configuredIntegrations(), isNot(contains('jenkins')));
+      _writeEnv('JENKINS_BASE_PATH=https://jenkins.example.com\n'
+          'JENKINS_USER=ci\nJENKINS_API_TOKEN=tok\n');
+      expect(_command().configuredIntegrations(), contains('jenkins'));
+    });
+
+    test('jira_xray requires both jira and xray', () {
+      _writeEnv('XRAY_CLIENT_ID=client\nXRAY_CLIENT_SECRET=secret\n'
+          'XRAY_BASE_PATH=https://xray.example.com\n');
+      expect(
+        _command().configuredIntegrations(),
+        isNot(contains('jira_xray')),
+      );
+      _writeEnv('JIRA_BASE_PATH=https://test.atlassian.net\n'
+          'JIRA_EMAIL=user@test.com\nJIRA_API_TOKEN=abc123\n'
+          'XRAY_CLIENT_ID=client\nXRAY_CLIENT_SECRET=secret\n'
+          'XRAY_BASE_PATH=https://xray.example.com\n');
+      expect(_command().configuredIntegrations(), contains('jira_xray'));
+    });
+
+    test('ai readiness unlocks ai, kb and mermaid', () {
+      _writeEnv('GEMINI_API_KEY=AIzaXYZ\n');
+      expect(_command().configuredIntegrations(),
+          containsAll(<String>['ai', 'kb', 'mermaid']));
+    });
+
+    test('teams readiness unlocks teams, teams_auth and sharepoint', () {
+      _writeEnv('''
+TEAMS_CLIENT_ID=client-id
+TEAMS_TENANT_ID=tenant-id
+''');
+      expect(
+        _command().configuredIntegrations(),
+        containsAll(<String>['teams', 'teams_auth', 'sharepoint']),
+      );
+    });
+  });
+}
+
+/// `scm`/`ci` carry no credentials: the gh-339 alias families they tag
+/// register only when DEFAULT_SCM/DEFAULT_CI resolve, so allowing the
+/// tags keeps registered families listable (gh-352 review: they must
+/// not be config-gated away).
+void _testAlwaysAvailableIntegrations() {
+  group('configuredIntegrations (always available)', () {
+    test('token-less integrations are always available', () {
+      expect(
+        _command().configuredIntegrations(),
+        containsAll(
+            <String>['cli', 'file', 'other', 'teams_auth', 'scm', 'ci']),
+      );
     });
   });
 }

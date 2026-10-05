@@ -28,6 +28,7 @@ import '../mcp/tool_param.dart';
 import '../mcp/tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
+import 'help_text.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
 
@@ -133,7 +134,7 @@ class CliDispatcher {
   }
 
   int _runDoctor() {
-    _writer(DoctorCommand(reader: _reader).run());
+    _writer(_doctor.run());
     return 0;
   }
 
@@ -253,16 +254,22 @@ class CliDispatcher {
     final integrations = _resolveIntegrations();
     var response = registry.generateToolsListResponse(integrations);
     if (rest.isNotEmpty) {
-      // gh-136: help/list resolution mirrors invocation resolution — an
-      // alias filter (tracker_get_ticket) resolves to its carrier so
-      // `dmtools <alias> --help` shows the backend tool's schema instead
-      // of an empty list. Candidates narrow to DMTOOLS_INTEGRATIONS so the
-      // fallback picks a carrier the filtered list actually shows.
-      // Unknown text (partial names, free text) stays a raw substring
-      // filter.
+      // gh-136: an alias filter (tracker_get_ticket) resolves to its
+      // carrier so `dmtools <alias> --help` shows the backend tool's
+      // schema; candidates narrow to DMTOOLS_INTEGRATIONS so the fallback
+      // picks a carrier the filtered list actually shows. Unknown text
+      // keeps raw substring semantics.
       final resolved = _resolveToolName(rest.first,
           registry: registry, integrations: integrations);
-      response = registry.filterToolsList(response, resolved ?? rest.first);
+      if (resolved != null) {
+        // dm.ai #570: a resolved name's schema comes from the FULL
+        // registry — usage hints keep working for tools whose
+        // integration is not configured on this machine.
+        response = registry.filterToolsList(
+            registry.generateToolsListResponse(), resolved);
+      } else {
+        response = registry.filterToolsList(response, rest.first);
+      }
     }
     _writer(const JsonEncoder.withIndent('  ').convert(response));
     return 0;
@@ -371,19 +378,28 @@ class CliDispatcher {
   /// Resolves the `DMTOOLS_INTEGRATIONS` filter into a set of integration
   /// names.
   ///
-  /// Returns `null` (meaning "all integrations") when the variable is unset
-  /// or empty; otherwise a lower-case set parsed from the comma-separated
-  /// value (e.g. `"jira,confluence"` → `{"jira", "confluence"}`).
-  Set<String>? _resolveIntegrations() {
+  /// When set, the variable wins verbatim: a lower-case set parsed from
+  /// the comma-separated value. When unset — Java
+  /// `McpCliHandler.resolveAvailableIntegrations` parity (dm.ai #570) —
+  /// the set is config-detected via [DoctorCommand] (token/path presence
+  /// only, no network calls) plus token-less integrations, so
+  /// `dmtools list` shows exactly what this machine can run.
+  Set<String> _resolveIntegrations() {
     final raw = _reader.getValue('DMTOOLS_INTEGRATIONS');
-    if (raw == null || raw.trim().isEmpty) return null;
+    if (raw == null || raw.trim().isEmpty) {
+      return _doctor.configuredIntegrations();
+    }
     final set = raw
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .where((s) => s.isNotEmpty)
         .toSet();
-    return set.isEmpty ? null : set;
+    return set.isEmpty ? _doctor.configuredIntegrations() : set;
   }
+
+  /// Doctor over the dispatcher's configuration — backs the
+  /// config-detected integration list (dm.ai #570).
+  late final DoctorCommand _doctor = DoctorCommand(reader: _reader);
 
   int _interactiveStub() {
     _writer('Interactive mode requires Phase 4 (terminal picker)');
@@ -648,44 +664,7 @@ class CliDispatcher {
     }
   }
 
-  /// Help text, byte-identical to the Java `JobRunner.printHelp()` output.
-  static const String helpText = '''
-DMTools CLI Wrapper
-
-Usage:
-  dmtools list                           # List available MCP tools
-  dmtools doctor                         # Check current directory configuration
-  dmtools run <json-file>                # Execute job with JSON config file
-  dmtools run <job-name> [--key value]   # Execute a registered job without a config file
-  dmtools run <json-file> <encoded>      # Execute job with file + encoded overrides
-  dmtools <tool> [args...]              # Execute MCP tool with args
-  dmtools <tool> --data '{"json"}'      # Execute with inline JSON
-  dmtools <tool> --file params.json     # Execute with JSON file
-  dmtools <tool> --verbose              # Execute with verbose output
-  dmtools <tool> --debug                # Execute with debug output and error messages
-  dmtools <tool> <<EOF                  # Execute with heredoc
-  {"json": "data"}
-  EOF
-
-Examples:
-  dmtools list
-  dmtools doctor
-  dmtools run job-config.json
-  dmtools run codegenerator --param1 test
-  dmtools jira_get_ticket DMC-479 summary,description
-  dmtools jira_get_ticket --data '{"key": "DMC-479", "fields": ["summary"]}'
-
-Environment Variables:
-  DMTOOLS_INTEGRATIONS    Comma-separated list of integrations (jira,confluence,figma)
-
-Environment Files:
-  The tool automatically loads environment variables from dmtools.env
-  (project root first, then the current working directory).
-
-  Common variables:
-  - JIRA_BASE_PATH, JIRA_EMAIL, JIRA_API_TOKEN
-  - CONFLUENCE_BASE_PATH, CONFLUENCE_API_TOKEN
-  - FIGMA_API_KEY
-  - GEMINI_API_KEY, OPENAI_API_KEY
-  - SOURCE_GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_TOKEN''';
+  /// Help text, byte-identical to the Java `JobRunner.printHelp()`
+  /// output (kept in [cliHelpText] — the file line-count gate).
+  static const String helpText = cliHelpText;
 }

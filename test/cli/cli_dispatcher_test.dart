@@ -41,7 +41,6 @@ void main() {
   _testRun();
   _testRunJsFile();
   _testRunCliAgent();
-  _testList();
   _testInteractive();
   _testDirectTool();
   _testDirectToolNamedArgs();
@@ -260,48 +259,6 @@ void _testRunCliAgent() {
           },
         }));
       expect(await _dispatcher.dispatch(['run', configFile.path]), 0);
-    });
-  });
-}
-
-void _testList() {
-  group('list', () {
-    test('prints the full MCP tool catalog as JSON', () async {
-      expect(await _dispatcher.dispatch(['list']), 0);
-      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
-      final tools = decoded['tools'] as List;
-      expect(tools.length, greaterThan(250));
-      final names = tools
-          .map((t) => (t as Map<String, dynamic>)['name'] as String)
-          .toSet();
-      expect(names, contains('jira_get_ticket'));
-      expect(names, contains('github_create_pr'));
-    });
-
-    test('filters the catalog by a case-insensitive substring', () async {
-      expect(await _dispatcher.dispatch(['list', 'COMMENT']), 0);
-      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
-      final tools = decoded['tools'] as List;
-      expect(tools, isNotEmpty);
-      for (final t in tools) {
-        final map = t as Map<String, dynamic>;
-        final matches = (map['name'] as String)
-                .toLowerCase()
-                .contains('comment') ||
-            (map['description'] as String).toLowerCase().contains('comment');
-        expect(matches, isTrue);
-      }
-    });
-
-    test('honors the DMTOOLS_INTEGRATIONS filter', () async {
-      PropertyReader.setOverrides({'DMTOOLS_INTEGRATIONS': 'jira'});
-      expect(await _dispatcher.dispatch(['list']), 0);
-      final decoded = jsonDecode(_lines.join('\n')) as Map<String, dynamic>;
-      final tools = decoded['tools'] as List;
-      expect(tools, isNotEmpty);
-      for (final t in tools) {
-        expect((t as Map<String, dynamic>)['integration'], 'jira');
-      }
     });
   });
 }

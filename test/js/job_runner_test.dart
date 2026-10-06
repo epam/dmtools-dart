@@ -18,6 +18,7 @@ void main() {
   _testContextInjection();
   _testExtraGlobalsFlatten();
   _testHostFunctions();
+  _testSetEnvVariable();
   _testErrorDispatch();
   _testWrapperDispatch();
   _testRegistryFiltering();
@@ -167,8 +168,31 @@ void _testHostFunctions() {
       }
     });
 
-    test('set_env_variable merges a runtime override and cli children see it',
+    test('direct file_read answers a sandbox-blocked path with null (gh-365)',
         () {
+      final dir = Directory.systemTemp.createTempSync('dmtools_fread_sbx');
+      try {
+        // Java FileTools.readFile parity: a traversal attempt is logged
+        // and answered with null — the contract testRunner.js relies on
+        // (`content && content.trim()`), never a thrown error.
+        final script = _writeScript(
+            dir, 'test.js', _action("file_read({path: '/etc/hosts'})"));
+        final result = const JsJobRunner().runScript(
+          scriptPath: script.path,
+          jobParams: {},
+          workingDirectory: dir.path,
+        );
+        expect(jsonDecode(result!), isNull);
+      } finally {
+        dir.deleteSync(recursive: true);
+      }
+    });
+  });
+}
+
+void _testSetEnvVariable() {
+  group('set_env_variable host function', () {
+    test('merges a runtime override and cli children see it', () {
       final dir = Directory.systemTemp.createTempSync('dmtools_env');
       try {
         // The override must land in PropertyReader (getValue sees it) and

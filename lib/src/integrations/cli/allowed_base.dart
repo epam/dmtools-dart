@@ -9,30 +9,101 @@
 library;
 
 import 'dart:io';
+import 'package:path/path.dart' as p;
 
 /// Canonicalizes [dirPath] and validates that it lies within the job
 /// [base] directory, its git repository root, or the system temp
 /// directory; otherwise throws (Java `SecurityException` parity, rethrown
 /// as a JS `Error` on the bridge path).
 void validateWithinAllowedBase(String dirPath, String base) {
-  String canonical(String p) {
-    try {
-      return Directory(p).resolveSymbolicLinksSync();
-    } catch (_) {
-      return p;
-    }
-  }
-
-  final dir = canonical(dirPath);
+  final dir = canonicalizePath(dirPath);
   bool within(String? candidate) {
     if (candidate == null) return false;
-    return pathIsWithin(dir, canonical(candidate));
+    return pathIsWithin(dir, canonicalizePath(candidate));
   }
 
-  if (within(base) || within(gitRepositoryRoot(base))) return;
-  if (within(Directory.systemTemp.path)) return;
+  // The tmpdir candidate is checked before the git root: it answers for
+  // the common temp-fixture traffic without spawning a `git rev-parse`
+  // subprocess on the synchronous bridge path (gh-365 rework review
+  // thread 3); the boolean outcome is unchanged (pure OR).
+  if (within(base) || within(Directory.systemTemp.path)) return;
+  if (within(gitRepositoryRoot(base))) return;
   throw Exception('Working directory is outside allowed base paths '
       '(user.dir, git root, tmpdir): $dirPath');
+}
+
+/// Resolves a `file_*` tool [path] the way Java `FileTools` does —
+/// relative paths against the job [base], lexical `.`/`..` normalization
+/// (Java `Path.normalize()` parity) — and validates that the result lies
+/// within [base], its git repository root, or the system temp directory;
+/// returns the validated absolute path, or throws (Java `FileTools`
+/// `"Path traversal attempt blocked"` parity, surfaced as the standard
+/// error envelope on the bridge path).
+///
+/// Shared by both surfaces of the `file_*` family — the synchronous
+/// JS-bridge path (ToolBridge) and the async executor (FileToolExecutor) —
+/// so the two cannot drift apart on a security-flavored behavior again,
+/// the same contract [validateWithinAllowedBase] gives `cli_execute_command`.
+///
+/// The normalization happens BEFORE the containment check: a not-yet-
+/// existing escape target has no filesystem entry to canonicalize, so
+/// skipping it would let `base/sub/../outside` pass a raw prefix match
+/// and materialize outside the base on write. [canonicalizePath] also
+/// resolves planned paths through their deepest existing ancestor, so
+/// the symlink guarantee covers the whole resolved path — an in-base
+/// link (as the target or as a parent of a planned write) pointing
+/// outside is rejected, and symlink-flavored tmpdir prefixes (macOS
+/// `/var/folders/...` → `/private/var/...`) compare equal to their
+/// canonical candidates instead of false-rejecting. It scopes to the
+/// resolved path argument: the executor's recursive traversals pass
+/// `followLinks: false` (Java `Files.walk` parity), so traversal cannot
+/// leak outside entries either.
+String resolveWithinAllowedBase(String path, String base) {
+  final resolved =
+      canonicalizePath(p.normalize(p.isAbsolute(path) ? path : '$base/$path'));
+  bool within(String? candidate) {
+    if (candidate == null) return false;
+    return pathIsWithin(resolved, canonicalizePath(candidate));
+  }
+
+  // Tmpdir before git root: no `git rev-parse` spawn for temp-fixture
+  // traffic on the synchronous bridge path (gh-365 rework review
+  // thread 3); boolean outcome unchanged (pure OR).
+  if (within(base) || within(Directory.systemTemp.path)) return resolved;
+  if (within(gitRepositoryRoot(base))) return resolved;
+  throw Exception('Path traversal attempt blocked: $path '
+      '(resolved: $resolved, working dir: $base)');
+}
+
+/// Canonical form of [path]: resolves symlinks for the deepest existing
+/// ancestor and appends the non-existent remainder lexically, so planned
+/// writes (final component not on disk yet) still see through symlinked
+/// parents — the symlink-escape hole and the macOS `/var` → `/private/var`
+/// first-write false rejections share this root cause (gh-365 rework:
+/// a fully lexical fallback left symlinked ancestors unresolved while
+/// every allowed-base candidate was canonicalized).
+///
+/// Falls back to the fully lexical [path] when nothing up to the
+/// filesystem root can be resolved (e.g. a symlink loop — `realpath(3)`
+/// fails the same way). Public so the planned-path/symlink semantics are
+/// testable portably, the same way [pathIsWithin] exposes the
+/// separator-sensitive containment for Windows tests.
+String canonicalizePath(String path) {
+  final trail = <String>[];
+  var current = path;
+  while (true) {
+    try {
+      final head = Directory(current).resolveSymbolicLinksSync();
+      return trail.isEmpty
+          ? head
+          : p.normalize(p.joinAll([head, ...trail.reversed]));
+    } catch (_) {
+      final parent = p.dirname(current);
+      if (parent == current) return path;
+      trail.add(p.basename(current));
+      current = parent;
+    }
+  }
 }
 
 /// Returns `true` when the canonical [dir] equals [base] or lies inside

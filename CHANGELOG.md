@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Sandboxed the JS-bridge `file_*` family behind the job working directory
+  (gh-365): every `file_*` tool on both surfaces — the synchronous bridge
+  (`ToolBridge._fileFns`, including the direct `file_read` host) and the
+  async `FileToolExecutor` — now resolves paths through the new shared
+  `resolveWithinAllowedBase` and rejects anything outside the job base, its
+  git repository root, or the system temp dir with the standard
+  `{"error": …}` envelope (rethrown as a JS `Error` via `executeToolViaJava`;
+  the direct `file_read` host answers null per its testRunner.js contract).
+  Closes the family-wide traversal gap the gh-361 parent-directory creation
+  could materialize through (`file_write`/`file_mkdir` absolute and `..`
+  escapes, `file_copy`/`file_move` leaking in both endpoint directions).
+  Java parity: `FileTools.java` normalizes and rejects such paths
+  ("Path traversal attempt blocked") — the Dart check runs the same lexical
+  normalization BEFORE containment (not-yet-existing escape targets have no
+  filesystem entry to canonicalize) plus symlink resolution for existing
+  paths, and shares the allowed-base semantics of `cli_execute_command`
+  (`validateWithinAllowedBase`) so the file and CLI surfaces cannot drift.
+- Hardened the gh-365 sandbox canonicalization after review (gh-365 rework):
+  `canonicalizePath` now resolves the deepest existing ancestor and
+  re-attaches the non-existent tail (normalized), so a first write through
+  an in-base symlinked parent resolves to its real target and is rejected
+  when that target is outside the allowed bases (the fully lexical fallback
+  let it materialize outside), and symlink-flavored tmpdir prefixes
+  (macOS `/var/folders/...` → `/private/var/...`) compare equal to their
+  canonical candidates instead of false-rejecting every first temp write.
+  The executor's recursive traversals (`FileToolExecutor.existsInPath`,
+  `search`) pass `followLinks: false` — Java `Files.walk` parity
+  (AGENTS.md rule 2) — so an in-base directory symlink pointing outside
+  cannot leak outside entry names; and both sandbox validators check the
+  tmpdir candidate before the git root, keeping the common temp-fixture
+  traffic off the blocking `git rev-parse` spawn on the synchronous bridge
+  path (boolean outcome unchanged).
+
 ### Changed
 
 - Retired the legacy `machine-kit` layer (gh-146): the machine loop runs on

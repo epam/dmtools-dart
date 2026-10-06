@@ -81,6 +81,7 @@ class ToolBridge {
   void registerOn(QuickjsRuntime runtime) {
     runtime.registerHostFunction('__executeToolViaJavaHost', _dispatchToolCall);
     runtime.registerHostFunction('__fileReadHost', _fileReadHost);
+    runtime.registerHostFunction('__loaderReadHost', _loaderReadHost);
     runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
     _registerConsole(runtime, _consolePrefix);
     runtime.eval(_hostFunctionBootstrap, filename: '<host_functions>');
@@ -219,6 +220,36 @@ class ToolBridge {
         return 'null';
       }
     });
+  }
+
+  /// Handles `__loaderFileRead(path)` — the require() loader's module
+  /// source read.
+  ///
+  /// Java `JobJavaScriptBridge.loadModule` parity: the loader is a HOST
+  /// primitive reading via `loadJavaScriptCode` — direct host IO, never
+  /// routed through the `FileTools` sandbox (that governs agent tool
+  /// calls). The loader only reads paths it resolved itself from the
+  /// current script directory / module spec, so it is host-trusted
+  /// machinery: pack modules under `~/.dmtools/packs` load regardless of
+  /// the working-dir containment or `DMTOOLS_FILE_READ_ALLOWED_PATHS`
+  /// (gh-369 — v0.1.41 broke every pack-internal require otherwise).
+  ///
+  /// Returns the file content as a plain JSON string, or JS `null` when
+  /// the file cannot be read — same contract as [_fileReadHost], so the
+  /// prelude's 'JavaScript file not found' path is unchanged. No call
+  /// logging: this is not a tool call (nothing agent-visible happens
+  /// here); the subsequent module eval is the observable event.
+  String _loaderReadHost(String argsJson) {
+    final parsed = _decodeArgs(argsJson);
+    String? path;
+    if (parsed is String) path = parsed;
+    if (parsed is Map) path = parsed['path'] as String?;
+    if (path == null) return 'null';
+    try {
+      return jsonEncode(File(path).readAsStringSync());
+    } catch (_) {
+      return 'null';
+    }
   }
 
   /// `SetEnvVariableProxy` parity — `set_env_variable(propertyName,
@@ -684,6 +715,13 @@ const String _hostFunctionBootstrap = '''
     };
     globalThis.file_read = function() {
         return __unwrapHostError(__fileReadHost.apply(null, arguments));
+    };
+    // Host-private: the require() loader's own source read. Deliberately
+    // NOT the sandboxed file_read — Java `loadModule` reads module sources
+    // via `loadJavaScriptCode` (direct host IO); the FileTools sandbox
+    // governs agent tool calls only. Never referenced by agent code.
+    globalThis.__loaderFileRead = function() {
+        return __unwrapHostError(__loaderReadHost.apply(null, arguments));
     };
     globalThis.set_env_variable = function() {
         return __unwrapHostError(

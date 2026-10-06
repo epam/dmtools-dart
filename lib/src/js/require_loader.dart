@@ -8,8 +8,11 @@
 /// The FFI host functions marshal results through JSON, so a host-side
 /// `require` could never return module exports containing functions. The
 /// loader therefore lives entirely in JS: it reads module sources through
-/// the existing `file_read` host function and evaluates them with `eval()`,
-/// so real JS objects (functions included) flow between modules.
+/// the host-private `__loaderFileRead` primitive (direct host IO, Java
+/// `loadJavaScriptCode` parity — deliberately not the sandboxed
+/// `file_read`, whose containment would block pack-internal modules,
+/// gh-369) and evaluates them with `eval()`, so real JS objects
+/// (functions included) flow between modules.
 ///
 /// Semantics ported 1:1 from Java:
 /// - `./x` / `../x` resolve against the current script directory, which is
@@ -96,7 +99,11 @@ const String _requireLoaderBootstrap = '''
     }
 
     function readModuleCode(resolvedPath) {
-        var content = file_read({ path: resolvedPath });
+        // Host-private direct read (Java loadJavaScriptCode parity) — NOT
+        // the sandboxed file_read: module sources are host-trusted loader
+        // input, so packs under ~/.dmtools load regardless of the
+        // working-dir containment (gh-369).
+        var content = __loaderFileRead(resolvedPath);
         if (content === null || content === undefined) {
             throw new Error('JavaScript file not found in resources or ' +
                 'filesystem: ' + resolvedPath);

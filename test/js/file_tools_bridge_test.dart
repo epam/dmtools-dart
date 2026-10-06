@@ -181,6 +181,7 @@ void fileWriteTests() {
 void fileSandboxTests() {
   fileSandboxEscapeTests();
   fileSandboxEndpointTests();
+  fileSandboxSymlinkParentTests();
 }
 
 /// The tool→args table for the escape tests: every bridge `file_*` tool
@@ -288,23 +289,6 @@ void fileSandboxEndpointTests() {
       expect(Directory('/etc/dmtools-blocked-dir').existsSync(), isFalse);
     });
 
-    test(
-        'a first write through an in-base symlinked parent is rejected '
-        '(gh-365 rework)', () {
-      // The symlinked parent exists, only the final component is missing —
-      // the blocking-review escape shape. The planned write must resolve
-      // through the link and answer the envelope, not materialize outside.
-      Link('${dir.path}/sub').createSync('/etc');
-      final target = '${dir.path}/sub/escape.txt';
-
-      final result = jsonDecode(
-        bridge.execute('file_write', {'path': target, 'content': 'x'}),
-      ) as Map<String, dynamic>;
-
-      expect(result['error'], contains('Path traversal attempt blocked'));
-      expect(File('/etc/escape.txt').existsSync(), isFalse);
-    });
-
     test('copy into the base from outside throws instead of leaking', () {
       final result = jsonDecode(
         bridge.execute('file_copy', {
@@ -327,6 +311,30 @@ void fileSandboxEndpointTests() {
 
       expect(result['error'], isA<String>());
       expect(File('${dir.path}/src.txt').existsSync(), isTrue);
+    });
+  });
+}
+
+/// gh-365 rework: a first write through an in-base symlinked parent —
+/// the blocking-review escape shape (the symlink exists, only the final
+/// component is missing) — must resolve through the link and answer the
+/// standard envelope instead of materializing outside the base.
+void fileSandboxSymlinkParentTests() {
+  group('JS-bridge file_* sandbox symlinked parents (gh-365 rework)', () {
+    test('a first write through an in-base symlinked parent is rejected', () {
+      final bridge = ToolBridge(
+        registry: createDefaultToolRegistry(),
+        workingDirectory: dir.path,
+      );
+      Link('${dir.path}/sub').createSync('/etc');
+      final target = '${dir.path}/sub/escape.txt';
+
+      final result = jsonDecode(
+        bridge.execute('file_write', {'path': target, 'content': 'x'}),
+      ) as Map<String, dynamic>;
+
+      expect(result['error'], contains('Path traversal attempt blocked'));
+      expect(File('/etc/escape.txt').existsSync(), isFalse);
     });
   });
 }

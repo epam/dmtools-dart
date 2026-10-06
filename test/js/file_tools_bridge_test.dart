@@ -288,6 +288,23 @@ void fileSandboxEndpointTests() {
       expect(Directory('/etc/dmtools-blocked-dir').existsSync(), isFalse);
     });
 
+    test(
+        'a first write through an in-base symlinked parent is rejected '
+        '(gh-365 rework)', () {
+      // The symlinked parent exists, only the final component is missing —
+      // the blocking-review escape shape. The planned write must resolve
+      // through the link and answer the envelope, not materialize outside.
+      Link('${dir.path}/sub').createSync('/etc');
+      final target = '${dir.path}/sub/escape.txt';
+
+      final result = jsonDecode(
+        bridge.execute('file_write', {'path': target, 'content': 'x'}),
+      ) as Map<String, dynamic>;
+
+      expect(result['error'], contains('Path traversal attempt blocked'));
+      expect(File('/etc/escape.txt').existsSync(), isFalse);
+    });
+
     test('copy into the base from outside throws instead of leaking', () {
       final result = jsonDecode(
         bridge.execute('file_copy', {

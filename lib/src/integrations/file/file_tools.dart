@@ -396,10 +396,15 @@ class FileToolExecutor {
       File(_check(path)).writeAsString(jsonEncode(data));
 
   /// Returns `true` if a file named [filename] exists under [path].
+  ///
+  /// The traversal does not follow symlinks (`followLinks: false`) —
+  /// Java `Files.walk` parity (AGENTS.md rule 2): links are reported but
+  /// never descended into, so an in-base directory symlink pointing
+  /// outside cannot leak outside entry names (gh-365 rework).
   Future<bool> existsInPath(String path, String filename) async {
     final dir = Directory(_check(path));
     if (!dir.existsSync()) return false;
-    await for (final entry in dir.list(recursive: true)) {
+    await for (final entry in dir.list(recursive: true, followLinks: false)) {
       if (entry is File && entry.uri.pathSegments.last == filename) {
         return true;
       }
@@ -422,12 +427,17 @@ class FileToolExecutor {
   Future<void> rename(String source, String dest) => move(source, dest);
 
   /// Recursively searches [dir] for files whose name matches glob [pattern].
+  ///
+  /// The traversal does not follow symlinks (`followLinks: false`) —
+  /// Java `Files.walk` parity (AGENTS.md rule 2), same as [existsInPath]:
+  /// an in-base directory symlink pointing outside cannot leak outside
+  /// entry names (gh-365 rework).
   Future<List<String>> search(String dir, String pattern) async {
     final matcher = _globToRegex(pattern);
     final result = <String>[];
     final root = Directory(_check(dir));
     if (!root.existsSync()) return result;
-    await for (final entry in root.list(recursive: true)) {
+    await for (final entry in root.list(recursive: true, followLinks: false)) {
       if (entry is File && matcher.hasMatch(entry.uri.pathSegments.last)) {
         result.add(entry.path);
       }

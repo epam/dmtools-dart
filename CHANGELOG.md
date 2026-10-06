@@ -26,6 +26,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   filesystem entry to canonicalize) plus symlink resolution for existing
   paths, and shares the allowed-base semantics of `cli_execute_command`
   (`validateWithinAllowedBase`) so the file and CLI surfaces cannot drift.
+- Hardened the gh-365 sandbox canonicalization after review (gh-365 rework):
+  `canonicalizePath` now resolves the deepest existing ancestor and
+  re-attaches the non-existent tail (normalized), so a first write through
+  an in-base symlinked parent resolves to its real target and is rejected
+  when that target is outside the allowed bases (the fully lexical fallback
+  let it materialize outside), and symlink-flavored tmpdir prefixes
+  (macOS `/var/folders/...` → `/private/var/...`) compare equal to their
+  canonical candidates instead of false-rejecting every first temp write.
+  The executor's recursive traversals (`FileToolExecutor.existsInPath`,
+  `search`) pass `followLinks: false` — Java `Files.walk` parity
+  (AGENTS.md rule 2) — so an in-base directory symlink pointing outside
+  cannot leak outside entry names; and both sandbox validators check the
+  tmpdir candidate before the git root, keeping the common temp-fixture
+  traffic off the blocking `git rev-parse` spawn on the synchronous bridge
+  path (boolean outcome unchanged).
 
 ### Changed
 

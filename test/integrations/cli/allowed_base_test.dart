@@ -13,6 +13,7 @@ void main() {
   pathIsWithinTests();
   validateTests();
   resolveTests();
+  canonicalizePathTests();
 }
 
 /// `pathIsWithin` — the path-prefix containment check. Java
@@ -106,8 +107,7 @@ void validateTests() {
 /// `base/sub/../outside` pass a raw prefix match), and the validated
 /// absolute path is returned so callers act on exactly what was checked.
 void resolveTests() {
-  resolveTests();
-  // canonicalizePathTests(); // RED: pending canonicalizePath
+  resolveAllowedTests();
   resolveBlockedTests();
 }
 

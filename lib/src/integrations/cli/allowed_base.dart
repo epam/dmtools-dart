@@ -211,7 +211,8 @@ bool matchesPattern(String path, String workingDir, String rawPattern) {
       slashBefore >= 0 ? rawPattern.substring(0, slashBefore) : '';
   final globSuffix =
       slashBefore >= 0 ? rawPattern.substring(slashBefore + 1) : rawPattern;
-  final canonicalBase = canonicalizePath(_patternBase(workingDir, literalPrefix));
+  final canonicalBase =
+      canonicalizePath(_patternBase(workingDir, literalPrefix));
   // Canonicalize the candidate too: a symlinked machine prefix (macOS
   // `/home` autofs) would otherwise drift away from a literal path that
   // names the same location — both sides must land in the same form.

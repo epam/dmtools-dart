@@ -39,6 +39,9 @@ void main() {
   copyEndpointTests();
   moveEndpointTests();
   recursiveSymlinkTests();
+  configuredReadAdmitsTests();
+  configuredReadStrictTests();
+  configuredReadUnsetTests();
 }
 
 /// The ops table: every path-taking executor operation, keyed by name.
@@ -282,6 +285,170 @@ void recursiveSymlinkTests() {
 
       expect(await f.executor.search(f.base.path, 'needle.txt'), isNotEmpty);
       expect(await f.executor.existsInPath(f.base.path, 'needle.txt'), isTrue);
+    });
+  });
+}
+
+/// gh-367: the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch reaches the
+/// executor surface too — read-flavored operations accept a path that only
+/// the configured globs admit (the pack-internal `file_read` shape from
+/// `~/.dmtools/packs/...`), while write-flavored operations keep Java's
+/// strict no-config guard (`writeFile`/`deleteFile` never consult the
+/// allow-list in `FileTools.java`).
+///
+/// The config value flows through [PropertyReader] exactly as in
+/// production: `setOverrides` stands in for the OS env tier the fa
+/// machine sets (`DMTOOLS_FILE_READ_ALLOWED_PATHS=...`).
+class _ConfigFixture {
+  final String? home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+
+  bool get usable {
+    final h = home;
+    return h != null &&
+        h.isNotEmpty &&
+        !pathIsWithin(h, Directory.systemTemp.path);
+  }
+
+  late Directory base;
+  late FileToolExecutor executor;
+  late Directory packJs;
+  late String module;
+  late String insideSource;
+
+  void setUp() {
+    base = Directory.systemTemp.createTempSync('dmtools_fsandbox_cfg');
+    executor = FileToolExecutor(base: base.path);
+    insideSource = '${base.path}/src.txt';
+    File(insideSource).writeAsStringSync('payload');
+    final packDir = '$home/.dmtools-gh367-test-exec/packs/sm_github-0.1.36/js';
+    packJs = Directory(packDir)..createSync(recursive: true);
+    module = '$packDir/configLoader.js';
+    File(module).writeAsStringSync('module.exports={};');
+    PropertyReader.setOverrides({
+      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test-exec/**',
+    });
+  }
+
+  void tearDown() {
+    PropertyReader.clearOverrides();
+    Directory('$home/.dmtools-gh367-test-exec').deleteSync(recursive: true);
+    base.deleteSync(recursive: true);
+  }
+}
+
+void configuredReadAdmitsTests() {
+  final f = _ConfigFixture();
+
+  group('FileToolExecutor read ops honor configured allowed paths (gh-367)',
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
+
+    test('read ops admit the pack module through the config', () async {
+      File('${f.packJs.path}/../cfg.json').writeAsStringSync('{"a": 1}');
+      final jsonPath =
+          '${f.home}/.dmtools-gh367-test-exec/packs/sm_github-0.1.36/cfg.json';
+      final ops = <String, Future<dynamic> Function()>{
+        'read': () => f.executor.read(f.module),
+        'readLines': () => f.executor.readLines(f.module),
+        'readJson': () => f.executor.readJson(jsonPath),
+        'exists': () => f.executor.exists(f.module),
+        'getFileInfo': () => f.executor.getFileInfo(f.module),
+        'getSize': () => f.executor.getSize(f.module),
+        'watch': () => f.executor.watch(f.module),
+      };
+      for (final entry in ops.entries) {
+        await expectLater(entry.value(), completes,
+            reason: '${entry.key} must admit its path via the config');
+      }
+      expect(await f.executor.read(f.module), 'module.exports={};');
+      expect(await f.executor.exists(f.module), isTrue);
+      expect((await f.executor.getFileInfo(f.module))['exists'], isTrue);
+    });
+
+    test('list/search over the admitted pack dir work', () async {
+      File('${f.packJs.path}/second.js').writeAsStringSync('// 2');
+      expect((await f.executor.list(f.packJs.path)), hasLength(2));
+      expect(await f.executor.search(f.packJs.path, '*.js'), hasLength(2));
+    });
+  });
+}
+
+/// The strict half (gh-367): Java's write path never consults the config
+/// (`writeFile`/`deleteFile` guard with a plain startsWith), so
+/// write-flavored operations reject the same configured path, and the
+/// read allowance disappears with the override.
+void configuredReadStrictTests() {
+  final f = _ConfigFixture();
+
+  group('FileToolExecutor write ops ignore the configured allow-list (gh-367)',
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
+
+    test('write ops still reject the same configured path', () async {
+      await expectLater(
+        f.executor.write(f.module, 'overwritten'),
+        throwsA(isA<Exception>()),
+      );
+      expect(File(f.module).readAsStringSync(), 'module.exports={};',
+          reason: 'the write must not land');
+
+      await expectLater(
+        f.executor.delete(f.module),
+        throwsA(isA<Exception>()),
+      );
+      expect(File(f.module).existsSync(), isTrue,
+          reason: 'the delete must not happen');
+
+      await expectLater(
+        f.executor.mkdir('${f.home}/.dmtools-gh367-test-exec/extra'),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        Directory('${f.home}/.dmtools-gh367-test-exec/extra').existsSync(),
+        isFalse,
+      );
+
+      await expectLater(
+        f.executor.append(f.module, 'tail'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('copy/move endpoints stay strict both ways', () async {
+      await expectLater(
+        f.executor.copy(f.module, '${f.base.path}/leak.txt'),
+        throwsA(isA<Exception>()),
+      );
+      expect(File('${f.base.path}/leak.txt').existsSync(), isFalse);
+
+      await expectLater(
+        f.executor.copy(f.insideSource, f.module),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+}
+
+/// The allowance is the config's, not the sandbox's: with the override
+/// cleared the same read is back to the traversal rejection.
+void configuredReadUnsetTests() {
+  final f = _ConfigFixture();
+
+  group('FileToolExecutor without the configured allow-list (gh-367)',
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
+
+    test('the same read stays blocked without the override', () async {
+      PropertyReader.clearOverrides();
+
+      await expectLater(
+        f.executor.read(f.module),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 }

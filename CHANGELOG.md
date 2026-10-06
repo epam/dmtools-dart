@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Restored the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch the gh-365
+  sandbox never ported (gh-367): read-flavored `file_*` operations on both
+  surfaces — the synchronous bridge (`file_read`, `file_read_lines`,
+  `file_list`, `file_exists`, `file_info`) and the async executor (plus
+  `readJson`, `getSize`, `watch`, `existsInPath`, `search`) — now consult
+  the comma-separated glob list after the base/tmpdir/git-root containment
+  fails, so pack-internal reads under the dmtools home
+  (`~/.dmtools/packs/<pack>/js/*.js`, the SM pack's `require()` chain)
+  pass again and the red SM ticks clear. Java `FileTools` parity:
+  `isAllowedByConfig`/`matchesPattern`/`indexOfWildcard` ported 1:1 —
+  each pattern's literal prefix resolves against the working dir
+  (`../.dmtools/**` names the sibling `.dmtools` of the checkout; absolute
+  prefixes pass through per `Path.resolve`), and the glob suffix matches
+  Java `PathMatcher` semantics (`**` crosses directory boundaries,
+  `*`/`?` stay inside one segment, `[...]`/`{...}` classes and
+  alternatives; malformed patterns are skipped, not fatal). Write-flavored
+  operations keep the strict guard — Java's `writeFile`/`deleteFile` never
+  consult the config — so the allowance cannot smuggle writes or
+  copy/move/delete endpoints outside the allowed bases.
 - Sandboxed the JS-bridge `file_*` family behind the job working directory
   (gh-365): every `file_*` tool on both surfaces — the synchronous bridge
   (`ToolBridge._fileFns`, including the direct `file_read` host) and the

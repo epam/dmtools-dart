@@ -7,6 +7,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../../config/property_reader.dart';
+import '../../config/property_reader_getters.dart';
 import '../../integrations/cli/allowed_base.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
@@ -270,6 +272,14 @@ ToolDefinition _searchTool() => ToolDefinition(
 /// repository root, or the system temp dir throw before any filesystem
 /// access (Java `FileTools` "Path traversal attempt blocked" parity).
 ///
+/// gh-367: read-flavored operations additionally honor the
+/// `DMTOOLS_FILE_READ_ALLOWED_PATHS` globs (Java
+/// `FileTools.isAllowedByConfig` parity — `readFile` and
+/// `resolveSandboxedPath` consult the config), so pack-internal reads
+/// under the dmtools home pass. Write-flavored operations keep the
+/// strict guard — Java's `writeFile`/`deleteFile` never consult the
+/// config.
+///
 /// Every operation reports failures through its returned Future —
 /// sandbox rejections included — so callers get one uniform async error
 /// channel; no method throws synchronously.
@@ -285,8 +295,19 @@ class FileToolExecutor {
   /// CWD).
   FileToolExecutor({String? base}) : _base = base ?? Directory.current.path;
 
-  /// Sandboxes [path] per the shared `file_*` containment check (gh-365).
+  /// Sandboxes [path] per the shared `file_*` containment check (gh-365),
+  /// without the configured allow-list — the write-flavor guard.
   String _check(String path) => resolveWithinAllowedBase(path, _base);
+
+  /// Sandboxes [path] for read-flavored operations: the containment check
+  /// plus the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch (gh-367),
+  /// read fresh from [PropertyReader] on every call exactly like Java's
+  /// `new PropertyReader().getFileReadAllowedPaths()` per tool call.
+  String _checkRead(String path) => resolveWithinAllowedBase(
+        path,
+        _base,
+        configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths(),
+      );
 
   /// Dispatches [toolName] with [args] to the matching file operation.
   ///
@@ -300,7 +321,8 @@ class FileToolExecutor {
   }
 
   /// Reads and returns the entire contents of the file at [path].
-  Future<String> read(String path) async => File(_check(path)).readAsString();
+  Future<String> read(String path) async =>
+      File(_checkRead(path)).readAsString();
 
   /// Writes [content] to the file at [path], creating or overwriting it.
   ///
@@ -319,11 +341,11 @@ class FileToolExecutor {
 
   /// Lists the entry paths inside the directory at [path].
   Future<List<String>> list(String path) async =>
-      Directory(_check(path)).list().map((e) => e.path).toList();
+      Directory(_checkRead(path)).list().map((e) => e.path).toList();
 
   /// Returns `true` if a file or directory exists at [path].
   Future<bool> exists(String path) async {
-    final checked = _check(path);
+    final checked = _checkRead(path);
     return File(checked).existsSync() || Directory(checked).existsSync();
   }
 
@@ -351,7 +373,7 @@ class FileToolExecutor {
 
   /// Reads the file at [path] and returns its lines.
   Future<List<String>> readLines(String path) async =>
-      File(_check(path)).readAsLines();
+      File(_checkRead(path)).readAsLines();
 
   /// Writes [lines] to the file at [path], joined by newlines.
   Future<void> writeLines(String path, List<String> lines) async =>
@@ -365,7 +387,7 @@ class FileToolExecutor {
   ///
   /// The map contains `exists`, `isDirectory`, `size`, and `modified`.
   Future<Map<String, dynamic>> getFileInfo(String path) async {
-    final checked = _check(path);
+    final checked = _checkRead(path);
     final type = FileSystemEntity.typeSync(checked);
     final exists = type != FileSystemEntityType.notFound;
     if (!exists) {
@@ -387,7 +409,7 @@ class FileToolExecutor {
 
   /// Reads the file at [path] and returns its decoded JSON value.
   Future<dynamic> readJson(String path) async {
-    final content = await File(_check(path)).readAsString();
+    final content = await File(_checkRead(path)).readAsString();
     return jsonDecode(content);
   }
 
@@ -402,7 +424,7 @@ class FileToolExecutor {
   /// never descended into, so an in-base directory symlink pointing
   /// outside cannot leak outside entry names (gh-365 rework).
   Future<bool> existsInPath(String path, String filename) async {
-    final dir = Directory(_check(path));
+    final dir = Directory(_checkRead(path));
     if (!dir.existsSync()) return false;
     await for (final entry in dir.list(recursive: true, followLinks: false)) {
       if (entry is File && entry.uri.pathSegments.last == filename) {
@@ -413,11 +435,11 @@ class FileToolExecutor {
   }
 
   /// Returns the size of the file at [path] in bytes.
-  Future<int> getSize(String path) async => File(_check(path)).length();
+  Future<int> getSize(String path) async => File(_checkRead(path)).length();
 
   /// Returns the last-modified time and size of [path] as a map.
   Future<Map<String, dynamic>> watch(String path) async {
-    final stat = await File(_check(path)).stat();
+    final stat = await File(_checkRead(path)).stat();
     return {'size': stat.size, 'modified': stat.modified};
   }
 
@@ -435,7 +457,7 @@ class FileToolExecutor {
   Future<List<String>> search(String dir, String pattern) async {
     final matcher = _globToRegex(pattern);
     final result = <String>[];
-    final root = Directory(_check(dir));
+    final root = Directory(_checkRead(dir));
     if (!root.existsSync()) return result;
     await for (final entry in root.list(recursive: true, followLinks: false)) {
       if (entry is File && matcher.hasMatch(entry.uri.pathSegments.last)) {

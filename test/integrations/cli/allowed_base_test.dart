@@ -526,11 +526,8 @@ void configuredAllowlistAdmitScopeTests() {
       final module = packModuleIn(fakeHome!);
 
       expect(
-        resolveWithinAllowedBase(
-          module,
-          base.path,
-          configuredAllowedPaths: module,
-        ),
+        resolveWithinAllowedBase(module, base.path,
+            configuredAllowedPaths: module),
         canonicalizePath(module),
       );
       expect(

@@ -206,10 +206,8 @@ class ToolBridge {
       if (path == null) return 'null';
       final String resolved;
       try {
-        // gh-367: the direct host is the read flavor — the require()
-        // chain reads pack-internal modules through here, so the
-        // DMTOOLS_FILE_READ_ALLOWED_PATHS globs apply (Java `readFile`
-        // parity), same as the table-driven `_readFile`.
+        // gh-367: the direct host is the read flavor — require() reads
+        // pack modules through here (Java `readFile` parity).
         resolved = _sandboxReadPath(path);
       } catch (e) {
         stderr.writeln('file_read: $e');
@@ -495,11 +493,10 @@ class ToolBridge {
   //
   // gh-367: read-flavored operations resolve through [_sandboxReadPath]
   // instead — the same containment check plus the
-  // `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch (Java
-  // `FileTools.isAllowedByConfig` parity), so the SM pack's `require()`
-  // chain can read its own modules under `~/.dmtools/packs`. Write
-  // flavors keep [_sandboxPath]: Java's `writeFile`/`deleteFile` never
-  // consult the config.
+  // `DMTOOLS_FILE_READ_ALLOWED_PATHS` globs (Java `isAllowedByConfig`
+  // parity), so the SM pack's `require()` chain reads its own modules
+  // under `~/.dmtools/packs`. Write flavors keep [_sandboxPath]: Java's
+  // `writeFile`/`deleteFile` never consult the config.
 
   /// Sandbox resolver for the whole `file_*` bridge family: shares
   /// [resolveWithinAllowedBase] with the async FileToolExecutor surface so
@@ -507,10 +504,9 @@ class ToolBridge {
   String _sandboxPath(String path) => resolveWithinAllowedBase(
       path, _workingDirectory ?? Directory.current.path);
 
-  /// Sandbox resolver for read-flavored operations: the containment check
-  /// plus the configured allow-list, read fresh from [PropertyReader] on
-  /// every call exactly like Java's
-  /// `new PropertyReader().getFileReadAllowedPaths()` per tool call.
+  /// Sandbox resolver for read-flavored operations: containment plus the
+  /// configured allow-list, read fresh from [PropertyReader] per call
+  /// (Java `new PropertyReader().getFileReadAllowedPaths()` parity).
   String _sandboxReadPath(String path) => resolveWithinAllowedBase(
       path, _workingDirectory ?? Directory.current.path,
       configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths());

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/dmtools.dart' show PropertyReader, pathIsWithin;
 import 'package:dmtools/src/js/job_runner.dart';
 import 'package:test/test.dart';
 
@@ -16,6 +17,7 @@ void main() {
   _requireCachesModules();
   _requireFailsForMissingModule();
   _requireArgumentValidation();
+  _requireLoadsConfiguredPackModule();
 }
 
 File _writeScript(String basePath, String name, String content) {
@@ -185,4 +187,44 @@ void _requireArgumentValidation() {
       }
     });
   }
+}
+
+/// gh-367: a pack-internal require — the SM pack's loader pulls sibling
+/// modules from `~/.dmtools/packs/<pack>/js/…`, an absolute path OUTSIDE
+/// the repo workdir. The `require` chain reads through the direct
+/// `file_read` host function, so the configured
+/// `DMTOOLS_FILE_READ_ALLOWED_PATHS` glob (Java `FileTools`
+/// `isAllowedByConfig` parity) must admit it there too — otherwise the
+/// whole require chain dies and the SM tick exits 1.
+void _requireLoadsConfiguredPackModule() {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  final usable = home != null &&
+      home.isNotEmpty &&
+      !pathIsWithin(home, Directory.systemTemp.path);
+
+  test('require admits a pack module under the configured dmtools home',
+      skip: usable ? null : 'no HOME outside the tmpdir to test against', () {
+    final packRoot = Directory('$home/.dmtools-gh367-test');
+    final packJs = Directory('${packRoot.path}/packs/sm_github-0.1.36/js');
+    packJs.createSync(recursive: true);
+    File('${packJs.path}/configLoader.js')
+        .writeAsStringSync('exports.loaded = true;');
+    PropertyReader.setOverrides({
+      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+    });
+    final dir = Directory.systemTemp.createTempSync('dmtools_req_pack');
+    try {
+      final main = _writeScript(dir.path, 'main.js', '''
+var loader = require("$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js/configLoader.js");
+function action(params) { return loader.loaded === true; }
+''');
+
+      expect(_run(main, {}), isTrue);
+    } finally {
+      PropertyReader.clearOverrides();
+      packRoot.deleteSync(recursive: true);
+      dir.deleteSync(recursive: true);
+    }
+  });
 }

@@ -206,7 +206,11 @@ class ToolBridge {
       if (path == null) return 'null';
       final String resolved;
       try {
-        resolved = _sandboxPath(path);
+        // gh-367: the direct host is the read flavor — the require()
+        // chain reads pack-internal modules through here, so the
+        // DMTOOLS_FILE_READ_ALLOWED_PATHS globs apply (Java `readFile`
+        // parity), same as the table-driven `_readFile`.
+        resolved = _sandboxReadPath(path);
       } catch (e) {
         stderr.writeln('file_read: $e');
         return 'null';

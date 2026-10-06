@@ -27,6 +27,8 @@ import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
+
+import 'loader_read_host.dart';
 import 'sync_tool_dispatcher.dart';
 
 /// Registers JS host functions backed by the Dart MCP tool registry.
@@ -81,10 +83,10 @@ class ToolBridge {
   void registerOn(QuickjsRuntime runtime) {
     runtime.registerHostFunction('__executeToolViaJavaHost', _dispatchToolCall);
     runtime.registerHostFunction('__fileReadHost', _fileReadHost);
-    runtime.registerHostFunction('__loaderReadHost', _loaderReadHost);
+    runtime.registerHostFunction('__loaderReadHost', loaderReadHost);
     runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
     _registerConsole(runtime, _consolePrefix);
-    runtime.eval(_hostFunctionBootstrap, filename: '<host_functions>');
+    runtime.eval(hostFunctionsBootstrap, filename: '<host_functions>');
   }
 
   /// Dispatch table for synchronous file tool execution.
@@ -220,36 +222,6 @@ class ToolBridge {
         return 'null';
       }
     });
-  }
-
-  /// Handles `__loaderFileRead(path)` — the require() loader's module
-  /// source read.
-  ///
-  /// Java `JobJavaScriptBridge.loadModule` parity: the loader is a HOST
-  /// primitive reading via `loadJavaScriptCode` — direct host IO, never
-  /// routed through the `FileTools` sandbox (that governs agent tool
-  /// calls). The loader only reads paths it resolved itself from the
-  /// current script directory / module spec, so it is host-trusted
-  /// machinery: pack modules under `~/.dmtools/packs` load regardless of
-  /// the working-dir containment or `DMTOOLS_FILE_READ_ALLOWED_PATHS`
-  /// (gh-369 — v0.1.41 broke every pack-internal require otherwise).
-  ///
-  /// Returns the file content as a plain JSON string, or JS `null` when
-  /// the file cannot be read — same contract as [_fileReadHost], so the
-  /// prelude's 'JavaScript file not found' path is unchanged. No call
-  /// logging: this is not a tool call (nothing agent-visible happens
-  /// here); the subsequent module eval is the observable event.
-  String _loaderReadHost(String argsJson) {
-    final parsed = _decodeArgs(argsJson);
-    String? path;
-    if (parsed is String) path = parsed;
-    if (parsed is Map) path = parsed['path'] as String?;
-    if (path == null) return 'null';
-    try {
-      return jsonEncode(File(path).readAsStringSync());
-    } catch (_) {
-      return 'null';
-    }
   }
 
   /// `SetEnvVariableProxy` parity — `set_env_variable(propertyName,
@@ -699,36 +671,6 @@ class ToolBridge {
 /// a `{'__jsError': <message>}` sentinel object; the wrapper turns that
 /// into a real JS `Error` (Java `IllegalArgumentException` parity). All
 /// other results pass through untouched.
-const String _hostFunctionBootstrap = '''
-(function() {
-    function __unwrapHostError(result) {
-        if (result !== null && result !== undefined &&
-                typeof result === 'object' &&
-                result.__jsError !== undefined) {
-            throw new Error(result.__jsError);
-        }
-        return result;
-    }
-    globalThis.executeToolViaJava = function() {
-        return __unwrapHostError(
-            __executeToolViaJavaHost.apply(null, arguments));
-    };
-    globalThis.file_read = function() {
-        return __unwrapHostError(__fileReadHost.apply(null, arguments));
-    };
-    // Host-private: the require() loader's own source read. Deliberately
-    // NOT the sandboxed file_read — Java `loadModule` reads module sources
-    // via `loadJavaScriptCode` (direct host IO); the FileTools sandbox
-    // governs agent tool calls only. Never referenced by agent code.
-    globalThis.__loaderFileRead = function() {
-        return __unwrapHostError(__loaderReadHost.apply(null, arguments));
-    };
-    globalThis.set_env_variable = function() {
-        return __unwrapHostError(
-            __setEnvVariableHost.apply(null, arguments));
-    };
-})();
-''';
 
 /// JS bootstrap that builds the `console` object over the private host
 /// functions registered by [_registerConsole].

@@ -38,6 +38,7 @@ void main() {
   noFalseRejectionTests();
   copyEndpointTests();
   moveEndpointTests();
+  recursiveSymlinkTests();
 }
 
 /// The ops table: every path-taking executor operation, keyed by name.
@@ -228,6 +229,59 @@ void moveEndpointTests() {
         isTrue,
         reason: 'the source must survive a rejected move',
       );
+    });
+  });
+}
+
+/// Recursive traversals report links without following them — Java
+/// `Files.walk` parity (AGENTS.md rule 2): an in-base directory symlink
+/// pointing outside must not leak outside entry names during listing
+/// (gh-365 rework review thread 2). The sandbox check on the listed root
+/// covers only the path argument; traversal must not walk through links.
+void recursiveSymlinkTests() {
+  group('FileToolExecutor recursive listings do not follow links (gh-365)', () {
+    final f = _SandboxFixture();
+
+    setUp(() => f.setUp('dmtools_fsandbox_lnk'));
+    tearDown(f.tearDown);
+
+    Directory outsideTarget() {
+      final outside =
+          Directory.systemTemp.createTempSync('dmtools_fsandbox_out');
+      File('${outside.path}/needle.txt').writeAsStringSync('secret');
+      Link('${f.base.path}/link').createSync(outside.path);
+      return outside;
+    }
+
+    test('search does not descend through an in-base directory symlink',
+        () async {
+      final outside = outsideTarget();
+      try {
+        expect(await f.executor.search(f.base.path, 'needle.txt'), isEmpty);
+      } finally {
+        outside.deleteSync(recursive: true);
+      }
+    });
+
+    test('existsInPath does not descend through an in-base directory symlink',
+        () async {
+      final outside = outsideTarget();
+      try {
+        expect(
+          await f.executor.existsInPath(f.base.path, 'needle.txt'),
+          isFalse,
+        );
+      } finally {
+        outside.deleteSync(recursive: true);
+      }
+    });
+
+    test('in-base real files are still found (no over-blocking)', () async {
+      Directory('${f.base.path}/pkg').createSync();
+      File('${f.base.path}/pkg/needle.txt').writeAsStringSync('mine');
+
+      expect(await f.executor.search(f.base.path, 'needle.txt'), isNotEmpty);
+      expect(await f.executor.existsInPath(f.base.path, 'needle.txt'), isTrue);
     });
   });
 }

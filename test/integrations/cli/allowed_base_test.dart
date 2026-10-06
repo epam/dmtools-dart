@@ -106,7 +106,8 @@ void validateTests() {
 /// `base/sub/../outside` pass a raw prefix match), and the validated
 /// absolute path is returned so callers act on exactly what was checked.
 void resolveTests() {
-  resolveAllowedTests();
+  resolveTests();
+  // canonicalizePathTests(); // RED: pending canonicalizePath
   resolveBlockedTests();
 }
 
@@ -122,7 +123,13 @@ void resolveAllowedTests() {
         () {
       final resolved =
           resolveWithinAllowedBase('sub/../nested/f.txt', base.path);
-      expect(resolved, p.normalize('${base.path}/nested/f.txt'));
+      // Compared in canonical form: on macOS the temp base sits behind a
+      // symlink (/var/folders/... → /private/var/...), so the resolved
+      // planned path carries the canonical prefix (gh-365 rework).
+      expect(
+        resolved,
+        canonicalizePath(p.normalize('${base.path}/nested/f.txt')),
+      );
     });
 
     test('accepts a nested in-base path (no false rejection)', () {
@@ -135,14 +142,27 @@ void resolveAllowedTests() {
     });
 
     test('accepts a path in the system temp dir outside the base', () {
-      final resolved = resolveWithinAllowedBase(
+      final planned = p.normalize(
         '${Directory.systemTemp.path}/dmtools-other-run/f.txt',
-        base.path,
       );
-      expect(
-        resolved,
-        p.normalize('${Directory.systemTemp.path}/dmtools-other-run/f.txt'),
-      );
+      final resolved = resolveWithinAllowedBase(planned, base.path);
+      // Canonical comparison — portable across symlink-flavored tmpdirs
+      // (gh-365 rework): a first write to a temp path must not be
+      // rejected for a /var vs /private/var prefix mismatch on macOS.
+      expect(resolved, canonicalizePath(planned));
+    });
+
+    test('accepts a planned path through an in-base symlinked directory', () {
+      Directory('${base.path}/real').createSync();
+      Link('${base.path}/link').createSync('${base.path}/real');
+
+      final resolved =
+          resolveWithinAllowedBase('${base.path}/link/new.txt', base.path);
+
+      // The checked (and returned) path is the canonical through-link
+      // form, not the lexical one — planned writes see through symlinked
+      // parents, so the containment decision is made on the real target.
+      expect(resolved, '${canonicalizePath(base.path)}/real/new.txt');
     });
   });
 }
@@ -190,6 +210,23 @@ void resolveBlockedTests() {
         _throwsTraversalBlocked(),
       );
     });
+    test(
+        'blocks a planned write through an in-base symlinked parent '
+        '(gh-365 rework)', () {
+      // The symlinked parent exists and points outside every allowed
+      // base; only the final component is missing — the shape of every
+      // first write through a link. The lexical fallback left the
+      // symlinked ancestor unresolved and let the write materialize
+      // outside the base (the blocking review finding).
+      Link('${base.path}/sub').createSync('/etc');
+      expect(
+        () => resolveWithinAllowedBase(
+          '${base.path}/sub/escape.txt',
+          base.path,
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
   });
 }
 
@@ -201,3 +238,60 @@ Matcher _throwsTraversalBlocked() => throwsA(
         contains('Path traversal attempt blocked'),
       ),
     );
+
+/// `canonicalizePath` — the planned-path symlink semantics the sandbox
+/// candidates rely on (gh-365 rework): a not-yet-existing target
+/// resolves through its deepest existing ancestor, so a symlink-flavored
+/// prefix (macOS TMPDIR=/var/folders/... → /private/var/...) compares
+/// equal to its canonical candidate instead of false-rejecting the first
+/// write, and a planned write sees through in-base symlinked parents.
+void canonicalizePathTests() {
+  group('canonicalizePath — planned paths resolve through symlinked ancestors',
+      () {
+    late Directory home;
+    late Directory real;
+    late Link flavor;
+
+    setUp(() {
+      home = Directory.systemTemp.createTempSync('dmtools_canon');
+      real = Directory.systemTemp.createTempSync('dmtools_canon_real');
+      flavor = Link('${home.path}/flavor')..createSync(real.path);
+    });
+    tearDown(() {
+      flavor.deleteSync();
+      real.deleteSync(recursive: true);
+      home.deleteSync(recursive: true);
+    });
+
+    test('a not-yet-existing target resolves through a symlinked parent', () {
+      final planned = '${flavor.path}/planned/f.txt';
+
+      expect(
+        canonicalizePath(planned),
+        '${real.resolveSymbolicLinksSync()}/planned/f.txt',
+      );
+    });
+
+    test('the resolved form is contained by the canonical candidate', () {
+      final planned = '${flavor.path}/planned/f.txt';
+
+      // Exactly the containment comparison `within()` makes for every
+      // allowed base: with the lexical fallback the flavor prefix
+      // (/var/...) fails the canonical candidate (/private/var/...), which
+      // blocked every first temp write on macOS.
+      expect(
+        pathIsWithin(
+          canonicalizePath(planned),
+          canonicalizePath(flavor.path),
+        ),
+        isTrue,
+      );
+    });
+
+    test('an existing path still resolves fully', () {
+      final file = File('${real.path}/exists.txt')..writeAsStringSync('x');
+
+      expect(canonicalizePath(file.path), file.resolveSymbolicLinksSync());
+    });
+  });
+}

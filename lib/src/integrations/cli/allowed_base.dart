@@ -71,6 +71,9 @@ String _canonicalizePath(String path) {
   }
 }
 
+/// TEMP STUB (old behavior) for RED proof.
+String canonicalizePath(String path) => path;
+
 /// Returns `true` when the canonical [dir] equals [base] or lies inside
 /// it, comparing path prefixes with [separator] (null — the default —
 /// means [Platform.pathSeparator]).

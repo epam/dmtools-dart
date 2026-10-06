@@ -373,6 +373,14 @@ var s = 'not // a comment';
     });
   });
 
+  scrubForScanTests();
+  scrubLexerTests();
+  closureRegexTests();
+}
+
+/// gh-371: the scrub's regex-literal awareness — mirror fixtures of the
+/// live dmtools-agents pullRequest.js desync.
+void scrubForScanTests() {
   group('scrubForScan (gh-371: regex literals with quotes)', () {
     test('an escaped backtick in a regex no longer swallows later requires',
         () {
@@ -410,7 +418,12 @@ var u = require('./util.js');
         reason: "the require's opening quote must survive",
       );
     });
+  });
+}
 
+/// gh-371 continued: lexer-context behaviors of the scrub.
+void scrubLexerTests() {
+  group('scrubForScan lexer context (gh-371)', () {
     test('division is not mistaken for a regex literal', () {
       const src = '''
 var half = total / 2 / parts;
@@ -447,7 +460,9 @@ var u = require('./real.js');
           contains('./real.js'));
     });
   });
+}
 
+void closureRegexTests() {
   group('closure across quote-bearing regexes (gh-371)', () {
     test('compile embeds modules required past a regex literal', () {
       write('js/common/mergeState.js', 'exports.ok = true;\n');

@@ -336,16 +336,15 @@ void matchesPatternTests() {
   group('matchesPattern — wildcard suffix semantics', () {
     test('** crosses directory boundaries', () {
       expect(
-        matchesPattern('/repo/work/.dmtools/packs/p-1/js/loader.js',
-            base, '.dmtools/**'),
+        matchesPattern(
+            '/repo/work/.dmtools/packs/p-1/js/loader.js', base, '.dmtools/**'),
         isTrue,
       );
       expect(matchesPattern('$base/.dmtools', base, '.dmtools/**'), isTrue);
     });
 
     test('* stays inside one segment', () {
-      expect(matchesPattern('$base/.dmtools/f.js', base, '.dmtools/*'),
-          isTrue);
+      expect(matchesPattern('$base/.dmtools/f.js', base, '.dmtools/*'), isTrue);
       expect(
         matchesPattern('$base/.dmtools/js/f.js', base, '.dmtools/*'),
         isFalse,
@@ -355,13 +354,12 @@ void matchesPatternTests() {
 
     test('*.js matches a flat module only', () {
       expect(matchesPattern('$base/configLoader.js', base, '*.js'), isTrue);
-      expect(matchesPattern('$base/js/configLoader.js', base, '*.js'),
-          isFalse);
+      expect(matchesPattern('$base/js/configLoader.js', base, '*.js'), isFalse);
     });
 
     test('literal segments before the suffix bind exactly', () {
-      expect(matchesPattern('$base/js/configLoader.js', base, 'js/*.js'),
-          isTrue);
+      expect(
+          matchesPattern('$base/js/configLoader.js', base, 'js/*.js'), isTrue);
       expect(matchesPattern('$base/lib/configLoader.js', base, 'js/*.js'),
           isFalse);
     });
@@ -374,10 +372,8 @@ void matchesPatternTests() {
 
     test('[...] character classes with ranges and ! negation', () {
       expect(matchesPattern('$base/pack-1.js', base, 'pack-[0-9].js'), isTrue);
-      expect(matchesPattern('$base/pack-x.js', base, 'pack-[0-9].js'),
-          isFalse);
-      expect(matchesPattern('$base/pack-x.js', base, 'pack-[!0-9].js'),
-          isTrue);
+      expect(matchesPattern('$base/pack-x.js', base, 'pack-[0-9].js'), isFalse);
+      expect(matchesPattern('$base/pack-x.js', base, 'pack-[!0-9].js'), isTrue);
     });
 
     test('{...} alternatives, nested content included', () {
@@ -395,7 +391,8 @@ void matchesPatternTests() {
       // The exact gh-367 shape: `../.dmtools/**` names the `.dmtools`
       // directory NEXT TO the repo checkout, wherever the process runs.
       expect(
-        matchesPattern('/repo/.dmtools/packs/p-1/js/c.js', base, '../.dmtools/**'),
+        matchesPattern(
+            '/repo/.dmtools/packs/p-1/js/c.js', base, '../.dmtools/**'),
         isTrue,
       );
       expect(
@@ -407,29 +404,29 @@ void matchesPatternTests() {
     test('a deeper relative prefix keeps resolving lexically', () {
       expect(
         matchesPattern('/home/r/.dmtools/packs/p/js/c.js', base,
-            '../../../.dmtools/**'),
+            '../../../home/r/.dmtools/**'),
         isTrue,
-        reason: '3 up from /repo/work lands at /home/r',
+        reason: '3 up from /repo/work lands at /',
       );
     });
 
     test('an absolute prefix passes through (Path.resolve semantics)', () {
       expect(
-        matchesPattern('/home/r/.dmtools/packs/p/js/c.js', base,
-            '/home/r/.dmtools/**'),
+        matchesPattern(
+            '/home/r/.dmtools/packs/p/js/c.js', base, '/home/r/.dmtools/**'),
         isTrue,
       );
     });
 
     test('no wildcard means exact-path equality', () {
       expect(
-        matchesPattern('/repo/.dmtools/loader.js', base,
-            '../.dmtools/loader.js'),
+        matchesPattern(
+            '/repo/.dmtools/loader.js', base, '../.dmtools/loader.js'),
         isTrue,
       );
       expect(
-        matchesPattern('/repo/.dmtools/other.js', base,
-            '../.dmtools/loader.js'),
+        matchesPattern(
+            '/repo/.dmtools/other.js', base, '../.dmtools/loader.js'),
         isFalse,
       );
     });
@@ -451,8 +448,7 @@ void matchesPatternTests() {
 /// path (`writeFile`/`deleteFile`) keeps its plain startsWith guard and
 /// never consults the config.
 void configuredAllowlistTests() {
-  group('resolveWithinAllowedBase — configured allowed paths (gh-367)',
-      () {
+  group('resolveWithinAllowedBase — configured allowed paths (gh-367)', () {
     late Directory base;
 
     setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
@@ -461,7 +457,8 @@ void configuredAllowlistTests() {
     void seedPackModule() {
       final js = Directory(p.dirname(packModuleIn(fakeHome!)))
         ..createSync(recursive: true);
-      File('${js.path}/configLoader.js').writeAsStringSync('module.exports={};');
+      File('${js.path}/configLoader.js')
+          .writeAsStringSync('module.exports={};');
     }
 
     test('an absolute-prefix glob admits the pack module', () {
@@ -483,8 +480,8 @@ void configuredAllowlistTests() {
       if (fakeHome == null) return;
       seedPackModule();
       final module = packModuleIn(fakeHome!);
-      final prefix = p.relative(p.dirname(p.dirname(p.dirname(module))),
-          from: base.path);
+      final prefix =
+          p.relative(p.dirname(p.dirname(p.dirname(module))), from: base.path);
 
       expect(
         resolveWithinAllowedBase(

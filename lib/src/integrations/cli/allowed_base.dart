@@ -40,6 +40,15 @@ void validateWithinAllowedBase(String dirPath, String base) {
 /// `"Path traversal attempt blocked"` parity, surfaced as the standard
 /// error envelope on the bridge path).
 ///
+/// When the containment checks fail, [configuredAllowedPaths] — the raw
+/// `DMTOOLS_FILE_READ_ALLOWED_PATHS` value (Java
+/// `PropertyReader.getFileReadAllowedPaths` parity) — is consulted as a
+/// last escape hatch (gh-367): a comma-separated glob list whose matches
+/// are accepted, exactly what Java `FileTools.isAllowedByConfig` grants
+/// its read-flavored tools (`file_read`, `file_exists`, `file_list`).
+/// Callers pick the flavor: Java's write path (`writeFile`/`deleteFile`)
+/// never consults the config, so write operations pass null here.
+///
 /// Shared by both surfaces of the `file_*` family — the synchronous
 /// JS-bridge path (ToolBridge) and the async executor (FileToolExecutor) —
 /// so the two cannot drift apart on a security-flavored behavior again,
@@ -58,7 +67,11 @@ void validateWithinAllowedBase(String dirPath, String base) {
 /// resolved path argument: the executor's recursive traversals pass
 /// `followLinks: false` (Java `Files.walk` parity), so traversal cannot
 /// leak outside entries either.
-String resolveWithinAllowedBase(String path, String base) {
+String resolveWithinAllowedBase(
+  String path,
+  String base, {
+  String? configuredAllowedPaths,
+}) {
   final resolved =
       canonicalizePath(p.normalize(p.isAbsolute(path) ? path : '$base/$path'));
   bool within(String? candidate) {
@@ -71,6 +84,9 @@ String resolveWithinAllowedBase(String path, String base) {
   // thread 3); boolean outcome unchanged (pure OR).
   if (within(base) || within(Directory.systemTemp.path)) return resolved;
   if (within(gitRepositoryRoot(base))) return resolved;
+  if (isAllowedByConfig(resolved, base, configuredAllowedPaths)) {
+    return resolved;
+  }
   throw Exception('Path traversal attempt blocked: $path '
       '(resolved: $resolved, working dir: $base)');
 }
@@ -140,3 +156,168 @@ String? gitRepositoryRoot(String base) {
   } catch (_) {}
   return null;
 }
+
+/// Returns `true` when the resolved [path] matches at least one of the
+/// comma-separated glob patterns in [raw] — the `DMTOOLS_FILE_READ_ALLOWED_PATHS`
+/// value — after each pattern's literal prefix is resolved against
+/// [workingDir] (Java `FileTools.isAllowedByConfig` parity, gh-367).
+///
+/// A null/blank [raw] allows nothing (Java returns false the same way), a
+/// pattern that fails to parse is skipped so the remaining patterns still
+/// get their chance (Java logs a warning and continues), and matching is
+/// case-sensitive with `/` as the glob separator on every platform.
+bool isAllowedByConfig(String path, String workingDir, String? raw) {
+  if (raw == null || raw.trim().isEmpty) return false;
+  for (final rawPattern in raw.split(',')) {
+    final pattern = rawPattern.trim();
+    if (pattern.isEmpty) continue;
+    try {
+      if (matchesPattern(path, workingDir, pattern)) return true;
+    } catch (_) {
+      // Malformed pattern: Java warns and keeps evaluating the rest.
+    }
+  }
+  return false;
+}
+
+/// Tests whether the resolved [path] matches a single [rawPattern] from
+/// the allow-list (Java `FileTools.matchesPattern` parity — package
+/// private there, public here for the same testability reason).
+///
+/// - No wildcard at all → exact match of `workingDir` + pattern (Java
+///   `Path.resolve` + `normalize` parity, so a relative pattern lands on
+///   the sibling-of-workdir shape).
+/// - Otherwise the literal prefix before the first wildcard (`*`, `?`,
+///   `{`, `[`) resolves against `workingDir` — `../.dmtools/**` names the
+///   `.dmtools` directory NEXT TO the working dir — the resolved path
+///   must sit under it, and the glob suffix matches the path relative to
+///   that base (Java `PathMatcher` glob semantics: `**` crosses directory
+///   boundaries, `*`/`?` stay inside one segment, `[...]` classes and
+///   `{...}` alternatives per the Java glob grammar).
+///
+/// Both sides are compared in canonical form ([canonicalizePath]), so a
+/// symlinked `~/.dmtools` prefix still matches its configured pattern —
+/// the same candidate canonicalization every allowed base gets (gh-365
+/// rework semantics).
+bool matchesPattern(String path, String workingDir, String rawPattern) {
+  final wildcardIdx = indexOfWildcard(rawPattern);
+  if (wildcardIdx < 0) {
+    final exact = canonicalizePath(p.normalize(p.join(workingDir, rawPattern)));
+    return path == exact;
+  }
+  final slashBefore =
+      wildcardIdx == 0 ? -1 : rawPattern.lastIndexOf('/', wildcardIdx - 1);
+  final literalPrefix =
+      slashBefore >= 0 ? rawPattern.substring(0, slashBefore) : '';
+  final globSuffix =
+      slashBefore >= 0 ? rawPattern.substring(slashBefore + 1) : rawPattern;
+  final absBase = literalPrefix.isEmpty
+      ? workingDir
+      : p.normalize(p.join(workingDir, literalPrefix));
+  final canonicalBase = canonicalizePath(absBase);
+  if (!pathIsWithin(path, canonicalBase)) return false;
+  final relative = p.relative(path, from: canonicalBase);
+  final pattern = RegExp('^${_globToRegexSource(globSuffix)}\$');
+  return pattern.hasMatch(_toSlashSegments(relative));
+}
+
+/// Returns the index of the first glob wildcard in [s] (`*`, `?`, `{`,
+/// `[`) or -1 when there is none (Java `FileTools.indexOfWildcard` parity).
+int indexOfWildcard(String s) {
+  for (var i = 0; i < s.length; i++) {
+    final c = s[i];
+    if (c == '*' || c == '?' || c == '{' || c == '[') return i;
+  }
+  return -1;
+}
+
+/// Translates a Java glob [glob] suffix into a regex source: `**` → `.*`,
+/// `*` → `[^/]*`, `?` → `[^/]`, `[...]` and `{...}` per the Java glob
+/// grammar (`sun.nio.fs.Globs` semantics), everything else literal.
+/// Throws on a malformed class/group so [isAllowedByConfig] can skip the
+/// pattern the way Java skips a failing `getPathMatcher` evaluation.
+String _globToRegexSource(String glob) {
+  final out = StringBuffer();
+  var i = 0;
+  while (i < glob.length) {
+    switch (glob[i]) {
+      case '*':
+        final doubleStar = i + 1 < glob.length && glob[i + 1] == '*';
+        out.write(doubleStar ? '.*' : '[^/]*');
+        i += doubleStar ? 2 : 1;
+      case '?':
+        out.write('[^/]');
+        i++;
+      case '[':
+        i = _writeCharClass(glob, i, out);
+      case '{':
+        i = _writeAlternatives(glob, i, out);
+      default:
+        out.write(RegExp.escape(glob[i]));
+        i++;
+    }
+  }
+  return out.toString();
+}
+
+/// Writes the regex translation of the `[...]` class starting at [start]
+/// and returns the index just past its closing `]`. A leading `!`
+/// negates (Java glob parity); ranges keep their raw `-` because
+/// [RegExp.escape] leaves it untouched.
+int _writeCharClass(String glob, int start, StringBuffer out) {
+  var i = start + 1;
+  if (i < glob.length && glob[i] == '!') {
+    out.write('[^');
+    i++;
+  } else {
+    out.write('[');
+  }
+  while (i < glob.length && glob[i] != ']') {
+    out.write(glob[i] == r'\' ? r'\\' : RegExp.escape(glob[i]));
+    i++;
+  }
+  if (i >= glob.length) {
+    throw FormatException('Unterminated [class] in pattern: $glob');
+  }
+  out.write(']');
+  return i + 1;
+}
+
+/// Writes the regex translation of the `{a,b}` group starting at [start]
+/// and returns the index just past its matching `}`. Top-level commas
+/// split alternatives (nesting-aware, Java glob parity); each
+/// alternative is translated recursively.
+int _writeAlternatives(String glob, int start, StringBuffer out) {
+  final alternatives = <String>[];
+  var depth = 0;
+  var i = start;
+  var altStart = start + 1;
+  while (i < glob.length) {
+    final c = glob[i];
+    if (c == '{') depth++;
+    if (c == '}') {
+      depth--;
+      if (depth == 0) break;
+    }
+    if (c == ',' && depth == 1) {
+      alternatives.add(glob.substring(altStart, i));
+      altStart = i + 1;
+    }
+    i++;
+  }
+  if (i >= glob.length) {
+    throw FormatException('Unterminated {group} in pattern: $glob');
+  }
+  alternatives.add(glob.substring(altStart, i));
+  out
+    ..write('(?:')
+    ..write(alternatives.map(_globToRegexSource).join('|'))
+    ..write(')');
+  return i + 1;
+}
+
+/// Converts the platform separators of [relative] to `/` so the glob
+/// classes (`[^/]*`) segment on every OS — the Java `PathMatcher` glob
+/// separator is `/` regardless of platform.
+String _toSlashSegments(String relative) =>
+    p.separator == '/' ? relative : relative.replaceAll(p.separator, '/');

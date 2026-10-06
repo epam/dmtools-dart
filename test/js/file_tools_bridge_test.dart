@@ -475,17 +475,19 @@ void fileConfiguredAllowlistTests() {
       File('$packJs/second.js').writeAsStringSync('// 2');
 
       expect(
-        jsonDecode(bridge.execute('file_exists', {'path': module})),
+        (jsonDecode(bridge.execute('file_exists', {'path': module}))
+            as Map<String, dynamic>)['exists'],
         isTrue,
       );
-      final listed =
-          jsonDecode(bridge.execute('file_list', {'path': packJs}))
-              as Map<String, dynamic>;
+      final listed = jsonDecode(bridge.execute('file_list', {'path': packJs}))
+          as Map<String, dynamic>;
       expect((listed['entries'] as List).cast<String>(),
           containsAll([module, '$packJs/second.js']));
       expect(
         jsonDecode(bridge.execute('file_read_lines', {'path': module})),
-        {'lines': ['module.exports={};']},
+        {
+          'lines': ['module.exports={};']
+        },
       );
     });
 
@@ -502,9 +504,8 @@ void fileConfiguredAllowlistTests() {
     test('without the override the same read stays blocked', () {
       PropertyReader.clearOverrides();
 
-      final result =
-          jsonDecode(bridge.execute('file_read', {'path': module}))
-              as Map<String, dynamic>;
+      final result = jsonDecode(bridge.execute('file_read', {'path': module}))
+          as Map<String, dynamic>;
       expect(result['error'], contains('Path traversal attempt blocked'));
     });
   });

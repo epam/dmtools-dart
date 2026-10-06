@@ -488,6 +488,14 @@ class ToolBridge {
   // per-operation catch and surfaces as the standard `{"error": …}`
   // envelope — which the `executeToolViaJava` path rethrows as a JS
   // `Error`, Java `SecurityException` semantics.
+  //
+  // gh-367: read-flavored operations resolve through [_sandboxReadPath]
+  // instead — the same containment check plus the
+  // `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch (Java
+  // `FileTools.isAllowedByConfig` parity), so the SM pack's `require()`
+  // chain can read its own modules under `~/.dmtools/packs`. Write
+  // flavors keep [_sandboxPath]: Java's `writeFile`/`deleteFile` never
+  // consult the config.
 
   /// Sandbox resolver for the whole `file_*` bridge family: shares
   /// [resolveWithinAllowedBase] with the async FileToolExecutor surface so
@@ -495,10 +503,18 @@ class ToolBridge {
   String _sandboxPath(String path) => resolveWithinAllowedBase(
       path, _workingDirectory ?? Directory.current.path);
 
+  /// Sandbox resolver for read-flavored operations: the containment check
+  /// plus the configured allow-list, read fresh from [PropertyReader] on
+  /// every call exactly like Java's
+  /// `new PropertyReader().getFileReadAllowedPaths()` per tool call.
+  String _sandboxReadPath(String path) => resolveWithinAllowedBase(
+      path, _workingDirectory ?? Directory.current.path,
+      configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths());
+
   String _readFile(String path) {
     try {
       return jsonEncode(
-          {'content': File(_sandboxPath(path)).readAsStringSync()});
+          {'content': File(_sandboxReadPath(path)).readAsStringSync()});
     } catch (e) {
       return _err(e.toString());
     }
@@ -532,7 +548,7 @@ class ToolBridge {
     try {
       // Java FileTools.listFiles parity (dm.ai#635): entries are absolute,
       // normalized, and sorted.
-      final entries = Directory(_sandboxPath(path))
+      final entries = Directory(_sandboxReadPath(path))
           .listSync()
           .map((e) => p.normalize(e.path))
           .toList()
@@ -545,7 +561,7 @@ class ToolBridge {
 
   String _exists(String path) {
     try {
-      final resolved = _sandboxPath(path);
+      final resolved = _sandboxReadPath(path);
       final exists =
           File(resolved).existsSync() || Directory(resolved).existsSync();
       return jsonEncode({'exists': exists});
@@ -596,7 +612,7 @@ class ToolBridge {
 
   String _readLines(String path) {
     try {
-      final lines = File(_sandboxPath(path)).readAsLinesSync();
+      final lines = File(_sandboxReadPath(path)).readAsLinesSync();
       return jsonEncode({'lines': lines});
     } catch (e) {
       return _err(e.toString());
@@ -625,7 +641,7 @@ class ToolBridge {
 
   String _info(String path) {
     try {
-      final resolved = _sandboxPath(path);
+      final resolved = _sandboxReadPath(path);
       final type = FileSystemEntity.typeSync(resolved);
       final exists = type != FileSystemEntityType.notFound;
       if (!exists) {

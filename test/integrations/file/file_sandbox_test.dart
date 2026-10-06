@@ -300,8 +300,9 @@ void recursiveSymlinkTests() {
 void configuredReadAllowlistTests() {
   final home =
       Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-  final homeUsable =
-      home != null && home.isNotEmpty && !pathIsWithin(home, Directory.systemTemp.path);
+  final homeUsable = home != null &&
+      home.isNotEmpty &&
+      !pathIsWithin(home, Directory.systemTemp.path);
 
   group('FileToolExecutor read ops honor configured allowed paths (gh-367)',
       skip: homeUsable ? null : 'no HOME outside the tmpdir to test against',
@@ -312,8 +313,7 @@ void configuredReadAllowlistTests() {
 
     setUp(() {
       f.setUp('dmtools_fsandbox_cfg');
-      final packDir =
-          '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
+      final packDir = '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
       packJs = Directory(packDir)..createSync(recursive: true);
       module = '$packDir/configLoader.js';
       File(module).writeAsStringSync('module.exports={};');
@@ -329,10 +329,13 @@ void configuredReadAllowlistTests() {
     });
 
     test('read ops admit the pack module through the config', () async {
+      File('${packJs.path}/../cfg.json').writeAsStringSync('{"a": 1}');
+      final jsonPath =
+          '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/cfg.json';
       final ops = <String, Future<dynamic> Function()>{
         'read': () => f.executor.read(module),
         'readLines': () => f.executor.readLines(module),
-        'readJson': () => f.executor.readJson(module),
+        'readJson': () => f.executor.readJson(jsonPath),
         'exists': () => f.executor.exists(module),
         'getFileInfo': () => f.executor.getFileInfo(module),
         'getSize': () => f.executor.getSize(module),
@@ -340,7 +343,7 @@ void configuredReadAllowlistTests() {
       };
       for (final entry in ops.entries) {
         await expectLater(entry.value(), completes,
-            reason: '${entry.key} must admit $module via the config');
+            reason: '${entry.key} must admit its path via the config');
       }
       expect(await f.executor.read(module), 'module.exports={};');
       expect(await f.executor.exists(module), isTrue);

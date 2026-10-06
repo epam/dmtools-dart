@@ -450,18 +450,19 @@ void fileConfiguredAllowlistTests() {
         registry: createDefaultToolRegistry(),
         workingDirectory: dir.path,
       );
-      packJs = '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
+      packJs = '$home/.dmtools-gh367-test-bridge/packs/sm_github-0.1.36/js';
       Directory(packJs).createSync(recursive: true);
       module = '$packJs/configLoader.js';
       File(module).writeAsStringSync('module.exports={};');
       PropertyReader.setOverrides({
-        'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+        'DMTOOLS_FILE_READ_ALLOWED_PATHS':
+            '$home/.dmtools-gh367-test-bridge/**',
       });
     });
 
     tearDown(() {
       PropertyReader.clearOverrides();
-      Directory('$home/.dmtools-gh367-test').deleteSync(recursive: true);
+      Directory('$home/.dmtools-gh367-test-bridge').deleteSync(recursive: true);
     });
 
     test('file_read answers the pack module content', () {

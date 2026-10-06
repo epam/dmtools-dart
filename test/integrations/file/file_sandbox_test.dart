@@ -321,18 +321,18 @@ class _ConfigFixture {
     executor = FileToolExecutor(base: base.path);
     insideSource = '${base.path}/src.txt';
     File(insideSource).writeAsStringSync('payload');
-    final packDir = '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
+    final packDir = '$home/.dmtools-gh367-test-exec/packs/sm_github-0.1.36/js';
     packJs = Directory(packDir)..createSync(recursive: true);
     module = '$packDir/configLoader.js';
     File(module).writeAsStringSync('module.exports={};');
     PropertyReader.setOverrides({
-      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test-exec/**',
     });
   }
 
   void tearDown() {
     PropertyReader.clearOverrides();
-    Directory('$home/.dmtools-gh367-test').deleteSync(recursive: true);
+    Directory('$home/.dmtools-gh367-test-exec').deleteSync(recursive: true);
     base.deleteSync(recursive: true);
   }
 }
@@ -348,7 +348,7 @@ void configuredReadAdmitsTests() {
     test('read ops admit the pack module through the config', () async {
       File('${f.packJs.path}/../cfg.json').writeAsStringSync('{"a": 1}');
       final jsonPath =
-          '${f.home}/.dmtools-gh367-test/packs/sm_github-0.1.36/cfg.json';
+          '${f.home}/.dmtools-gh367-test-exec/packs/sm_github-0.1.36/cfg.json';
       final ops = <String, Future<dynamic> Function()>{
         'read': () => f.executor.read(f.module),
         'readLines': () => f.executor.readLines(f.module),
@@ -403,11 +403,11 @@ void configuredReadStrictTests() {
           reason: 'the delete must not happen');
 
       await expectLater(
-        f.executor.mkdir('${f.home}/.dmtools-gh367-test/extra'),
+        f.executor.mkdir('${f.home}/.dmtools-gh367-test-exec/extra'),
         throwsA(isA<Exception>()),
       );
       expect(
-        Directory('${f.home}/.dmtools-gh367-test/extra').existsSync(),
+        Directory('${f.home}/.dmtools-gh367-test-exec/extra').existsSync(),
         isFalse,
       );
 

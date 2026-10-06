@@ -205,18 +205,18 @@ void _requireLoadsConfiguredPackModule() {
 
   test('require admits a pack module under the configured dmtools home',
       skip: usable ? null : 'no HOME outside the tmpdir to test against', () {
-    final packRoot = Directory('$home/.dmtools-gh367-test');
+    final packRoot = Directory('$home/.dmtools-gh367-test-req');
     final packJs = Directory('${packRoot.path}/packs/sm_github-0.1.36/js');
     packJs.createSync(recursive: true);
     File('${packJs.path}/configLoader.js')
         .writeAsStringSync('exports.loaded = true;');
     PropertyReader.setOverrides({
-      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test-req/**',
     });
     final dir = Directory.systemTemp.createTempSync('dmtools_req_pack');
     try {
       final main = _writeScript(dir.path, 'main.js', '''
-var loader = require("$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js/configLoader.js");
+var loader = require("$home/.dmtools-gh367-test-req/packs/sm_github-0.1.36/js/configLoader.js");
 function action(params) { return loader.loaded === true; }
 ''');
 

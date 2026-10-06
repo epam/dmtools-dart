@@ -37,7 +37,7 @@ final String? fakeHome = () {
 /// Path of a pack-internal module inside [fakeHome], the gh-367 failure
 /// shape: `~/.dmtools/packs/<agent>-<version>/js/configLoader.js`.
 String packModuleIn(String home, {String agent = 'sm_github-0.1.36'}) =>
-    '$home/.dmtools-gh367-test/packs/$agent/js/configLoader.js';
+    '$home/.dmtools-gh367-test-base/packs/$agent/js/configLoader.js';
 
 /// `pathIsWithin` — the path-prefix containment check. Java
 /// `Path.startsWith` parity: separator-aware, so Windows backslash paths
@@ -485,7 +485,7 @@ void configuredAllowlistAdmitsTests() {
         resolveWithinAllowedBase(
           module,
           base.path,
-          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test-base/**',
         ),
         canonicalizePath(module),
       );
@@ -535,7 +535,7 @@ void configuredAllowlistAdmitScopeTests() {
       );
       expect(
         () => resolveWithinAllowedBase(
-          '$fakeHome/.dmtools-gh367-test/packs/sm_github-0.1.36/js/other.js',
+          '$fakeHome/.dmtools-gh367-test-base/packs/sm_github-0.1.36/js/other.js',
           base.path,
           configuredAllowedPaths: module,
         ),
@@ -551,7 +551,7 @@ void configuredAllowlistAdmitScopeTests() {
         module,
         base.path,
         configuredAllowedPaths:
-            ' /nonexistent-gh367/** , , $fakeHome/.dmtools-gh367-test/** ',
+            ' /nonexistent-gh367/** , , $fakeHome/.dmtools-gh367-test-base/** ',
       );
 
       expect(resolved, canonicalizePath(module));
@@ -567,7 +567,7 @@ void configuredAllowlistAdmitScopeTests() {
           resolveWithinAllowedBase(
             '${js.path}/$name',
             base.path,
-            configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+            configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test-base/**',
           ),
           canonicalizePath('${js.path}/$name'),
         );
@@ -604,7 +604,7 @@ void configuredAllowlistBlocksTests() {
         () => resolveWithinAllowedBase(
           packModuleIn(fakeHome!),
           base.path,
-          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/*',
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test-base/*',
         ),
         _throwsTraversalBlocked(),
       );
@@ -624,9 +624,9 @@ void configuredAllowlistBlocksTests() {
     test('.. segments inside the path cannot smuggle past the pattern', () {
       expect(
         () => resolveWithinAllowedBase(
-          '$fakeHome/.dmtools-gh367-test/../elsewhere/f.js',
+          '$fakeHome/.dmtools-gh367-test-base/../elsewhere/f.js',
           base.path,
-          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test-base/**',
         ),
         _throwsTraversalBlocked(),
       );

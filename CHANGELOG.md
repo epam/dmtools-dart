@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Sandboxed the JS-bridge `file_*` family behind the job working directory
+  (gh-365): every `file_*` tool on both surfaces — the synchronous bridge
+  (`ToolBridge._fileFns`, including the direct `file_read` host) and the
+  async `FileToolExecutor` — now resolves paths through the new shared
+  `resolveWithinAllowedBase` and rejects anything outside the job base, its
+  git repository root, or the system temp dir with the standard
+  `{"error": …}` envelope (rethrown as a JS `Error` via `executeToolViaJava`;
+  the direct `file_read` host answers null per its testRunner.js contract).
+  Closes the family-wide traversal gap the gh-361 parent-directory creation
+  could materialize through (`file_write`/`file_mkdir` absolute and `..`
+  escapes, `file_copy`/`file_move` leaking in both endpoint directions).
+  Java parity: `FileTools.java` normalizes and rejects such paths
+  ("Path traversal attempt blocked") — the Dart check runs the same lexical
+  normalization BEFORE containment (not-yet-existing escape targets have no
+  filesystem entry to canonicalize) plus symlink resolution for existing
+  paths, and shares the allowed-base semantics of `cli_execute_command`
+  (`validateWithinAllowedBase`) so the file and CLI surfaces cannot drift.
+
 ### Changed
 
 - Retired the legacy `machine-kit` layer (gh-146): the machine loop runs on

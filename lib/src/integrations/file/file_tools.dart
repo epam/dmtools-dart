@@ -7,6 +7,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../../integrations/cli/allowed_base.dart';
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 
@@ -262,9 +263,30 @@ ToolDefinition _searchTool() => ToolDefinition(
 ///
 /// Each method performs a single file-system operation; [execute] dispatches
 /// by tool name, mirroring the Java method-routing pattern.
+///
+/// gh-365: every operation sandboxes its paths through
+/// [resolveWithinAllowedBase] — the same shared check the synchronous
+/// JS-bridge path applies — so paths outside the job base, its git
+/// repository root, or the system temp dir throw before any filesystem
+/// access (Java `FileTools` "Path traversal attempt blocked" parity).
+///
+/// Every operation reports failures through its returned Future —
+/// sandbox rejections included — so callers get one uniform async error
+/// channel; no method throws synchronously.
 class FileToolExecutor {
+  /// The job base directory: relative paths resolve against it and it is
+  /// the first allowed base of the sandbox check (the Java `user.dir`
+  /// stand-in).
+  final String _base;
+
   /// Creates a file tool executor.
-  FileToolExecutor();
+  ///
+  /// [base] overrides the job base directory (defaults to the process
+  /// CWD).
+  FileToolExecutor({String? base}) : _base = base ?? Directory.current.path;
+
+  /// Sandboxes [path] per the shared `file_*` containment check (gh-365).
+  String _check(String path) => resolveWithinAllowedBase(path, _base);
 
   /// Dispatches [toolName] with [args] to the matching file operation.
   ///
@@ -278,31 +300,36 @@ class FileToolExecutor {
   }
 
   /// Reads and returns the entire contents of the file at [path].
-  Future<String> read(String path) => File(path).readAsString();
+  Future<String> read(String path) async => File(_check(path)).readAsString();
 
   /// Writes [content] to the file at [path], creating or overwriting it.
   ///
   /// Creates any missing parent directories first, matching the Java
-  /// DMTools `FileUtils.writeStringToFile` behavior.
+  /// DMTools `FileUtils.writeStringToFile` behavior. The path is
+  /// sandbox-checked first (gh-365), so the parent creation cannot reach
+  /// outside the allowed bases.
   Future<void> write(String path, String content) async {
-    final parent = File(path).parent;
+    final checked = _check(path);
+    final parent = File(checked).parent;
     if (!parent.existsSync()) {
       await parent.create(recursive: true);
     }
-    await File(path).writeAsString(content);
+    await File(checked).writeAsString(content);
   }
 
   /// Lists the entry paths inside the directory at [path].
-  Future<List<String>> list(String path) =>
-      Directory(path).list().map((e) => e.path).toList();
+  Future<List<String>> list(String path) async =>
+      Directory(_check(path)).list().map((e) => e.path).toList();
 
   /// Returns `true` if a file or directory exists at [path].
-  Future<bool> exists(String path) async =>
-      File(path).existsSync() || Directory(path).existsSync();
+  Future<bool> exists(String path) async {
+    final checked = _check(path);
+    return File(checked).existsSync() || Directory(checked).existsSync();
+  }
 
   /// Deletes the file at [path]; returns `true` if it existed.
   Future<bool> delete(String path) async {
-    final file = File(path);
+    final file = File(_check(path));
     if (file.existsSync()) {
       await file.delete();
       return true;
@@ -311,30 +338,35 @@ class FileToolExecutor {
   }
 
   /// Copies the file at [source] to [dest].
-  Future<void> copy(String source, String dest) => File(source).copy(dest);
+  Future<void> copy(String source, String dest) async =>
+      File(_check(source)).copy(_check(dest));
 
   /// Moves (renames) the file at [source] to [dest].
-  Future<void> move(String source, String dest) => File(source).rename(dest);
+  Future<void> move(String source, String dest) async =>
+      File(_check(source)).rename(_check(dest));
 
   /// Creates the directory at [path], including parents.
-  Future<void> mkdir(String path) => Directory(path).create(recursive: true);
+  Future<void> mkdir(String path) async =>
+      Directory(_check(path)).create(recursive: true);
 
   /// Reads the file at [path] and returns its lines.
-  Future<List<String>> readLines(String path) => File(path).readAsLines();
+  Future<List<String>> readLines(String path) async =>
+      File(_check(path)).readAsLines();
 
   /// Writes [lines] to the file at [path], joined by newlines.
-  Future<void> writeLines(String path, List<String> lines) =>
-      File(path).writeAsString(lines.join('\n'));
+  Future<void> writeLines(String path, List<String> lines) async =>
+      File(_check(path)).writeAsString(lines.join('\n'));
 
   /// Appends [content] to the file at [path], creating it if needed.
-  Future<void> append(String path, String content) =>
-      File(path).writeAsString(content, mode: FileMode.append);
+  Future<void> append(String path, String content) async =>
+      File(_check(path)).writeAsString(content, mode: FileMode.append);
 
   /// Returns metadata about the file or directory at [path].
   ///
   /// The map contains `exists`, `isDirectory`, `size`, and `modified`.
   Future<Map<String, dynamic>> getFileInfo(String path) async {
-    final type = FileSystemEntity.typeSync(path);
+    final checked = _check(path);
+    final type = FileSystemEntity.typeSync(checked);
     final exists = type != FileSystemEntityType.notFound;
     if (!exists) {
       return const {
@@ -344,7 +376,7 @@ class FileToolExecutor {
         'modified': null,
       };
     }
-    final stat = FileStat.statSync(path);
+    final stat = FileStat.statSync(checked);
     return {
       'exists': true,
       'isDirectory': type == FileSystemEntityType.directory,
@@ -355,17 +387,17 @@ class FileToolExecutor {
 
   /// Reads the file at [path] and returns its decoded JSON value.
   Future<dynamic> readJson(String path) async {
-    final content = await File(path).readAsString();
+    final content = await File(_check(path)).readAsString();
     return jsonDecode(content);
   }
 
   /// Encodes [data] as JSON and writes it to the file at [path].
-  Future<void> writeJson(String path, Map<String, dynamic> data) =>
-      File(path).writeAsString(jsonEncode(data));
+  Future<void> writeJson(String path, Map<String, dynamic> data) async =>
+      File(_check(path)).writeAsString(jsonEncode(data));
 
   /// Returns `true` if a file named [filename] exists under [path].
   Future<bool> existsInPath(String path, String filename) async {
-    final dir = Directory(path);
+    final dir = Directory(_check(path));
     if (!dir.existsSync()) return false;
     await for (final entry in dir.list(recursive: true)) {
       if (entry is File && entry.uri.pathSegments.last == filename) {
@@ -376,11 +408,11 @@ class FileToolExecutor {
   }
 
   /// Returns the size of the file at [path] in bytes.
-  Future<int> getSize(String path) => File(path).length();
+  Future<int> getSize(String path) async => File(_check(path)).length();
 
   /// Returns the last-modified time and size of [path] as a map.
   Future<Map<String, dynamic>> watch(String path) async {
-    final stat = await File(path).stat();
+    final stat = await File(_check(path)).stat();
     return {'size': stat.size, 'modified': stat.modified};
   }
 
@@ -393,7 +425,7 @@ class FileToolExecutor {
   Future<List<String>> search(String dir, String pattern) async {
     final matcher = _globToRegex(pattern);
     final result = <String>[];
-    final root = Directory(dir);
+    final root = Directory(_check(dir));
     if (!root.existsSync()) return result;
     await for (final entry in root.list(recursive: true)) {
       if (entry is File && matcher.hasMatch(entry.uri.pathSegments.last)) {

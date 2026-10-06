@@ -87,6 +87,10 @@ class ToolBridge {
   }
 
   /// Dispatch table for synchronous file tool execution.
+  ///
+  /// Every entry resolves its paths through [_sandboxPath] (gh-365, Java
+  /// `FileTools` parity) before touching the filesystem — see the
+  /// sync-operations section comment below.
   late final Map<String, String Function(Map<String, dynamic>)> _fileFns = {
     'file_read': (a) => _readFile(a['path'] as String),
     'file_write': (a) =>
@@ -185,6 +189,10 @@ class ToolBridge {
   /// be read — the Java bridge contract testRunner.js and configLoader.js
   /// depend on (`content && content.trim()`).
   ///
+  /// gh-365: a path outside the sandbox (Java `FileTools.readFile` parity)
+  /// is logged ("Path traversal attempt blocked") and answered with null —
+  /// the same observable result as a missing file, never a thrown error.
+  ///
   /// Logs the call args first, like every other tool: in Java `file_read`
   /// is a generated wrapper that logs its call, but here the direct host
   /// replaces that wrapper.
@@ -196,8 +204,15 @@ class ToolBridge {
         '${jsonEncode(parsed is Map ? parsed : const {})}');
     return _timed('file_read', () {
       if (path == null) return 'null';
+      final String resolved;
       try {
-        return jsonEncode(File(_resolve(path)).readAsStringSync());
+        resolved = _sandboxPath(path);
+      } catch (e) {
+        stderr.writeln('file_read: $e');
+        return 'null';
+      }
+      try {
+        return jsonEncode(File(resolved).readAsStringSync());
       } catch (_) {
         return 'null';
       }
@@ -466,10 +481,24 @@ class ToolBridge {
   }
 
   // ── Synchronous file operations ────────────────────────────────────────
+  //
+  // Every operation resolves its path through [_sandboxPath] (gh-365, Java
+  // `FileTools` parity): relative paths resolve against the job base and
+  // anything outside the base / git root / system tmpdir throws into the
+  // per-operation catch and surfaces as the standard `{"error": …}`
+  // envelope — which the `executeToolViaJava` path rethrows as a JS
+  // `Error`, Java `SecurityException` semantics.
+
+  /// Sandbox resolver for the whole `file_*` bridge family: shares
+  /// [resolveWithinAllowedBase] with the async FileToolExecutor surface so
+  /// the two cannot drift apart on a security-flavored behavior again.
+  String _sandboxPath(String path) => resolveWithinAllowedBase(
+      path, _workingDirectory ?? Directory.current.path);
 
   String _readFile(String path) {
     try {
-      return jsonEncode({'content': File(_resolve(path)).readAsStringSync()});
+      return jsonEncode(
+          {'content': File(_sandboxPath(path)).readAsStringSync()});
     } catch (e) {
       return _err(e.toString());
     }
@@ -481,14 +510,13 @@ class ToolBridge {
   /// `outputs/token_usage/` cache) succeeds instead of failing with
   /// `PathNotFoundException`.
   ///
-  /// Parity is scoped to that parent creation only: Java `writeFile` also
-  /// normalizes the path and rejects anything outside the working
-  /// directory ("Path traversal attempt blocked"), and this bridge — like
-  /// the whole `file_*` family here — has no such containment check
-  /// (pre-existing gap, tracked in #365).
+  /// gh-365: parity now includes the traversal sandbox — the parent
+  /// creation only happens for paths that resolved inside the allowed
+  /// bases (see [_sandboxPath]), so the gh-361 shortcut can no longer
+  /// materialize directories outside the job base.
   String _writeFile(String path, String content) {
     try {
-      final resolved = _resolve(path);
+      final resolved = _sandboxPath(path);
       final parent = File(resolved).parent;
       if (!parent.existsSync()) {
         parent.createSync(recursive: true);
@@ -504,7 +532,7 @@ class ToolBridge {
     try {
       // Java FileTools.listFiles parity (dm.ai#635): entries are absolute,
       // normalized, and sorted.
-      final entries = Directory(_resolve(path))
+      final entries = Directory(_sandboxPath(path))
           .listSync()
           .map((e) => p.normalize(e.path))
           .toList()
@@ -516,15 +544,19 @@ class ToolBridge {
   }
 
   String _exists(String path) {
-    final resolved = _resolve(path);
-    final exists =
-        File(resolved).existsSync() || Directory(resolved).existsSync();
-    return jsonEncode({'exists': exists});
+    try {
+      final resolved = _sandboxPath(path);
+      final exists =
+          File(resolved).existsSync() || Directory(resolved).existsSync();
+      return jsonEncode({'exists': exists});
+    } catch (e) {
+      return _err(e.toString());
+    }
   }
 
   String _delete(String path) {
     try {
-      final file = File(_resolve(path));
+      final file = File(_sandboxPath(path));
       if (file.existsSync()) {
         file.deleteSync();
         return '{"deleted":true}';
@@ -537,7 +569,7 @@ class ToolBridge {
 
   String _copy(String source, String dest) {
     try {
-      File(_resolve(source)).copySync(_resolve(dest));
+      File(_sandboxPath(source)).copySync(_sandboxPath(dest));
       return _successJson;
     } catch (e) {
       return _err(e.toString());
@@ -546,7 +578,7 @@ class ToolBridge {
 
   String _move(String source, String dest) {
     try {
-      File(_resolve(source)).renameSync(_resolve(dest));
+      File(_sandboxPath(source)).renameSync(_sandboxPath(dest));
       return _successJson;
     } catch (e) {
       return _err(e.toString());
@@ -555,7 +587,7 @@ class ToolBridge {
 
   String _mkdir(String path) {
     try {
-      Directory(_resolve(path)).createSync(recursive: true);
+      Directory(_sandboxPath(path)).createSync(recursive: true);
       return _successJson;
     } catch (e) {
       return _err(e.toString());
@@ -564,7 +596,7 @@ class ToolBridge {
 
   String _readLines(String path) {
     try {
-      final lines = File(_resolve(path)).readAsLinesSync();
+      final lines = File(_sandboxPath(path)).readAsLinesSync();
       return jsonEncode({'lines': lines});
     } catch (e) {
       return _err(e.toString());
@@ -574,7 +606,7 @@ class ToolBridge {
   String _writeLines(String path, dynamic lines) {
     try {
       final list = (lines as List).cast<String>();
-      File(_resolve(path)).writeAsStringSync(list.join('\n'));
+      File(_sandboxPath(path)).writeAsStringSync(list.join('\n'));
       return _successJson;
     } catch (e) {
       return _err(e.toString());
@@ -583,7 +615,8 @@ class ToolBridge {
 
   String _append(String path, String content) {
     try {
-      File(_resolve(path)).writeAsStringSync(content, mode: FileMode.append);
+      File(_sandboxPath(path))
+          .writeAsStringSync(content, mode: FileMode.append);
       return _successJson;
     } catch (e) {
       return _err(e.toString());
@@ -591,25 +624,22 @@ class ToolBridge {
   }
 
   String _info(String path) {
-    final resolved = _resolve(path);
-    final type = FileSystemEntity.typeSync(resolved);
-    final exists = type != FileSystemEntityType.notFound;
-    if (!exists) {
-      return jsonEncode({'exists': false, 'isDirectory': false, 'size': 0});
+    try {
+      final resolved = _sandboxPath(path);
+      final type = FileSystemEntity.typeSync(resolved);
+      final exists = type != FileSystemEntityType.notFound;
+      if (!exists) {
+        return jsonEncode({'exists': false, 'isDirectory': false, 'size': 0});
+      }
+      final stat = FileStat.statSync(resolved);
+      return jsonEncode({
+        'exists': true,
+        'isDirectory': type == FileSystemEntityType.directory,
+        'size': stat.size,
+      });
+    } catch (e) {
+      return _err(e.toString());
     }
-    final stat = FileStat.statSync(resolved);
-    return jsonEncode({
-      'exists': true,
-      'isDirectory': type == FileSystemEntityType.directory,
-      'size': stat.size,
-    });
-  }
-
-  /// Resolves [path] against the working directory when relative.
-  String _resolve(String path) {
-    if (path.startsWith('/')) return path;
-    final base = _workingDirectory ?? Directory.current.path;
-    return '$base/$path';
   }
 }
 

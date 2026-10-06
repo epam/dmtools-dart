@@ -272,11 +272,12 @@ class AgentPackCompiler {
       File jsFile, Map<String, File> closure, Set<String> visitedJs) {
     final normalized = jsFile.absolute.path;
     if (!visitedJs.add(normalized)) return; // cycle safety
-    final content = stripJsComments(jsFile.readAsStringSync());
+    final content = jsFile.readAsStringSync();
     final parentDir = File(normalized).parent.path;
-    for (final match in _jsModuleRef.allMatches(_maskStringLiterals(content))) {
-      // The ref was masked out of the scanned text; recover it from the
-      // original content at the same offset (masking preserves length).
+    // The scrub is LENGTH-PRESERVING: match offsets in the scrubbed text
+    // are valid against the original, so the masked-out reference string
+    // is recovered from the original at the same offset.
+    for (final match in _jsModuleRef.allMatches(scrubForScan(content))) {
       final raw = content.substring(match.start, match.end);
       final refMatch = _jsModuleRef.firstMatch(raw);
       if (refMatch == null) continue;
@@ -285,48 +286,33 @@ class AgentPackCompiler {
     }
   }
 
-  /// Blanks out the CONTENTS of string/template literals (single, double,
-  /// backtick) while preserving every other byte, so `require(...)` calls
-  /// inside embedded worker-source strings are not treated as real module
-  /// references. Length-preserving so match offsets stay valid against the
-  /// original content. Comment stripping runs BEFORE this (stripJsComments).
-  static String _maskStringLiterals(String content) {
-    final chars = content.codeUnits.toList();
-    var quote = 0;
-    var i = 0;
-    while (i < chars.length) {
-      if (quote == 0) {
-        quote = _opensLiteral(chars[i]) ? chars[i] : 0;
-        i++;
-      } else {
-        final step = _maskLiteralChar(chars, i, quote);
-        i = step.next;
-        quote = step.quote;
-      }
-    }
-    return String.fromCharCodes(chars);
-  }
-
-  static bool _opensLiteral(int c) =>
-      c == 0x27 || c == 0x22 || c == 0x60; // ' " `
-
-  /// Masks one char inside a literal; returns the next index + quote state.
-  /// Keeps the closing quote, ends unterminated '...'/"..." at EOL.
-  static ({int next, int quote}) _maskLiteralChar(
-      List<int> chars, int i, int quote) {
-    final c = chars[i];
-    if (c == 0x5c && i + 1 < chars.length) {
-      chars[i] = 0x20; // blank the escape
-      chars[i + 1] = 0x20; // and the escaped char
-      return (next: i + 2, quote: quote);
-    }
-    if (c == quote) return (next: i + 1, quote: 0); // keep the closing quote
-    if (c == 0x0a && quote != 0x60) {
-      return (next: i + 1, quote: 0); // unterminated literal ends at EOL
-    }
-    chars[i] = 0x20; // blank literal contents (offset-stable)
-    return (next: i + 1, quote: quote);
-  }
+  /// Length-preserving scrub for the closure scan: blanks the CONTENTS of
+  /// comments, string/template literals, and regex literals while keeping
+  /// every byte count (structure chars — quotes, newlines — stay), so
+  /// `require('./x.js')` survives as `require('       ')` at identical
+  /// offsets and real code is distinguishable from embedded worker-source
+  /// strings.
+  ///
+  /// Regex-literal aware (gh-371): JS decides regex-vs-division from
+  /// expression position, so this lexer does too — a `/` in expression
+  /// position (after `(`, `,`, `=`, operators, keywords like `return`)
+  /// opens a regex literal consumed escape-aware to its closing unescaped
+  /// `/` (a `/` inside a `[...]` class never terminates). Without this, a
+  /// regex like `/[<>\`\|&;$\r\n]/g` (live: dmtools-agents
+  /// js/common/pullRequest.js:48) made the old masker open a phantom
+  /// template literal that swallowed every `require(...)` for the next
+  /// ~150 lines — pr_review packs shipped without js/common/mergeState.js
+  /// and every fa review leg requiring it went red.
+  ///
+  /// Template interpolations nest properly: `${` re-enters code state and
+  /// the matching `}` (brace-balanced) returns to the template, so nested
+  /// quotes/backticks inside `${...}` cannot desync the scan either.
+  ///
+  /// Belt and suspenders: in code state a quote preceded by an odd
+  /// backslash run is an escaped character, never a literal opener
+  /// (defensive for `\``-style escapes the regex consumer might miss).
+  /// Punctuation after which a `/` opens a regex (expression position).
+  static String scrubForScan(String src) => _Scrubber(src).run();
 
   /// Resolves one relative JS module reference and recurses into it.
   void _resolveJsModule(String ref, String parentDir, String fromFile,
@@ -633,3 +619,242 @@ class _CommentStripper {
 }
 
 enum _State { code, lineComment, blockComment, string }
+
+/// Length-preserving scrub state machine for [AgentPackCompiler]'s closure
+/// scan (gh-371). See `scrubForScan` for the contract.
+class _Scrubber {
+  _Scrubber(String src) : chars = src.codeUnits.toList();
+
+  final List<int> chars;
+  int i = 0;
+
+  /// Last significant code char (0 = none yet) — drives regex-vs-division.
+  int _prevSig = 0;
+  String _lastWord = '';
+  bool _inWord = false;
+
+  /// Brace balance per open `${` interpolation (nested `{}` inside the
+  /// interpolation code must not close it early).
+  final List<int> _interpBraces = [];
+
+  /// Punctuation after which a `/` opens a regex (expression position).
+  static final _regexStarterChars = RegExp(r'[(\[,;=!?:&|+\-%<>^~]');
+
+  /// Keywords after which a `/` opens a regex literal — division can
+  /// never directly follow these.
+  static const _regexPositionKeywords = {
+    'return',
+    'typeof',
+    'instanceof',
+    'in',
+    'of',
+    'new',
+    'delete',
+    'void',
+    'case',
+    'do',
+    'else',
+    'yield',
+    'await',
+    'throw',
+  };
+
+  String run() {
+    while (i < chars.length) {
+      final c = chars[i];
+      if (_isWhitespace(c)) {
+        i++;
+      } else if (c == 0x7d && _closesInterpolation()) {
+        // Handled inside _closesInterpolation (resumes the template).
+      } else if (c == 0x2f && _tryConsumeSlash()) {
+        // Consumed as comment or regex literal.
+      } else if (_isQuoteCode(c) && _tryConsumeLiteral()) {
+        // Consumed a string/template literal.
+      } else {
+        _trackCode(c);
+      }
+    }
+    return String.fromCharCodes(chars);
+  }
+
+  static bool _isWhitespace(int c) =>
+      c == 0x0a || c == 0x0d || c == 0x09 || c == 0x20;
+
+  static bool _isQuoteCode(int c) => c == 0x27 || c == 0x22 || c == 0x60;
+
+  void _blank(int at) => chars[at] = 0x20;
+
+  bool _regexAllowed() =>
+      _prevSig == 0 ||
+      String.fromCharCode(_prevSig).contains(_regexStarterChars) ||
+      _regexPositionKeywords.contains(_lastWord);
+
+  /// A `}` closing an interpolation: pops one `${` level and resumes the
+  /// surrounding template literal. Returns true when handled.
+  bool _closesInterpolation() {
+    if (_interpBraces.isEmpty) return false;
+    if (_interpBraces.last > 0) {
+      _interpBraces[_interpBraces.length - 1]--;
+      _trackCode(0x7d);
+      return true;
+    }
+    _interpBraces.removeLast();
+    i++;
+    _consumeLiteral(0x60);
+    _prevSig = 0x60;
+    _lastWord = '';
+    _inWord = false;
+    return true;
+  }
+
+  /// Consumes `/`-prefixed tokens (comments, regex literals). Returns true
+  /// when the slash was consumed as one of those, false for division
+  /// (which falls through to code tracking).
+  bool _tryConsumeSlash() {
+    if (i + 1 >= chars.length) return false;
+    final next = chars[i + 1];
+    if (next == 0x2f) {
+      _consumeLineComment();
+      return true;
+    }
+    if (next == 0x2a) {
+      _consumeBlockComment();
+      return true;
+    }
+    if (_regexAllowed()) {
+      _consumeRegexLiteral();
+      return true;
+    }
+    return false; // division
+  }
+
+  bool _consumeLineComment() {
+    while (i < chars.length && chars[i] != 0x0a) {
+      _blank(i++);
+    }
+    return true;
+  }
+
+  bool _consumeBlockComment() {
+    _blank(i++);
+    _blank(i++);
+    while (i < chars.length) {
+      if (chars[i] == 0x2a && i + 1 < chars.length && chars[i + 1] == 0x2f) {
+        _blank(i++);
+        _blank(i++);
+        break;
+      }
+      if (chars[i] != 0x0a) _blank(i);
+      i++;
+    }
+    return true;
+  }
+
+  /// Blanks a regex literal through the closing unescaped `/` (one outside
+  /// a `[...]` character class) plus any trailing flag letters. Bail at EOL
+  /// for an unterminated regex.
+  bool _consumeRegexLiteral() {
+    _blank(i++);
+    var inClass = false;
+    while (i < chars.length) {
+      final rc = chars[i];
+      if (rc == 0x5c && i + 1 < chars.length) {
+        _blank(i++);
+        _blank(i++);
+        continue;
+      }
+      if (rc == 0x5b) inClass = true;
+      if (rc == 0x5d) inClass = false;
+      if (rc == 0x2f && !inClass) {
+        _blank(i++);
+        while (i < chars.length && chars[i] >= 0x61 && chars[i] <= 0x7a) {
+          _blank(i++);
+        }
+        break;
+      }
+      if (rc == 0x0a) break;
+      _blank(i++);
+    }
+    _prevSig = 0x2f;
+    _lastWord = '';
+    _inWord = false;
+    return true;
+  }
+
+  /// Consumes a quote-opened literal when [c] really opens one (an odd
+  /// backslash run before it means it is an escaped character instead).
+  bool _tryConsumeLiteral() {
+    var run = 0;
+    var bs = i;
+    while (bs > 0 && chars[bs - 1] == 0x5c) {
+      run++;
+      bs--;
+    }
+    if (run.isOdd) {
+      _blank(i - 1);
+      _blank(i++);
+      return true;
+    }
+    _consumeLiteral(chars[i]);
+    _prevSig = chars[i];
+    _lastWord = '';
+    _inWord = false;
+    return true;
+  }
+
+  /// Consumes a string/template literal from the opening quote (kept):
+  /// blanks contents, keeps the closing quote, ends unterminated
+  /// single/double literals at EOL. `${` re-enters code state (tracked by
+  /// [_interpBraces]) and the template resumes after the matching `}`.
+  void _consumeLiteral(int quote) {
+    final isTemplate = quote == 0x60;
+    i++;
+    while (i < chars.length) {
+      final c = chars[i];
+      if (c == 0x5c && i + 1 < chars.length) {
+        _blank(i++);
+        _blank(i++);
+        continue;
+      }
+      if (isTemplate &&
+          c == 0x24 &&
+          i + 1 < chars.length &&
+          chars[i + 1] == 0x7b) {
+        _interpBraces.add(0);
+        i += 2;
+        return; // main loop resumes in code state
+      }
+      if (c == quote) {
+        i++;
+        return;
+      }
+      if (c == 0x0a && !isTemplate) return;
+      _blank(i++);
+    }
+  }
+
+  /// Word/punctuation context tracking for regex-vs-division decisions.
+  void _trackCode(int c) {
+    if (c == 0x7b && _interpBraces.isNotEmpty) {
+      _interpBraces[_interpBraces.length - 1]++;
+    }
+    final isWordChar = (c >= 0x61 && c <= 0x7a) ||
+        (c >= 0x41 && c <= 0x5a) ||
+        (c >= 0x30 && c <= 0x39) ||
+        c == 0x5f ||
+        c == 0x24;
+    if (isWordChar) {
+      _lastWord =
+          _inWord ? _lastWord + String.fromCharCode(c) : String.fromCharCode(c);
+      _inWord = true;
+      // After a word only the keyword set can put a `/` in expression
+      // position — identifiers END expressions (division follows).
+      _prevSig = 0x61;
+    } else {
+      _inWord = false;
+      _lastWord = c == 0x2e ? _lastWord : '';
+      _prevSig = c;
+    }
+    i++;
+  }
+}

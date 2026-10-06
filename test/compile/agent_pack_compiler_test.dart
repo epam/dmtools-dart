@@ -372,4 +372,107 @@ var s = 'not // a comment';
       expect(AgentPackCompiler.stripJsComments(src), src);
     });
   });
+
+  group('scrubForScan (gh-371: regex literals with quotes)', () {
+    test('an escaped backtick in a regex no longer swallows later requires',
+        () {
+      // Mirror of dmtools-agents js/common/pullRequest.js:48 + :154 —
+      // the live case that shipped pr_review packs without mergeState.js.
+      const src = '''
+function shellEscape(v) {
+    return String(v === null || v === undefined ? '' : v)
+        .replace(/"/g, '\\\\"')
+        .replace(/[<>\\`\\|&;\$\\r\\n]/g, ' ')
+        .trim();
+}
+var MAX = 60000;
+var mergeState = require('./mergeState.js');
+''';
+      final scrubbed = AgentPackCompiler.scrubForScan(src);
+      final re =
+          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
+      expect(re.allMatches(scrubbed).length, 1,
+          reason: 'the require must survive the regex-literal region');
+      expect(scrubbed.length, src.length, reason: 'length-preserving');
+    });
+
+    test('quotes inside regex literals do not open phantom strings', () {
+      const src = '''
+var a = /['"]/g;
+var b = x.replace(/"/g, '');
+var u = require('./util.js');
+''';
+      final scrubbed = AgentPackCompiler.scrubForScan(src);
+      expect(scrubbed, contains('require('));
+      expect(
+        RegExp(r'''require\(\s*['"]''').hasMatch(scrubbed),
+        isTrue,
+        reason: "the require's opening quote must survive",
+      );
+    });
+
+    test('division is not mistaken for a regex literal', () {
+      const src = '''
+var half = total / 2 / parts;
+var u = require('./util.js');
+''';
+      final scrubbed = AgentPackCompiler.scrubForScan(src);
+      expect(scrubbed, contains('total'));
+      expect(scrubbed, contains('/ 2 /'));
+    });
+
+    test('nested template interpolations do not desync the scan', () {
+      const src = '''
+var msg = `outer \${cond ? `in\${deep}er` : 'plain'} tail`;
+var u = require('./util.js');
+''';
+      final scrubbed = AgentPackCompiler.scrubForScan(src);
+      final re =
+          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
+      expect(re.allMatches(scrubbed).length, 1);
+    });
+
+    test('requires inside strings and comments stay masked out', () {
+      const src = '''
+var s = "require('./never.js')";
+// require('./commented.js')
+var u = require('./real.js');
+''';
+      final scrubbed = AgentPackCompiler.scrubForScan(src);
+      final re =
+          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
+      final matches = re.allMatches(scrubbed).toList();
+      expect(matches.length, 1);
+      expect(src.substring(matches[0].start, matches[0].end),
+          contains('./real.js'));
+    });
+  });
+
+  group('closure across quote-bearing regexes (gh-371)', () {
+    test('compile embeds modules required past a regex literal', () {
+      write('js/common/mergeState.js', 'exports.ok = true;\n');
+      write('js/common/pullRequest.js', '''
+function esc(v) {
+    return String(v)
+        .replace(/[<>\\`\\|&;\$\\r\\n]/g, ' ')
+        .trim();
+}
+var ms = require('./mergeState.js');
+function action(params) { return ms.ok; }
+''');
+      write('js/main.js', "var pr = require('./common/pullRequest.js');\n");
+      final entry = write(
+          'my_agent.json',
+          jsonEncode({
+            'name': 'Teammate',
+            'params': {'jsPath': 'agents/js/main.js'},
+          }));
+
+      final result = AgentPackCompiler(agentRoot.path)
+          .compile(entry, '0.1.0', 'deadbeef', outDir);
+      final names = zipNames(result.zipFile);
+      expect(names, contains('js/common/mergeState.js'));
+      expect(names, contains('js/common/pullRequest.js'));
+    });
+  });
 }

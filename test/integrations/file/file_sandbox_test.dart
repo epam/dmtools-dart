@@ -41,6 +41,7 @@ void main() {
   recursiveSymlinkTests();
   configuredReadAdmitsTests();
   configuredReadStrictTests();
+  configuredReadUnsetTests();
 }
 
 /// The ops table: every path-taking executor operation, keyed by name.
@@ -428,8 +429,20 @@ void configuredReadStrictTests() {
         throwsA(isA<Exception>()),
       );
     });
+  });
+}
 
-    test('without the override the same path stays blocked', () async {
+/// The allowance is the config's, not the sandbox's: with the override
+/// cleared the same read is back to the traversal rejection.
+void configuredReadUnsetTests() {
+  final f = _ConfigFixture();
+
+  group('FileToolExecutor without the configured allow-list (gh-367)',
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
+
+    test('the same read stays blocked without the override', () async {
       PropertyReader.clearOverrides();
 
       await expectLater(

@@ -17,6 +17,7 @@ void main() {
   matchesPatternWildcardTests();
   matchesPatternPrefixTests();
   configuredAllowlistAdmitsTests();
+  configuredAllowlistAdmitScopeTests();
   configuredAllowlistBlocksTests();
 }
 
@@ -455,38 +456,44 @@ void matchesPatternPrefixTests() {
 /// comma-separated globs is accepted. Read tools only — Java's write
 /// path (`writeFile`/`deleteFile`) keeps its plain startsWith guard and
 /// never consults the config.
+///
+/// The fixture mirrors the failure shape: a pack cache under `$HOME`
+/// (the dmtools home), a temp job base, no git root — every group skips
+/// when the platform offers no usable HOME outside the tmpdir.
+void _seedGh367PackModule() {
+  final js = Directory(p.dirname(packModuleIn(fakeHome!)))
+    ..createSync(recursive: true);
+  File('${js.path}/configLoader.js').writeAsStringSync('module.exports={};');
+}
+
+String? get _homeSkip =>
+    fakeHome == null ? 'no HOME outside the tmpdir to test against' : null;
+
 void configuredAllowlistAdmitsTests() {
-  group('resolveWithinAllowedBase — configured globs admit (gh-367)', () {
+  group('resolveWithinAllowedBase — configured globs admit (gh-367)',
+      skip: _homeSkip, () {
     late Directory base;
 
     setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
     tearDown(() => base.deleteSync(recursive: true));
 
-    void seedPackModule() {
-      final js = Directory(p.dirname(packModuleIn(fakeHome!)))
-        ..createSync(recursive: true);
-      File('${js.path}/configLoader.js')
-          .writeAsStringSync('module.exports={};');
-    }
-
     test('an absolute-prefix glob admits the pack module', () {
-      if (fakeHome == null) return;
-      seedPackModule();
+      _seedGh367PackModule();
       final module = packModuleIn(fakeHome!);
 
-      final resolved = resolveWithinAllowedBase(
-        module,
-        base.path,
-        configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+      expect(
+        resolveWithinAllowedBase(
+          module,
+          base.path,
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+        ),
+        canonicalizePath(module),
       );
-
-      expect(resolved, canonicalizePath(module));
     });
 
     test('a relative ..-prefix glob (the Java ../.dmtools shape) admits it',
         () {
-      if (fakeHome == null) return;
-      seedPackModule();
+      _seedGh367PackModule();
       final module = packModuleIn(fakeHome!);
       final prefix =
           p.relative(p.dirname(p.dirname(p.dirname(module))), from: base.path);
@@ -500,10 +507,22 @@ void configuredAllowlistAdmitsTests() {
         canonicalizePath(module),
       );
     });
+  });
+}
+
+/// The config grants exactly its pattern's scope: an exact match only
+/// for no-wildcard patterns, every comma entry gets its chance, and one
+/// pattern covers all modules under it (multi-item).
+void configuredAllowlistAdmitScopeTests() {
+  group('resolveWithinAllowedBase — configured glob scope (gh-367)',
+      skip: _homeSkip, () {
+    late Directory base;
+
+    setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
+    tearDown(() => base.deleteSync(recursive: true));
 
     test('an exact no-wildcard pattern admits exactly that file', () {
-      if (fakeHome == null) return;
-      seedPackModule();
+      _seedGh367PackModule();
       final module = packModuleIn(fakeHome!);
 
       expect(
@@ -525,8 +544,7 @@ void configuredAllowlistAdmitsTests() {
     });
 
     test('a comma list tries every pattern, blanks skipped', () {
-      if (fakeHome == null) return;
-      seedPackModule();
+      _seedGh367PackModule();
       final module = packModuleIn(fakeHome!);
 
       final resolved = resolveWithinAllowedBase(
@@ -540,8 +558,7 @@ void configuredAllowlistAdmitsTests() {
     });
 
     test('two modules under one pattern both pass (multi-item)', () {
-      if (fakeHome == null) return;
-      seedPackModule();
+      _seedGh367PackModule();
       final js = Directory(p.dirname(packModuleIn(fakeHome!)));
       File('${js.path}/second.js').writeAsStringSync('// 2');
 
@@ -561,25 +578,17 @@ void configuredAllowlistAdmitsTests() {
 
 /// The blocked half: a blank/mismatched config grants nothing, `*` never
 /// reaches across segments, and `..` inside the path cannot smuggle past
-/// a matching prefix.
+/// a matching prefix. No seeding — the canonicalizer resolves planned
+/// paths, so the rejections are about the pattern, not the file.
 void configuredAllowlistBlocksTests() {
-  group('resolveWithinAllowedBase — configured globs still block (gh-367)', () {
+  group('resolveWithinAllowedBase — configured globs still block (gh-367)',
+      skip: _homeSkip, () {
     late Directory base;
 
     setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
     tearDown(() => base.deleteSync(recursive: true));
 
-    void seedPackModule() {
-      final js = Directory(p.dirname(packModuleIn(fakeHome!)))
-        ..createSync(recursive: true);
-      File('${js.path}/configLoader.js')
-          .writeAsStringSync('module.exports={};');
-    }
-
     test('a blank config value behaves like an unset one', () {
-      if (fakeHome == null) return;
-      seedPackModule();
-
       expect(
         () => resolveWithinAllowedBase(
           packModuleIn(fakeHome!),
@@ -591,9 +600,6 @@ void configuredAllowlistBlocksTests() {
     });
 
     test('* patterns do not admit nested pack modules', () {
-      if (fakeHome == null) return;
-      seedPackModule();
-
       expect(
         () => resolveWithinAllowedBase(
           packModuleIn(fakeHome!),
@@ -605,9 +611,6 @@ void configuredAllowlistBlocksTests() {
     });
 
     test('an unmatching prefix keeps the traversal blocked', () {
-      if (fakeHome == null) return;
-      seedPackModule();
-
       expect(
         () => resolveWithinAllowedBase(
           packModuleIn(fakeHome!),
@@ -619,9 +622,6 @@ void configuredAllowlistBlocksTests() {
     });
 
     test('.. segments inside the path cannot smuggle past the pattern', () {
-      if (fakeHome == null) return;
-      seedPackModule();
-
       expect(
         () => resolveWithinAllowedBase(
           '$fakeHome/.dmtools-gh367-test/../elsewhere/f.js',

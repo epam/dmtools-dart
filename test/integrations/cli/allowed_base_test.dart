@@ -14,8 +14,10 @@ void main() {
   validateTests();
   resolveTests();
   canonicalizePathTests();
-  matchesPatternTests();
-  configuredAllowlistTests();
+  matchesPatternWildcardTests();
+  matchesPatternPrefixTests();
+  configuredAllowlistAdmitsTests();
+  configuredAllowlistBlocksTests();
 }
 
 /// A writable directory outside the base, the system temp dir, and any git
@@ -330,7 +332,7 @@ void canonicalizePathTests() {
 /// - the glob suffix matches the path relative to that base: `**` crosses
 ///   directory boundaries, `*`/`?` stay inside one segment, `[...]` and
 ///   `{...}` per Java glob.
-void matchesPatternTests() {
+void matchesPatternWildcardTests() {
   const base = '/repo/work';
 
   group('matchesPattern — wildcard suffix semantics', () {
@@ -385,6 +387,12 @@ void matchesPatternTests() {
           isFalse);
     });
   });
+}
+
+/// The prefix-resolution half of `matchesPattern`: how a pattern's
+/// literal prefix resolves against the working dir before matching.
+void matchesPatternPrefixTests() {
+  const base = '/repo/work';
 
   group('matchesPattern — prefix resolution against the working dir', () {
     test('a relative prefix expands to the sibling of the working dir', () {
@@ -447,8 +455,8 @@ void matchesPatternTests() {
 /// comma-separated globs is accepted. Read tools only — Java's write
 /// path (`writeFile`/`deleteFile`) keeps its plain startsWith guard and
 /// never consults the config.
-void configuredAllowlistTests() {
-  group('resolveWithinAllowedBase — configured allowed paths (gh-367)', () {
+void configuredAllowlistAdmitsTests() {
+  group('resolveWithinAllowedBase — configured globs admit (gh-367)', () {
     late Directory base;
 
     setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
@@ -531,6 +539,43 @@ void configuredAllowlistTests() {
       expect(resolved, canonicalizePath(module));
     });
 
+    test('two modules under one pattern both pass (multi-item)', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final js = Directory(p.dirname(packModuleIn(fakeHome!)));
+      File('${js.path}/second.js').writeAsStringSync('// 2');
+
+      for (final name in ['configLoader.js', 'second.js']) {
+        expect(
+          resolveWithinAllowedBase(
+            '${js.path}/$name',
+            base.path,
+            configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+          ),
+          canonicalizePath('${js.path}/$name'),
+        );
+      }
+    });
+  });
+}
+
+/// The blocked half: a blank/mismatched config grants nothing, `*` never
+/// reaches across segments, and `..` inside the path cannot smuggle past
+/// a matching prefix.
+void configuredAllowlistBlocksTests() {
+  group('resolveWithinAllowedBase — configured globs still block (gh-367)', () {
+    late Directory base;
+
+    setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
+    tearDown(() => base.deleteSync(recursive: true));
+
+    void seedPackModule() {
+      final js = Directory(p.dirname(packModuleIn(fakeHome!)))
+        ..createSync(recursive: true);
+      File('${js.path}/configLoader.js')
+          .writeAsStringSync('module.exports={};');
+    }
+
     test('a blank config value behaves like an unset one', () {
       if (fakeHome == null) return;
       seedPackModule();
@@ -585,24 +630,6 @@ void configuredAllowlistTests() {
         ),
         _throwsTraversalBlocked(),
       );
-    });
-
-    test('two modules under one pattern both pass (multi-item)', () {
-      if (fakeHome == null) return;
-      seedPackModule();
-      final js = Directory(p.dirname(packModuleIn(fakeHome!)));
-      File('${js.path}/second.js').writeAsStringSync('// 2');
-
-      for (final name in ['configLoader.js', 'second.js']) {
-        expect(
-          resolveWithinAllowedBase(
-            '${js.path}/$name',
-            base.path,
-            configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
-          ),
-          canonicalizePath('${js.path}/$name'),
-        );
-      }
     });
   });
 }

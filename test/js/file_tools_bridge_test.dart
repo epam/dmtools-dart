@@ -39,6 +39,7 @@ void main() {
   fileSandboxTests();
   fileSandboxAllowedTests();
   fileConfiguredAllowlistTests();
+  fileConfiguredAllowlistStrictTests();
 }
 
 void fileListTests() {
@@ -431,82 +432,105 @@ void fileSandboxTmpdirAllowedTests() {
 /// `file_read_lines`, `file_info`) admit a path only the configured globs
 /// allow (Java `FileTools.readFile`/`resolveSandboxedPath` consult
 /// `isAllowedByConfig`); write-flavored tools keep the strict guard.
-void fileConfiguredAllowlistTests() {
-  final home =
+class _BridgePackFixture {
+  final String? home =
       Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-  final homeUsable = home != null &&
-      home.isNotEmpty &&
-      !pathIsWithin(home, Directory.systemTemp.path);
+
+  bool get usable {
+    final h = home;
+    return h != null &&
+        h.isNotEmpty &&
+        !pathIsWithin(h, Directory.systemTemp.path);
+  }
+
+  late ToolBridge bridge;
+  late String packJs;
+  late String module;
+
+  void setUp() {
+    bridge = ToolBridge(
+      registry: createDefaultToolRegistry(),
+      workingDirectory: dir.path,
+    );
+    packJs = '$home/.dmtools-gh367-test-bridge/packs/sm_github-0.1.36/js';
+    Directory(packJs).createSync(recursive: true);
+    module = '$packJs/configLoader.js';
+    File(module).writeAsStringSync('module.exports={};');
+    PropertyReader.setOverrides({
+      'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test-bridge/**',
+    });
+  }
+
+  void tearDown() {
+    PropertyReader.clearOverrides();
+    Directory('$home/.dmtools-gh367-test-bridge').deleteSync(recursive: true);
+  }
+}
+
+void fileConfiguredAllowlistTests() {
+  final f = _BridgePackFixture();
 
   group('JS-bridge file_read configured allow-list (gh-367)',
-      skip: homeUsable ? null : 'no HOME outside the tmpdir to test against',
-      () {
-    late ToolBridge bridge;
-    late String packJs;
-    late String module;
-
-    setUp(() {
-      bridge = ToolBridge(
-        registry: createDefaultToolRegistry(),
-        workingDirectory: dir.path,
-      );
-      packJs = '$home/.dmtools-gh367-test-bridge/packs/sm_github-0.1.36/js';
-      Directory(packJs).createSync(recursive: true);
-      module = '$packJs/configLoader.js';
-      File(module).writeAsStringSync('module.exports={};');
-      PropertyReader.setOverrides({
-        'DMTOOLS_FILE_READ_ALLOWED_PATHS':
-            '$home/.dmtools-gh367-test-bridge/**',
-      });
-    });
-
-    tearDown(() {
-      PropertyReader.clearOverrides();
-      Directory('$home/.dmtools-gh367-test-bridge').deleteSync(recursive: true);
-    });
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
 
     test('file_read answers the pack module content', () {
       expect(
-        jsonDecode(bridge.execute('file_read', {'path': module})),
+        jsonDecode(f.bridge.execute('file_read', {'path': f.module})),
         {'content': 'module.exports={};'},
       );
     });
 
     test('the read-flavored family admits the pack dir', () {
-      File('$packJs/second.js').writeAsStringSync('// 2');
+      File('${f.packJs}/second.js').writeAsStringSync('// 2');
 
       expect(
-        (jsonDecode(bridge.execute('file_exists', {'path': module}))
+        (jsonDecode(f.bridge.execute('file_exists', {'path': f.module}))
             as Map<String, dynamic>)['exists'],
         isTrue,
       );
-      final listed = jsonDecode(bridge.execute('file_list', {'path': packJs}))
-          as Map<String, dynamic>;
+      final listed =
+          jsonDecode(f.bridge.execute('file_list', {'path': f.packJs}))
+              as Map<String, dynamic>;
       expect((listed['entries'] as List).cast<String>(),
-          containsAll([module, '$packJs/second.js']));
+          containsAll([f.module, '${f.packJs}/second.js']));
       expect(
-        jsonDecode(bridge.execute('file_read_lines', {'path': module})),
+        jsonDecode(f.bridge.execute('file_read_lines', {'path': f.module})),
         {
           'lines': ['module.exports={};']
         },
       );
     });
+  });
+}
+
+/// The strict half: Java's write path never consults the config, and the
+/// read allowance is the config's — clearing the override re-blocks.
+void fileConfiguredAllowlistStrictTests() {
+  final f = _BridgePackFixture();
+
+  group('JS-bridge file_write ignores the configured allow-list (gh-367)',
+      skip: f.usable ? null : 'no HOME outside the tmpdir to test against', () {
+    setUp(f.setUp);
+    tearDown(f.tearDown);
 
     test('file_write to the same path keeps the strict envelope', () {
       final result = jsonDecode(
-        bridge.execute('file_write', {'path': module, 'content': 'x'}),
+        f.bridge.execute('file_write', {'path': f.module, 'content': 'x'}),
       ) as Map<String, dynamic>;
 
       expect(result['error'], contains('Path traversal attempt blocked'));
-      expect(File(module).readAsStringSync(), 'module.exports={};',
+      expect(File(f.module).readAsStringSync(), 'module.exports={};',
           reason: 'the write must not land');
     });
 
     test('without the override the same read stays blocked', () {
       PropertyReader.clearOverrides();
 
-      final result = jsonDecode(bridge.execute('file_read', {'path': module}))
-          as Map<String, dynamic>;
+      final result =
+          jsonDecode(f.bridge.execute('file_read', {'path': f.module}))
+              as Map<String, dynamic>;
       expect(result['error'], contains('Path traversal attempt blocked'));
     });
   });

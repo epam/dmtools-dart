@@ -211,14 +211,24 @@ bool matchesPattern(String path, String workingDir, String rawPattern) {
       slashBefore >= 0 ? rawPattern.substring(0, slashBefore) : '';
   final globSuffix =
       slashBefore >= 0 ? rawPattern.substring(slashBefore + 1) : rawPattern;
-  final absBase = literalPrefix.isEmpty
-      ? workingDir
-      : p.normalize(p.join(workingDir, literalPrefix));
-  final canonicalBase = canonicalizePath(absBase);
-  if (!pathIsWithin(path, canonicalBase)) return false;
-  final relative = p.relative(path, from: canonicalBase);
+  final canonicalBase = canonicalizePath(_patternBase(workingDir, literalPrefix));
+  // Canonicalize the candidate too: a symlinked machine prefix (macOS
+  // `/home` autofs) would otherwise drift away from a literal path that
+  // names the same location — both sides must land in the same form.
+  final canonicalPath = canonicalizePath(path);
+  if (!pathIsWithin(canonicalPath, canonicalBase)) return false;
+  final relative = p.relative(canonicalPath, from: canonicalBase);
   final pattern = RegExp('^${_globToRegexSource(globSuffix)}\$');
   return pattern.hasMatch(_toSlashSegments(relative));
+}
+
+/// Resolves a pattern's literal prefix against [workingDir] the way
+/// Java `Path.resolve` does: empty → the working dir itself, absolute →
+/// passes through as-is, relative → joined (climbing with `..`).
+String _patternBase(String workingDir, String literalPrefix) {
+  if (literalPrefix.isEmpty) return workingDir;
+  if (p.isAbsolute(literalPrefix)) return p.normalize(literalPrefix);
+  return p.normalize(p.join(workingDir, literalPrefix));
 }
 
 /// Returns the index of the first glob wildcard in [s] (`*`, `?`, `{`,
@@ -242,9 +252,7 @@ String _globToRegexSource(String glob) {
   while (i < glob.length) {
     switch (glob[i]) {
       case '*':
-        final doubleStar = i + 1 < glob.length && glob[i + 1] == '*';
-        out.write(doubleStar ? '.*' : '[^/]*');
-        i += doubleStar ? 2 : 1;
+        i = _writeStar(glob, i, out);
       case '?':
         out.write('[^/]');
         i++;
@@ -258,6 +266,14 @@ String _globToRegexSource(String glob) {
     }
   }
   return out.toString();
+}
+
+/// Writes the `*` / `**` translation at [i] and returns the next index
+/// (`**` spans separators as `.*`; a single `*` stops at one as `[^/]*`).
+int _writeStar(String glob, int i, StringBuffer out) {
+  final doubleStar = i + 1 < glob.length && glob[i + 1] == '*';
+  out.write(doubleStar ? '.*' : '[^/]*');
+  return i + (doubleStar ? 2 : 1);
 }
 
 /// Writes the regex translation of the `[...]` class starting at [start]
@@ -288,32 +304,50 @@ int _writeCharClass(String glob, int start, StringBuffer out) {
 /// split alternatives (nesting-aware, Java glob parity); each
 /// alternative is translated recursively.
 int _writeAlternatives(String glob, int start, StringBuffer out) {
-  final alternatives = <String>[];
-  var depth = 0;
-  var i = start;
-  var altStart = start + 1;
-  while (i < glob.length) {
-    final c = glob[i];
-    if (c == '{') depth++;
-    if (c == '}') {
-      depth--;
-      if (depth == 0) break;
-    }
-    if (c == ',' && depth == 1) {
-      alternatives.add(glob.substring(altStart, i));
-      altStart = i + 1;
-    }
-    i++;
-  }
-  if (i >= glob.length) {
+  final end = _matchingBrace(glob, start);
+  if (end < 0) {
     throw FormatException('Unterminated {group} in pattern: $glob');
   }
-  alternatives.add(glob.substring(altStart, i));
+  final alternatives = _splitTopLevel(glob, start + 1, end);
   out
     ..write('(?:')
     ..write(alternatives.map(_globToRegexSource).join('|'))
     ..write(')');
-  return i + 1;
+  return end + 1;
+}
+
+/// Index of the `}` matching the `{` at [start], or -1 when the group
+/// runs off the end of [glob].
+int _matchingBrace(String glob, int start) {
+  var depth = 0;
+  for (var i = start; i < glob.length; i++) {
+    if (glob[i] == '{') depth++;
+    if (glob[i] == '}') {
+      depth--;
+      if (depth == 0) return i;
+    }
+  }
+  return -1;
+}
+
+/// Splits [glob] from [from] (inclusive) to [to] (exclusive) on the
+/// commas that sit at depth 1 relative to the enclosing group — the
+/// Java glob top-level alternation split, nesting-aware.
+List<String> _splitTopLevel(String glob, int from, int to) {
+  final parts = <String>[];
+  var depth = 0;
+  var partStart = from;
+  for (var i = from; i < to; i++) {
+    final c = glob[i];
+    if (c == '{') depth++;
+    if (c == '}') depth--;
+    if (c == ',' && depth == 0) {
+      parts.add(glob.substring(partStart, i));
+      partStart = i + 1;
+    }
+  }
+  parts.add(glob.substring(partStart, to));
+  return parts;
 }
 
 /// Converts the platform separators of [relative] to `/` so the glob

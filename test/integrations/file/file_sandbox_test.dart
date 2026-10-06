@@ -39,6 +39,7 @@ void main() {
   copyEndpointTests();
   moveEndpointTests();
   recursiveSymlinkTests();
+  configuredReadAllowlistTests();
 }
 
 /// The ops table: every path-taking executor operation, keyed by name.
@@ -282,6 +283,126 @@ void recursiveSymlinkTests() {
 
       expect(await f.executor.search(f.base.path, 'needle.txt'), isNotEmpty);
       expect(await f.executor.existsInPath(f.base.path, 'needle.txt'), isTrue);
+    });
+  });
+}
+
+/// gh-367: the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch reaches the
+/// executor surface too — read-flavored operations accept a path that only
+/// the configured globs admit (the pack-internal `file_read` shape from
+/// `~/.dmtools/packs/...`), while write-flavored operations keep Java's
+/// strict no-config guard (`writeFile`/`deleteFile` never consult the
+/// allow-list in `FileTools.java`).
+///
+/// The config value flows through [PropertyReader] exactly as in
+/// production: `setOverrides` stands in for the OS env tier the fa
+/// machine sets (`DMTOOLS_FILE_READ_ALLOWED_PATHS=...`).
+void configuredReadAllowlistTests() {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  final homeUsable =
+      home != null && home.isNotEmpty && !pathIsWithin(home, Directory.systemTemp.path);
+
+  group('FileToolExecutor read ops honor configured allowed paths (gh-367)',
+      skip: homeUsable ? null : 'no HOME outside the tmpdir to test against',
+      () {
+    final f = _SandboxFixture();
+    late Directory packJs;
+    late String module;
+
+    setUp(() {
+      f.setUp('dmtools_fsandbox_cfg');
+      final packDir =
+          '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
+      packJs = Directory(packDir)..createSync(recursive: true);
+      module = '$packDir/configLoader.js';
+      File(module).writeAsStringSync('module.exports={};');
+      PropertyReader.setOverrides({
+        'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+      });
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      Directory('$home/.dmtools-gh367-test').deleteSync(recursive: true);
+      f.tearDown();
+    });
+
+    test('read ops admit the pack module through the config', () async {
+      final ops = <String, Future<dynamic> Function()>{
+        'read': () => f.executor.read(module),
+        'readLines': () => f.executor.readLines(module),
+        'readJson': () => f.executor.readJson(module),
+        'exists': () => f.executor.exists(module),
+        'getFileInfo': () => f.executor.getFileInfo(module),
+        'getSize': () => f.executor.getSize(module),
+        'watch': () => f.executor.watch(module),
+      };
+      for (final entry in ops.entries) {
+        await expectLater(entry.value(), completes,
+            reason: '${entry.key} must admit $module via the config');
+      }
+      expect(await f.executor.read(module), 'module.exports={};');
+      expect(await f.executor.exists(module), isTrue);
+      expect((await f.executor.getFileInfo(module))['exists'], isTrue);
+    });
+
+    test('list/search over the admitted pack dir work', () async {
+      File('${packJs.path}/second.js').writeAsStringSync('// 2');
+      expect((await f.executor.list(packJs.path)), hasLength(2));
+      expect(await f.executor.search(packJs.path, '*.js'), hasLength(2));
+    });
+
+    test('write ops still reject the same configured path', () async {
+      await expectLater(
+        f.executor.write(module, 'overwritten'),
+        throwsA(isA<Exception>()),
+      );
+      expect(File(module).readAsStringSync(), 'module.exports={};',
+          reason: 'the write must not land');
+
+      await expectLater(
+        f.executor.delete(module),
+        throwsA(isA<Exception>()),
+      );
+      expect(File(module).existsSync(), isTrue,
+          reason: 'the delete must not happen');
+
+      await expectLater(
+        f.executor.mkdir('$home/.dmtools-gh367-test/extra'),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        Directory('$home/.dmtools-gh367-test/extra').existsSync(),
+        isFalse,
+      );
+
+      await expectLater(
+        f.executor.append(module, 'tail'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('copy/move endpoints stay strict both ways', () async {
+      await expectLater(
+        f.executor.copy(module, '${f.base.path}/leak.txt'),
+        throwsA(isA<Exception>()),
+      );
+      expect(File('${f.base.path}/leak.txt').existsSync(), isFalse);
+
+      await expectLater(
+        f.executor.copy(f.insideSource, module),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('without the override the same path stays blocked', () async {
+      PropertyReader.clearOverrides();
+
+      await expectLater(
+        f.executor.read(module),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 }

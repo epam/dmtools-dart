@@ -22,6 +22,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmtools/dmtools.dart' show PropertyReader, pathIsWithin;
 import 'package:dmtools/src/js/tool_bridge.dart';
 import 'package:dmtools/src/mcp/default_tool_registry.dart';
 import 'package:path/path.dart' as p;
@@ -37,6 +38,7 @@ void main() {
   fileWriteTests();
   fileSandboxTests();
   fileSandboxAllowedTests();
+  fileConfiguredAllowlistTests();
 }
 
 void fileListTests() {
@@ -418,6 +420,92 @@ void fileSandboxTmpdirAllowedTests() {
       } finally {
         other.deleteSync(recursive: true);
       }
+    });
+  });
+}
+
+/// gh-367: the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch on the
+/// synchronous bridge surface — the path the SM pack's `require()` chain
+/// actually takes (`file_read` of `~/.dmtools/packs/<pack>/js/*.js`).
+/// Read-flavored tools (`file_read`, `file_exists`, `file_list`,
+/// `file_read_lines`, `file_info`) admit a path only the configured globs
+/// allow (Java `FileTools.readFile`/`resolveSandboxedPath` consult
+/// `isAllowedByConfig`); write-flavored tools keep the strict guard.
+void fileConfiguredAllowlistTests() {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  final homeUsable = home != null &&
+      home.isNotEmpty &&
+      !pathIsWithin(home, Directory.systemTemp.path);
+
+  group('JS-bridge file_read configured allow-list (gh-367)',
+      skip: homeUsable ? null : 'no HOME outside the tmpdir to test against',
+      () {
+    late ToolBridge bridge;
+    late String packJs;
+    late String module;
+
+    setUp(() {
+      bridge = ToolBridge(
+        registry: createDefaultToolRegistry(),
+        workingDirectory: dir.path,
+      );
+      packJs = '$home/.dmtools-gh367-test/packs/sm_github-0.1.36/js';
+      Directory(packJs).createSync(recursive: true);
+      module = '$packJs/configLoader.js';
+      File(module).writeAsStringSync('module.exports={};');
+      PropertyReader.setOverrides({
+        'DMTOOLS_FILE_READ_ALLOWED_PATHS': '$home/.dmtools-gh367-test/**',
+      });
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      Directory('$home/.dmtools-gh367-test').deleteSync(recursive: true);
+    });
+
+    test('file_read answers the pack module content', () {
+      expect(
+        jsonDecode(bridge.execute('file_read', {'path': module})),
+        {'content': 'module.exports={};'},
+      );
+    });
+
+    test('the read-flavored family admits the pack dir', () {
+      File('$packJs/second.js').writeAsStringSync('// 2');
+
+      expect(
+        jsonDecode(bridge.execute('file_exists', {'path': module})),
+        isTrue,
+      );
+      final listed =
+          jsonDecode(bridge.execute('file_list', {'path': packJs}))
+              as Map<String, dynamic>;
+      expect((listed['entries'] as List).cast<String>(),
+          containsAll([module, '$packJs/second.js']));
+      expect(
+        jsonDecode(bridge.execute('file_read_lines', {'path': module})),
+        {'lines': ['module.exports={};']},
+      );
+    });
+
+    test('file_write to the same path keeps the strict envelope', () {
+      final result = jsonDecode(
+        bridge.execute('file_write', {'path': module, 'content': 'x'}),
+      ) as Map<String, dynamic>;
+
+      expect(result['error'], contains('Path traversal attempt blocked'));
+      expect(File(module).readAsStringSync(), 'module.exports={};',
+          reason: 'the write must not land');
+    });
+
+    test('without the override the same read stays blocked', () {
+      PropertyReader.clearOverrides();
+
+      final result =
+          jsonDecode(bridge.execute('file_read', {'path': module}))
+              as Map<String, dynamic>;
+      expect(result['error'], contains('Path traversal attempt blocked'));
     });
   });
 }

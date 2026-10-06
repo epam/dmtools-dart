@@ -14,7 +14,27 @@ void main() {
   validateTests();
   resolveTests();
   canonicalizePathTests();
+  matchesPatternTests();
+  configuredAllowlistTests();
 }
+
+/// A writable directory outside the base, the system temp dir, and any git
+/// repository root — the shape of the dmtools home (`~/.dmtools`) on the
+/// fa machine (gh-367). Null when the platform exposes no such directory
+/// (HOME under the temp dir, e.g. some Windows runners) — the groups that
+/// need it skip instead of passing for a wrong reason.
+final String? fakeHome = () {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  if (home == null || home.isEmpty) return null;
+  if (pathIsWithin(home, Directory.systemTemp.path)) return null;
+  return home;
+}();
+
+/// Path of a pack-internal module inside [fakeHome], the gh-367 failure
+/// shape: `~/.dmtools/packs/<agent>-<version>/js/configLoader.js`.
+String packModuleIn(String home, {String agent = 'sm_github-0.1.36'}) =>
+    '$home/.dmtools-gh367-test/packs/$agent/js/configLoader.js';
 
 /// `pathIsWithin` — the path-prefix containment check. Java
 /// `Path.startsWith` parity: separator-aware, so Windows backslash paths
@@ -292,6 +312,300 @@ void canonicalizePathTests() {
       final file = File('${real.path}/exists.txt')..writeAsStringSync('x');
 
       expect(canonicalizePath(file.path), file.resolveSymbolicLinksSync());
+    });
+  });
+}
+
+/// `matchesPattern` — a single `DMTOOLS_FILE_READ_ALLOWED_PATHS` glob
+/// pattern against an already-resolved path (gh-367, Java
+/// `FileTools.matchesPattern` parity, package-private static there /
+/// public here for the same testability reason). Pattern rules (Java
+/// `PathMatcher` glob + `Path.resolve` prefix semantics):
+///
+/// - no wildcard at all → exact match of `workingDir.resolve(pattern)`;
+/// - the literal prefix before the first wildcard resolves against
+///   `workingDir` (so `../.dmtools/**` names the sibling `.dmtools` of
+///   the working directory regardless of where the process started, and
+///   an absolute prefix passes through — `Path.resolve` semantics);
+/// - the glob suffix matches the path relative to that base: `**` crosses
+///   directory boundaries, `*`/`?` stay inside one segment, `[...]` and
+///   `{...}` per Java glob.
+void matchesPatternTests() {
+  const base = '/repo/work';
+
+  group('matchesPattern — wildcard suffix semantics', () {
+    test('** crosses directory boundaries', () {
+      expect(
+        matchesPattern('/repo/work/.dmtools/packs/p-1/js/loader.js',
+            base, '.dmtools/**'),
+        isTrue,
+      );
+      expect(matchesPattern('$base/.dmtools', base, '.dmtools/**'), isTrue);
+    });
+
+    test('* stays inside one segment', () {
+      expect(matchesPattern('$base/.dmtools/f.js', base, '.dmtools/*'),
+          isTrue);
+      expect(
+        matchesPattern('$base/.dmtools/js/f.js', base, '.dmtools/*'),
+        isFalse,
+        reason: '* must not cross the / boundary',
+      );
+    });
+
+    test('*.js matches a flat module only', () {
+      expect(matchesPattern('$base/configLoader.js', base, '*.js'), isTrue);
+      expect(matchesPattern('$base/js/configLoader.js', base, '*.js'),
+          isFalse);
+    });
+
+    test('literal segments before the suffix bind exactly', () {
+      expect(matchesPattern('$base/js/configLoader.js', base, 'js/*.js'),
+          isTrue);
+      expect(matchesPattern('$base/lib/configLoader.js', base, 'js/*.js'),
+          isFalse);
+    });
+
+    test('? matches exactly one character, never a separator', () {
+      expect(matchesPattern('$base/pack-a.js', base, 'pack-?.js'), isTrue);
+      expect(matchesPattern('$base/pack-ab.js', base, 'pack-?.js'), isFalse);
+      expect(matchesPattern('$base/pack-.js', base, 'pack-?.js'), isFalse);
+    });
+
+    test('[...] character classes with ranges and ! negation', () {
+      expect(matchesPattern('$base/pack-1.js', base, 'pack-[0-9].js'), isTrue);
+      expect(matchesPattern('$base/pack-x.js', base, 'pack-[0-9].js'),
+          isFalse);
+      expect(matchesPattern('$base/pack-x.js', base, 'pack-[!0-9].js'),
+          isTrue);
+    });
+
+    test('{...} alternatives, nested content included', () {
+      expect(matchesPattern('$base/js/loader.js', base, '{js,ts}/loader.js'),
+          isTrue);
+      expect(matchesPattern('$base/ts/loader.js', base, '{js,ts}/loader.js'),
+          isTrue);
+      expect(matchesPattern('$base/py/loader.js', base, '{js,ts}/loader.js'),
+          isFalse);
+    });
+  });
+
+  group('matchesPattern — prefix resolution against the working dir', () {
+    test('a relative prefix expands to the sibling of the working dir', () {
+      // The exact gh-367 shape: `../.dmtools/**` names the `.dmtools`
+      // directory NEXT TO the repo checkout, wherever the process runs.
+      expect(
+        matchesPattern('/repo/.dmtools/packs/p-1/js/c.js', base, '../.dmtools/**'),
+        isTrue,
+      );
+      expect(
+        matchesPattern('/repo/other/packs/p-1/js/c.js', base, '../.dmtools/**'),
+        isFalse,
+      );
+    });
+
+    test('a deeper relative prefix keeps resolving lexically', () {
+      expect(
+        matchesPattern('/home/r/.dmtools/packs/p/js/c.js', base,
+            '../../../.dmtools/**'),
+        isTrue,
+        reason: '3 up from /repo/work lands at /home/r',
+      );
+    });
+
+    test('an absolute prefix passes through (Path.resolve semantics)', () {
+      expect(
+        matchesPattern('/home/r/.dmtools/packs/p/js/c.js', base,
+            '/home/r/.dmtools/**'),
+        isTrue,
+      );
+    });
+
+    test('no wildcard means exact-path equality', () {
+      expect(
+        matchesPattern('/repo/.dmtools/loader.js', base,
+            '../.dmtools/loader.js'),
+        isTrue,
+      );
+      expect(
+        matchesPattern('/repo/.dmtools/other.js', base,
+            '../.dmtools/loader.js'),
+        isFalse,
+      );
+    });
+
+    test('a sibling with a shared name prefix is not swallowed', () {
+      expect(
+        matchesPattern('$base/.dmtools-x/f.js', base, '.dmtools/**'),
+        isFalse,
+      );
+    });
+  });
+}
+
+/// `resolveWithinAllowedBase` with `configuredAllowedPaths` — the
+/// `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch (gh-367, Java
+/// `FileTools.isAllowedByConfig` parity): after the base / tmpdir /
+/// git-root containment fails, a path matching one of the configured
+/// comma-separated globs is accepted. Read tools only — Java's write
+/// path (`writeFile`/`deleteFile`) keeps its plain startsWith guard and
+/// never consults the config.
+void configuredAllowlistTests() {
+  group('resolveWithinAllowedBase — configured allowed paths (gh-367)',
+      () {
+    late Directory base;
+
+    setUp(() => base = Directory.systemTemp.createTempSync('dmtools_allow'));
+    tearDown(() => base.deleteSync(recursive: true));
+
+    void seedPackModule() {
+      final js = Directory(p.dirname(packModuleIn(fakeHome!)))
+        ..createSync(recursive: true);
+      File('${js.path}/configLoader.js').writeAsStringSync('module.exports={};');
+    }
+
+    test('an absolute-prefix glob admits the pack module', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final module = packModuleIn(fakeHome!);
+
+      final resolved = resolveWithinAllowedBase(
+        module,
+        base.path,
+        configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+      );
+
+      expect(resolved, canonicalizePath(module));
+    });
+
+    test('a relative ..-prefix glob (the Java ../.dmtools shape) admits it',
+        () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final module = packModuleIn(fakeHome!);
+      final prefix = p.relative(p.dirname(p.dirname(p.dirname(module))),
+          from: base.path);
+
+      expect(
+        resolveWithinAllowedBase(
+          module,
+          base.path,
+          configuredAllowedPaths: '$prefix/**',
+        ),
+        canonicalizePath(module),
+      );
+    });
+
+    test('an exact no-wildcard pattern admits exactly that file', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final module = packModuleIn(fakeHome!);
+
+      expect(
+        resolveWithinAllowedBase(
+          module,
+          base.path,
+          configuredAllowedPaths: module,
+        ),
+        canonicalizePath(module),
+      );
+      expect(
+        () => resolveWithinAllowedBase(
+          '$fakeHome/.dmtools-gh367-test/packs/sm_github-0.1.36/js/other.js',
+          base.path,
+          configuredAllowedPaths: module,
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
+
+    test('a comma list tries every pattern, blanks skipped', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final module = packModuleIn(fakeHome!);
+
+      final resolved = resolveWithinAllowedBase(
+        module,
+        base.path,
+        configuredAllowedPaths:
+            ' /nonexistent-gh367/** , , $fakeHome/.dmtools-gh367-test/** ',
+      );
+
+      expect(resolved, canonicalizePath(module));
+    });
+
+    test('a blank config value behaves like an unset one', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+
+      expect(
+        () => resolveWithinAllowedBase(
+          packModuleIn(fakeHome!),
+          base.path,
+          configuredAllowedPaths: '   ',
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
+
+    test('* patterns do not admit nested pack modules', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+
+      expect(
+        () => resolveWithinAllowedBase(
+          packModuleIn(fakeHome!),
+          base.path,
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/*',
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
+
+    test('an unmatching prefix keeps the traversal blocked', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+
+      expect(
+        () => resolveWithinAllowedBase(
+          packModuleIn(fakeHome!),
+          base.path,
+          configuredAllowedPaths: '$fakeHome/.other-tools/**',
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
+
+    test('.. segments inside the path cannot smuggle past the pattern', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+
+      expect(
+        () => resolveWithinAllowedBase(
+          '$fakeHome/.dmtools-gh367-test/../elsewhere/f.js',
+          base.path,
+          configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+        ),
+        _throwsTraversalBlocked(),
+      );
+    });
+
+    test('two modules under one pattern both pass (multi-item)', () {
+      if (fakeHome == null) return;
+      seedPackModule();
+      final js = Directory(p.dirname(packModuleIn(fakeHome!)));
+      File('${js.path}/second.js').writeAsStringSync('// 2');
+
+      for (final name in ['configLoader.js', 'second.js']) {
+        expect(
+          resolveWithinAllowedBase(
+            '${js.path}/$name',
+            base.path,
+            configuredAllowedPaths: '$fakeHome/.dmtools-gh367-test/**',
+          ),
+          canonicalizePath('${js.path}/$name'),
+        );
+      }
     });
   });
 }

@@ -74,20 +74,24 @@ class _Scrubber {
 
   String run() {
     while (i < chars.length) {
-      final c = chars[i];
-      if (_isWhitespace(c)) {
-        i++;
-      } else if (c == _closeBrace && _closesInterpolation()) {
-        // Handled inside _closesInterpolation (resumes the template).
-      } else if (c == _slash && _tryConsumeSlash()) {
-        // Consumed as comment or regex literal.
-      } else if (_isQuoteCode(c) && _tryConsumeLiteral()) {
-        // Consumed a string/template literal.
-      } else {
-        _trackCode(c);
-      }
+      _dispatch(chars[i]);
     }
     return String.fromCharCodes(chars);
+  }
+
+  /// One state-machine step for the char at [i].
+  void _dispatch(int c) {
+    if (_isWhitespace(c)) {
+      i++;
+    } else if (c == _closeBrace && _closesInterpolation()) {
+      // Handled inside _closesInterpolation (resumes the template).
+    } else if (c == _slash && _tryConsumeSlash()) {
+      // Consumed as comment or regex literal.
+    } else if (_isQuoteCode(c) && _tryConsumeLiteral()) {
+      // Consumed a string/template literal.
+    } else {
+      _trackCode(c);
+    }
   }
 
   static bool _isWhitespace(int c) =>

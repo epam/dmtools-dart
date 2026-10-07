@@ -22,6 +22,8 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'js_scrubber.dart';
+
 /// The result of a compile: the produced artifacts.
 class PackResult {
   /// Creates a result with the produced artifact paths.
@@ -272,11 +274,12 @@ class AgentPackCompiler {
       File jsFile, Map<String, File> closure, Set<String> visitedJs) {
     final normalized = jsFile.absolute.path;
     if (!visitedJs.add(normalized)) return; // cycle safety
-    final content = stripJsComments(jsFile.readAsStringSync());
+    final content = jsFile.readAsStringSync();
     final parentDir = File(normalized).parent.path;
-    for (final match in _jsModuleRef.allMatches(_maskStringLiterals(content))) {
-      // The ref was masked out of the scanned text; recover it from the
-      // original content at the same offset (masking preserves length).
+    // The scrub is LENGTH-PRESERVING: match offsets in the scrubbed text
+    // are valid against the original, so the masked-out reference string
+    // is recovered from the original at the same offset.
+    for (final match in _jsModuleRef.allMatches(scrubForScan(content))) {
       final raw = content.substring(match.start, match.end);
       final refMatch = _jsModuleRef.firstMatch(raw);
       if (refMatch == null) continue;
@@ -285,48 +288,33 @@ class AgentPackCompiler {
     }
   }
 
-  /// Blanks out the CONTENTS of string/template literals (single, double,
-  /// backtick) while preserving every other byte, so `require(...)` calls
-  /// inside embedded worker-source strings are not treated as real module
-  /// references. Length-preserving so match offsets stay valid against the
-  /// original content. Comment stripping runs BEFORE this (stripJsComments).
-  static String _maskStringLiterals(String content) {
-    final chars = content.codeUnits.toList();
-    var quote = 0;
-    var i = 0;
-    while (i < chars.length) {
-      if (quote == 0) {
-        quote = _opensLiteral(chars[i]) ? chars[i] : 0;
-        i++;
-      } else {
-        final step = _maskLiteralChar(chars, i, quote);
-        i = step.next;
-        quote = step.quote;
-      }
-    }
-    return String.fromCharCodes(chars);
-  }
-
-  static bool _opensLiteral(int c) =>
-      c == 0x27 || c == 0x22 || c == 0x60; // ' " `
-
-  /// Masks one char inside a literal; returns the next index + quote state.
-  /// Keeps the closing quote, ends unterminated '...'/"..." at EOL.
-  static ({int next, int quote}) _maskLiteralChar(
-      List<int> chars, int i, int quote) {
-    final c = chars[i];
-    if (c == 0x5c && i + 1 < chars.length) {
-      chars[i] = 0x20; // blank the escape
-      chars[i + 1] = 0x20; // and the escaped char
-      return (next: i + 2, quote: quote);
-    }
-    if (c == quote) return (next: i + 1, quote: 0); // keep the closing quote
-    if (c == 0x0a && quote != 0x60) {
-      return (next: i + 1, quote: 0); // unterminated literal ends at EOL
-    }
-    chars[i] = 0x20; // blank literal contents (offset-stable)
-    return (next: i + 1, quote: quote);
-  }
+  /// Length-preserving scrub for the closure scan: blanks the CONTENTS of
+  /// comments, string/template literals, and regex literals while keeping
+  /// every byte count (structure chars — quotes, newlines — stay), so
+  /// `require('./x.js')` survives as `require('       ')` at identical
+  /// offsets and real code is distinguishable from embedded worker-source
+  /// strings.
+  ///
+  /// Regex-literal aware (gh-371): JS decides regex-vs-division from
+  /// expression position, so this lexer does too — a `/` in expression
+  /// position (after `(`, `,`, `=`, operators, keywords like `return`)
+  /// opens a regex literal consumed escape-aware to its closing unescaped
+  /// `/` (a `/` inside a `[...]` class never terminates). Without this, a
+  /// regex like `/[<>\`\|&;$\r\n]/g` (live: dmtools-agents
+  /// js/common/pullRequest.js:48) made the old masker open a phantom
+  /// template literal that swallowed every `require(...)` for the next
+  /// ~150 lines — pr_review packs shipped without js/common/mergeState.js
+  /// and every fa review leg requiring it went red.
+  ///
+  /// Template interpolations nest properly: `${` re-enters code state and
+  /// the matching `}` (brace-balanced) returns to the template, so nested
+  /// quotes/backticks inside `${...}` cannot desync the scan either.
+  ///
+  /// Belt and suspenders: in code state a quote preceded by an odd
+  /// backslash run is an escaped character, never a literal opener
+  /// (defensive for `\``-style escapes the regex consumer might miss).
+  /// Punctuation after which a `/` opens a regex (expression position).
+  static String scrubForScan(String src) => scrubJsForScan(src);
 
   /// Resolves one relative JS module reference and recurses into it.
   void _resolveJsModule(String ref, String parentDir, String fromFile,

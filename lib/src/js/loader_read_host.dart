@@ -62,13 +62,10 @@ const String hostFunctionsBootstrap = '''
     globalThis.file_read = function() {
         return __unwrapHostError(__fileReadHost.apply(null, arguments));
     };
-    // Host-private: the require() loader's own source read. Deliberately
-    // NOT the sandboxed file_read — Java `loadModule` reads module sources
-    // via `loadJavaScriptCode` (direct host IO); the FileTools sandbox
-    // governs agent tool calls only. Never referenced by agent code.
-    globalThis.__loaderFileRead = function() {
-        return __unwrapHostError(__loaderReadHost.apply(null, arguments));
-    };
+    // NOTE: `__loaderReadHost` is deliberately NOT wrapped/published here.
+    // The require() loader captures it into its closure on install and
+    // deletes the global (gh-369 review: leaving it reachable would let
+    // any agent script bypass the gh-365 containment in one call).
     globalThis.set_env_variable = function() {
         return __unwrapHostError(
             __setEnvVariableHost.apply(null, arguments));

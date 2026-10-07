@@ -135,8 +135,19 @@ NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
       );
   rt.setGlobal('params', params);
   _injectExtraGlobals(rt, ctx.extraGlobals);
-  installRequireLoader(rt);
   final registry = spec.registry ?? createDefaultToolRegistry();
+  // Order matters twice over (gh-369):
+  // 1. host functions are registered before [installRequireLoader] so the
+  //    loader can capture `__loaderReadHost` and delete the global;
+  // 2. the JS host wrappers are installed AFTER the generated tool
+  //    wrappers so the direct `file_read` host keeps precedence.
+  final bridge = ToolBridge(
+    registry: registry,
+    workingDirectory: spec.workingDirectory,
+    consolePrefix: spec.consolePrefix,
+  );
+  bridge.registerHostFunctions(rt);
+  installRequireLoader(rt);
   rt.eval(
     buildWrapperSource(registry, spec.integrationFilter),
     filename: '<tool_wrappers>',
@@ -147,11 +158,7 @@ NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
     // it with a virtual job file name.
     setScriptDirectory(rt, '${spec.scriptDirectory}/__jsr_job__.js');
   }
-  ToolBridge(
-    registry: registry,
-    workingDirectory: spec.workingDirectory,
-    consolePrefix: spec.consolePrefix,
-  ).registerOn(rt);
+  bridge.installHostWrappers(rt);
   return _installNodeCompatIfEnabled(rt, spec);
 }
 

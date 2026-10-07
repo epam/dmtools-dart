@@ -8,10 +8,12 @@
 /// The FFI host functions marshal results through JSON, so a host-side
 /// `require` could never return module exports containing functions. The
 /// loader therefore lives entirely in JS: it reads module sources through
-/// the host-private `__loaderFileRead` primitive (direct host IO, Java
-/// `loadJavaScriptCode` parity — deliberately not the sandboxed
+/// the host-private `__loaderReadHost` primitive, which it captures into
+/// its closure on install and deletes from `globalThis` (direct host IO,
+/// Java `loadJavaScriptCode` parity — deliberately not the sandboxed
 /// `file_read`, whose containment would block pack-internal modules,
-/// gh-369) and evaluates them with `eval()`, so real JS objects
+/// gh-369; the closure capture keeps the uncontained read unreachable
+/// from agent code) and evaluates them with `eval()`, so real JS objects
 /// (functions included) flow between modules.
 ///
 /// Semantics ported 1:1 from Java:
@@ -41,9 +43,9 @@ import 'package:quickjs_runtime/quickjs_runtime.dart';
 /// Installs `globalThis.require` and `globalThis.__setScriptDirectory` on
 /// [runtime].
 ///
-/// Must run before the user script is evaluated; `require` only invokes
-/// `file_read` at script runtime, so the host function may be registered
-/// later.
+/// Must run before the user script is evaluated. The bootstrap captures
+/// the `__loaderReadHost` host function into its closure and deletes the
+/// global, so it must run AFTER the host functions are registered.
 void installRequireLoader(QuickjsRuntime runtime) {
   runtime.eval(_requireLoaderBootstrap, filename: '<require_loader>');
 }
@@ -55,6 +57,24 @@ void installRequireLoader(QuickjsRuntime runtime) {
 /// whose cache is cleared on `close()`.
 const String _requireLoaderBootstrap = '''
 (function() {
+    // Capture the host read primitive and remove its global: after this
+    // IIFE runs, __loaderReadHost is reachable ONLY through require()
+    // (gh-369 review: a lingering global let agent scripts bypass the
+    // gh-365 file containment with one direct call).
+    var loaderReadHost = globalThis.__loaderReadHost;
+    delete globalThis.__loaderReadHost;
+    function unwrapHostError(result) {
+        if (result !== null && result !== undefined &&
+                typeof result === 'object' &&
+                result.__jsError !== undefined) {
+            throw new Error(result.__jsError);
+        }
+        return result;
+    }
+    function loaderFileRead(path) {
+        return unwrapHostError(loaderReadHost(path));
+    }
+
     var currentScriptDirectory = '';
     var moduleCache = {};
 
@@ -99,11 +119,12 @@ const String _requireLoaderBootstrap = '''
     }
 
     function readModuleCode(resolvedPath) {
-        // Host-private direct read (Java loadJavaScriptCode parity) — NOT
-        // the sandboxed file_read: module sources are host-trusted loader
-        // input, so packs under ~/.dmtools load regardless of the
-        // working-dir containment (gh-369).
-        var content = __loaderFileRead(resolvedPath);
+        // Host-private direct read captured in this closure (Java
+        // loadJavaScriptCode parity) — NOT the sandboxed file_read:
+        // module sources are host-trusted loader input, so packs under
+        // ~/.dmtools load regardless of the working-dir containment
+        // (gh-369).
+        var content = loaderFileRead(resolvedPath);
         if (content === null || content === undefined) {
             throw new Error('JavaScript file not found in resources or ' +
                 'filesystem: ' + resolvedPath);

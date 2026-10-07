@@ -27,6 +27,8 @@ import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
+
+import 'loader_read_host.dart';
 import 'sync_tool_dispatcher.dart';
 
 /// Registers JS host functions backed by the Dart MCP tool registry.
@@ -68,22 +70,43 @@ class ToolBridge {
   /// the `console` object as globals on [runtime].
   ///
   /// The host functions are registered under private `__…Host` names and
-  /// wrapped by [_hostFunctionBootstrap] under the public global names:
-  /// FFI host functions cannot throw into JS (stray Dart exceptions surface
-  /// as JS `undefined`), so argument-validation failures return a
+  /// wrapped by the JS bootstrap under the public global names
+  /// (`__loaderReadHost` is the exception: the require loader captures it
+  /// into its closure and deletes the global, gh-369): FFI host functions
+  /// cannot throw into JS (stray Dart exceptions surface as JS
+  /// `undefined`), so argument-validation failures return a
   /// `{'__jsError': …}` sentinel that the JS wrapper rethrows as a real
   /// JS `Error` — mirroring Java `IllegalArgumentException` propagation.
   ///
-  /// Must be called **after** tool wrappers are generated so that the direct
-  /// `file_read` host function (returning the raw content string) takes
+  /// [wireEngine] calls this in two steps — [registerHostFunctions] before
+  /// the require loader, [installHostWrappers] after the tool wrappers —
+  /// so the direct `file_read` host function (returning the raw content
+  /// string) takes
   /// precedence over any generated wrapper that dispatches via
   /// `executeToolViaJava`.
   void registerOn(QuickjsRuntime runtime) {
+    registerHostFunctions(runtime);
+    installHostWrappers(runtime);
+  }
+
+  /// Step 1 of [registerOn]: registers the raw FFI host functions and the
+  /// console. Runs FIRST in [wireEngine] so the require loader can capture
+  /// `__loaderReadHost` into its closure (and delete the global) at
+  /// install time (gh-369).
+  void registerHostFunctions(QuickjsRuntime runtime) {
     runtime.registerHostFunction('__executeToolViaJavaHost', _dispatchToolCall);
     runtime.registerHostFunction('__fileReadHost', _fileReadHost);
+    runtime.registerHostFunction('__loaderReadHost', loaderReadHost);
     runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
     _registerConsole(runtime, _consolePrefix);
-    runtime.eval(_hostFunctionBootstrap, filename: '<host_functions>');
+  }
+
+  /// Step 2 of [registerOn]: evaluates the JS bootstrap wrapping the host
+  /// functions under their public global names. Runs LAST in [wireEngine]
+  /// (after the generated tool wrappers) so the direct `file_read` host
+  /// function keeps precedence over any generated wrapper.
+  void installHostWrappers(QuickjsRuntime runtime) {
+    runtime.eval(hostFunctionsBootstrap, filename: '<host_functions>');
   }
 
   /// Dispatch table for synchronous file tool execution.
@@ -668,29 +691,6 @@ class ToolBridge {
 /// a `{'__jsError': <message>}` sentinel object; the wrapper turns that
 /// into a real JS `Error` (Java `IllegalArgumentException` parity). All
 /// other results pass through untouched.
-const String _hostFunctionBootstrap = '''
-(function() {
-    function __unwrapHostError(result) {
-        if (result !== null && result !== undefined &&
-                typeof result === 'object' &&
-                result.__jsError !== undefined) {
-            throw new Error(result.__jsError);
-        }
-        return result;
-    }
-    globalThis.executeToolViaJava = function() {
-        return __unwrapHostError(
-            __executeToolViaJavaHost.apply(null, arguments));
-    };
-    globalThis.file_read = function() {
-        return __unwrapHostError(__fileReadHost.apply(null, arguments));
-    };
-    globalThis.set_env_variable = function() {
-        return __unwrapHostError(
-            __setEnvVariableHost.apply(null, arguments));
-    };
-})();
-''';
 
 /// JS bootstrap that builds the `console` object over the private host
 /// functions registered by [_registerConsole].

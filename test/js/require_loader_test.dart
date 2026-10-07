@@ -12,11 +12,13 @@ import 'package:test/test.dart';
 /// currentScriptDirectory save/restore contract from Java `loadModule`.
 void main() {
   _requireLoadsModuleRelativeToScript();
+  _loaderHostReadNotReachableAsGlobal();
   _requireNormalizesParentSegments();
   _requireRestoresScriptDirectory();
   _requireCachesModules();
   _requireFailsForMissingModule();
   _requireArgumentValidation();
+  _requireLoadsPackModuleWithoutAnyAllowlist();
   _requireLoadsConfiguredPackModule();
 }
 
@@ -48,6 +50,34 @@ var util = require('./util.js');
 function action(params) { return util.greet(params.jobParams.name); }
 ''');
       expect(_run(main, {'name': 'module'}), 'hi module');
+    } finally {
+      dir.deleteSync(recursive: true);
+    }
+  });
+}
+
+/// gh-369 review BLOCK: the uncontained host read must not stay reachable
+/// as a JS global after the loader installs — otherwise any agent script
+/// bypasses the gh-365 containment with one direct call (the reviewer
+/// demonstrated reading ~/.dmtools/version.txt, next stop dmtools.env).
+void _loaderHostReadNotReachableAsGlobal() {
+  test('__loaderReadHost and __loaderFileRead are gone from globalThis', () {
+    final dir = Directory.systemTemp.createTempSync('dmtools_req_glob');
+    try {
+      final main = _writeScript(dir.path, 'main.js', '''
+function action(params) {
+    return {
+        host: typeof __loaderReadHost,
+        fileRead: typeof __loaderFileRead,
+        require: typeof require
+    };
+}
+''');
+      expect(_run(main, {}), {
+        'host': 'undefined',
+        'fileRead': 'undefined',
+        'require': 'function'
+      });
     } finally {
       dir.deleteSync(recursive: true);
     }
@@ -189,13 +219,52 @@ void _requireArgumentValidation() {
   }
 }
 
+/// gh-369: the loader is a HOST primitive (Java `loadJavaScriptCode`
+/// parity) — it must read module sources with NO allowlist and NO
+/// containment, exactly like the live SM tick pulling
+/// `~/.dmtools/packs/<pack>/js/…` under a job workdir; while the
+/// AGENT-visible `file_read` of the same path stays sandboxed (gh-365).
+void _requireLoadsPackModuleWithoutAnyAllowlist() {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+  final usable = home != null &&
+      home.isNotEmpty &&
+      !pathIsWithin(home, Directory.systemTemp.path);
+
+  test('require loads a pack module with no allowlist; file_read stays blocked',
+      skip: usable ? null : 'no HOME outside the tmpdir to test against', () {
+    final packJs = Directory('$home/.dmtools-gh369-test-req/packs/p/js');
+    packJs.createSync(recursive: true);
+    File('${packJs.path}/configLoader.js')
+        .writeAsStringSync('exports.loaded = true;');
+    final dir = Directory.systemTemp.createTempSync('dmtools_req_norule');
+    try {
+      // No DMTOOLS_FILE_READ_ALLOWED_PATHS override anywhere: the live
+      // v0.1.41 SM-tick shape.
+      final main = _writeScript(dir.path, 'main.js', '''
+var loader = require("$home/.dmtools-gh369-test-req/packs/p/js/configLoader.js");
+var agentRead = file_read({ path: "$home/.dmtools-gh369-test-req/packs/p/js/configLoader.js" });
+function action(params) {
+  return loader.loaded === true && (agentRead === null || agentRead === undefined);
+}
+''');
+
+      expect(_run(main, {}), isTrue);
+    } finally {
+      Directory('$home/.dmtools-gh369-test-req').deleteSync(recursive: true);
+      dir.deleteSync(recursive: true);
+    }
+  });
+}
+
 /// gh-367: a pack-internal require — the SM pack's loader pulls sibling
 /// modules from `~/.dmtools/packs/<pack>/js/…`, an absolute path OUTSIDE
-/// the repo workdir. The `require` chain reads through the direct
-/// `file_read` host function, so the configured
-/// `DMTOOLS_FILE_READ_ALLOWED_PATHS` glob (Java `FileTools`
-/// `isAllowedByConfig` parity) must admit it there too — otherwise the
-/// whole require chain dies and the SM tick exits 1.
+/// the repo workdir. The `require` chain reads through the direct host
+/// read, so the configured `DMTOOLS_FILE_READ_ALLOWED_PATHS` glob (Java
+/// `FileTools` `isAllowedByConfig` parity) admits the sandboxed
+/// `file_read` of the same path there too — otherwise the agent-visible
+/// read dies while the loader keeps working (gh-369 made the loader
+/// host-side).
 void _requireLoadsConfiguredPackModule() {
   final home =
       Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];

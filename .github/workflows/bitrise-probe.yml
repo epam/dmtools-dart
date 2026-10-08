@@ -9,8 +9,9 @@ name: Bitrise runner probe
 # (= Bitrise auto-label "bitrise-runner-<pool>" for pool "dmtools-ci").
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  # No pull_request trigger (2026-10-08): the pool stopped picking up jobs, so this probe sat
+  # queued forever on every PR and held the PR's overall status at PENDING. Run it manually
+  # (workflow_dispatch) when you want to know whether the pool is back.
   workflow_dispatch:
 
 jobs:

@@ -10,6 +10,7 @@ library;
 import 'dart:io';
 
 import '../sync_http_client.dart';
+import 'sync_binary_upload.dart';
 import 'sync_request_helpers.dart';
 
 /// Runs the `github_upload_release_asset` flow for [args].
@@ -108,43 +109,13 @@ String _uploadAssetBytes({
     url += '&label=${Uri.encodeQueryComponent(asset.label.trim())}';
   }
   return syncBodyOrError(
-    _curlUpload(url, {...headers, 'Content-Type': asset.contentType}, file),
-  );
-}
-
-/// Runs the binary upload curl command with staged headers.
-SyncHttpResponse _curlUpload(
-  String url,
-  Map<String, String> headers,
-  File file,
-) {
-  final dir = Directory.systemTemp.createTempSync('dmtools_gh_upload_');
-  try {
-    final headerFile = File('${dir.path}/headers')
-      ..writeAsStringSync(
-        SyncHttpClient.renderHeaderFile(headers),
-        flush: true,
-      );
-    final result = Process.runSync('curl', [
-      '-s',
-      '-X',
-      'POST',
-      '-w',
-      '\n%{http_code}',
-      '--connect-timeout',
-      '10',
-      '--max-time',
-      '60',
-      '-H',
-      '@${headerFile.path}',
-      '--data-binary',
-      '@${file.path}',
+    syncCurlUpload(
       url,
-    ]);
-    return SyncHttpClient.parseResponse(result);
-  } finally {
-    dir.deleteSync(recursive: true);
-  }
+      {...headers, 'Content-Type': asset.contentType},
+      file,
+      tempPrefix: 'dmtools_gh_upload_',
+    ),
+  );
 }
 
 /// Content-type guess for common asset extensions.

@@ -24,6 +24,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
 
     DELETE_LOG = []
     REQUEST_LOG = []
+    FULL_LOG = []
     RETRY_HITS = {}
 
     def _send(self, encoded, content_type="application/json"):
@@ -42,6 +43,12 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             EchoHandler.DELETE_LOG.append(self.path)
         if not self.path.startswith("/__"):
             EchoHandler.REQUEST_LOG.append(self.path)
+            EchoHandler.FULL_LOG.append({
+                "method": self.command,
+                "path": self.path,
+                "body": body,
+                "headers": {k: v for k, v in self.headers.items()},
+            })
         payload = {
             "method": self.command,
             "path": self.path,
@@ -183,6 +190,9 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             return
         # Recorded DELETE paths, so tests can assert which deletions the
         # client performed against this server instance.
+        if self.path == "/__full_log":
+            self._send(json.dumps(EchoHandler.FULL_LOG).encode("utf-8"))
+            return
         if self.path == "/__delete_log":
             self._send(json.dumps(EchoHandler.DELETE_LOG).encode("utf-8"))
             return
@@ -656,6 +666,32 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload["count"] = 1
             payload["value"] = [
                 {"id": 7, "fields": {"System.Title": "T"}}
+            ]
+        elif self.command == "POST" and "/wit/attachments" in self.path:
+            # ADO attach-file fixture: the upload answers {id, url}.
+            payload["id"] = "att-1"
+            payload["url"] = "http://ado.example/_apis/wit/attachments/att-1"
+        elif (self.command == "POST"
+              and "/wit/workitems/$" in self.path):
+            # ADO create fixture: the created work item carries id 321.
+            payload["id"] = 321
+        elif self.command == "GET" and "/wit/fields" in self.path:
+            # ADO field-catalog fixture for ado_get_field_code.
+            payload.clear()
+            payload["value"] = [
+                {"name": "Title", "referenceName": "System.Title"},
+                {"name": "Solution Design",
+                 "referenceName": "Custom.SolutionDesign"},
+            ]
+        elif (self.command == "GET"
+              and "/wit/workitems/55" in self.path):
+            # ADO attach-file fixture: item 55 already has shot.png attached.
+            payload.clear()
+            payload["id"] = 55
+            payload["relations"] = [
+                {"rel": "AttachedFile",
+                 "attributes": {"name": "Shot.PNG"}},
+                {"rel": "System.LinkTypes.Related", "attributes": {}},
             ]
         elif (self.command == "GET"
               and "/wit/workitems/9" in self.path):

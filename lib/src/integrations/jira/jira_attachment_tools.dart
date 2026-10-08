@@ -5,6 +5,7 @@ part of 'jira_tools.dart';
 List<ToolDefinition> _attachmentTools() => [
       _jiraTool(
         name: 'jira_attach_file_to_ticket',
+        aliases: ['tracker_attach_file'],
         description: 'Attach a file to a Jira ticket via multipart upload',
         params: [
           _keyParam,

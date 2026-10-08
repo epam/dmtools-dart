@@ -312,9 +312,10 @@ void workItemCatalogParamShapeTests() {
       expect(tool.params.single.type, 'number');
     });
 
-    test('ado_add_work_item_comment declares id and text', () {
+    test('ado_add_work_item_comment declares id and comment (text alias)', () {
       final tool = toolNamed('ado_add_work_item_comment');
-      expect(tool.params.map((p) => p.name), ['id', 'text']);
+      expect(tool.params.map((p) => p.name), ['id', 'comment']);
+      expect(tool.params[1].aliases, ['text']);
     });
 
     test('ado_create_work_item_link declares numeric ids and linkType', () {

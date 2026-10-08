@@ -13,6 +13,19 @@ void main() {
   executorEdgeCaseTests();
 }
 
+/// Ticket-operation tools added for dm.ai #661, in declaration order.
+const _ticketOpNames = [
+  'ado_move_to_state',
+  'ado_assign_work_item',
+  'ado_update_description',
+  'ado_update_tags',
+  'ado_update_field',
+  'ado_set_priority',
+  'ado_get_field_code',
+  'ado_link_work_items',
+  'ado_attach_file',
+];
+
 /// Looks up a registered tool by name.
 ToolDefinition toolNamed(String name) =>
     adoTools().firstWhere((t) => t.name == name);
@@ -44,6 +57,7 @@ void catalogOrderTests() {
         'ado_add_work_item_comment',
         'ado_add_work_item_label',
         'ado_remove_work_item_label',
+        ..._ticketOpNames,
         'ado_get_teams',
         'ado_get_team_members',
         'ado_get_project_details',
@@ -98,10 +112,20 @@ void catalogTests() {
       expect(tool.params.single.type, 'number');
     });
 
-    test('ado_create_work_item declares required type and title', () {
+    test('ado_create_work_item declares the Java params', () {
       final tool = toolNamed('ado_create_work_item');
-      expect(tool.params.map((p) => p.name), ['type', 'title']);
-      expect(tool.params.every((p) => p.required), isTrue);
+      expect(tool.params.map((p) => p.name), [
+        'project',
+        'workItemType',
+        'title',
+        'description',
+        'fieldsJson',
+        'parentId',
+      ]);
+      expect(
+        tool.params.where((p) => p.required).map((p) => p.name),
+        ['project', 'workItemType', 'title'],
+      );
     });
 
     test('ado_list_prs makes status optional', () {
@@ -135,12 +159,15 @@ void executorRoutingTests() {
       expect(f.spy.calls, ['getWorkItem:42']);
     });
 
-    test('routes ado_create_work_item with type and title', () async {
+    test('routes ado_create_work_item to the work-item ops', () async {
       await f.executor.execute('ado_create_work_item', {
-        'type': 'Bug',
+        'project': 'dmtools',
+        'workItemType': 'Bug',
         'title': 'Fix bug',
       });
-      expect(f.spy.calls, ['createWorkItem:Bug:Fix bug']);
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(call.path, endsWith('/dmtools/_apis/wit/workitems/\$Bug'));
     });
 
     test('routes ado_list_prs with an explicit status', () async {
@@ -177,12 +204,17 @@ void executorEdgeCaseTests() {
 }
 
 /// A spy client plus the executor bound to it.
-typedef _ExecutorFixture = ({AdoToolExecutor executor, _SpyAdoClient spy});
+typedef _ExecutorFixture = ({
+  AdoToolExecutor executor,
+  _SpyAdoClient spy,
+  RoutingAdapter adapter,
+});
 
 /// Builds a [_SpyAdoClient] over the mocked transport and wraps it.
 _ExecutorFixture _executorFixture() {
-  final spy = _SpyAdoClient(mockAdoHttp(_spyRouter).http);
-  return (executor: AdoToolExecutor(spy), spy: spy);
+  final fix = mockAdoHttp(_spyRouter);
+  final spy = _SpyAdoClient(fix.http);
+  return (executor: AdoToolExecutor(spy), spy: spy, adapter: fix.adapter);
 }
 
 /// Records every dispatched call then delegates to the real client logic.
@@ -201,12 +233,6 @@ class _SpyAdoClient extends AdoClient {
   Future<Map<String, dynamic>> getWorkItem(int id) {
     calls.add('getWorkItem:$id');
     return super.getWorkItem(id);
-  }
-
-  @override
-  Future<Map<String, dynamic>> createWorkItem(String type, String title) {
-    calls.add('createWorkItem:$type:$title');
-    return super.createWorkItem(type, title);
   }
 
   @override

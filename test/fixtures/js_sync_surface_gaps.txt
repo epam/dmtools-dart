@@ -10,10 +10,8 @@
 # wrappers are generated for the whole registry while the sync bridge
 # was grown agent-surface-first (Java exposes all @MCPTool to JS).
 ado_add_pull_request_reviewer
-ado_add_work_item_comment
 ado_create_pull_request_status
 ado_create_repo
-ado_create_work_item
 ado_create_work_item_link
 ado_get_builds
 ado_get_commits
@@ -28,7 +26,6 @@ ado_get_repo_file
 ado_get_repos
 ado_get_team_members
 ado_get_teams
-ado_get_work_item_comments
 ado_get_work_item_revisions
 ado_get_work_item_types
 ado_get_work_items

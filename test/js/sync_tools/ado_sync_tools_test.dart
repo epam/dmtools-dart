@@ -46,6 +46,18 @@ void _testHandlerSurface() {
     const tools = AdoSyncTools();
     final names = [
       'ado_get_work_item',
+      'ado_add_work_item_comment',
+      'ado_get_work_item_comments',
+      'ado_move_to_state',
+      'ado_assign_work_item',
+      'ado_create_work_item',
+      'ado_link_work_items',
+      'ado_update_description',
+      'ado_update_tags',
+      'ado_update_field',
+      'ado_set_priority',
+      'ado_get_field_code',
+      'ado_attach_file',
       'ado_list_work_items',
       'ado_list_prs',
       'ado_get_pr',

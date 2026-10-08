@@ -1,5 +1,4 @@
 ado_add_pr_reviewer
-ado_assign_work_item
 ado_delete_pr_comment
 ado_download_attachment
 ado_get_changelog
@@ -8,14 +7,10 @@ ado_get_pipeline_run
 ado_get_pr_reviewers
 ado_get_pr_work_items
 ado_get_user_by_email
-ado_link_work_items
-ado_move_to_state
 ado_search_by_wiql
 ado_set_pr_vote
-ado_update_description
 ado_update_pr
 ado_update_pr_comment
-ado_update_tags
 bitbucket_test
 bitrise_abort_pipeline
 bitrise_delete_secret

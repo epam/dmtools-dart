@@ -1,5 +1,3 @@
-ado_add_work_item_comment:id,comment
-ado_create_work_item:project,workItemType,title,description,fieldsJson
 ado_get_pr:repository,pullRequestId
 ado_get_work_item:id,fields
 ado_get_work_item_comments:id,ticket

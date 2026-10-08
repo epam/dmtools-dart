@@ -74,6 +74,11 @@ class AdoHttpClient extends BaseHttpClient {
   String buildUrl(String path) =>
       '$basePath/$_organization/$_project/_apis/$path';
 
+  /// Builds a URL scoped to an explicit [project] (Java tools that take a
+  /// `project` argument): `{base}/{organization}/{project}/_apis/{path}`.
+  String buildProjectUrl(String project, String path) =>
+      '$basePath/$_organization/${Uri.encodeComponent(project)}/_apis/$path';
+
   /// Builds an organization-scoped URL: `{base}/{organization}/_apis/{path}`.
   String buildOrgUrl(String path) => '$basePath/$_organization/_apis/$path';
 
@@ -124,9 +129,10 @@ class AdoHttpClient extends BaseHttpClient {
     String path, {
     Object? body,
     String contentType = 'application/json',
+    String? project,
   }) async {
     final response = await dio.request<String>(
-      buildUrl(path),
+      project == null ? buildUrl(path) : buildProjectUrl(project, path),
       data: body,
       queryParameters: {'api-version': apiVersion},
       options: Options(
@@ -151,12 +157,44 @@ class AdoHttpClient extends BaseHttpClient {
 
   /// POSTs a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item creation.
-  Future<String> postPatch(String path, {Object? body}) => _request(
+  ///
+  /// [project] overrides the configured project (create-by-project tools).
+  Future<String> postPatch(String path, {Object? body, String? project}) =>
+      _request(
         'POST',
         path,
         body: body,
         contentType: 'application/json-patch+json',
+        project: project,
       );
+
+  /// GETs [path] under an explicit [project] with the API version attached.
+  Future<String> getInProject(String project, String path) async {
+    final response = await dio.get<String>(
+      buildProjectUrl(project, path),
+      queryParameters: {'api-version': apiVersion},
+      options: Options(headers: headers),
+    );
+    return response.data ?? '';
+  }
+
+  /// POSTs raw [bytes] (`application/octet-stream`) to `wit/attachments`
+  /// with `fileName=[name]` — step 1 of the attach-file flow.
+  Future<String> uploadAttachment(String name, List<int> bytes) async {
+    final response = await dio.post<String>(
+      buildUrl('wit/attachments'),
+      data: Stream.fromIterable([bytes]),
+      queryParameters: {'fileName': name, 'api-version': apiVersion},
+      options: Options(
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': '${bytes.length}',
+        },
+      ),
+    );
+    return response.data ?? '';
+  }
 
   /// PATCHes a JSON body, attaching the API version as a query parameter. Used
   /// to update pull requests (ADO accepts a plain-JSON PATCH for PR fields).

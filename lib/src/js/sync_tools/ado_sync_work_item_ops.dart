@@ -144,7 +144,9 @@ String _createWorkItem(AdoSyncConfig c, Map<String, dynamic> a) {
       ? c.baseUrl
       : '${_orgUrl(c)}/${Uri.encodeComponent(project)}/_apis';
   final response = syncBodyOrError(SyncHttpClient.post(
-    '$base/wit/workitems/\$$type?api-version=$_apiVersion',
+    // The type goes into the PATH: 'User Story' has a space, which curl rejects (exit 3) —
+    // Java's OkHttp encoded it implicitly.
+    '$base/wit/workitems/\$${Uri.encodeComponent(type)}?api-version=$_apiVersion',
     headers: _patchHeaders(c),
     body: adoCreatePatch(adoArg(a, ['title', 'summary']),
         adoArg(a, ['description']), fieldsJson as Map<String, dynamic>?),

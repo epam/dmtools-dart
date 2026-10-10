@@ -118,6 +118,20 @@ const Map<String, List<String>> kGithubRequiredParams = {
 
 /// `gitlab_*` tools with Java-required parameters, in Java declaration
 /// order (extracted from `GitLab.java` `@MCPParam(required = true)`).
+///
+/// gh-380 AC5 (catalog/runtime coherence): a row may only exist for a
+/// tool with a live sync handler. Declaring a name the dispatcher
+/// rejects is the phantom-tool trap behind CM-3626 — the call looks
+/// supported, then the runtime answers 'Unsupported GitLab tool'.
+/// Rows for not-yet-ported Java tools (`gitlab_cancel_job`,
+/// `gitlab_delete_release_asset`, `gitlab_get_mr_activities`,
+/// `gitlab_get_pipeline_jobs`, `gitlab_list_release_assets`) are
+/// dropped until their executor lands; they stay tracked in
+/// `test/fixtures/java_mcp_tool_gaps.txt`. Registry tools that take a
+/// plain `project` arg (`gitlab_get_pipelines`/`gitlab_get_pipeline`)
+/// declare the sync surface's `workspace`/`repository` pair — the
+/// convention every sync GitLab handler resolves via
+/// `gitlabEncodedProjectArg`.
 const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_add_inline_mr_comment': [
     // Java also marks baseSha/headSha/startSha required, but the Dart
@@ -133,7 +147,6 @@ const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_add_mr_comment': ['workspace', 'repository', 'pullRequestId', 'text'],
   'gitlab_add_mr_label': ['workspace', 'repository', 'pullRequestId', 'label'],
   'gitlab_approve_mr': ['workspace', 'repository', 'pullRequestId'],
-  'gitlab_cancel_job': ['workspace', 'repository', 'jobId'],
   'gitlab_create_mr': [
     'workspace',
     'repository',
@@ -142,12 +155,6 @@ const Map<String, List<String>> kGitlabRequiredParams = {
     'title',
   ],
   'gitlab_create_mr_note': ['workspace', 'repository', 'pullRequestId', 'text'],
-  'gitlab_delete_release_asset': [
-    'workspace',
-    'repository',
-    'tagName',
-    'assetName',
-  ],
   'gitlab_download_release_asset': [
     'workspace',
     'repository',
@@ -158,19 +165,18 @@ const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_get_commit_statuses': ['workspace', 'repository', 'commitSha'],
   'gitlab_get_job_logs': ['workspace', 'repository', 'jobId'],
   'gitlab_get_mr': ['workspace', 'repository', 'pullRequestId'],
-  'gitlab_get_mr_activities': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_mr_comments': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_mr_diff': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_mr_diff_text': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_mr_discussions': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_mr_pipelines': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_get_or_create_release': ['workspace', 'repository', 'tagName'],
-  'gitlab_get_pipeline_jobs': ['workspace', 'repository', 'pipelineId'],
+  'gitlab_get_pipeline': ['workspace', 'repository', 'pipelineId'],
+  'gitlab_get_pipelines': ['workspace', 'repository'],
   'gitlab_list_issues': ['workspace', 'repository'],
   'gitlab_list_mrs': ['workspace', 'repository', 'state'],
   'gitlab_list_pipeline_runs': ['workspace', 'repository'],
   'gitlab_list_project_jobs': ['workspace', 'repository'],
-  'gitlab_list_release_assets': ['workspace', 'repository', 'tagName'],
   'gitlab_merge_mr': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_rebase_mr': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_remove_mr_label': [
@@ -243,6 +249,7 @@ const Map<String, List<String>> kGithubAcceptedNames = {
 /// Java's).
 const Map<String, List<String>> kGitlabAcceptedNames = {
   'gitlab_get_mr': ['project', 'iid'],
+  'gitlab_get_pipeline': ['pipeline_id'],
   'gitlab_create_mr_note': ['project', 'iid'],
   'gitlab_list_mrs': ['project'],
 };

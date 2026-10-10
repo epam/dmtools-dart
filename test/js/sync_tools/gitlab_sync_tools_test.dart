@@ -34,6 +34,7 @@ void main() {
     _testMrTools();
     _testThreadTools();
     _testCiTools();
+    _testJobListTools();
     _testReleaseTools();
   }
   _testDiffHelpers();
@@ -68,6 +69,9 @@ void _testHandlerSurface() {
       'gitlab_get_commit_statuses',
       'gitlab_get_job_logs',
       'gitlab_list_pipeline_runs',
+      'gitlab_list_project_jobs',
+      'gitlab_get_pipelines',
+      'gitlab_get_pipeline',
       'gitlab_trigger_pipeline',
       'gitlab_create_mr',
       'gitlab_get_or_create_release',
@@ -524,6 +528,186 @@ void testcitools_p2() {
       'variablesJson': 'not-json{',
     });
     expect(jsonDecode(result), {'error': 'Invalid variablesJson'});
+  });
+}
+
+/// gh-380: `gitlab_list_project_jobs` (project + pipeline scope, exact
+/// name filter) and the `gitlab_get_pipeline(s)` coherence closures.
+void _testJobListTools() {
+  group('GitLabSyncTools job listing tools', () {
+    setUp(() async {
+      server = EchoServer();
+      await server.start();
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'http://127.0.0.1:${server.port}',
+        'GITLAB_TOKEN': 'glpat-test',
+      });
+    });
+
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+
+    testjoblisttools_p1();
+    testjoblisttools_p2();
+  });
+}
+
+void testjoblisttools_p1() {
+  test('gitlab_list_project_jobs GETs the project jobs, newest first',
+      () {
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+    });
+    final jobs = jsonDecode(result) as List<dynamic>;
+    expect(jobs.map((j) => j['id']), [101, 102]);
+    final request = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+    });
+    expect(request['method'], 'GET');
+    expect(request['path'],
+        '/api/v4/projects/g%2Fr/jobs?per_page=20&page=1');
+  });
+
+  test('gitlab_list_project_jobs honors per_page and page (max 100 '
+      'clamp)', () {
+    final body = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'per_page': '250',
+      'page': '3',
+    });
+    expect(body['path'],
+        '/api/v4/projects/g%2Fr/jobs?per_page=100&page=3');
+  });
+
+  test('gitlab_list_project_jobs accepts the camelCase perPage spelling',
+      () {
+    final body = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'perPage': '50',
+    });
+    expect(body['path'],
+        '/api/v4/projects/g%2Fr/jobs?per_page=50&page=1');
+  });
+
+  test('gitlab_list_project_jobs maps scope to repeated scope[] params',
+      () {
+    final single = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success',
+    });
+    expect(single['path'], contains('scope[]=success'));
+    final list = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': ['success', 'running'],
+    });
+    expect(list['path'], contains('scope[]=success'));
+    expect(list['path'], contains('scope[]=running'));
+    final comma = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success,running',
+    });
+    expect(comma['path'], contains('scope[]=success'));
+    expect(comma['path'], contains('scope[]=running'));
+  });
+
+  test('gitlab_list_project_jobs scopes to the pipeline when '
+      'pipelineId is given', () {
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'pipelineId': '9',
+    });
+    final jobs = jsonDecode(result) as List<dynamic>;
+    expect(jobs.single['id'], 501);
+    expect(jobs.single['pipeline'], {'id': 9});
+    final request = echo('gitlab_list_project_jobs', {
+      'workspace': 'g',
+      'repository': 'r',
+      'pipelineId': '9',
+    });
+    expect(request['path'],
+        '/api/v4/projects/g%2Fr/pipelines/9/jobs?per_page=20&page=1');
+  });
+}
+
+void testjoblisttools_p2() {
+  test('name narrows the result to exact matches', () {
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'name': 'ai-teammate',
+    });
+    final jobs = jsonDecode(result) as List<dynamic>;
+    expect(jobs.map((j) => j['id']), [101]);
+  });
+
+  test('a name with no matches returns an empty list, not an error', () {
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'name': 'no-such-job',
+    });
+    expect(result, '[]');
+  });
+
+  test('the name filter does not match partial names', () {
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'name': 'ai',
+    });
+    expect(result, '[]');
+  });
+
+  test('the name filter passes a non-array body through verbatim', () {
+    // Pipeline 5 has no fixture: the echo server answers the request
+    // object, which the filter must not touch.
+    final result = tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'pipelineId': '5',
+      'name': 'ai-teammate',
+    });
+    final body = jsonDecode(result) as Map<String, dynamic>;
+    expect(body['method'], 'GET');
+    expect(body['path'], contains('/pipelines/5/jobs?'));
+  });
+
+  test('gitlab_get_pipelines GETs the project pipelines', () {
+    final body = echo('gitlab_get_pipelines', {
+      'workspace': 'g',
+      'repository': 'r',
+    });
+    expect(body['method'], 'GET');
+    expect(body['path'], '/api/v4/projects/g%2Fr/pipelines');
+  });
+
+  test('gitlab_get_pipeline GETs one pipeline by id', () {
+    final body = echo('gitlab_get_pipeline', {
+      'workspace': 'g',
+      'repository': 'r',
+      'pipeline_id': '7',
+    });
+    expect(body['method'], 'GET');
+    expect(body['path'], '/api/v4/projects/g%2Fr/pipelines/7');
+  });
+
+  test('gitlab_get_pipeline accepts the pipelineId spelling', () {
+    final body = echo('gitlab_get_pipeline', {
+      'workspace': 'g',
+      'repository': 'r',
+      'pipelineId': '7',
+    });
+    expect(body['path'], '/api/v4/projects/g%2Fr/pipelines/7');
   });
 }
 

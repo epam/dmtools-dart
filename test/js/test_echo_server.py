@@ -649,6 +649,29 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(encoded)
             return
+        # GitLab jobs fixtures (gh-380): the pipeline-scoped route answers
+        # the dispatch-pipeline shape (one ai-teammate job); the
+        # project-wide route answers two jobs so the client-side exact-name
+        # filter and multi-item handling are both exercised. The
+        # pipeline-scoped check comes first — its path also contains
+        # "/jobs?".
+        elif self.command == "GET" and "/pipelines/9/jobs" in self.path:
+            self._send(json.dumps([
+                {"id": 501, "name": "ai-teammate", "status": "success",
+                 "stage": "dispatch", "pipeline": {"id": 9},
+                 "web_url": "http://gl.example/jobs/501"},
+            ]).encode("utf-8"))
+            return
+        elif self.command == "GET" and "/jobs?" in self.path:
+            self._send(json.dumps([
+                {"id": 101, "name": "ai-teammate", "status": "success",
+                 "stage": "run", "pipeline": {"id": 7},
+                 "web_url": "http://gl.example/jobs/101"},
+                {"id": 102, "name": "build", "status": "failed",
+                 "stage": "build", "pipeline": {"id": 7},
+                 "web_url": "http://gl.example/jobs/102"},
+            ]).encode("utf-8"))
+            return
         elif (self.command == "GET" and "/pipelines?" in self.path
               and urllib.parse.parse_qs(
                   urllib.parse.urlparse(self.path).query

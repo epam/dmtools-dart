@@ -67,6 +67,7 @@ void _testJobListTools() {
     testjoblisttools_p2();
     testjoblisttools_p3();
     testjoblisttools_p4();
+    testjoblisttools_p5();
   });
 }
 
@@ -139,34 +140,6 @@ void testjoblisttools_p2() {
     expect(paths[2], contains('scope%5B%5D=running'));
   });
 
-  test('scope[] params are wire-identical on both HTTP transports', () async {
-    // Transport-parity regression (gh-380 rework): the curl fallback
-    // sends the URL verbatim while the pooled-isolate bridge routes it
-    // through Uri.parse/HttpClient, which percent-encodes '[' and ']'.
-    // Which transport serves a request is a boot-timing race, so the
-    // tool must pre-encode the brackets — both transports must emit the
-    // same bytes.
-    SyncHttpBridge.shared.dispose();
-    tools.handlers['gitlab_list_project_jobs']!({
-      'workspace': 'g',
-      'repository': 'r',
-      'scope': 'success,running',
-    });
-    final curlPaths = (await requestLog()).map((r) => r['path']).toList();
-    expect(curlPaths.single, contains('scope%5B%5D=success'));
-    expect(curlPaths.single, contains('scope%5B%5D=running'));
-
-    await SyncHttpBridge.shared.boot();
-    tools.handlers['gitlab_list_project_jobs']!({
-      'workspace': 'g',
-      'repository': 'r',
-      'scope': 'success,running',
-    });
-    final paths = (await requestLog()).map((r) => r['path']).toList();
-    expect(paths.last, contains('scope%5B%5D=success'));
-    expect(paths.last, contains('scope%5B%5D=running'));
-  });
-
   test(
       'gitlab_list_project_jobs scopes to the pipeline when '
       'pipelineId is given', () async {
@@ -225,6 +198,36 @@ void testjoblisttools_p3() {
     final body = jsonDecode(result) as Map<String, dynamic>;
     expect(body['method'], 'GET');
     expect(body['path'], contains('/pipelines/5/jobs?'));
+  });
+}
+
+void testjoblisttools_p5() {
+  test('scope[] params are wire-identical on both HTTP transports', () async {
+    // Transport-parity regression (gh-380 rework): the curl fallback
+    // sends the URL verbatim while the pooled-isolate bridge routes it
+    // through Uri.parse/HttpClient, which percent-encodes '[' and ']'.
+    // Which transport serves a request is a boot-timing race, so the
+    // tool must pre-encode the brackets — both transports must emit the
+    // same bytes.
+    SyncHttpBridge.shared.dispose();
+    tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success,running',
+    });
+    final curlPaths = (await requestLog()).map((r) => r['path']).toList();
+    expect(curlPaths.single, contains('scope%5B%5D=success'));
+    expect(curlPaths.single, contains('scope%5B%5D=running'));
+
+    await SyncHttpBridge.shared.boot();
+    tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success,running',
+    });
+    final paths = (await requestLog()).map((r) => r['path']).toList();
+    expect(paths.last, contains('scope%5B%5D=success'));
+    expect(paths.last, contains('scope%5B%5D=running'));
   });
 }
 

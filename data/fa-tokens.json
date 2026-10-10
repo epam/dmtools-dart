@@ -7,5 +7,15 @@
       "completion": 28003,
       "total": 133310
     }
+  ],
+  "issue-380": [
+    {
+      "leg": "dev",
+      "at": "2026-10-10T19:30:29Z",
+      "prompt": 174103,
+      "completion": 62756,
+      "total": 236859,
+      "model": ""
+    }
   ]
 }

@@ -16,6 +16,24 @@ const tools = GitLabSyncTools();
 Map<String, dynamic> echo(String tool, Map<String, dynamic> args) =>
     jsonDecode(tools.handlers[tool]!(args)) as Map<String, dynamic>;
 
+/// Every request the echo server has served so far (`{method, path,
+/// body, headers}` each).
+///
+/// The job-list handlers return the fixture body (not the request echo),
+/// so their request shape is read back from the server's full log.
+Future<List<Map<String, dynamic>>> requestLog() async {
+  final client = HttpClient();
+  try {
+    final request = await client.get('127.0.0.1', server.port, '/__full_log');
+    final response = await request.close();
+    final log =
+        jsonDecode(await utf8.decoder.bind(response).join()) as List<dynamic>;
+    return [for (final entry in log) entry as Map<String, dynamic>];
+  } finally {
+    client.close();
+  }
+}
+
 /// Tests for [GitLabSyncTools].
 ///
 /// Server-dependent groups start a Python echo server subprocess (Dart's
@@ -556,71 +574,74 @@ void _testJobListTools() {
 
 void testjoblisttools_p1() {
   test('gitlab_list_project_jobs GETs the project jobs, newest first',
-      () {
+      () async {
     final result = tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
     });
     final jobs = jsonDecode(result) as List<dynamic>;
     expect(jobs.map((j) => j['id']), [101, 102]);
-    final request = echo('gitlab_list_project_jobs', {
-      'workspace': 'g',
-      'repository': 'r',
-    });
-    expect(request['method'], 'GET');
-    expect(request['path'],
+    final requests = await requestLog();
+    expect(requests.single['method'], 'GET');
+    expect(requests.single['path'],
         '/api/v4/projects/g%2Fr/jobs?per_page=20&page=1');
   });
 
-  test('gitlab_list_project_jobs honors per_page and page (max 100 '
-      'clamp)', () {
-    final body = echo('gitlab_list_project_jobs', {
+  test(
+      'gitlab_list_project_jobs honors per_page and page (max 100 '
+      'clamp)', () async {
+    tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
       'per_page': '250',
       'page': '3',
     });
-    expect(body['path'],
+    final requests = await requestLog();
+    expect(requests.single['path'],
         '/api/v4/projects/g%2Fr/jobs?per_page=100&page=3');
   });
 
   test('gitlab_list_project_jobs accepts the camelCase perPage spelling',
-      () {
-    final body = echo('gitlab_list_project_jobs', {
+      () async {
+    tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
       'perPage': '50',
     });
-    expect(body['path'],
+    final requests = await requestLog();
+    expect(requests.single['path'],
         '/api/v4/projects/g%2Fr/jobs?per_page=50&page=1');
   });
 
   test('gitlab_list_project_jobs maps scope to repeated scope[] params',
-      () {
-    final single = echo('gitlab_list_project_jobs', {
+      () async {
+    tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
       'scope': 'success',
     });
-    expect(single['path'], contains('scope[]=success'));
-    final list = echo('gitlab_list_project_jobs', {
+    tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
       'scope': ['success', 'running'],
     });
-    expect(list['path'], contains('scope[]=success'));
-    expect(list['path'], contains('scope[]=running'));
-    final comma = echo('gitlab_list_project_jobs', {
+    tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
       'scope': 'success,running',
     });
-    expect(comma['path'], contains('scope[]=success'));
-    expect(comma['path'], contains('scope[]=running'));
+    final paths = (await requestLog()).map((r) => r['path']).toList();
+    expect(paths[0], contains('scope%5B%5D=success'));
+    expect(paths[0], isNot(contains('scope%5B%5D=running')));
+    expect(paths[1], contains('scope%5B%5D=success'));
+    expect(paths[1], contains('scope%5B%5D=running'));
+    expect(paths[2], contains('scope%5B%5D=success'));
+    expect(paths[2], contains('scope%5B%5D=running'));
   });
 
-  test('gitlab_list_project_jobs scopes to the pipeline when '
-      'pipelineId is given', () {
+  test(
+      'gitlab_list_project_jobs scopes to the pipeline when '
+      'pipelineId is given', () async {
     final result = tools.handlers['gitlab_list_project_jobs']!({
       'workspace': 'g',
       'repository': 'r',
@@ -629,12 +650,8 @@ void testjoblisttools_p1() {
     final jobs = jsonDecode(result) as List<dynamic>;
     expect(jobs.single['id'], 501);
     expect(jobs.single['pipeline'], {'id': 9});
-    final request = echo('gitlab_list_project_jobs', {
-      'workspace': 'g',
-      'repository': 'r',
-      'pipelineId': '9',
-    });
-    expect(request['path'],
+    final requests = await requestLog();
+    expect(requests.single['path'],
         '/api/v4/projects/g%2Fr/pipelines/9/jobs?per_page=20&page=1');
   });
 }

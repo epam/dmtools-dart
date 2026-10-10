@@ -40,8 +40,7 @@ void main() {
       );
     });
 
-    test('dispatcher routes gitlab_list_project_jobs (not Unsupported)',
-        () {
+    test('dispatcher routes gitlab_list_project_jobs (not Unsupported)', () {
       final dispatcher = SyncToolDispatcher(PropertyReader());
       final result = dispatcher.execute('gitlab_list_project_jobs', {
         'workspace': 'g',
@@ -55,7 +54,8 @@ void main() {
       );
     });
 
-    test('dispatcher routes gitlab_get_pipelines/gitlab_get_pipeline '
+    test(
+        'dispatcher routes gitlab_get_pipelines/gitlab_get_pipeline '
         '(not Unsupported)', () {
       final dispatcher = SyncToolDispatcher(PropertyReader());
       expect(

@@ -124,12 +124,20 @@ void toolCatalogTests() {
   group('gitlab_list_project_jobs', () {
     final tool = toolNamed('gitlab_list_project_jobs');
 
-    test('requires workspace/repository; name, scope, perPage, page and '
+    test(
+        'requires workspace/repository; name, scope, perPage, page and '
         'pipelineId are optional', () {
       expect(
         tool.params.map((p) => p.name),
-        ['workspace', 'repository', 'name', 'scope', 'perPage', 'page',
-            'pipelineId'],
+        [
+          'workspace',
+          'repository',
+          'name',
+          'scope',
+          'perPage',
+          'page',
+          'pipelineId'
+        ],
       );
       expect(tool.params.take(2).every((p) => p.required), isTrue);
       expect(tool.params.skip(2).every((p) => !p.required), isTrue);

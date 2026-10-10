@@ -662,7 +662,8 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                  "web_url": "http://gl.example/jobs/501"},
             ]).encode("utf-8"))
             return
-        elif self.command == "GET" and "/jobs?" in self.path:
+        elif (self.command == "GET" and "/jobs?" in self.path
+              and "/pipelines/" not in self.path):
             self._send(json.dumps([
                 {"id": 101, "name": "ai-teammate", "status": "success",
                  "stage": "run", "pipeline": {"id": 7},

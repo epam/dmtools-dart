@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/src/config/property_reader.dart';
+import 'package:dmtools/src/js/sync_http_bridge.dart';
 import 'package:dmtools/src/js/sync_tools/gitlab_sync_tools.dart';
 import 'package:test/test.dart';
 
@@ -136,6 +137,34 @@ void testjoblisttools_p2() {
     expect(paths[1], contains('scope%5B%5D=running'));
     expect(paths[2], contains('scope%5B%5D=success'));
     expect(paths[2], contains('scope%5B%5D=running'));
+  });
+
+  test('scope[] params are wire-identical on both HTTP transports', () async {
+    // Transport-parity regression (gh-380 rework): the curl fallback
+    // sends the URL verbatim while the pooled-isolate bridge routes it
+    // through Uri.parse/HttpClient, which percent-encodes '[' and ']'.
+    // Which transport serves a request is a boot-timing race, so the
+    // tool must pre-encode the brackets — both transports must emit the
+    // same bytes.
+    SyncHttpBridge.shared.dispose();
+    tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success,running',
+    });
+    final curlPaths = (await requestLog()).map((r) => r['path']).toList();
+    expect(curlPaths.single, contains('scope%5B%5D=success'));
+    expect(curlPaths.single, contains('scope%5B%5D=running'));
+
+    await SyncHttpBridge.shared.boot();
+    tools.handlers['gitlab_list_project_jobs']!({
+      'workspace': 'g',
+      'repository': 'r',
+      'scope': 'success,running',
+    });
+    final paths = (await requestLog()).map((r) => r['path']).toList();
+    expect(paths.last, contains('scope%5B%5D=success'));
+    expect(paths.last, contains('scope%5B%5D=running'));
   });
 
   test(

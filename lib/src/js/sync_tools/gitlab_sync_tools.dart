@@ -437,7 +437,11 @@ String _listPipelineRuns(_GitlabConfig config, Map<String, dynamic> args) {
 /// GitLab has no server-side name filter, so `name` narrows the result
 /// client-side to exact matches — an empty list is a valid answer, never
 /// an error. `scope` (one value, comma list, or array) maps to repeated
-/// `scope[]` query params; `per_page` defaults to 20 (the API default)
+/// `scope[]` query params (pre-encoded as `scope%5B%5D` — the curl
+/// fallback transport sends the URL verbatim while the isolate bridge
+/// percent-encodes via Uri.parse, so the tool must emit the encoded
+/// form to keep the wire bytes identical on both transports);
+/// `per_page` defaults to 20 (the API default)
 /// and is clamped to the 100 maximum; `page` defaults to 1. Returns the
 /// bare jobs array (unwrapList-style, like `gitlab_list_pipeline_runs`).
 String _listProjectJobs(_GitlabConfig config, Map<String, dynamic> args) {
@@ -450,7 +454,7 @@ String _listProjectJobs(_GitlabConfig config, Map<String, dynamic> args) {
     'per_page=${_clampPerPage(_perPageArg(args))}',
     'page=${_parsePositiveInt(syncAsStr(args['page']), 1)}',
     for (final scope in _scopeList(args['scope']))
-      'scope[]=${Uri.encodeQueryComponent(scope)}',
+      'scope%5B%5D=${Uri.encodeQueryComponent(scope)}',
   ];
   final body = syncBodyOrError(SyncHttpClient.get(
     '${config.baseUrl}/$path?${query.join('&')}',

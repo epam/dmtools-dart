@@ -13,6 +13,7 @@ gitlab_get_mr_discussions:workspace,repository,pullRequestId
 gitlab_get_mr_pipelines:workspace,repository,pullRequestId
 gitlab_list_issues:workspace,repository,state,perPage
 gitlab_list_mrs:workspace,repository,state
+gitlab_list_project_jobs:workspace,repository
 gitlab_merge_mr:workspace,repository,pullRequestId,mergeCommitMessage
 gitlab_trigger_pipeline:workspace,repository,ref,variablesJson
 gitlab_unapprove_mr:workspace,repository,pullRequestId

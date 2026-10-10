@@ -62,6 +62,7 @@ const _expectedToolOrder = [
   'gitlab_get_commit_statuses',
   'gitlab_get_job_logs',
   'gitlab_list_pipeline_runs',
+  'gitlab_list_project_jobs',
   'gitlab_get_or_create_release',
   'gitlab_upload_release_asset',
   'gitlab_download_release_asset',
@@ -72,7 +73,7 @@ void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the forty-seven tools in declaration order', () {
+    test('registers the forty-eight tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 
@@ -123,6 +124,30 @@ void toolCatalogTests() {
 
 /// Catalog param tests for the MR-review and project tools.
 void mrReviewAndProjectCatalogParamTests() {
+  group('gitlab_list_project_jobs', () {
+    final tool = toolNamed('gitlab_list_project_jobs');
+
+    test(
+        'requires workspace/repository; name, scope, perPage, page and '
+        'pipelineId are optional', () {
+      expect(
+        tool.params.map((p) => p.name),
+        [
+          'workspace',
+          'repository',
+          'name',
+          'scope',
+          'perPage',
+          'page',
+          'pipelineId'
+        ],
+      );
+      expect(tool.params.take(2).every((p) => p.required), isTrue);
+      expect(tool.params.skip(2).every((p) => !p.required), isTrue);
+      expect(tool.category, 'ci');
+    });
+  });
+
   group('gitlab_get_mr_approvals', () {
     final tool = toolNamed('gitlab_get_mr_approvals');
 

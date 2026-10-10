@@ -38,7 +38,6 @@ gitlab_cancel_job
 gitlab_delete_release_asset
 gitlab_get_mr_activities
 gitlab_get_pipeline_jobs
-gitlab_list_project_jobs
 gitlab_list_release_assets
 jenkins_get_queue_item
 jenkins_list_builds

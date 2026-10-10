@@ -97,6 +97,9 @@ final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
   'gitlab_get_commit_statuses': _getCommitStatuses,
   'gitlab_get_job_logs': _getJobLogs,
   'gitlab_list_pipeline_runs': _listPipelineRuns,
+  'gitlab_list_project_jobs': _listProjectJobs,
+  'gitlab_get_pipelines': _getPipelines,
+  'gitlab_get_pipeline': _getPipeline,
   'gitlab_trigger_pipeline': _triggerPipeline,
   'gitlab_create_mr': _createMr,
   'gitlab_get_or_create_release': _getOrCreateRelease,
@@ -425,6 +428,94 @@ String _listPipelineRuns(_GitlabConfig config, Map<String, dynamic> args) {
     maxResults: maxResults,
   );
   return jsonEncode(runs);
+}
+
+/// `gitlab_list_project_jobs` — GET `projects/{id}/jobs` (gh-380), or
+/// GET `projects/{id}/pipelines/{pipelineId}/jobs` when `pipelineId` is
+/// given — the pipeline-scoped shape a dispatch-pipeline consumer wants.
+///
+/// GitLab has no server-side name filter, so `name` narrows the result
+/// client-side to exact matches — an empty list is a valid answer, never
+/// an error. `scope` (one value, comma list, or array) maps to repeated
+/// `scope[]` query params (pre-encoded as `scope%5B%5D` — the curl
+/// fallback transport sends the URL verbatim while the isolate bridge
+/// percent-encodes via Uri.parse, so the tool must emit the encoded
+/// form to keep the wire bytes identical on both transports);
+/// `per_page` defaults to 20 (the API default)
+/// and is clamped to the 100 maximum; `page` defaults to 1. Returns the
+/// bare jobs array (unwrapList-style, like `gitlab_list_pipeline_runs`).
+String _listProjectJobs(_GitlabConfig config, Map<String, dynamic> args) {
+  final project = gitlabEncodedProjectArg(args);
+  final pipelineId = syncAsStr(args['pipelineId']);
+  final path = pipelineId.isEmpty
+      ? 'projects/$project/jobs'
+      : 'projects/$project/pipelines/$pipelineId/jobs';
+  final query = <String>[
+    'per_page=${_clampPerPage(_perPageArg(args))}',
+    'page=${_parsePositiveInt(syncAsStr(args['page']), 1)}',
+    for (final scope in _scopeList(args['scope']))
+      'scope%5B%5D=${Uri.encodeQueryComponent(scope)}',
+  ];
+  final body = syncBodyOrError(SyncHttpClient.get(
+    '${config.baseUrl}/$path?${query.join('&')}',
+    headers: config.headers,
+  ));
+  final name = syncAsStr(args['name']);
+  if (name.isEmpty) return body;
+  final decoded = syncTryDecode(body);
+  if (decoded is! List) return body;
+  return jsonEncode([
+    for (final job in decoded)
+      if (job is Map && job['name'] == name) job,
+  ]);
+}
+
+/// Reads the page-size argument: snake `per_page` (the gh-380 tool
+/// signature) with the camelCase `perPage` repo spelling as fallback.
+String _perPageArg(Map<String, dynamic> args) {
+  final raw = syncAsStr(args['per_page']);
+  return raw.isEmpty ? syncAsStr(args['perPage']) : raw;
+}
+
+/// Clamps the `per_page` argument to GitLab's page-size window:
+/// the API default 20 when unset/invalid, 100 maximum (gh-380 AC3).
+int _clampPerPage(String raw) {
+  final parsed = int.tryParse(raw.trim());
+  if (parsed == null || parsed <= 0) return 20;
+  return parsed > 100 ? 100 : parsed;
+}
+
+/// Normalizes the `scope` argument into individual status filters — a
+/// List, a comma-separated string, and a single value each contribute
+/// one `scope[]` query param (gh-380 AC4).
+List<String> _scopeList(dynamic scope) {
+  final raw = scope is List ? scope : syncAsStr(scope).split(',');
+  return [
+    for (final entry in raw)
+      if (syncAsStr(entry).trim().isNotEmpty) syncAsStr(entry).trim(),
+  ];
+}
+
+/// `gitlab_get_pipelines` — GET `projects/{id}/pipelines` (gh-380 AC5:
+/// the registry tool gains a sync executor, closing the phantom JS
+/// wrapper that died with 'Unsupported GitLab tool').
+String _getPipelines(_GitlabConfig config, Map<String, dynamic> args) =>
+    syncBodyOrError(SyncHttpClient.get(
+      '${_projectsPath(config, args)}/pipelines',
+      headers: config.headers,
+    ));
+
+/// `gitlab_get_pipeline` — GET `projects/{id}/pipelines/{id}` (gh-380
+/// AC5, the same coherence closure as [_getPipelines]). Accepts the
+/// registry `pipeline_id` spelling alongside the sync-surface
+/// `pipelineId`.
+String _getPipeline(_GitlabConfig config, Map<String, dynamic> args) {
+  final pipelineId = syncAsStr(args['pipelineId']);
+  final id = pipelineId.isEmpty ? syncAsStr(args['pipeline_id']) : pipelineId;
+  return syncBodyOrError(SyncHttpClient.get(
+    '${_projectsPath(config, args)}/pipelines/$id',
+    headers: config.headers,
+  ));
 }
 
 /// `gitlab_trigger_pipeline` — POST `projects/{id}/pipeline`.

@@ -120,7 +120,10 @@ void toolCatalogTests() {
       expect(tool.params.last.type, 'number');
     });
   });
+}
 
+/// Catalog param tests for the MR-review and project tools.
+void mrReviewAndProjectCatalogParamTests() {
   group('gitlab_list_project_jobs', () {
     final tool = toolNamed('gitlab_list_project_jobs');
 
@@ -144,10 +147,7 @@ void toolCatalogTests() {
       expect(tool.category, 'ci');
     });
   });
-}
 
-/// Catalog param tests for the MR-review and project tools.
-void mrReviewAndProjectCatalogParamTests() {
   group('gitlab_get_mr_approvals', () {
     final tool = toolNamed('gitlab_get_mr_approvals');
 

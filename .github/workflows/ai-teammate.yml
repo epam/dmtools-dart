@@ -142,9 +142,11 @@ jobs:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
       KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
-      # Copilot enterprise (first in the runners' FA_PROVIDERS_QUEUE); the
-      # key VALUE itself is added by the owner as the COPILOT_EPAM_KEY repo
-      # secret — this only routes it into the factory call.
-      COPILOT_EPAM_KEY: ${{ secrets.COPILOT_EPAM_KEY }}
+      # Universal provider-key passthrough (awf PR #30): ONE repo secret
+      # CUSTOM_PROVIDER_KEY holds a JSON object {"ENV_NAME":"api key"}; the
+      # factory decodes it into the agent job env (values masked). The
+      # runners reference COPILOT_EPAM_KEY — the owner puts the copilot
+      # enterprise key under that name inside CUSTOM_PROVIDER_KEY.
+      CUSTOM_PROVIDER_KEY: ${{ secrets.CUSTOM_PROVIDER_KEY }}
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

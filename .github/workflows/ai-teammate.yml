@@ -142,5 +142,9 @@ jobs:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
       KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
+      # Copilot enterprise (first in the runners' FA_PROVIDERS_QUEUE); the
+      # key VALUE itself is added by the owner as the COPILOT_EPAM_KEY repo
+      # secret — this only routes it into the factory call.
+      COPILOT_EPAM_KEY: ${{ secrets.COPILOT_EPAM_KEY }}
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

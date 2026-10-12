@@ -593,7 +593,6 @@ void fixtureactionstools_p1() {
       }),
     ) as Map<String, dynamic>;
     expect(body['method'], 'GET');
-    // The tool now walks pages at per_page=100 (fa #1457 blind-spot fix).
     expect(
       body['path'],
       '/repos/o/r/commits/cafe123/check-runs?per_page=100&page=1',

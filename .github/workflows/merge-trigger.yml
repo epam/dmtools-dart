@@ -24,7 +24,7 @@ jobs:
   merge-trigger:
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge-trigger.yml@main
     with:
-      runner: bitrise-runner-dmtools-ci
+      runner: ubuntu-latest
       remove_pr_label: true
       map_pr_labels: true
       gh_branch_pattern: true

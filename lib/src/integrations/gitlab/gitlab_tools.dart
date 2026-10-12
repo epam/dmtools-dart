@@ -29,6 +29,7 @@ List<ToolDefinition> gitlabTools() => [
       ..._projectHookTools(),
       ..._ciTools(),
       ..._ciPipelineTools(),
+      ..._ciJobTools(),
       ..._releaseTools(),
       ..._releaseAssetTools(),
     ];
@@ -444,6 +445,56 @@ List<ToolDefinition> _ciPipelineTools() => [
           ToolParam(
             name: 'limit',
             description: 'Maximum number of pipelines to return',
+            type: 'number',
+            required: false,
+          ),
+        ],
+      ),
+    ];
+
+/// CI jobs tool (gh-380): `gitlab_list_project_jobs` — project-wide
+/// (`GET projects/{id}/jobs`) or pipeline-scoped via `pipelineId`
+/// (`GET projects/{id}/pipelines/{pid}/jobs`). The `name` filter is
+/// client-side exact match — GitLab has no server-side name filter.
+/// Mirrors the Java `GitLab.listJobs` workspace/repository contract.
+List<ToolDefinition> _ciJobTools() => [
+      ToolDefinition(
+        name: 'gitlab_list_project_jobs',
+        description: 'List GitLab CI jobs for a project, newest first, '
+            'or for one pipeline when pipelineId is given; optionally '
+            'narrows the result client-side to jobs with the exact '
+            'given name',
+        integration: 'gitlab',
+        category: 'ci',
+        params: [
+          _workspaceParam,
+          _repositoryParam,
+          ToolParam(
+            name: 'name',
+            description: 'Exact job name filter (client-side)',
+            required: false,
+          ),
+          ToolParam(
+            name: 'scope',
+            description: 'Job status filter(s), e.g. success, running',
+            required: false,
+          ),
+          ToolParam(
+            name: 'perPage',
+            description: 'Page size (max 100)',
+            type: 'number',
+            required: false,
+          ),
+          ToolParam(
+            name: 'page',
+            description: 'Page number',
+            type: 'number',
+            required: false,
+          ),
+          ToolParam(
+            name: 'pipelineId',
+            description: 'Pipeline id — scopes the listing to that '
+                "pipeline's jobs",
             type: 'number',
             required: false,
           ),

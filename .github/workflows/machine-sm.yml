@@ -48,7 +48,7 @@ jobs:
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-sm.yml@main
     with:
       # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: bitrise-runner-dmtools-ci
+      runner: ubuntu-latest
       # Bridge-free mode (factory #510): the tick stamps the three required
       # protection checks itself — the sm-validation bridge is deleted.
       # gh-315: the sharded agents suite merges in `agents-gate` (the

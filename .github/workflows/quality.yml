@@ -20,7 +20,7 @@ jobs:
   static:
     # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
     # finish in ~2 min and fail the pipeline early on style/type errors.
-    runs-on: bitrise-runner-dmtools-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Runner disk hygiene
         # Bitrise pool machines accumulate per-run workdirs; twice on
@@ -47,7 +47,7 @@ jobs:
     # ~17 min serial to ~5-6 min (fixed per-shard overhead ~3 min +
     # suite/4). Each shard uploads its partial lcov + test count; the
     # gate job merges them.
-    runs-on: bitrise-runner-dmtools-ci
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -143,7 +143,7 @@ jobs:
     # trigger is ever added.
     needs: [static, test]
     if: always()
-    runs-on: bitrise-runner-dmtools-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Fail unless static and test both succeeded
         if: needs.static.result != 'success' || needs.test.result != 'success'
@@ -271,7 +271,7 @@ jobs:
     # N=6 keeps the pole at ~4 min while adding only 2 extra jobs beyond
     # the proposal (13 total). If the Bitrise pool cannot host them, shards
     # queue — wall time degrades gracefully, correctness is unaffected.
-    runs-on: bitrise-runner-dmtools-ci
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -356,7 +356,7 @@ jobs:
     # is ever added.
     needs: [agents-suite]
     if: always()
-    runs-on: bitrise-runner-dmtools-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Fail unless every shard succeeded
         if: needs.agents-suite.result != 'success'

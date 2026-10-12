@@ -13,6 +13,7 @@ import 'package:dio/dio.dart' show DioException;
 
 import 'ado_http_client.dart';
 import 'ado_json.dart';
+import 'ado_work_item_client.dart';
 
 /// Azure DevOps API methods exposed to the MCP tool runtime.
 class AdoClient {
@@ -20,6 +21,10 @@ class AdoClient {
 
   /// Creates a client backed by [_http].
   AdoClient(this._http);
+
+  /// Tracker-agnostic ticket operations (state, assign, field, priority,
+  /// link, create-with-parent, field code, attach file).
+  late final AdoWorkItemOps workItemOps = AdoWorkItemOps(_http);
 
   /// `ado_test` — connectivity check via the Profile API
   /// (`app.vssps.visualstudio.com/_apis/profile/profiles/me`).

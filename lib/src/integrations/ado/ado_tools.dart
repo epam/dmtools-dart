@@ -4,10 +4,14 @@
 /// executor routes a tool name + arguments to the matching [AdoClient] call.
 library;
 
+import 'dart:convert';
+
 import '../../mcp/tool_definition.dart';
 import '../../mcp/tool_param.dart';
 import 'ado_client.dart';
+import 'ado_work_item_client.dart';
 part 'ado_pr_tools.dart';
+part 'ado_ticket_op_tools.dart';
 
 /// Returns all Azure DevOps MCP tool definitions.
 ///
@@ -18,6 +22,7 @@ List<ToolDefinition> adoTools() => [
       ..._workItemLinkTools(),
       ..._workItemQueryTools(),
       ..._commentTools(),
+      ..._ticketOpTools(),
       ..._teamTools(),
       ..._projectTools(),
       ..._pullRequestTools(),
@@ -54,27 +59,7 @@ List<ToolDefinition> _workItemTools() => [
         category: 'work_item_management',
         params: [_idParam('The work item ID')],
       ),
-      ToolDefinition(
-        name: 'ado_create_work_item',
-        aliases: ['tracker_create_ticket'],
-        description: 'Create a new Azure DevOps work item',
-        integration: 'ado',
-        category: 'work_item_management',
-        params: [
-          ToolParam(
-            name: 'type',
-            description: 'The work item type (Bug, Task, User Story, etc.)',
-            required: true,
-            aliases: ['issueType'],
-          ),
-          ToolParam(
-            name: 'title',
-            description: 'The work item title',
-            required: true,
-            aliases: ['summary'],
-          ),
-        ],
-      ),
+      _createWorkItemTool(),
       ToolDefinition(
         name: 'ado_update_work_item',
         description: 'Update an Azure DevOps work item by setting fields',
@@ -106,7 +91,6 @@ List<ToolDefinition> _workItemTools() => [
 List<ToolDefinition> _workItemLinkTools() => [
       ToolDefinition(
         name: 'ado_create_work_item_link',
-        aliases: ['tracker_link_tickets'],
         description: 'Link two Azure DevOps work items (source → target) with '
             'a relation type',
         integration: 'ado',
@@ -184,7 +168,11 @@ List<ToolDefinition> _commentTools() => [
         category: 'comment_management',
         params: [
           _idParam('The work item ID'),
-          ToolParam(name: 'text', description: 'The comment text'),
+          ToolParam(
+            name: 'comment',
+            description: 'The comment text',
+            aliases: ['text'],
+          ),
         ],
       ),
       ToolDefinition(
@@ -280,10 +268,7 @@ class AdoToolExecutor {
       _handlers = {
     'ado_test': (_) => _client.testConnection(),
     'ado_get_work_item': (a) => _client.getWorkItem(_id(a)),
-    'ado_create_work_item': (a) => _client.createWorkItem(
-          a['type'] as String,
-          a['title'] as String,
-        ),
+    ..._ticketOpHandlers(_client.workItemOps),
     'ado_update_work_item': (a) => _client.updateWorkItem(
           _id(a),
           a['fields'] as Map<String, dynamic>,
@@ -343,7 +328,7 @@ class AdoToolExecutor {
     'ado_get_work_item_comments': (a) => _client.getWorkItemComments(_id(a)),
     'ado_add_work_item_comment': (a) => _client.addWorkItemComment(
           _id(a),
-          a['text'] as String,
+          (a['comment'] ?? a['text']) as String,
         ),
     'ado_create_repo': (a) => _client.createRepo(
           a['project'] as String,

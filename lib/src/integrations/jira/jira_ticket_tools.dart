@@ -144,6 +144,7 @@ List<ToolDefinition> _assignTools() => [
 List<ToolDefinition> _fieldTools() => [
       _jiraTool(
         name: 'jira_update_field',
+        aliases: ['tracker_update_field'],
         description: "Update field(s) in a Jira ticket. When using field "
             "names (e.g., 'Dependencies'), updates ALL fields with that "
             "name. When using custom field IDs (e.g., 'customfield_10091'), "
@@ -274,6 +275,7 @@ List<ToolDefinition> _ticketWriteTools() => [
       ),
       _jiraTool(
         name: 'jira_set_priority',
+        aliases: ['tracker_set_priority'],
         description: 'Set the priority on a Jira ticket',
         params: [
           _keyParam,
@@ -286,6 +288,7 @@ List<ToolDefinition> _ticketWriteTools() => [
       ),
       _jiraTool(
         name: 'jira_update_description',
+        aliases: ['tracker_update_description'],
         description: 'Update the description of a Jira ticket',
         params: [
           _keyParam,
@@ -378,6 +381,7 @@ List<ToolDefinition> _fieldsByNameTools() => [
       ),
       _jiraTool(
         name: 'jira_get_field_custom_code',
+        aliases: ['tracker_get_field_code'],
         description: 'Get the custom field code for a human friendly field '
             'name in a Jira project',
         category: 'project_management',

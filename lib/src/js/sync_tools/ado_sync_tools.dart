@@ -30,16 +30,14 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/ado/ado_json.dart';
 import '../sync_http_client.dart';
+import 'ado_sync_work_item_ops.dart';
 import 'sync_request_helpers.dart';
 
 /// Connection config for the sync ADO client.
-typedef _AdoConfig = ({String baseUrl, Map<String, String> headers});
+typedef _AdoConfig = AdoSyncConfig;
 
 /// Internal executor: receives resolved [config] plus the raw tool args.
-typedef _AdoExecutor = String Function(
-  _AdoConfig config,
-  Map<String, dynamic> args,
-);
+typedef _AdoExecutor = AdoSyncExecutor;
 
 /// Synchronous `ado_*` tool executors for agent scripts.
 ///
@@ -90,6 +88,7 @@ final Map<String, String Function(Map<String, dynamic> args)> _adoHandlers =
   'ado_list_pipeline_runs': _listPipelineRuns,
   'ado_trigger_pipeline': _triggerPipeline,
   'ado_get_pipeline_logs': _getPipelineLogs,
+  ...adoWorkItemOpExecutors,
 });
 
 /// Builds ADO config, or `null` when organization / project / PAT is

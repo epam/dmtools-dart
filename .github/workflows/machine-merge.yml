@@ -41,7 +41,7 @@ jobs:
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-merge.yml@main
     with:
       # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: bitrise-runner-dmtools-ci
+      runner: ubuntu-latest
       ci_workflow: quality.yml
     secrets:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}

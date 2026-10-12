@@ -453,9 +453,45 @@ String _graphQl(
 
 // ── Commits, checks, Actions ───────────────────────────────────────────
 
-/// `github_get_commit_check_runs` — GET `commits/{sha}/check-runs`.
-String _getCommitCheckRuns(GhSyncConfig c, Map<String, dynamic> a) =>
-    _getRepoPath(c, a, 'commits/${syncAsStr(a['commitSha'])}/check-runs');
+/// `github_get_commit_check_runs` — GET `commits/{sha}/check-runs`,
+/// walking every page (per_page=100). Heads accumulate check-runs
+/// across CI re-runs and SM bridge-free stamps (live: fa #1457's head
+/// carried 355 — the default 30-run page hid the in_progress
+/// placeholder orphans from every SM detector; dmtools-agents#865).
+/// Java's `GitHub.java:1135` has the same single-page blind spot; the
+/// fix lands here first because the fleet's SM runs the Dart CLI.
+/// Non-paged shapes (echo stubs, error bodies) pass through untouched.
+String _getCommitCheckRuns(GhSyncConfig c, Map<String, dynamic> a) {
+  final base = '${c.baseUrl}/${_repoSeg(a)}'
+      '/commits/${syncAsStr(a['commitSha'])}/check-runs?per_page=100';
+  final first = SyncHttpClient.get('$base&page=1', headers: c.headers);
+  if (!first.isOk) return syncBodyOrError(first);
+  final decoded = syncTryDecode(first.body);
+  final firstPage = decoded is Map ? decoded['check_runs'] : null;
+  if (firstPage is! List || firstPage.length < 100) {
+    return syncBodyOrError(first);
+  }
+  return jsonEncode({
+    'total_count': decoded['total_count'],
+    'check_runs': _walkCheckRunPages(c, base, firstPage),
+  });
+}
+
+/// Appends every remaining check-runs page to [firstPage]; a short or
+/// undecodable page ends the walk (later-page failures degrade to the
+/// pages already collected, never to an error the caller must parse).
+List<dynamic> _walkCheckRunPages(
+    GhSyncConfig c, String base, List<dynamic> firstPage) {
+  final runs = <dynamic>[...firstPage];
+  for (var page = 2;; page++) {
+    final next = _getJson(c, '$base&page=$page');
+    if (next is! Map || next['check_runs'] is! List) break;
+    final items = next['check_runs'] as List;
+    runs.addAll(items);
+    if (items.length < 100) break;
+  }
+  return runs;
+}
 
 /// `github_get_job_logs` — raw text logs from `actions/jobs/{id}/logs`.
 String _getJobLogs(GhSyncConfig c, Map<String, dynamic> a) =>

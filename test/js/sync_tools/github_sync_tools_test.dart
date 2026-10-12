@@ -593,7 +593,39 @@ void fixtureactionstools_p1() {
       }),
     ) as Map<String, dynamic>;
     expect(body['method'], 'GET');
-    expect(body['path'], '/repos/o/r/commits/cafe123/check-runs');
+    expect(
+      body['path'],
+      '/repos/o/r/commits/cafe123/check-runs?per_page=100&page=1',
+    );
+  });
+
+  test('github_get_commit_check_runs walks every page (fa#1457 blind spot)',
+      () {
+    // Live: fa #1457's head carried 355 check-runs — the default 30-run
+    // page hid the in_progress placeholder orphans from the SM's
+    // zombie/placeholder detectors (dmtools-agents#865).
+    final body = jsonDecode(
+      tools.handlers['github_get_commit_check_runs']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'commitSha': 'pagedsha',
+      }),
+    ) as Map<String, dynamic>;
+    final runs = body['check_runs'] as List;
+    expect(runs, hasLength(103));
+    expect(
+      runs.map((r) => (r as Map)['name']),
+      containsAll(const [
+        'Quality gate',
+        'JS engine integration (quickjs-ng)',
+        'Binaries smoke gate',
+      ]),
+    );
+    expect(body['total_count'], 103);
+    expect(
+      fx.requests.where((r) => r.contains('commits/pagedsha/check-runs')),
+      hasLength(2),
+    );
   });
 
   test('github_get_job_logs hits the job logs endpoint', () {

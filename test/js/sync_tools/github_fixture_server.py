@@ -159,6 +159,32 @@ def _paged_commit(i):
 COMMITS_PAGED_PAGE1 = [_paged_commit(i) for i in range(100)]
 COMMITS_PAGED_PAGE2 = [{"sha": "p100"}]
 
+# gh-1457-saga check-runs pagination fixture (live: fa #1457's head
+# carried 355 check-runs across 4 CI runs + SM stamps — the default
+# 30-run page hid the in_progress placeholder orphans on later pages
+# from every SM detector; dmtools-agents#865). Page 1 is full (100),
+# page 2 is short (3) and carries the orphan trio.
+CHECK_RUNS_PAGE1 = {
+    "total_count": 103,
+    "check_runs": [
+        {"id": 1000 + i, "name": "job-%03d" % i,
+         "status": "completed", "conclusion": "success"}
+        for i in range(100)
+    ],
+}
+CHECK_RUNS_PAGE2 = {
+    "total_count": 103,
+    "check_runs": [
+        {"id": 2000, "name": "Quality gate",
+         "status": "in_progress", "conclusion": None},
+        {"id": 2001, "name": "JS engine integration (quickjs-ng)",
+         "status": "in_progress", "conclusion": None},
+        {"id": 2002, "name": "Binaries smoke gate",
+         "status": "in_progress", "conclusion": None},
+    ],
+}
+
+
 FILTERED_PRS_PAGE1 = [
     {"number": i, "title": "t%03d" % i, "merged_at": "2024-01-01T00:00:00Z"}
     for i in range(99)
@@ -233,6 +259,13 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, build_zip(), "application/zip")
             return
 
+        if base == "/repos/o/r/commits/pagedsha/check-runs":
+            self._record(body)
+            if _query_param(path, "page") == "2":
+                self._respond(200, CHECK_RUNS_PAGE2)
+            else:
+                self._respond(200, CHECK_RUNS_PAGE1)
+            return
         # PR endpoint answers a diff when asked with the diff accept header.
         is_pr_root = (
             base.startswith("/repos/o/r/pulls/42")

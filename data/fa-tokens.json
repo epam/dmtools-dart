@@ -33,5 +33,15 @@
       "total": 69146,
       "model": ""
     }
+  ],
+  "pr-387": [
+    {
+      "leg": "review",
+      "at": "2026-10-12T08:59:18Z",
+      "prompt": 6696,
+      "completion": 0,
+      "total": 6696,
+      "model": "kimi-for-coding"
+    }
   ]
 }

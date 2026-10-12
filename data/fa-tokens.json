@@ -50,6 +50,14 @@
       "completion": 0,
       "total": 14571,
       "model": "kimi-for-coding"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-12T09:49:39Z",
+      "prompt": 22394,
+      "completion": 0,
+      "total": 22394,
+      "model": "kimi-for-coding"
     }
   ]
 }

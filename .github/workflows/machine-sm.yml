@@ -36,7 +36,44 @@ permissions:
   actions: write          # workflow_dispatch on the teammate workflow
 
 jobs:
+  pick:
+    # Bitrise-first picker (owner 2026-10-13): the pool is preferred, but a
+    # dead/paused pool must never park the machine on "queued forever".
+    # Canary: dispatch the short-capped pool probe and poll briefly; the
+    # probe answering fast = pool alive -> pool. Any other outcome (no
+    # pickup within the window, red, dispatch failure) -> GitHub-hosted.
+    # Worst-case added latency when the pool is down: ~90s once per run.
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Canary the Bitrise pool, else fall back to GitHub-hosted
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run bitrise-probe.yml --ref "$GITHUB_REF_NAME" || true
+          VERDICT=no-pickup
+          RUNNER=ubuntu-24.04
+          for i in $(seq 1 9); do
+            sleep 10
+            R=$(gh run list --workflow bitrise-probe.yml --created ">$TS" \
+                 --limit 1 --json status,conclusion \
+                 --jq '.[0] | "\(.status)/\(.conclusion // "-")"' 2>/dev/null || echo none)
+            case "$R" in
+              completed/success) VERDICT=pool-up;   RUNNER=bitrise-runner-dmtools-ci; break ;;
+              completed/*)       VERDICT=pool-red;  break ;;
+            esac
+          done
+          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
+          echo "picker: $VERDICT -> $RUNNER"
+
   sm:
+    needs: pick
     # Machine loop — tracks IstiN/dmtools-agentic-workflows main
     # (always-latest policy, owner directive 2026-10-04: fixes go live on
     # merge; awf pushes stay review-gated). Agent code and the dmtools CLI
@@ -48,7 +85,7 @@ jobs:
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-sm.yml@main
     with:
       # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: BITRISE-RUNNER-DMTOOLS-CI
+      runner: ${{ needs.pick.outputs.runner }}
       # Bridge-free mode (factory #510): the tick stamps the three required
       # protection checks itself — the sm-validation bridge is deleted.
       # gh-315: the sharded agents suite merges in `agents-gate` (the

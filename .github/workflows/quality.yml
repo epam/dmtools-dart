@@ -17,6 +17,42 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  pick:
+    # Bitrise-first picker (owner 2026-10-13): the pool is preferred, but a
+    # dead/paused pool must never park the machine on "queued forever".
+    # Canary: dispatch the short-capped pool probe and poll briefly; the
+    # probe answering fast = pool alive -> pool. Any other outcome (no
+    # pickup within the window, red, dispatch failure) -> GitHub-hosted.
+    # Worst-case added latency when the pool is down: ~90s once per run.
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Canary the Bitrise pool, else fall back to GitHub-hosted
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run bitrise-probe.yml --ref "$GITHUB_REF_NAME" || true
+          VERDICT=no-pickup
+          RUNNER=ubuntu-24.04
+          for i in $(seq 1 9); do
+            sleep 10
+            R=$(gh run list --workflow bitrise-probe.yml --created ">$TS" \
+                 --limit 1 --json status,conclusion \
+                 --jq '.[0] | "\(.status)/\(.conclusion // "-")"' 2>/dev/null || echo none)
+            case "$R" in
+              completed/success) VERDICT=pool-up;   RUNNER=bitrise-runner-dmtools-ci; break ;;
+              completed/*)       VERDICT=pool-red;  break ;;
+            esac
+          done
+          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
+          echo "picker: $VERDICT -> $RUNNER"
+
   static:
     # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
     # finish in ~2 min and fail the pipeline early on style/type errors.
@@ -274,7 +310,8 @@ jobs:
     # Bitrise pool first (owner 2026-10-13): the 6-shard suite is the
     # pipeline's long pole — hosted slots serialized it behind the whole
     # gate. The workflow comment below already anticipated pool hosting.
-    runs-on: bitrise-runner-dmtools-ci
+    needs: pick
+    runs-on: ${{ needs.pick.outputs.runner }}
     strategy:
       fail-fast: false
       matrix:

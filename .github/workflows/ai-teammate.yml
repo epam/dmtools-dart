@@ -73,6 +73,42 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pick:
+    # Bitrise-first picker (owner 2026-10-13): the pool is preferred, but a
+    # dead/paused pool must never park the machine on "queued forever".
+    # Canary: dispatch the short-capped pool probe and poll briefly; the
+    # probe answering fast = pool alive -> pool. Any other outcome (no
+    # pickup within the window, red, dispatch failure) -> GitHub-hosted.
+    # Worst-case added latency when the pool is down: ~90s once per run.
+    runs-on: ubuntu-latest
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Canary the Bitrise pool, else fall back to GitHub-hosted
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run bitrise-probe.yml --ref "$GITHUB_REF_NAME" || true
+          VERDICT=no-pickup
+          RUNNER=ubuntu-24.04
+          for i in $(seq 1 9); do
+            sleep 10
+            R=$(gh run list --workflow bitrise-probe.yml --created ">$TS" \
+                 --limit 1 --json status,conclusion \
+                 --jq '.[0] | "\(.status)/\(.conclusion // "-")"' 2>/dev/null || echo none)
+            case "$R" in
+              completed/success) VERDICT=pool-up;   RUNNER=bitrise-runner-dmtools-ci; break ;;
+              completed/*)       VERDICT=pool-red;  break ;;
+            esac
+          done
+          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
+          echo "picker: $VERDICT -> $RUNNER"
+
   dedupe:
     # First-wins: the `issues` trigger fires on assigned AND labeled, so one
     # manual launch can dispatch two dev legs minutes apart (live gh-305 twin,
@@ -111,7 +147,7 @@ jobs:
           echo "duplicate=false" >> "$GITHUB_OUTPUT"
 
   factory:
-    needs: dedupe
+    needs: [dedupe, pick]
     if: needs.dedupe.outputs.duplicate != 'true'
     # TWO PINS, never conflated (see test/machine_kit/factory_stub_ref_test.dart):
     #   uses:  — the FACTORY HOME pin (dmtools-agentic-workflows). Moves
@@ -128,7 +164,7 @@ jobs:
       # own ref — github.workflow_ref in a called workflow is the CALLER's).
       factory_ref: d22a4f1032e2cd441200ed1a8309234985385fd2
       # Bitrise Build Hub pool (epam-org visible; probe #229).
-      runner: BITRISE-RUNNER-DMTOOLS-CI
+      runner: ${{ needs.pick.outputs.runner }}
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}
       leg: ${{ github.event.inputs.leg || '' }}
       reason: ${{ github.event.inputs.reason || 'stub' }}

@@ -149,12 +149,16 @@ jobs:
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - run: dart pub global activate coverage
       - name: Format coverage (shard)
-        # Prune empty vm.json stubs first: a tag-excluded (skipped) test
-        # file still emits `{}` — no `coverage` key — and format_coverage
-        # hard-fails on it ("Expected a {"coverage": [...]} report"),
-        # red-lighting every shard for artifacts that carry zero data.
+        # Prune keyless vm.json stubs first: a tag-excluded (skipped) test
+        # file still emits a JSON map WITHOUT the `coverage` key (shape
+        # varies across SDK versions — seen {} and richer stubs), and
+        # format_coverage hard-fails on any such map ("Expected a
+        # {"coverage": [...]} report"). Parse-based: only true reports
+        # survive; stubs carry zero coverage data.
         run: |
-          find coverage -name '*.vm.json' -exec grep -qx '{}' {} \; -delete
+          find coverage -name '*.vm.json' | while IFS= read -r f; do
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and "coverage" not in d else 1)' "$f" && rm -f "$f"
+          done
           dart pub global run coverage:format_coverage \
             --lcov --in coverage --out coverage/lcov.info --report-on lib
       - uses: actions/upload-artifact@v4

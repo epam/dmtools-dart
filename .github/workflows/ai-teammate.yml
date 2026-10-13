@@ -134,6 +134,11 @@ jobs:
       reason: ${{ github.event.inputs.reason || 'stub' }}
       pr: ${{ github.event.inputs.pr || '' }}
       machine-author: ${{ vars.MACHINE_AUTHOR || '' }}
+      # Provider-key slots (generic, awf 75c72a6): slot -> key mapping is
+      # documented HERE, next to the secret reference. Slot 1 carries the
+      # copilot enterprise token (copilot provider, first in the queue —
+      # see .dmtools/runners/*.json apiKeyEnv). Slots 2-3 free.
+      CUSTOM_PROVIDER_KEY1_NAME: COPILOT_EPAM_KEY
     # Explicit mapping — the factory DECLARES SOURCE_GITHUB_TOKEN as a
     # required named secret (plus optional ZAI_CODE_KEY / KIMI_REVIEW_KEY),
     # and `secrets: inherit` does not satisfy required-secret validation at
@@ -142,5 +147,9 @@ jobs:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
       KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
+      # Slot 1 = COPILOT_EPAM_KEY — plain repo secret, runner-masked
+      # natively; the factory exports it into the agent job env under the
+      # name given in with.CUSTOM_PROVIDER_KEY1_NAME above.
+      CUSTOM_PROVIDER_KEY1: ${{ secrets.COPILOT_EPAM_KEY }}
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

@@ -377,51 +377,57 @@ void _faBootPreconfigRunnerTests(String runner) {
   });
 }
 
-/// The review runner must pin its DESIGNED primary (the queue head —
-/// zai glm-5.3-flash; parity with the dev legs since 2026-09-22, before
-/// that kimi/k3) so the wrapper guard passes, while the queue stays wired
-/// for fa builds that consume the failover.
+/// The review runner must pin its DESIGNED primary (copilot/
+/// claude-sonnet-5.5 since 2026-10-13 — the 429-blocked zai glm-5.3-flash
+/// demoted to the queue tail; before that zai parity since 2026-09-22,
+/// before that kimi/k3) so the wrapper guard passes, while the queue stays
+/// wired for fa builds that consume the failover.
 void _reviewQueueHeadPreconfigTests() {
   test(
-      'review runner pins its designed primary (queue head: glm-5.3-flash) '
+      'review runner pins its designed primary (copilot/claude-sonnet-5.5) '
       'and keeps the failover queue', () {
     final env = (_runnerJson(
         '.dmtools/runners/fa-review.json')['params'])['envVariables'] as Map;
-    expect(env['FA_PROVIDER_TYPE'], 'openai-completions',
-        reason: 'the queue head is glm-5.3-flash via the z.ai OpenAI-'
-            'compatible endpoint');
+    expect(env['FA_PROVIDER_TYPE'], 'copilot',
+        reason: 'the designed primary is copilot/claude-sonnet-5.5 via the '
+            'enterprise GitHub Copilot endpoint');
     final config = jsonDecode(env['FA_PROVIDER_CONFIG'] as String) as Map;
-    expect(config['baseUrl'], 'https://api.z.ai/api/coding/paas/v4');
-    expect(config['model'], 'glm-5.3-flash');
-    expect(config['apiKeyEnvVar'], 'ZAI_CODE_KEY',
-        reason: 'the factory maps ZAI_CODE_KEY into the job env '
-            '(factory-teammate.yml)');
+    expect(config['baseUrl'], 'https://api.enterprise.githubcopilot.com');
+    expect(config['model'], 'claude-sonnet-5.5');
+    expect(config['apiKeyEnvVar'], 'COPILOT_EPAM_KEY',
+        reason: 'the factory maps it via the generic CUSTOM_PROVIDER_KEY1 '
+            'slot (stub: slot 1 ← repo secret COPILOT_EPAM_KEY)');
     expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue);
   });
 }
 
 void _devQueueFallbackPreconfigTests() {
   // GLM weekly-limit 429s killed the dev leg with exit 1 (no fallback) —
-  // the dev legs must carry the same queue the review leg has:
-  // zai/glm-5.3-flash primary, kimi-for-coding as the cooldown fallback.
+  // the dev legs must carry a failover queue: copilot/claude-haiku-5.5
+  // head (since 2026-10-13), kimi-for-coding cooldown, zai/glm-5.3-flash
+  // tail.
   for (final runner in ['fa-bug-dev', 'fa-story-dev', 'fa-rework']) {
     test(
-        '$runner declares the fallback queue (glm-5.3-flash → '
-        'kimi-for-coding)', () {
+        '$runner declares the fallback queue (copilot/claude-haiku → '
+        'kimi → zai/glm)', () {
       final env = (_runnerJson(
           '.dmtools/runners/$runner.json')['params'])['envVariables'] as Map;
       expect(env.containsKey('FA_PROVIDERS_QUEUE'), isTrue,
           reason: 'single-provider preconfig dies hard on provider 429s');
       final queue =
           jsonDecode(env['FA_PROVIDERS_QUEUE'] as String) as List<dynamic>;
-      expect(queue, hasLength(2));
+      expect(queue, hasLength(3));
       final head = (queue[0] as Map)['provider_config'] as Map;
-      expect(head['model'], 'glm-5.3-flash');
-      expect(head['apiKeyEnv'], 'ZAI_CODE_KEY');
+      expect(head['model'], 'claude-haiku-5.5');
+      expect(head['baseUrl'], 'https://api.enterprise.githubcopilot.com');
+      expect(head['apiKeyEnv'], 'COPILOT_EPAM_KEY');
       final fallback = (queue[1] as Map)['provider_config'] as Map;
       expect(fallback['model'], 'kimi-for-coding');
       expect(fallback['baseUrl'], 'https://api.kimi.com/coding/v1');
       expect(fallback['apiKeyEnv'], 'KIMI_REVIEW_KEY');
+      final tail = (queue[2] as Map)['provider_config'] as Map;
+      expect(tail['model'], 'glm-5.3-flash');
+      expect(tail['apiKeyEnv'], 'ZAI_CODE_KEY');
     });
   }
 }

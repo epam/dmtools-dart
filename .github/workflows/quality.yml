@@ -271,7 +271,10 @@ jobs:
     # N=6 keeps the pole at ~4 min while adding only 2 extra jobs beyond
     # the proposal (13 total). If the Bitrise pool cannot host them, shards
     # queue — wall time degrades gracefully, correctness is unaffected.
-    runs-on: ubuntu-latest
+    # Bitrise pool first (owner 2026-10-13): the 6-shard suite is the
+    # pipeline's long pole — hosted slots serialized it behind the whole
+    # gate. The workflow comment below already anticipated pool hosting.
+    runs-on: bitrise-runner-dmtools-ci
     strategy:
       fail-fast: false
       matrix:

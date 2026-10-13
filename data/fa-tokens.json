@@ -94,6 +94,15 @@
       "total": 28793,
       "cacheRead": 465152,
       "model": "glm-5.3-flash"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-13T21:27:49Z",
+      "prompt": 37359,
+      "completion": 0,
+      "total": 37359,
+      "cacheRead": 0,
+      "model": "claude-haiku-5.5"
     }
   ],
   "pr-390": [

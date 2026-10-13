@@ -75,5 +75,16 @@
       "total": 38038,
       "model": "kimi-for-coding"
     }
+  ],
+  "pr-392": [
+    {
+      "leg": "review",
+      "at": "2026-10-13T09:34:44Z",
+      "prompt": 52910,
+      "completion": 12746,
+      "total": 65656,
+      "cacheRead": 475776,
+      "model": "glm-5.3-flash"
+    }
   ]
 }

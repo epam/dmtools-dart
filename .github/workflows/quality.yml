@@ -149,15 +149,21 @@ jobs:
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - run: dart pub global activate coverage
       - name: Format coverage (shard)
-        # Prune keyless vm.json stubs first: a tag-excluded (skipped) test
-        # file still emits a JSON map WITHOUT the `coverage` key (shape
-        # varies across SDK versions — seen {} and richer stubs), and
-        # format_coverage hard-fails on any such map ("Expected a
-        # {"coverage": [...]} report"). Parse-based: only true reports
-        # survive; stubs carry zero coverage data.
+        # Prune non-report vm.json stubs: a tag-excluded (skipped) test
+        # file still emits a vm.json that is NOT a coverage report (shape
+        # varies by SDK — seen {}, richer keyless maps, even unparseable
+        # bytes), and format_coverage hard-fails on it. Keep ONLY files
+        # that parse to a dict with a `coverage` list; everything else is
+        # logged and dropped. The prune cannot fail the step by
+        # construction (every failure lands in the else branch).
         run: |
           find coverage -name '*.vm.json' | while IFS= read -r f; do
-            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and "coverage" not in d else 1)' "$f" && rm -f "$f"
+            if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and isinstance(d.get("coverage"),list) else 1)' "$f" 2>/dev/null; then
+              :
+            else
+              echo "prune: $f ($(wc -c <"$f") bytes, not a coverage report)"
+              rm -f "$f"
+            fi
           done
           dart pub global run coverage:format_coverage \
             --lcov --in coverage --out coverage/lcov.info --report-on lib

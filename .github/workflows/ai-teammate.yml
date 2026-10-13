@@ -142,11 +142,10 @@ jobs:
       SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
       ZAI_CODE_KEY: ${{ secrets.ZAI_CODE_KEY }}
       KIMI_REVIEW_KEY: ${{ secrets.KIMI_REVIEW_KEY }}
-      # Universal provider-key passthrough (awf PR #30): ONE repo secret
-      # CUSTOM_PROVIDER_KEY holds a JSON object {"ENV_NAME":"api key"}; the
-      # factory decodes it into the agent job env (values masked). The
-      # runners reference COPILOT_EPAM_KEY — the owner puts the copilot
-      # enterprise key under that name inside CUSTOM_PROVIDER_KEY.
-      CUSTOM_PROVIDER_KEY: ${{ secrets.CUSTOM_PROVIDER_KEY }}
+      # COPILOT_EPAM_KEY (copilot provider, first in the queue) is wired
+      # repo-side by the owner as a plain secret when ready — two lines:
+      # awf factory-teammate.yml declares the optional input (same shape as
+      # KIMI_REVIEW_KEY) and this stub maps COPILOT_EPAM_KEY: ${{ secrets.COPILOT_EPAM_KEY }}.
+      # Until then fa logs a warning and falls back to kimi/zai (queue semantics).
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

@@ -553,5 +553,16 @@
       "cacheRead": 475431,
       "model": "claude-haiku-5.5"
     }
+  ],
+  "issue-375": [
+    {
+      "leg": "dev",
+      "at": "2026-10-14T20:36:17Z",
+      "prompt": 74928,
+      "completion": 20013,
+      "total": 94941,
+      "cacheRead": 1211085,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

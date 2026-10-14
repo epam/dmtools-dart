@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `CliDispatcher` takes its engine-worker and Confluence pools through
+  `CliDispatcherPools` (the `asyncPool` / `confluencePool` named parameters
+  moved there). Internal `src` API; out-of-tree callers must update.
+
 ### Fixed
 
 - Restored the `DMTOOLS_FILE_READ_ALLOWED_PATHS` escape hatch the gh-365

@@ -12,6 +12,12 @@ import 'package:path/path.dart' as p;
 /// File name written at the root of every unpacked pack directory.
 const String packProvenanceFileName = '.provenance.json';
 
+/// Substrings of the JS runtime's missing-`require` errors. The provenance
+/// line is printed only for these; keep them in sync with `require_loader.dart`
+/// and `job_runner.dart`, which throw them.
+const String packMissingModuleMarker = 'Failed to require module';
+const String packMissingFileMarker = 'JavaScript file not found';
+
 /// Identity of the zip an unpacked pack directory came from.
 class PackProvenance {
   /// Creates a provenance record.

@@ -26,11 +26,11 @@ import '../js/tool_bridge.dart';
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_param.dart';
 import '../mcp/tool_registry.dart';
+import '../pack/agent_pack_resolver.dart';
+import '../pack/pack_provenance.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'help_text.dart';
-import '../pack/agent_pack_resolver.dart';
-import '../pack/pack_provenance.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
 
@@ -146,17 +146,16 @@ class CliDispatcher {
   int _runCompile(List<String> rest) =>
       CompileCommand(writer: _writer).run(rest);
 
-  /// The pack root when [rest] targets a versioned agent pack, else null.
+  /// Resolves [rest] once when it targets a versioned agent pack, else null.
   ///
   /// Best-effort: a resolution failure yields null (the run proceeds without
-  /// provenance enrichment — fail open).
-  Directory? _packRootIfPack(List<String> rest) {
-    final resolver = _packResolver ?? AgentPackResolver();
-    if (!resolver.isPack(rest.first)) return null;
+  /// provenance enrichment — fail open). The result is reused by the run path
+  /// so a remote pack is downloaded and unpacked only once per `dmtools run`.
+  ResolvedPack? _pinnedPackFor(List<String> rest, AgentPackResolver resolver) {
+    if (rest.isEmpty || !resolver.isPack(rest.first)) return null;
     try {
-      return resolver
-          .resolve(rest.first, githubToken: PropertyReader().getGithubToken())
-          .packRoot;
+      return resolver.resolve(rest.first,
+          githubToken: PropertyReader().getGithubToken());
     } on Object {
       return null;
     }
@@ -175,8 +174,8 @@ class CliDispatcher {
       return await body();
     } on Object catch (e) {
       final message = e.toString();
-      if (message.contains('Failed to require module') ||
-          message.contains('JavaScript file not found')) {
+      if (message.contains(packMissingModuleMarker) ||
+          message.contains(packMissingFileMarker)) {
         final provenance = PackProvenance.read(packRoot);
         if (provenance != null) {
           _writer('ERROR: ${provenance.describe()}');
@@ -197,10 +196,19 @@ class CliDispatcher {
       _writer('Usage: dmtools run <json-file> [encoded] [--key value ...]');
       return 1;
     }
-    final packRoot = _packRootIfPack(rest);
+    final resolver = _packResolver ?? AgentPackResolver();
+    final pinned = _pinnedPackFor(rest, resolver);
+    final packRoot = pinned?.packRoot;
     try {
-      final resolved = RunCommandProcessor(packResolver: _packResolver)
-          .process(['run', ...rest]);
+      final resolved = RunCommandProcessor(
+        packResolver: pinned == null
+            ? _packResolver
+            : _PinnedPackResolver(
+                resolver,
+                rest.first,
+                pinned,
+              ),
+      ).process(['run', ...rest]);
       final config = jsonDecode(resolved) as Map<String, dynamic>;
       final name = (config['name'] as String?) ?? '<unnamed>';
       final params = (config['params'] as Map<String, dynamic>?) ?? const {};
@@ -734,4 +742,36 @@ class CliDispatcherPools {
 
   /// Agent pack resolver override (gh-375 provenance tests).
   final AgentPackResolver? packResolver;
+}
+
+/// Serves one already-resolved pack for [_target]; every other pack call is
+/// forwarded to [_inner], so `dmtools run` runs the pack it reports provenance for.
+class _PinnedPackResolver extends AgentPackResolver {
+  _PinnedPackResolver(this._inner, this._target, this._pinned)
+      : super(packsRoot: _inner.packsRootDir);
+
+  final AgentPackResolver _inner;
+  final String _target;
+  final ResolvedPack _pinned;
+
+  @override
+  ResolvedPack resolve(String runArg, {String? githubToken}) =>
+      runArg == _target
+          ? _pinned
+          : _inner.resolve(runArg, githubToken: githubToken);
+
+  @override
+  bool isPack(String? runArg) => _inner.isPack(runArg);
+
+  @override
+  bool isRegistryRefShaped(String? runArg) =>
+      _inner.isRegistryRefShaped(runArg);
+
+  @override
+  bool get hasRegistry => _inner.hasRegistry;
+
+  @override
+  void rewritePathsToPackRoot(
+          Map<String, dynamic> config, Directory packRoot) =>
+      _inner.rewritePathsToPackRoot(config, packRoot);
 }

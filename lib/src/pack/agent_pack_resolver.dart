@@ -77,6 +77,9 @@ class AgentPackResolver {
 
   final Directory _packsRoot;
 
+  /// The directory unpacked packs are cached under.
+  Directory get packsRootDir => _packsRoot;
+
   /// The configured registry base URL (env `DMTOOLS_PACK_REGISTRY`), lazily
   /// resolved and cached; `null` when no registry is configured.
   String? _registryBaseUrl;

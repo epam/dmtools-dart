@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:dmtools/src/pack/pack_provenance.dart';
 import 'package:path/path.dart' as p;
@@ -54,12 +55,8 @@ void provenanceCacheTests(AgentPackResolver Function() r) {
       final second = resolver().resolve(zip.path);
       expect(File(p.join(second.packRoot.path, 'MARKER.txt')).existsSync(),
           isFalse);
-      expect(
-          PackProvenance.read(second.packRoot)?.sha256,
-          sha256Of(zip.readAsBytesSync().toString()).length == 64 &&
-                  PackProvenance.read(second.packRoot)?.sha256 != '0000'
-              ? PackProvenance.read(second.packRoot)?.sha256
-              : null);
+      expect(PackProvenance.read(second.packRoot)?.sha256,
+          sha256.convert(zip.readAsBytesSync()).toString());
     });
 
     test('unpacked pack records name, version, sha256 and source', () {

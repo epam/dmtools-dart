@@ -221,12 +221,29 @@ class ToolBridge {
   /// replaces that wrapper.
   String _fileReadHost(String argsJson) {
     final parsed = _decodeArgs(argsJson);
-    String? path;
-    if (parsed is Map) path = parsed['path'] as String?;
+    // Java `FileTools.readFile` parity (gh-401): accepts the string form
+    // `file_read('a.txt')` and the object form `file_read({path})`. Any
+    // other shape (number, array, object without a string `path`, no
+    // argument, null) is a wrong call: it throws, never an empty string.
+    final String path;
+    if (parsed is String) {
+      path = parsed;
+    } else if (parsed is Map && parsed['path'] is String) {
+      path = parsed['path'] as String;
+    } else {
+      return _jsError(
+        'file_read expects a path string or {path: <string>} as its '
+        'argument (got ${parsed == null ? 'no argument' : jsonEncode(parsed)})',
+      );
+    }
     stdout.writeln('Calling tool file_read with args: '
-        '${jsonEncode(parsed is Map ? parsed : const {})}');
+        '${jsonEncode(parsed is Map ? parsed : {'path': path})}');
     return _timed('file_read', () {
-      if (path == null) return 'null';
+      if (path.isEmpty) {
+        // Java parity: empty path answers null (with a warning).
+        stderr.writeln('file_read: empty path');
+        return 'null';
+      }
       final String resolved;
       try {
         // gh-367: the direct host is the read flavor — require() reads

@@ -41,7 +41,7 @@ CliDispatcher _poolDispatcher(AsyncJobPool pool) => CliDispatcher(
       writer: _lines.add,
       propertyReader: PropertyReader(basePath: _tmp.path),
       isTty: () => false,
-      asyncPool: pool,
+      pools: CliDispatcherPools(asyncPool: pool),
     );
 
 /// Writes [source] as a jsrunner script with [jobParams] and runs it
@@ -124,7 +124,7 @@ void _testBootFailure() {
         errorWriter: errorLines.add,
         propertyReader: PropertyReader(basePath: _tmp.path),
         isTty: () => false,
-        asyncPool: _ExplodingPool(),
+        pools: CliDispatcherPools(asyncPool: _ExplodingPool()),
       );
     });
 

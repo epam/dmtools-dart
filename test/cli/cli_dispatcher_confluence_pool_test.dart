@@ -37,7 +37,7 @@ void main() {
       errorWriter: _errorLines.add,
       propertyReader: PropertyReader(basePath: _tmp.path),
       isTty: () => false,
-      confluencePool: _pool,
+      pools: CliDispatcherPools(confluencePool: _pool),
     );
   });
   tearDown(() {

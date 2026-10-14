@@ -40,12 +40,14 @@ CliDispatcher _dispatcherOf(
     writer: lines.add,
     propertyReader: PropertyReader(),
     isTty: () => false,
-    packResolver: _FakePackResolver(
-      ResolvedPack(
-        packRoot: packRoot,
-        entryFile: entry,
-        agent: 'it-pack',
-        version: '1.2.3',
+    pools: CliDispatcherPools(
+      packResolver: _FakePackResolver(
+        ResolvedPack(
+          packRoot: packRoot,
+          entryFile: entry,
+          agent: 'it-pack',
+          version: '1.2.3',
+        ),
       ),
     ),
   );

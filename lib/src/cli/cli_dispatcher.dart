@@ -57,16 +57,14 @@ class CliDispatcher {
     void Function(String line)? errorWriter,
     PropertyReader? propertyReader,
     bool Function()? isTty,
-    AsyncJobPool? asyncPool,
-    SyncWorkerPool? confluencePool,
-    AgentPackResolver? packResolver,
+    CliDispatcherPools pools = const CliDispatcherPools(),
   })  : _writer = writer ?? print,
         _errorWriter = errorWriter ?? stderr.writeln,
         _reader = propertyReader ?? PropertyReader(),
         _isTty = isTty ?? _stdoutIsTty,
-        _asyncPool = asyncPool,
-        _confluencePool = confluencePool,
-        _packResolver = packResolver;
+        _asyncPool = pools.asyncPool,
+        _confluencePool = pools.confluencePool,
+        _packResolver = pools.packResolver;
 
   final AgentPackResolver? _packResolver;
 
@@ -718,4 +716,22 @@ class CliDispatcher {
   /// Help text, byte-identical to the Java `JobRunner.printHelp()`
   /// output (kept in [cliHelpText] — the file line-count gate).
   static const String helpText = cliHelpText;
+}
+
+/// Rarely-wired execution seams for [CliDispatcher] — pools and the pack
+/// resolver test seam — grouped so the constructor stays within the
+/// method_size param limit.
+class CliDispatcherPools {
+  /// Creates the seams; every field defaults to production wiring.
+  const CliDispatcherPools(
+      {this.asyncPool, this.confluencePool, this.packResolver});
+
+  /// Async JS job pool override (worker dispatch tests).
+  final AsyncJobPool? asyncPool;
+
+  /// Confluence sync pool override (pool boot tests).
+  final SyncWorkerPool? confluencePool;
+
+  /// Agent pack resolver override (gh-375 provenance tests).
+  final AgentPackResolver? packResolver;
 }

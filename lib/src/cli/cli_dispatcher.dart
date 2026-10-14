@@ -29,6 +29,8 @@ import '../mcp/tool_registry.dart';
 import '../version.dart';
 import 'doctor_command.dart';
 import 'help_text.dart';
+import '../pack/agent_pack_resolver.dart';
+import '../pack/pack_provenance.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
 
@@ -57,12 +59,16 @@ class CliDispatcher {
     bool Function()? isTty,
     AsyncJobPool? asyncPool,
     SyncWorkerPool? confluencePool,
+    AgentPackResolver? packResolver,
   })  : _writer = writer ?? print,
         _errorWriter = errorWriter ?? stderr.writeln,
         _reader = propertyReader ?? PropertyReader(),
         _isTty = isTty ?? _stdoutIsTty,
         _asyncPool = asyncPool,
-        _confluencePool = confluencePool;
+        _confluencePool = confluencePool,
+        _packResolver = packResolver;
+
+  final AgentPackResolver? _packResolver;
 
   final void Function(String line) _writer;
   final void Function(String line) _errorWriter;
@@ -142,6 +148,46 @@ class CliDispatcher {
   int _runCompile(List<String> rest) =>
       CompileCommand(writer: _writer).run(rest);
 
+  /// The pack root when [rest] targets a versioned agent pack, else null.
+  ///
+  /// Best-effort: a resolution failure yields null (the run proceeds without
+  /// provenance enrichment — fail open).
+  Directory? _packRootIfPack(List<String> rest) {
+    final resolver = _packResolver ?? AgentPackResolver();
+    if (!resolver.isPack(rest.first)) return null;
+    try {
+      return resolver
+          .resolve(rest.first, githubToken: PropertyReader().getGithubToken())
+          .packRoot;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// gh-375: a missing `require` inside a pack surfaces as a raw JS error
+  /// from the job run. Log the pack's provenance (name, version, sha256,
+  /// source URL) on one line before rethrowing, so the failure names the
+  /// exact zip that ran. Non-matching failures rethrow untouched.
+  Future<int> _withPackProvenanceOnFailure(
+    Directory? packRoot,
+    Future<int> Function() body,
+  ) async {
+    if (packRoot == null) return body();
+    try {
+      return await body();
+    } on Object catch (e) {
+      final message = e.toString();
+      if (message.contains('Failed to require module') ||
+          message.contains('JavaScript file not found')) {
+        final provenance = PackProvenance.read(packRoot);
+        if (provenance != null) {
+          _writer('ERROR: ${provenance.describe()}');
+        }
+      }
+      rethrow;
+    }
+  }
+
   /// Runs a job: resolve config → parse name/params → execute → print result.
   ///
   /// Returns `0` on success, `1` on any error (bad config, unknown job,
@@ -153,12 +199,17 @@ class CliDispatcher {
       _writer('Usage: dmtools run <json-file> [encoded] [--key value ...]');
       return 1;
     }
+    final packRoot = _packRootIfPack(rest);
     try {
-      final resolved = RunCommandProcessor().process(['run', ...rest]);
+      final resolved = RunCommandProcessor(packResolver: _packResolver)
+          .process(['run', ...rest]);
       final config = jsonDecode(resolved) as Map<String, dynamic>;
       final name = (config['name'] as String?) ?? '<unnamed>';
       final params = (config['params'] as Map<String, dynamic>?) ?? const {};
-      return await _executeJob(name, params);
+      return await _withPackProvenanceOnFailure(
+        packRoot,
+        () => _executeJob(name, params),
+      );
     } on ArgumentError catch (e) {
       _writer('Error: ${e.message}');
       return 1;

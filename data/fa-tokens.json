@@ -448,5 +448,16 @@
       "cacheRead": 1271296,
       "model": "glm-5.3-flash"
     }
+  ],
+  "issue-401": [
+    {
+      "leg": "dev",
+      "at": "2026-10-14T14:26:31Z",
+      "prompt": 68481,
+      "completion": 15050,
+      "total": 83531,
+      "cacheRead": 1259550,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

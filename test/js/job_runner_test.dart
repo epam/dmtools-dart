@@ -194,7 +194,6 @@ void _testHostFunctions() {
         dir.deleteSync(recursive: true);
       }
     });
-
   });
 }
 

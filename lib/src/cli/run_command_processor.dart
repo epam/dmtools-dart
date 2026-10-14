@@ -19,6 +19,7 @@ import 'job_registry.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../pack/agent_pack_resolver.dart';
+import '../pack/pack_provenance.dart';
 
 /// Processes `dmtools run` command arguments into resolved config JSON.
 class RunCommandProcessor {
@@ -59,10 +60,13 @@ class RunCommandProcessor {
         target,
         githubToken: PropertyReader().getGithubToken(),
       );
-      return _processConfigFile(
-        pack.entryFile.path,
-        runArgs,
-        packRoot: pack.packRoot,
+      return _logPackProvenanceOnFailure(
+        pack.packRoot,
+        () => _processConfigFile(
+          pack.entryFile.path,
+          runArgs,
+          packRoot: pack.packRoot,
+        ),
       );
     }
 
@@ -73,6 +77,25 @@ class RunCommandProcessor {
       return _processJobName(target, runArgs);
     }
     return _processConfigFile(target, runArgs);
+  }
+
+  /// gh-375: a missing `require` inside a pack surfaces as a raw JS error.
+  /// Log the pack's provenance (name, version, sha256, source URL) on one
+  /// line before rethrowing, so the failure names the exact zip that ran.
+  T _logPackProvenanceOnFailure<T>(Directory packRoot, T Function() body) {
+    try {
+      return body();
+    } on Object catch (e) {
+      final message = e.toString();
+      if (message.contains('Failed to require module') ||
+          message.contains('JavaScript file not found')) {
+        final provenance = PackProvenance.read(packRoot);
+        if (provenance != null) {
+          stderr.writeln('ERROR: ${provenance.describe()}');
+        }
+      }
+      rethrow;
+    }
   }
 
   // ------------------------------------------------------------------

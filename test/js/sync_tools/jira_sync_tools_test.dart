@@ -278,6 +278,24 @@ void testnewwritetools_p2() {
     expect(fields['summary'], 'FromString');
   });
 
+  test('jira_create_ticket_with_json surfaces the full Jira error body', () {
+    // gh-403: a Jira 400 (missing required Epic Name) used to reach agent
+    // logs as `{}` — the error envelope must carry the status and the
+    // complete errors map, not a 120-char snippet.
+    final result = tools.dispatch('jira_create_ticket_with_json', {
+      'project': 'FAILCREATE',
+      'fieldsJson': {
+        'summary': 'Epic without Epic Name',
+        'issuetype': {'name': 'Epic'},
+      },
+    });
+    final error = errOf(result)['error'] as String;
+    expect(error, startsWith('HTTP 400:'));
+    expect(error, contains('Epic Name is required'));
+    expect(error, contains('split the content across multiple lines'));
+    expect(error.length, greaterThan(120));
+  });
+
   test('jira_create_ticket alias routes to the create executor', () {
     final body = jsonDecode(tools.dispatch('jira_create_ticket', {
       'project': 'PROJ',
@@ -510,6 +528,7 @@ void _testUpdateFieldEngine() {
     testupdatefield_p2();
     testupdatefield_p3();
     testupdatefield_p4();
+    testupdatefield_p5();
   });
 }
 
@@ -645,13 +664,16 @@ void testupdatefield_p3() {
 }
 
 void testupdatefield_p4() {
-  test('unknown field name reports no matches', () {
+  test('unknown field name returns a no-fields error envelope', () {
     final result = tools.dispatch('jira_update_field', {
       'key': 'PROJ-1',
       'field': 'Nope Field',
       'value': 'v',
     });
-    expect(jsonDecode(result), "No fields found with name 'Nope Field'");
+    expect(
+      errOf(result),
+      {'error': "No fields found with name 'Nope Field'"},
+    );
   });
 
   test('per-field failures produce ❌ lines and a failed summary', () {
@@ -671,16 +693,44 @@ void testupdatefield_p4() {
       ),
     );
   });
+}
 
-  test('single-field failure through a name keeps the plain message', () {
+/// gh-403: name-path failures must surface as `{"error": …}` envelopes
+/// carrying the HTTP status and the full Jira error body.
+void testupdatefield_p5() {
+  test('single-field failure through a name carries status and body', () {
+    // gh-403: the failure was collapsed to a plain sentence — the HTTP
+    // status and the Jira error body vanished, so agent logs showed
+    // nothing diagnosable.
     final result = tools.dispatch('jira_update_field', {
       'key': 'PROJ-FAIL',
       'field': 'Dependencies',
       'value': 'v',
     });
+    final error = errOf(result)['error'] as String;
     expect(
-      jsonDecode(result),
-      "Failed to update field 'Dependencies' on ticket PROJ-FAIL",
+      error,
+      startsWith(
+        "Failed to update field 'Dependencies' on ticket PROJ-FAIL:",
+      ),
     );
+    expect(error, contains('HTTP 400'));
+    expect(error, contains('Boom'));
+    expect(error, contains('nope'));
+  });
+
+  test('field listing failure surfaces the HTTP error envelope', () {
+    // '/field' 503s with 'fieldfail' and createmeta 503s with 'metafail':
+    // both resolution legs fail, so the HTTP failure must reach the caller
+    // instead of collapsing to "No fields found with name …".
+    configureJira(server, token: 'fieldfail metafail');
+    final result = tools.dispatch('jira_update_field', {
+      'key': 'PROJ-1',
+      'field': 'Story Points',
+      'value': '8',
+    });
+    final error = errOf(result)['error'] as String;
+    expect(error, contains("Failed to resolve field 'Story Points'"));
+    expect(error, contains('HTTP 503'));
   });
 }

@@ -65,6 +65,10 @@ String? _performFieldUpdate(
 /// `getAllFieldCustomCodes` over the field listing, falling back to the
 /// best-match single field) and updates each, mirroring the Java
 /// `✅`/`❌` summary contract.
+///
+/// gh-403: resolution failures (field listing failed, no field with the
+/// name) return an `{"error": …}` envelope — never a plain sentence the
+/// caller cannot tell apart from a silent no-op.
 String _updateFieldsByName(
   _JiraSyncConfig config,
   String key,
@@ -72,10 +76,14 @@ String _updateFieldsByName(
   Object? coerced,
 ) {
   final listing = _fieldsListing(config, jiraProjectKeyOf(key));
-  final fieldIds =
-      _resolveActiveFieldIds(findAllJiraFieldsByName(field, listing));
+  if (listing.error != null) {
+    return _err("Failed to resolve field '$field': ${listing.error}");
+  }
+  final fieldIds = _resolveActiveFieldIds(
+    findAllJiraFieldsByName(field, listing.body!),
+  );
   if (fieldIds.isEmpty) {
-    return jsonEncode("No fields found with name '$field'");
+    return _err("No fields found with name '$field'");
   }
   if (fieldIds.length == 1) {
     return _singleFieldUpdateResult(
@@ -97,8 +105,11 @@ List<String> _resolveActiveFieldIds(List<JiraFieldCandidate> matches) {
   return best == null ? const [] : [best.id];
 }
 
-/// The single-field outcome: Java's success/failure sentence without the
-/// per-field ✅/❌ lines.
+/// The single-field outcome: Java's success sentence, or an `{"error": …}`
+/// envelope carrying the HTTP status and the full Jira error body.
+///
+/// gh-403: the failure detail used to be computed and then discarded for a
+/// detail-free sentence ("Failed to update field 'X' on ticket Y").
 String _singleFieldUpdateResult(
   _JiraSyncConfig config,
   String key,
@@ -107,9 +118,10 @@ String _singleFieldUpdateResult(
   Object? coerced,
 ) {
   final failure = _performFieldUpdate(config, key, fieldId, coerced);
-  return jsonEncode(failure == null
-      ? "Field '$field' updated successfully on ticket $key"
-      : "Failed to update field '$field' on ticket $key");
+  if (failure != null) {
+    return _err("Failed to update field '$field' on ticket $key: $failure");
+  }
+  return jsonEncode("Field '$field' updated successfully on ticket $key");
 }
 
 /// The multi-field outcome: one `✅`/`❌` line per field, then the Java
@@ -142,14 +154,28 @@ String _multiFieldUpdateResult(
 /// Fetches the field listing with the Java fallback chain: GET `field`;
 /// on failure GET `issue/createmeta` with the project filter and fields
 /// expansion.
-String _fieldsListing(_JiraSyncConfig config, String project) {
+///
+/// Returns the listing [body], or the [error] detail when both legs fail
+/// (gh-403: the failure used to flow into the name matcher and collapse to
+/// a bare "No fields found with name …").
+({String? body, String? error}) _fieldsListing(
+  _JiraSyncConfig config,
+  String project,
+) {
   final direct = SyncHttpClient.get(
     '${config.baseUrl}/field',
     headers: config.headers,
   );
-  if (direct.isOk) return direct.body;
+  if (direct.isOk) return (body: direct.body, error: null);
   final url = '${config.baseUrl}/issue/createmeta'
       '?projectKeys=${Uri.encodeQueryComponent(project)}'
       '&expand=projects.issuetypes.fields';
-  return SyncHttpClient.get(url, headers: config.headers).body;
+  final fallback = SyncHttpClient.get(url, headers: config.headers);
+  if (fallback.isOk) return (body: fallback.body, error: null);
+  return (
+    body: null,
+    error: '${_failureDetail('HTTP ${direct.statusCode}', direct)}; '
+        'createmeta fallback: '
+        '${_failureDetail('HTTP ${fallback.statusCode}', fallback)}',
+  );
 }

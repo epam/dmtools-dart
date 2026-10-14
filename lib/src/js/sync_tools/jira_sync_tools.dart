@@ -495,9 +495,13 @@ class JiraSyncTools {
   /// candidate's id. Returns JSON `null` when nothing matches (Java returns
   /// `null`).
   String _getFieldCustomCode(Map<String, dynamic> args) => _run((config) {
-        final body = _fieldsListing(config, _asStr(args['project']));
+        final field = _asStr(args['fieldName']);
+        final listing = _fieldsListing(config, _asStr(args['project']));
+        if (listing.error != null) {
+          return _err("Failed to resolve field '$field': ${listing.error}");
+        }
         final best = selectBestJiraField(
-          findAllJiraFieldsByName(_asStr(args['fieldName']), body),
+          findAllJiraFieldsByName(field, listing.body!),
         );
         return best == null ? 'null' : jsonEncode(best.id);
       });

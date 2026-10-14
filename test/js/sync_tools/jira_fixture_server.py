@@ -11,9 +11,15 @@ serves canned Jira shapes the sync executors resolve against:
                                        (503 when the auth token contains
                                        'fieldfail', to exercise the
                                        createmeta fallback)
+- GET  */issue/createmeta          -> empty createmeta (503 when the auth
+                                       token contains 'metafail', so both
+                                       field-resolution legs fail)
 - GET  *fields=attachment*         -> attachment fixture ('__attached' key
                                        already owns 'doc.md')
 - PUT  */issue/PROJ-FAIL           -> 400 Jira field-update failure shape
+- POST */issue                     -> 400 Jira create failure shape when
+                                       the body contains '"FAILCREATE"'
+                                       (a >120-char body, gh-403)
 - GET  /__last                     -> last served request "METHOD path"
 - everything else                  -> echo of method/path/headers/body
 """
@@ -44,6 +50,14 @@ FIELDS = json.dumps([
 ])
 
 CREATE_META = json.dumps({"projects": []})
+
+CREATE_FAIL = json.dumps({
+    "errorMessages": ["Epic Name is required"],
+    "errors": {
+        "customfield_10400": "Acceptance Criteria content is too long; "
+                             "split the content across multiple lines",
+    },
+})
 
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
@@ -91,7 +105,17 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._respond(json.dumps(payload))
             return
         if "/issue/createmeta" in self.path:
+            auth = self.headers.get("Authorization", "")
+            if "metafail" in auth:
+                self._respond('{"errors": ["forbidden"]}', status=503)
+                return
             self._respond(CREATE_META)
+            return
+        if self.command == "POST" and "/issue" in self.path \
+                and '"FAILCREATE"' in body:
+            # Jira-shaped create failure with a >120-char error body
+            # (gh-403: the full errors map must reach the caller).
+            self._respond(CREATE_FAIL, status=400)
             return
         if self.command == "PUT" and "/issue/PROJ-FAIL" in self.path:
             # Jira-shaped field-update failure (updateField ❌ summary path).

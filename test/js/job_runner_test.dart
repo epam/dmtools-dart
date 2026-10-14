@@ -18,6 +18,7 @@ void main() {
   _testContextInjection();
   _testExtraGlobalsFlatten();
   _testHostFunctions();
+  _testHostFunctionsBadForms();
   _testSetEnvVariable();
   _testErrorDispatch();
   _testWrapperDispatch();
@@ -194,6 +195,11 @@ void _testHostFunctions() {
       }
     });
 
+  });
+}
+
+void _testHostFunctionsBadForms() {
+  group('host functions — bad call forms and sandbox parity', () {
     test(
         'file_read throws on a wrong call form instead of returning empty (gh-401)',
         () {

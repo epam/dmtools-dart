@@ -79,15 +79,6 @@
   "pr-392": [
     {
       "leg": "review",
-      "at": "2026-10-13T21:59:51Z",
-      "prompt": 74866,
-      "completion": 0,
-      "total": 74866,
-      "cacheRead": 0,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "review",
       "at": "2026-10-13T22:18:11Z",
       "prompt": 82357,
       "completion": 0,
@@ -434,6 +425,15 @@
       "prompt": 363952,
       "completion": 0,
       "total": 363952,
+      "cacheRead": 0,
+      "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-14T07:08:38Z",
+      "prompt": 371347,
+      "completion": 0,
+      "total": 371347,
       "cacheRead": 0,
       "model": "claude-haiku-5.5"
     }

@@ -73,12 +73,14 @@ String _bodyOrError(SyncHttpResponse resp) {
   return resp.body;
 }
 
-/// Formats a failure message with a short body snippet.
-String _failureDetail(String reason, SyncHttpResponse resp) {
-  final snippet =
-      resp.body.length > 120 ? resp.body.substring(0, 120) : resp.body;
-  return '$reason: $snippet';
-}
+/// Formats a failure message carrying the **full** response body.
+///
+/// gh-403: Jira error maps (e.g. a missing required Epic Name) are longer
+/// than the old 120-char snippet — the map must reach the caller verbatim
+/// (Java `checkJiraResponseForErrors` embeds the whole body in the
+/// `IOException` it throws).
+String _failureDetail(String reason, SyncHttpResponse resp) =>
+    '$reason: ${resp.body}';
 
 /// Joins a `fields` argument (list or comma string) into a query value.
 ///

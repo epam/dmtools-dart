@@ -706,6 +706,12 @@ const String _consoleBootstrap = '''
             var a = args[i];
             if (typeof a === 'string') {
                 parts.push(a);
+            } else if (a instanceof Error) {
+                // gh-403: JSON.stringify(new Error(m)) === '{}' (message
+                // and stack are non-enumerable) — log the human-readable
+                // `String(e)` form ("Error: message") so agent scripts
+                // surface the error text.
+                parts.push(String(a));
             } else {
                 var s;
                 try { s = JSON.stringify(a); } catch (e) { s = null; }

@@ -76,6 +76,37 @@ jobs:
           echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
           echo "picker: $VERDICT -> $RUNNER"
 
+  sweep-check-runs:
+    # Orphaned-check-run janitor (autonomy, 2026-10-14): when a validation
+    # run concludes but a job check-run stays `in_progress` (attempt races,
+    # superseded dispatches), the SM's hasActiveHeadRun probe reads
+    # "still running" forever — no failure verdict, no rework leg, the PR
+    # deadlocks (live: #402 held 3h by 15:11 zombies). Only the creator
+    # identity may PATCH a check-run, so the sweep runs HERE, under
+    # github.token (github-actions[bot] created the job check-runs).
+    # For every open PR head: the LATEST Quality run on that head, once
+    # completed, donates its per-job conclusions to any still-hanging
+    # static/gate/agents-gate check-runs. Skip while the run is active —
+    # the guard must stay truthful. No-op when states agree.
+    runs-on: ubuntu-slim
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for sha in $(gh pr list -R "$GITHUB_REPOSITORY" --state open --json headRefOid --jq '.[].headRefOid' | sort -u); do
+            latest=$(gh run list -R "$GITHUB_REPOSITORY" --commit "$sha" --json databaseId,status,conclusion,workflowName --jq '[.[] | select(.workflowName=="Quality")] | sort_by(.databaseId) | reverse | .[0] // empty') || continue
+            [ -n "$latest" ] || continue
+            [ "$(echo "$latest" | jq -r .status)" = "completed" ] || continue
+            rid=$(echo "$latest" | jq -r .databaseId)
+            jobs_json=$(gh run view "$rid" -R "$GITHUB_REPOSITORY" --json jobs)
+            gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?status=in_progress&per_page=100" --jq '.check_runs[] | select(.name=="static" or .name=="gate" or .name=="agents-gate") | .id' | while read -r crid; do
+              name=$(gh api "repos/$GITHUB_REPOSITORY/check-runs/$crid" --jq .name)
+              concl=$(echo "$jobs_json" | jq -r --arg n "$name" '[.jobs[] | select(.name==$n)][0].conclusion // "failure"')
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/check-runs/$crid" -f status=completed -f conclusion="$concl" --jq '"sweep: \(.name) -> \(.conclusion)"' || echo "sweep: could not complete $name ($crid)" >&2
+            done
+          done
+          echo "sweep: done"
+
   sm:
     needs: pick
     # Machine loop — tracks IstiN/dmtools-agentic-workflows main

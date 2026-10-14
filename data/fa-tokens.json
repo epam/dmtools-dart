@@ -400,6 +400,15 @@
       "total": 282610,
       "cacheRead": 0,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-14T04:34:02Z",
+      "prompt": 290005,
+      "completion": 0,
+      "total": 290005,
+      "cacheRead": 0,
+      "model": "claude-haiku-5.5"
     }
   ],
   "pr-390": [

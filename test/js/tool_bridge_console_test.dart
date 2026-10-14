@@ -11,6 +11,13 @@ import 'package:test/test.dart';
 /// Every script defines `action(params)` — the JSRunner contract enforced
 /// by [JsJobRunner.runScript] (Java `JobJavaScriptBridge` parity).
 void main() {
+  testConsoleStringArgs();
+  testConsoleErrorArgs();
+}
+
+/// String, JSON-encoded, joined, and oversized console arguments pass
+/// through to the host without breaking script execution.
+void testConsoleStringArgs() {
   test('console.log prints a plain string argument and continues', () {
     final result = _runScript(
       "function action(params) { console.log('hello'); return 1 + 1; }",
@@ -58,7 +65,11 @@ void main() {
     );
     expect(result, '7');
   });
+}
 
+/// gh-403: Error arguments render as the human-readable `String(e)` form,
+/// never the `{}` of `JSON.stringify(new Error(m))`.
+void testConsoleErrorArgs() {
   test('console.error renders an Error object with its message', () {
     // gh-403: JSON.stringify(new Error(m)) === '{}' (message/stack are
     // non-enumerable), so every `console.error('…', e)` in agent scripts

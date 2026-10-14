@@ -528,6 +528,7 @@ void _testUpdateFieldEngine() {
     testupdatefield_p2();
     testupdatefield_p3();
     testupdatefield_p4();
+    testupdatefield_p5();
   });
 }
 
@@ -692,7 +693,11 @@ void testupdatefield_p4() {
       ),
     );
   });
+}
 
+/// gh-403: name-path failures must surface as `{"error": …}` envelopes
+/// carrying the HTTP status and the full Jira error body.
+void testupdatefield_p5() {
   test('single-field failure through a name carries status and body', () {
     // gh-403: the failure was collapsed to a plain sentence — the HTTP
     // status and the Jira error body vanished, so agent logs showed

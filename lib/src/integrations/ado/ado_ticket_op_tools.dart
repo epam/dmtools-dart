@@ -30,6 +30,15 @@ ToolDefinition _opTool(
       params: params,
     );
 
+/// Optional `format` param (`html` default | `markdown`). A field saved as
+/// Markdown cannot go back to HTML (ADO rule).
+ToolParam _formatParam() => ToolParam(
+      name: 'format',
+      description: 'Optional content format: html (default) or markdown. '
+          'A field saved as Markdown cannot go back to HTML (ADO rule).',
+      required: false,
+    );
+
 /// `ado_create_work_item` — Java `createWorkItemWithFieldsJson`.
 ToolDefinition _createWorkItemTool() => _opTool(
       'ado_create_work_item',
@@ -58,6 +67,7 @@ ToolDefinition _createWorkItemTool() => _opTool(
           required: false,
           aliases: ['parentKey'],
         ),
+        _formatParam(),
       ],
       aliases: ['tracker_create_ticket'],
     );
@@ -82,6 +92,7 @@ List<ToolDefinition> _ticketOpTools() => [
           'ado_update_description', 'Update the description of a work item', [
         _workItemId(),
         _req('description', 'The new description (HTML format)'),
+        _formatParam(),
       ],
           aliases: [
             'tracker_update_description'
@@ -114,6 +125,7 @@ List<ToolDefinition> _ticketFieldTools() => [
             _workItemId(),
             _req('field', 'Field reference name or common name'),
             _req('value', 'The new value'),
+            _formatParam(),
           ],
           aliases: [
             'tracker_update_field'
@@ -208,14 +220,17 @@ Map<String, _AdoHandler> _ticketOpHandlers(AdoWorkItemOps ops) => {
             description: a['description'] as String?,
             fieldsJson: _fieldsJsonArg(a['fieldsJson']),
             parentId: _optInt(a['parentId']),
+            format: a['format'] as String?,
           ),
       'ado_move_to_state': (a) => ops.moveToState(_id(a), _s(a, 'state')),
       'ado_assign_work_item': (a) => ops.assign(_id(a), _s(a, 'userEmail')),
-      'ado_update_description': (a) =>
-          ops.updateDescription(_id(a), _s(a, 'description')),
+      'ado_update_description': (a) => ops.updateDescription(
+          _id(a), _s(a, 'description'),
+          format: a['format'] as String?),
       'ado_update_tags': (a) => ops.updateTags(_id(a), _s(a, 'tags')),
-      'ado_update_field': (a) =>
-          ops.updateField(_id(a), _s(a, 'field'), a['value']),
+      'ado_update_field': (a) => ops.updateField(
+          _id(a), _s(a, 'field'), a['value'],
+          format: a['format'] as String?),
       'ado_set_priority': (a) => ops.setPriority(_id(a), _s(a, 'priority')),
       'ado_get_field_code': (a) =>
           ops.getFieldCode(a['project'] as String?, _s(a, 'fieldName')),

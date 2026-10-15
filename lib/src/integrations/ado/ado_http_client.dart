@@ -130,11 +130,12 @@ class AdoHttpClient extends BaseHttpClient {
     Object? body,
     String contentType = 'application/json',
     String? project,
+    Map<String, String>? queryParams,
   }) async {
     final response = await dio.request<String>(
       project == null ? buildUrl(path) : buildProjectUrl(project, path),
       data: body,
-      queryParameters: {'api-version': apiVersion},
+      queryParameters: {'api-version': apiVersion, ...?queryParams},
       options: Options(
         method: method,
         headers: {...authHeaders, 'Content-Type': contentType},
@@ -144,10 +145,13 @@ class AdoHttpClient extends BaseHttpClient {
   }
 
   /// POSTs a JSON body, attaching the API version as a query parameter.
+  /// [queryParams] are merged in (e.g. `format=markdown` for comments).
   @override
   Future<String> post(String path,
-          {Object? body, Map<String, String>? extra}) =>
-      _request('POST', path, body: body);
+          {Object? body,
+          Map<String, String>? extra,
+          Map<String, String>? queryParams}) =>
+      _request('POST', path, body: body, queryParams: queryParams);
 
   /// PUTs a JSON body, attaching the API version as a query parameter. Used
   /// to add pull-request reviewers.

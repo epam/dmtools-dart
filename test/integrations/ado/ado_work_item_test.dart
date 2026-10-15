@@ -481,9 +481,13 @@ class _WorkItemSpy extends AdoClient {
   }
 
   @override
-  Future<Map<String, dynamic>> addWorkItemComment(int id, String text) {
+  Future<Map<String, dynamic>> addWorkItemComment(
+    int id,
+    String text, {
+    String? format,
+  }) {
     calls.add('addWorkItemComment:$id:$text');
-    return super.addWorkItemComment(id, text);
+    return super.addWorkItemComment(id, text, format: format);
   }
 
   @override

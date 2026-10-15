@@ -173,6 +173,11 @@ List<ToolDefinition> _commentTools() => [
             description: 'The comment text',
             aliases: ['text'],
           ),
+          ToolParam(
+            name: 'format',
+            description: 'Optional comment format: html (default) or markdown',
+            required: false,
+          ),
         ],
       ),
       ToolDefinition(
@@ -329,6 +334,7 @@ class AdoToolExecutor {
     'ado_add_work_item_comment': (a) => _client.addWorkItemComment(
           _id(a),
           (a['comment'] ?? a['text']) as String,
+          format: a['format'] as String?,
         ),
     'ado_create_repo': (a) => _client.createRepo(
           a['project'] as String,

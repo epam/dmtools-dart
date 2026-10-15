@@ -121,6 +121,7 @@ void catalogTests() {
         'description',
         'fieldsJson',
         'parentId',
+        'format',
       ]);
       expect(
         tool.params.where((p) => p.required).map((p) => p.name),

@@ -99,24 +99,52 @@ Map<String, dynamic> _addField(String name, Object? value) =>
 
 /// JSON-Patch body (encoded) setting each entry of [fields] — Java
 /// `updateWorkItem`.
-String adoFieldsPatch(Map<String, Object?> fields) => jsonEncode([
+///
+/// With [markdown], each field also gets a `/multilineFieldsFormat/<field>`
+/// op set to `Markdown` (Java `AzureDevOpsClient` `format` support).
+String adoFieldsPatch(
+  Map<String, Object?> fields, {
+  bool markdown = false,
+}) =>
+    jsonEncode([
       for (final e in fields.entries) _addField(e.key, e.value),
+      if (markdown)
+        for (final name in fields.keys) _markdownFormatOp(name),
     ]);
+
+/// Whether the optional `format` argument requests Markdown: case-insensitive,
+/// trimmed `markdown` or `md`. Anything else (incl. omitted) means HTML.
+bool isAdoMarkdownFormat(Object? format) {
+  if (format == null) return false;
+  final f = '$format'.trim().toLowerCase();
+  return f == 'markdown' || f == 'md';
+}
+
+Map<String, dynamic> _markdownFormatOp(String fieldRef) => {
+      'op': 'add',
+      'path': '/multilineFieldsFormat/$fieldRef',
+      'value': 'Markdown',
+    };
 
 /// JSON-Patch body for work-item creation: title, optional description,
 /// then [fieldsJson] keys (skipping Title/Description/WorkItemType).
+///
+/// With [markdown] and a non-empty [description], also sets the
+/// `System.Description` format to Markdown.
 String adoCreatePatch(
   String title,
   String? description,
-  Map<String, dynamic>? fieldsJson,
-) {
+  Map<String, dynamic>? fieldsJson, {
+  bool markdown = false,
+}) {
   const skipped = {'System.Title', 'System.Description', 'System.WorkItemType'};
+  final hasDescription = description != null && description.isNotEmpty;
   return jsonEncode([
     _addField('System.Title', title),
-    if (description != null && description.isNotEmpty)
-      _addField('System.Description', description),
+    if (hasDescription) _addField('System.Description', description),
     for (final e in (fieldsJson ?? const <String, dynamic>{}).entries)
       if (!skipped.contains(e.key)) _addField(e.key, e.value),
+    if (markdown && hasDescription) _markdownFormatOp('System.Description'),
   ]);
 }
 

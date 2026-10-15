@@ -14,6 +14,7 @@ import 'package:dio/dio.dart' show DioException;
 import 'ado_http_client.dart';
 import 'ado_json.dart';
 import 'ado_work_item_client.dart';
+import 'ado_work_item_ops.dart';
 
 /// Azure DevOps API methods exposed to the MCP tool runtime.
 class AdoClient {
@@ -363,10 +364,18 @@ class AdoClient {
 
   /// `ado_add_work_item_comment` — POST `wit/workitems/{id}/comments` with
   /// `{"text": text}` (mirrors the Java `postComment` body).
-  Future<Map<String, dynamic>> addWorkItemComment(int id, String text) async {
+  ///
+  /// [format] `markdown` appends `format=markdown` (Java `postComment`);
+  /// any other value keeps the previous HTML wire format.
+  Future<Map<String, dynamic>> addWorkItemComment(
+    int id,
+    String text, {
+    String? format,
+  }) async {
     final body = await _http.post(
       'wit/workitems/$id/comments',
       body: jsonEncode({'text': text}),
+      queryParams: isAdoMarkdownFormat(format) ? {'format': 'markdown'} : null,
     );
     return jsonDecode(body) as Map<String, dynamic>;
   }

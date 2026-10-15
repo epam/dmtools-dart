@@ -24,9 +24,15 @@ class AdoWorkItemOps {
       jsonDecode(await _http.patchPatch('wit/workitems/$id', body: patch))
           as Map<String, dynamic>;
 
-  /// Sets one [field] (reference name) on work item [id].
-  Future<Map<String, dynamic>> setField(int id, String field, Object? value) =>
-      _patchItem(id, adoFieldsPatch({field: value}));
+  /// Sets one [field] (reference name) on work item [id]. With [markdown]
+  /// the field's format is also set to Markdown (Java `format` support).
+  Future<Map<String, dynamic>> setField(
+    int id,
+    String field,
+    Object? value, {
+    bool markdown = false,
+  }) =>
+      _patchItem(id, adoFieldsPatch({field: value}, markdown: markdown));
 
   /// `ado_move_to_state` — sets `System.State`.
   Future<Map<String, dynamic>> moveToState(int id, String state) =>
@@ -36,21 +42,30 @@ class AdoWorkItemOps {
   Future<Map<String, dynamic>> assign(int id, String userEmail) =>
       setField(id, 'System.AssignedTo', userEmail);
 
-  /// `ado_update_description` — sets `System.Description`.
-  Future<Map<String, dynamic>> updateDescription(int id, String description) =>
-      setField(id, 'System.Description', description);
+  /// `ado_update_description` — sets `System.Description`; [format] `markdown`
+  /// (see [isAdoMarkdownFormat]) also marks it as Markdown.
+  Future<Map<String, dynamic>> updateDescription(
+    int id,
+    String description, {
+    String? format,
+  }) =>
+      setField(id, 'System.Description', description,
+          markdown: isAdoMarkdownFormat(format));
 
   /// `ado_update_tags` — sets `System.Tags` (semicolon-separated).
   Future<Map<String, dynamic>> updateTags(int id, String tags) =>
       setField(id, 'System.Tags', tags);
 
-  /// `ado_update_field` — sets [field] after [resolveAdoFieldName] mapping.
+  /// `ado_update_field` — sets [field] after [resolveAdoFieldName] mapping;
+  /// [format] `markdown` also marks the field's format as Markdown.
   Future<Map<String, dynamic>> updateField(
     int id,
     String field,
-    Object? value,
-  ) =>
-      setField(id, resolveAdoFieldName(field), value);
+    Object? value, {
+    String? format,
+  }) =>
+      setField(id, resolveAdoFieldName(field), value,
+          markdown: isAdoMarkdownFormat(format));
 
   /// `ado_set_priority` — sets the numeric priority.
   ///
@@ -83,10 +98,12 @@ class AdoWorkItemOps {
     String? description,
     Map<String, dynamic>? fieldsJson,
     int? parentId,
+    String? format,
   }) async {
     final body = await _http.postPatch(
       'wit/workitems/\$$workItemType',
-      body: adoCreatePatch(title, description, fieldsJson),
+      body: adoCreatePatch(title, description, fieldsJson,
+          markdown: isAdoMarkdownFormat(format)),
       project: project.isEmpty ? null : project,
     );
     final created = jsonDecode(body) as Map<String, dynamic>;

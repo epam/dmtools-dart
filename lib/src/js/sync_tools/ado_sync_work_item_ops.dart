@@ -36,8 +36,9 @@ final Map<String, AdoSyncExecutor> adoWorkItemOpExecutors = {
       _setField(c, a, 'System.State', adoArg(a, ['state', 'statusName'])),
   'ado_assign_work_item': (c, a) => _setField(
       c, a, 'System.AssignedTo', adoArg(a, ['userEmail', 'accountId'])),
-  'ado_update_description': (c, a) =>
-      _setField(c, a, 'System.Description', adoArg(a, ['description'])),
+  'ado_update_description': (c, a) => _setField(
+      c, a, 'System.Description', adoArg(a, ['description']),
+      markdown: _isMarkdown(a)),
   'ado_update_tags': (c, a) =>
       _setField(c, a, 'System.Tags', adoArg(a, ['tags'])),
   'ado_update_field': _updateField,
@@ -73,17 +74,23 @@ String _setField(
   AdoSyncConfig c,
   Map<String, dynamic> a,
   String field,
-  String value,
-) =>
-    _patch(c, _idOf(a), adoFieldsPatch({field: value}));
+  String value, {
+  bool markdown = false,
+}) =>
+    _patch(c, _idOf(a), adoFieldsPatch({field: value}, markdown: markdown));
+
+/// Whether the optional `format` arg requests Markdown (see
+/// [isAdoMarkdownFormat]).
+bool _isMarkdown(Map<String, dynamic> a) => isAdoMarkdownFormat(a['format']);
 
 String _commentsUrl(AdoSyncConfig c, String id) =>
     '${c.baseUrl}/wit/workItems/$id/comments?api-version=$_apiVersion-preview';
 
-/// `ado_add_work_item_comment` — POST `{"text": comment}` (`text` alias).
+/// `ado_add_work_item_comment` — POST `{"text": comment}` (`text` alias);
+/// `format=markdown` query param when requested.
 String _addComment(AdoSyncConfig c, Map<String, dynamic> a) =>
     syncBodyOrError(SyncHttpClient.post(
-      _commentsUrl(c, _idOf(a)),
+      _commentsUrl(c, _idOf(a)) + (_isMarkdown(a) ? '&format=markdown' : ''),
       headers: c.headers,
       body: jsonEncode({
         'text': adoArg(a, ['comment', 'text'])
@@ -103,7 +110,8 @@ String _getComments(AdoSyncConfig c, Map<String, dynamic> a) {
 
 /// `ado_update_field` — PATCH the field resolved via [resolveAdoFieldName].
 String _updateField(AdoSyncConfig c, Map<String, dynamic> a) => _setField(
-    c, a, resolveAdoFieldName(adoArg(a, ['field'])), adoArg(a, ['value']));
+    c, a, resolveAdoFieldName(adoArg(a, ['field'])), adoArg(a, ['value']),
+    markdown: _isMarkdown(a));
 
 /// `ado_set_priority` — PATCH `Microsoft.VSTS.Common.Priority` with a number.
 String _setPriority(AdoSyncConfig c, Map<String, dynamic> a) {
@@ -143,13 +151,15 @@ String _createWorkItem(AdoSyncConfig c, Map<String, dynamic> a) {
   final base = project.isEmpty
       ? c.baseUrl
       : '${_orgUrl(c)}/${Uri.encodeComponent(project)}/_apis';
+  final description = adoArg(a, ['description']);
   final response = syncBodyOrError(SyncHttpClient.post(
     // The type goes into the PATH: 'User Story' has a space, which curl rejects (exit 3) —
     // Java's OkHttp encoded it implicitly.
     '$base/wit/workitems/\$${Uri.encodeComponent(type)}?api-version=$_apiVersion',
     headers: _patchHeaders(c),
-    body: adoCreatePatch(adoArg(a, ['title', 'summary']),
-        adoArg(a, ['description']), fieldsJson as Map<String, dynamic>?),
+    body: adoCreatePatch(adoArg(a, ['title', 'summary']), description,
+        fieldsJson as Map<String, dynamic>?,
+        markdown: _isMarkdown(a)),
   ));
   final parent = adoArg(a, ['parentId', 'parentKey']).trim();
   if (parent.isEmpty) return response;

@@ -65,6 +65,7 @@ void main() {
   _createParentTests();
   _fieldCodeTests();
   _attachTests();
+  _formatTests();
 }
 
 /// Wire shape of a PATCH echo: method, path, content type and patch ops.
@@ -402,6 +403,117 @@ void _attachTests() {
           {'id': 9, 'name': 'x', 'filePath': '/nonexistent/x.bin'});
       expect(out['error'], 'File does not exist: /nonexistent/x.bin');
       expect(await fullLog(), isEmpty);
+    });
+  });
+}
+
+/// Markdown `format` (dm.ai #672 parity): markdown adds the
+/// multilineFieldsFormat op; html/omitted/unknown keep the old wire format.
+void _formatTests() {
+  const mdOp = {
+    'op': 'add',
+    'path': '/multilineFieldsFormat/System.Description',
+    'value': 'Markdown',
+  };
+  group('format parameter', () {
+    test('update_description: markdown adds the format op', () {
+      for (final f in ['markdown', 'MD', ' Markdown ']) {
+        expect(
+            wire(call('ado_update_description',
+                {'id': 4, 'description': '# x', 'format': f})),
+            patched('4', [
+              ..._setOp('System.Description', '# x'),
+              mdOp,
+            ]),
+            reason: f);
+      }
+    });
+
+    test('update_description: html, omitted and unknown add no format op', () {
+      final plain = patched('4', _setOp('System.Description', 'x'));
+      for (final f in [null, 'html', 'rtf', '']) {
+        final args = {'id': 4, 'description': 'x', 'format': f};
+        expect(wire(call('ado_update_description', args)), plain, reason: '$f');
+      }
+    });
+
+    test('update_field: markdown on a custom long-text field', () {
+      final echo = call('ado_update_field', {
+        'id': 4,
+        'field': 'Custom.SolutionDesign',
+        'value': '## Plan',
+        'format': 'markdown',
+      });
+      expect(
+          wire(echo),
+          patched('4', [
+            ..._setOp('Custom.SolutionDesign', '## Plan'),
+            {
+              'op': 'add',
+              'path': '/multilineFieldsFormat/Custom.SolutionDesign',
+              'value': 'Markdown',
+            },
+          ]));
+    });
+
+    test('update_field: name is resolved before the format op', () {
+      final echo = call('ado_update_field', {
+        'id': 4,
+        'field': 'description',
+        'value': 'x',
+        'format': 'md',
+      });
+      expect(patchOf(echo).last, {
+        'op': 'add',
+        'path': '/multilineFieldsFormat/System.Description',
+        'value': 'Markdown',
+      });
+    });
+
+    test('add_work_item_comment: markdown adds format=markdown query', () {
+      final echo = call('ado_add_work_item_comment',
+          {'id': 5, 'comment': 'hi', 'format': 'markdown'});
+      expect(
+          echo['path'],
+          '/org/proj/_apis/wit/workItems/5/comments?api-version=7.0-preview'
+          '&format=markdown');
+      expect(jsonDecode(echo['body'] as String), {'text': 'hi'});
+    });
+
+    test('add_work_item_comment: html/unknown keep the old path', () {
+      for (final f in ['html', 'xyz']) {
+        final echo = call('ado_add_work_item_comment',
+            {'id': 5, 'comment': 'hi', 'format': f});
+        expect(echo['path'],
+            '/org/proj/_apis/wit/workItems/5/comments?api-version=7.0-preview');
+      }
+    });
+
+    test('create: markdown with description adds the format op', () {
+      final echo = call('ado_create_work_item', {
+        'project': 'proj',
+        'workItemType': 'Task',
+        'title': 'T',
+        'description': '**d**',
+        'format': 'markdown',
+      });
+      expect(patchOf(echo), [
+        {'op': 'add', 'path': '/fields/System.Title', 'value': 'T'},
+        {'op': 'add', 'path': '/fields/System.Description', 'value': '**d**'},
+        mdOp,
+      ]);
+    });
+
+    test('create: markdown without description adds no format op', () {
+      final echo = call('ado_create_work_item', {
+        'project': 'proj',
+        'workItemType': 'Task',
+        'title': 'T',
+        'format': 'markdown',
+      });
+      expect(patchOf(echo), [
+        {'op': 'add', 'path': '/fields/System.Title', 'value': 'T'},
+      ]);
     });
   });
 }

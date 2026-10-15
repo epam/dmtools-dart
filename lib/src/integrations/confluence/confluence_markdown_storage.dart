@@ -221,12 +221,15 @@ String _wrapInlineStyle(_XmlNode node, String inner) {
     case 'strike':
     case 's':
       return '~~$inner~~';
-    case 'span':
-      if (_isLineThrough(node)) return '~~$inner~~';
-      return inner;
     case 'code':
       return '`${node.content}`';
   }
+  return _wrapStyledSpan(node, inner);
+}
+
+/// `<span style="…line-through…">` becomes strikethrough; other spans pass through.
+String _wrapStyledSpan(_XmlNode node, String inner) {
+  if (node.name == 'span' && _isLineThrough(node)) return '~~$inner~~';
   return inner;
 }
 

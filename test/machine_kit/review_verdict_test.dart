@@ -623,16 +623,16 @@ String _workflowGraphqlQuery() {
 /// label must be added before the counter).
 void verdictLabelWiringTests() {
   group('machine wiring: bounded-verdict labels', () {
-    test('quality job checks out the agents submodule (wiring tests need it)',
-        () {
+    test('quality job fetches the agents tree (wiring tests need it)', () {
       final yml = File('.github/workflows/quality.yml').readAsStringSync();
+      // 2026-10-15: the submodule is gone — the machine-wiring tests read
+      // the tree fetched by tool/fetch_agents.sh (dmtools-agents MAIN).
       expect(
         yml.split('agents-suite:').first,
-        contains('submodules: true'),
+        contains('tool/fetch_agents.sh'),
         reason: 'the machine-wiring tests resolve the runner parents under '
-            'agents/ (a git submodule) — the dart test job must check it '
-            'out, or parent-config resolution dies with '
-            'PathNotFoundException (observed on CI, gh-71 rework)',
+            'agents/ (fetched from main) — the dart test job must fetch it, '
+            'or parent-config resolution dies with PathNotFoundException',
       );
     });
 

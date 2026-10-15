@@ -252,16 +252,6 @@ Set<String> _mappedSecrets(String yml) {
   ).allMatches(secretsBlock).map((m) => m.group(1)!).toSet();
 }
 
-/// The `agents` gitlink at HEAD (the reviewed factory commit).
-String _submodulePin() {
-  final result = Process.runSync('git', ['ls-tree', 'HEAD', 'agents']);
-  expect(result.exitCode, 0, reason: 'git ls-tree failed inside the repo');
-  final parts = result.stdout.toString().trim().split(RegExp(r'\s+'));
-  expect(parts, hasLength(greaterThanOrEqualTo(3)));
-  expect(parts[1], 'commit', reason: 'agents must stay a submodule');
-  return parts[2];
-}
-
 /// The `secrets:` names the factory-teammate.yml declares. The workflow
 /// lives in dmtools-agentic-workflows now (nothing in-tree to parse).
 /// MANUAL LOCKSTEP DUTY: when factory-teammate.yml at the pinned AW SHA

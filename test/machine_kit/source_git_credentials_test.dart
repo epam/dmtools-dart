@@ -252,7 +252,6 @@ void _deduplicationIntoScript() {
             '$_workflowPath moved to dmtools-agentic-workflows; the '
             'invocation invariant is owned there now');
       }
-      return;
       for (final path in _credentialYamlFiles) {
         expect(
           _read(path).split('\n').where((l) => l.contains(_scriptPath)),
@@ -279,7 +278,6 @@ void _artifactSeesFinalPush() {
           '$_workflowPath moved to dmtools-agentic-workflows; the step-order '
           'invariant is owned there now');
     }
-    return;
     final source = _read(_workflowPath);
     final upload = source.indexOf('Upload the full fa session trace');
     final persist =

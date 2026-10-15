@@ -16,6 +16,9 @@ const String packProvenanceFileName = '.provenance.json';
 /// line is printed only for these; keep them in sync with `require_loader.dart`
 /// and `job_runner.dart`, which throw them.
 const String packMissingModuleMarker = 'Failed to require module';
+
+/// The job-runner error substring for a missing entry script — the second
+/// provenance-log trigger beside [packMissingModuleMarker].
 const String packMissingFileMarker = 'JavaScript file not found';
 
 /// Identity of the zip an unpacked pack directory came from.

@@ -630,6 +630,7 @@ class FixtureTree {
       'js/unit-tests/testRunner.js',
       'js/config.js',
       'js/common/scm.js',
+      'js/common/machineNotice.js',
       'js/configLoader.js',
     ]) {
       final src = File('$agentsPath/$rel');

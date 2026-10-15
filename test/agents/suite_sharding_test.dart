@@ -143,12 +143,14 @@ void _plannerRealListTests() {
       return [for (final f in jobParams['testFiles'] as List) f as String];
     }
 
-    test('partitions exactly (92 entries, N=4)', () {
+    test('partitions exactly (all run_all.json entries, N=4)', () {
       final testFiles = realFiles();
       if (testFiles == null) {
         return; // Submodule not checked out — synthetic cases cover the rest.
       }
-      expect(testFiles, hasLength(92));
+      expect(testFiles.length, greaterThan(100),
+          reason:
+              'real list grows with the agents submodule; no hardcoded count');
       final shards = [
         for (var i = 0; i < 4; i++) ShardPlanner.split(testFiles, i, 4),
       ];
@@ -159,7 +161,12 @@ void _plannerRealListTests() {
       expect(union.length, testFiles.length,
           reason: 'no file may be lost or duplicated by the split');
       expect([...union]..sort(), [...testFiles]..sort());
-      expect(shards.map((s) => s.length), everyElement(23));
+      final sizes = shards.map((s) => s.length).toList();
+      expect(
+          sizes.reduce((a, b) => a > b ? a : b) -
+              sizes.reduce((a, b) => a < b ? a : b),
+          lessThanOrEqualTo(1),
+          reason: 'round-robin keeps shard sizes within 1 of each other');
     });
 
     test('split accepts every N in {1..len+}', () {

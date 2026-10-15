@@ -14,14 +14,11 @@ class _XmlNode {
   String text;
 
   _XmlNode.text(String this.text)
-      : name = null,
-        attrs = const {},
-        children = const [];
+    : name = null,
+      attrs = const {},
+      children = const [];
 
-  _XmlNode.tag(String this.name)
-      : attrs = {},
-        children = [],
-        text = '';
+  _XmlNode.tag(String this.name) : attrs = {}, children = [], text = '';
 
   /// Concatenated descendant text (entities unescaped; `<time>` date
   /// lozenges contribute their `datetime` attribute — the Java preprocess
@@ -219,12 +216,20 @@ String _wrapInlineStyle(_XmlNode node, String inner) {
       return '*$inner*';
     case 'del':
     case 'strike':
+    case 's':
       return '~~$inner~~';
+    case 'span':
+      if (_isLineThrough(node)) return '~~$inner~~';
+      return inner;
     case 'code':
       return '`${node.content}`';
   }
   return inner;
 }
+
+/// Whether a `<span style="…">` carries `text-decoration: line-through`.
+bool _isLineThrough(_XmlNode node) =>
+    (node.attrs['style'] ?? '').toLowerCase().contains('line-through');
 
 /// Prefixes every line of [inner] with `> `.
 String _quoteLines(String inner) => inner
@@ -265,7 +270,8 @@ String _macroToMarkdown(_XmlNode node) {
   if (node.attrs['ac:name'] == 'native-embed:whiteboard') {
     return _whiteboardMarker(node);
   }
-  final body = node.child('ac:plain-text-body')?.content ??
+  final body =
+      node.child('ac:plain-text-body')?.content ??
       node.child('ac:rich-text-body')?.content ??
       '';
   final lang = node.attrs['ac:name'] == 'code'

@@ -97,9 +97,11 @@ String _convertMixedContent(String input) {
   for (final chunk in preserved.split('\n\n')) {
     final trimmed = chunk.trim();
     if (trimmed.isEmpty) continue;
-    parts.add(containsHtmlTags(trimmed)
-        ? _convertHtmlToJiraMarkup(trimmed)
-        : _convertMarkdownToJiraMarkup(trimmed));
+    parts.add(
+      containsHtmlTags(trimmed)
+          ? _convertHtmlToJiraMarkup(trimmed)
+          : _convertMarkdownToJiraMarkup(trimmed),
+    );
   }
   final joined = preserver.restoreCodeBlocks(parts.join('\n\n'));
   return joined.trim();
@@ -158,9 +160,9 @@ String _convertMarkdownToJiraMarkup(String markdown) {
 
 /// `![name|attrs]` → `!name|attrs!` (Java `processImages`).
 String _processImages(String text) => text.replaceAllMapped(
-      RegExp(r'!\[(.*?)\|([^\]]+)\]'),
-      (m) => '!${m.group(1)}|${m.group(2)}!',
-    );
+  RegExp(r'!\[(.*?)\|([^\]]+)\]'),
+  (m) => '!${m.group(1)}|${m.group(2)}!',
+);
 
 /// Per-paragraph Markdown inline conversion (Java `processTextParagraph`):
 /// `1. **bold opener**` → `*bold opener*` bullets, `#`-headings, inline code,
@@ -168,9 +170,11 @@ String _processImages(String text) => text.replaceAllMapped(
 String _processTextParagraph(String text) {
   final output = <String>[];
   for (final line in _processImages(text).split('\n')) {
-    var trimmed = line.trim();
+    var trimmed = _convertStrike(line.trim());
     trimmed = trimmed.replaceAllMapped(
-        RegExp(r'^1\. \*\*(.*?)\*\*'), (m) => '*${m.group(1)}*');
+      RegExp(r'^1\. \*\*(.*?)\*\*'),
+      (m) => '*${m.group(1)}*',
+    );
     final heading = RegExp(r'^(#{1,6})\s+(.+)$').firstMatch(trimmed);
     if (heading != null) {
       output.add('h${heading.group(1)!.length}. ${heading.group(2)}');
@@ -178,38 +182,66 @@ String _processTextParagraph(String text) {
     }
     trimmed = trimmed
         .replaceAllMapped(
-            RegExp(r'`\s*([^`]+)\s*`'), (m) => '{{${m.group(1)}}}')
+          RegExp(r'`\s*([^`]+)\s*`'),
+          (m) => '{{${m.group(1)}}}',
+        )
         .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => '*${m.group(1)}*')
-        .replaceAllMapped(RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
-            (m) => '[${m.group(1)}|${m.group(2)}]');
+        .replaceAllMapped(
+          RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
+          (m) => '[${m.group(1)}|${m.group(2)}]',
+        );
     output.add(trimmed);
   }
   return output.join('\n');
 }
 
+/// `~~gone~~` → Jira strike `-gone-` (dm.ai#676 parity). Only spans with a
+/// non-space character at both ends convert; code spans, `{{…}}`, `{code}`
+/// blocks and URLs are copied verbatim so their content is never rewritten.
+String _convertStrike(String s) {
+  final out = StringBuffer();
+  var last = 0;
+  for (final m in _strikeProtected.allMatches(s)) {
+    out.write(_applyStrike(s.substring(last, m.start)));
+    out.write(m.group(0));
+    last = m.end;
+  }
+  out.write(_applyStrike(s.substring(last)));
+  return out.toString();
+}
+
+final RegExp _strikeProtected = RegExp(
+  r'`[^`]*`|\{\{.*?\}\}|\{code[^}]*\}.*?\{code\}|https?://\S+',
+  dotAll: true,
+);
+
+final RegExp _strikeSpan = RegExp(r'~~(?=\S)(.+?)(?<=\S)~~');
+
+String _applyStrike(String segment) =>
+    segment.replaceAllMapped(_strikeSpan, (m) => '-${m.group(1)}-');
+
 /// Whether [tag] starts a new block in the HTML walker (Java `isBlockLevel`).
 bool _isBlockLevel(String tag) => switch (tag) {
-      'ac:structured-macro' ||
-      'p' ||
-      'pre' ||
-      'ul' ||
-      'ol' ||
-      'table' ||
-      'h1' ||
-      'h2' ||
-      'h3' ||
-      'h4' ||
-      'h5' ||
-      'h6' ||
-      'code' ||
-      'strong' ||
-      'em' ||
-      'b' ||
-      'i' ||
-      'a' =>
-        true,
-      _ => false,
-    };
+  'ac:structured-macro' ||
+  'p' ||
+  'pre' ||
+  'ul' ||
+  'ol' ||
+  'table' ||
+  'h1' ||
+  'h2' ||
+  'h3' ||
+  'h4' ||
+  'h5' ||
+  'h6' ||
+  'code' ||
+  'strong' ||
+  'em' ||
+  'b' ||
+  'i' ||
+  'a' => true,
+  _ => false,
+};
 
 /// HTML branch: enumerates the body's top-level nodes, accumulating inline
 /// runs and flushing them as paragraphs between blocks (Java
@@ -320,10 +352,8 @@ _SpecialBlock _boldItalicChain(
 }
 
 /// A top-level `<a>` becomes a bare Jira link block.
-_SpecialBlock _anchorBlock(int i, dom.Element el) => (
-      block: '[${el.text}|${el.attributes['href'] ?? ''}]',
-      nextIndex: i,
-    );
+_SpecialBlock _anchorBlock(int i, dom.Element el) =>
+    (block: '[${el.text}|${el.attributes['href'] ?? ''}]', nextIndex: i);
 
 /// Strips leading whitespace from every element's own text, destroying
 /// nested markup in the process (Java `trimLeadingSpaces` — `Element.text()`
@@ -373,14 +403,17 @@ String _handleBlockElement(dom.Element el) {
 final RegExp codeTagPattern = RegExp(r'</?code[^>]*>', caseSensitive: false);
 
 final RegExp _anchorTag = RegExp(r'<a\s+href="([^"]+)">(.*?)</a>');
-final RegExp _strongTag =
-    RegExp(r'<strong>(.*?)</strong>', caseSensitive: false);
+final RegExp _strongTag = RegExp(
+  r'<strong>(.*?)</strong>',
+  caseSensitive: false,
+);
 final RegExp _emTag = RegExp(r'<em>(.*?)</em>', caseSensitive: false);
 final RegExp _bTag = RegExp(r'<b>(.*?)</b>', caseSensitive: false);
 final RegExp _iTag = RegExp(r'<i>(.*?)</i>', caseSensitive: false);
 final RegExp _inlineCodeTag = RegExp(
-    '<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
-    caseSensitive: false);
+  '<code>(?!\\$codeBlockPlaceholder\\d+)(.*?)</code>',
+  caseSensitive: false,
+);
 final RegExp _anyTag = RegExp(r'<[^>]+>');
 
 /// The shared inline replacement ladder for paragraph/list/table cells
@@ -391,21 +424,23 @@ String _inlineChain(
   String html, {
   required Pattern brPattern,
   required String brReplacement,
-}) =>
-    html
-        .replaceAllMapped(_anchorTag, (m) => '[${m.group(2)}|${m.group(1)}]')
-        .replaceAllMapped(_strongTag, (m) => '*${m.group(1)}*')
-        .replaceAllMapped(_emTag, (m) => '_${m.group(1)}_')
-        .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
-        .replaceAll(brPattern, brReplacement)
-        .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
-        .replaceAllMapped(_inlineCodeTag, (m) => '{{${m.group(1)}}}')
-        .replaceAll(_anyTag, '');
+}) => html
+    .replaceAllMapped(_anchorTag, (m) => '[${m.group(2)}|${m.group(1)}]')
+    .replaceAllMapped(_strongTag, (m) => '*${m.group(1)}*')
+    .replaceAllMapped(_emTag, (m) => '_${m.group(1)}_')
+    .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
+    .replaceAll(brPattern, brReplacement)
+    .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
+    .replaceAllMapped(_inlineCodeTag, (m) => '{{${m.group(1)}}}')
+    .replaceAll(_anyTag, '');
 
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
-String _inlineMarkup(String html) => _inlineChain(html,
-    brPattern: RegExp(r'<br\s*/?>', caseSensitive: false), brReplacement: '\n');
+String _inlineMarkup(String html) => _inlineChain(
+  html,
+  brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
+  brReplacement: '\n',
+);
 
 /// Paragraph conversion: inline replacement chain over the element's inner
 /// HTML, entity decode, trim (Java `processParagraph`).
@@ -508,9 +543,11 @@ String _listItemText(dom.Element li) {
 
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
-String _listInlineMarkup(String html) => _inlineChain(html,
-    brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
-    brReplacement: '\n');
+String _listInlineMarkup(String html) => _inlineChain(
+  html,
+  brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
+  brReplacement: '\n',
+);
 
 /// Appends nested `<ul>`/`<ol>` children of [li] to [sb] (Java's recursion
 /// tail in both list processors).
@@ -584,9 +621,11 @@ void _writeBodyRow(StringBuffer sb, List<dom.Element> cells) {
 
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
-String _tableCellMarkup(String html) => _inlineChain(html,
-    brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
-    brReplacement: '\n\\\\');
+String _tableCellMarkup(String html) => _inlineChain(
+  html,
+  brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
+  brReplacement: '\n\\\\',
+);
 
 /// Numeric `colspan` attribute of [cell], `1` when absent or unparseable.
 int _colspan(dom.Element cell) =>
@@ -597,7 +636,9 @@ int _colspan(dom.Element cell) =>
 /// byte-parity with the Java output).
 String _fixNewlineBeforeLink(String text) => text
     .replaceAllMapped(
-        RegExp(r'(\S)\n\[(https?://)'), (m) => '${m.group(1)}\n[${m.group(2)}')
+      RegExp(r'(\S)\n\[(https?://)'),
+      (m) => '${m.group(1)}\n[${m.group(2)}',
+    )
     .replaceAll(RegExp(r'\n\[\n(https?://)'), '\n[https://')
     .replaceAll(RegExp(r'\n\[https?://'), '\n[https://');
 
@@ -609,26 +650,27 @@ class HtmlCodeBlockPreserver {
   static final _classPattern = RegExp("class=[\"']([^\"']*)[\"']");
 
   final List<({String content, String language, bool isInline})>
-      _preservedCodeBlocks = [];
+  _preservedCodeBlocks = [];
 
   /// Swaps every `<code>` span for a placeholder element; spans already
   /// carrying a placeholder are left alone.
-  String preserveCodeBlocks(String html) => html.replaceAllMapped(
-        _codePattern,
-        (match) {
-          final fullMatch = match.group(0)!;
-          final codeContent = match.group(1)!;
-          if (codeContent.contains(codeBlockPlaceholder)) return fullMatch;
-          final classMatch = _classPattern.firstMatch(fullMatch);
-          final language = classMatch?.group(1) ?? 'java';
-          final isInline =
-              !fullMatch.contains('class=') && !codeContent.contains('\n');
-          _preservedCodeBlocks.add(
-              (content: codeContent, language: language, isInline: isInline));
-          return '<code>$codeBlockPlaceholder${_preservedCodeBlocks.length - 1}'
-              '</code>';
-        },
-      );
+  String preserveCodeBlocks(String html) =>
+      html.replaceAllMapped(_codePattern, (match) {
+        final fullMatch = match.group(0)!;
+        final codeContent = match.group(1)!;
+        if (codeContent.contains(codeBlockPlaceholder)) return fullMatch;
+        final classMatch = _classPattern.firstMatch(fullMatch);
+        final language = classMatch?.group(1) ?? 'java';
+        final isInline =
+            !fullMatch.contains('class=') && !codeContent.contains('\n');
+        _preservedCodeBlocks.add((
+          content: codeContent,
+          language: language,
+          isInline: isInline,
+        ));
+        return '<code>$codeBlockPlaceholder${_preservedCodeBlocks.length - 1}'
+            '</code>';
+      });
 
   /// Swaps each placeholder back for its Jira construct: `{{inline}}` for
   /// single-line spans, `{code:lang}…{code}` blocks otherwise (`properties`

@@ -808,5 +808,16 @@
       "cacheRead": 348763,
       "model": "claude-haiku-5.5"
     }
+  ],
+  "issue-379": [
+    {
+      "leg": "dev",
+      "at": "2026-10-15T20:42:55Z",
+      "prompt": 67217,
+      "completion": 15434,
+      "total": 82651,
+      "cacheRead": 1725546,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

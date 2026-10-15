@@ -220,9 +220,16 @@ void _teammateStubContract() {
 /// would be inert — package:test only honors it on test/group/main).
 /// Re-home the contract to the AW pin as a follow-up.
 void _teammateFactoryContract() {
+  // Registration-safe: the group body executes even when skipped, so the
+  // read must not fail on the new tree (factory moved to
+  // dmtools-agentic-workflows; the skip documents the pending re-home).
+  final factoryPresent = File(_teammateFactoryPath).existsSync();
   group('factory/teammate.yml leg runner',
-      skip: 'factory moved to dmtools-agentic-workflows '
-          '(pending dmtools-agents#591 + submodule bump)', () {
+      skip: factoryPresent
+          ? null
+          : 'factory moved to dmtools-agentic-workflows '
+              '(pending dmtools-agents#591 + submodule bump)', () {
+    if (!factoryPresent) return;
     final yaml = _read(_teammateFactoryPath);
 
     test('the guard pins the runner from the SM-provided leg', () {

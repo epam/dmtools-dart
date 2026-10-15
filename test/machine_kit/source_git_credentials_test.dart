@@ -26,8 +26,7 @@ const _scriptPath = 'agents/setup/install-source-git-credentials.sh';
 // invariants that read the workflow re-homed there (awf follow-up); they
 // still run here whenever a pinned submodule carries the file, and skip
 // otherwise — asserted structurally by the delegation test below.
-final bool _factoryWorkflowPresent =
-    File(_workflowPath).existsSync();
+final bool _factoryWorkflowPresent = File(_workflowPath).existsSync();
 final List<String> _credentialYamlFiles = [
   if (_factoryWorkflowPresent) _workflowPath,
 ];
@@ -672,7 +671,8 @@ void _helperOperationGuard() {
 /// dart tree still owns: the agents submodule does NOT re-vendor the factory
 /// workflow, and both delegation stubs point at the awf factory.
 void _factoryDelegation() {
-  test('factory workflow is delegated to dmtools-agentic-workflows, not '
+  test(
+      'factory workflow is delegated to dmtools-agentic-workflows, not '
       're-vendored (2026-10-15 move)', () {
     expect(
       _factoryWorkflowPresent,

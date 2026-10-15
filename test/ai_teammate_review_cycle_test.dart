@@ -25,7 +25,8 @@ void main() {
   final workflowFile = File('agents/.github/workflows/factory-teammate.yml');
   if (!workflowFile.existsSync()) {
     group('factory teammate.yml review cycle', () {
-      test('factory workflow is delegated to dmtools-agentic-workflows, not '
+      test(
+          'factory workflow is delegated to dmtools-agentic-workflows, not '
           're-vendored (2026-10-15 move)', () {
         final stub =
             File('agents/.github/workflows/ai-teammate.yml').readAsStringSync();

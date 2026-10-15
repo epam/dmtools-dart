@@ -591,7 +591,6 @@ void escalationThreadSummaryWiringTests() {
   });
 }
 
-
 /// 2026-10-15: the factory teammate workflow moved to
 /// dmtools-agentic-workflows. Wiring tests that read it skip on the new
 /// tree (invariants re-homed there) and still run on older pins.

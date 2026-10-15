@@ -1,0 +1,2 @@
+{"ts":"2026-10-14T20:54:47.616011Z","event":"scheduled","id":"1792011287614957_0000_60yj4u","dueMs":1792011587614,"to":"main","text":"Check bash job sh-17-hn7qm9hso610jpltp (full dart test run for gh-375 rework, log /tmp/fulltest.log). Reason: verify no regressions before writing outputs/response.md."}
+{"ts":"2026-10-14T22:10:38.572577Z","event":"delivered","id":"1792011287614957_0000_60yj4u","to":"01a13c2f-a0bb-7202-987e-5080fcad8627/main","dueMs":1792011587614,"lagMs":4250958}

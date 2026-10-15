@@ -111,11 +111,6 @@ jobs:
           find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
           df -h / || true
       - uses: actions/checkout@v4
-        with:
-          # agents/ — the machine-wiring tests (test/machine_kit/) resolve
-          # the runner configs' parents under agents/ (fetched from git
-          # main by tool/fetch_agents.sh below); without it,
-          # RunCommandProcessor dies with PathNotFoundException.
       - name: Fetch dmtools-agents@main (no submodule pin)
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1
@@ -356,7 +351,6 @@ jobs:
           find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
           df -h / || true
       - uses: actions/checkout@v4
-        with:
       - name: Fetch dmtools-agents@main (no submodule pin — L4 suite)
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1
@@ -439,9 +433,6 @@ jobs:
           df -h / || true
       - uses: actions/checkout@v4
         if: needs.agents-suite.result == 'success'
-        with:
-          # agents/ is the partition's ground truth: the gate compares the
-          # merged manifests against the fetched run_all.json list.
       - name: Fetch dmtools-agents@main (no submodule pin)
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1

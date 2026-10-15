@@ -60,7 +60,7 @@ jobs:
   static:
     # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
     # finish in ~2 min and fail the pipeline early on style/type errors.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Runner disk hygiene
         # Bitrise pool machines accumulate per-run workdirs; twice on
@@ -86,8 +86,11 @@ jobs:
     # The suite (~2.3k tests) is sharded 4 ways — wall time drops from
     # ~17 min serial to ~5-6 min (fixed per-shard overhead ~3 min +
     # suite/4). Each shard uploads its partial lcov + test count; the
-    # gate job merges them.
-    runs-on: ubuntu-latest
+    # gate job merges them. Bitrise pool first (owner 2026-10-15): the
+    # 4-shard suite is the wall-time pole — same dispatch shape as the
+    # agents-suite below; falls back to ubuntu-24.04 when the pool is down.
+    needs: pick
+    runs-on: ${{ needs.pick.outputs.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -198,7 +201,7 @@ jobs:
     # trigger is ever added.
     needs: [static, test]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Fail unless static and test both succeeded
         if: needs.static.result != 'success' || needs.test.result != 'success'
@@ -415,7 +418,7 @@ jobs:
     # is ever added.
     needs: [agents-suite]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Fail unless every shard succeeded
         if: needs.agents-suite.result != 'success'

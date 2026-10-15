@@ -275,8 +275,7 @@ void _storageToMdBlockTests() {
 void _roundTripTests() {
   group('round trips', () {
     test('agent-style discovery document survives storage and back', () {
-      const md =
-          '# TICKET-1 Summary\n\n'
+      const md = '# TICKET-1 Summary\n\n'
           'Some **context** with a [link](https://e.com).\n\n'
           '- point one\n- point two\n';
       final back = confluenceStorageToMarkdown(markdownToConfluenceStorage(md));

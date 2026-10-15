@@ -42,8 +42,7 @@ void edgeCaseTests() {
 void markdownBranchTests() {
   group('markdownToJiraMarkup: markdown branch', () {
     test('markdown input (Java testMarkdownInput)', () {
-      const markdown =
-          'This is **bold** and _italic_\n\n'
+      const markdown = 'This is **bold** and _italic_\n\n'
           '```java\npublic class Test {}\n```';
       expect(
         markdownToJiraMarkup(markdown),
@@ -52,8 +51,7 @@ void markdownBranchTests() {
     });
 
     test('complex markdown input (Java testComplexMarkdownInput)', () {
-      const markdown =
-          '# Title\n\n'
+      const markdown = '# Title\n\n'
           '**Bold text** and _italic text_\n\n'
           '```java\npublic class Test {}\n```\n\n'
           '* Item 1\n* Item 2\n\n'
@@ -71,8 +69,7 @@ void markdownBranchTests() {
     });
 
     test('complex markdown input 2 (Java testComplexMarkdownInput2)', () {
-      const markdown =
-          '1. **Step one**\n'
+      const markdown = '1. **Step one**\n'
           '2. Do the thing\n'
           '\n'
           '```dart\nfinal x = 1;\n```\n'
@@ -91,8 +88,7 @@ void markdownBranchTests() {
 void markdownCodeBlockTests() {
   group('markdownToJiraMarkup: markdown branch', () {
     test('code blocks conversion (Java testCodeBlocksConversion)', () {
-      const input =
-          "Here's how to implement a feature:\n"
+      const input = "Here's how to implement a feature:\n"
           '\n'
           '1. Update `src/auth.ts`:\n'
           '\n'
@@ -127,8 +123,7 @@ void markdownCodeBlockTests() {
 void htmlBranchTests() {
   group('markdownToJiraMarkup: HTML branch', () {
     test('html input (Java testHtmlInput)', () {
-      const html =
-          '<p>This is <strong>bold</strong> and <em>italic</em></p>'
+      const html = '<p>This is <strong>bold</strong> and <em>italic</em></p>'
           '<pre><code class="java">public class Test {}</code></pre>';
       expect(
         markdownToJiraMarkup(html),
@@ -137,8 +132,7 @@ void htmlBranchTests() {
     });
 
     test('complex html input (Java testComplexHtmlInput)', () {
-      const input =
-          '<h1>Title</h1><p><strong>Bold text</strong> and '
+      const input = '<h1>Title</h1><p><strong>Bold text</strong> and '
           '<em>italic text</em></p>'
           '<pre><code class="java">public class Test {}</code></pre>'
           '<ul><li>Item 1</li><li>Item 2</li></ul>'
@@ -161,15 +155,13 @@ void htmlBranchTests() {
     });
 
     test('ordered list with strong+ul pair', () {
-      const html =
-          '<ol><li><strong>Given</strong><ul><li>a page</li></ul>'
+      const html = '<ol><li><strong>Given</strong><ul><li>a page</li></ul>'
           '</li><li>plain item</li></ol>';
       expect(markdownToJiraMarkup(html), '# *Given*\n* a page\n# plain item');
     });
 
     test('table with header, line break, and emphasis', () {
-      const html =
-          '<table><tr><th>Name</th><th>Value</th></tr>'
+      const html = '<table><tr><th>Name</th><th>Value</th></tr>'
           '<tr><td><strong>event.name</strong></td>'
           '<td>trackEvent("x")<br>second line</td></tr></table>';
       expect(
@@ -185,8 +177,7 @@ void htmlBranchTests() {
 void htmlInlineAndEntityTests() {
   group('markdownToJiraMarkup: HTML branch', () {
     test('multi-line code element becomes a block', () {
-      const html =
-          '<p>before</p><code class="kotlin">\nval x = 1\n'
+      const html = '<p>before</p><code class="kotlin">\nval x = 1\n'
           'val y = 2\n</code>';
       expect(
         markdownToJiraMarkup(html),
@@ -195,8 +186,7 @@ void htmlInlineAndEntityTests() {
     });
 
     test('greeting line breaks inside a paragraph', () {
-      const html =
-          '<p><strong>Given</strong> a page<br>'
+      const html = '<p><strong>Given</strong> a page<br>'
           '<strong>When</strong> the user clicks</p>';
       expect(
         markdownToJiraMarkup(html),
@@ -272,8 +262,7 @@ void topLevelInlineRunTests() {
 void mixedBranchTests() {
   group('markdownToJiraMarkup: mixed branch', () {
     test('mixed input (Java testMixedInput)', () {
-      const input =
-          '# Heading\n\n<p>This is <strong>bold</strong></p>'
+      const input = '# Heading\n\n<p>This is <strong>bold</strong></p>'
           '\n\n* List item\n\n```java\ncode\n```';
       expect(
         markdownToJiraMarkup(input),

@@ -1,7 +1,10 @@
+ado_add_work_item_comment:id,comment
+ado_create_work_item:project,workItemType,title,description,fieldsJson
 ado_get_pr:repository,pullRequestId
 ado_get_work_item:id,fields
 ado_get_work_item_comments:id,ticket
 ado_list_prs:repository,status
+ado_update_description:id,description
 confluence_create_page:title,parentId,body,space
 confluence_download_attachment:attachment,targetDir
 confluence_sync_markdown_directory:directory,parentId,space,deleteOrphans,attachmentsDir,preserveInlineComments

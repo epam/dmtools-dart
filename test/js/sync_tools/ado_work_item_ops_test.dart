@@ -409,13 +409,19 @@ void _attachTests() {
 
 /// Markdown `format` (dm.ai #672 parity): markdown adds the
 /// multilineFieldsFormat op; html/omitted/unknown keep the old wire format.
+const _mdOp = {
+  'op': 'add',
+  'path': '/multilineFieldsFormat/System.Description',
+  'value': 'Markdown',
+};
+
 void _formatTests() {
-  const mdOp = {
-    'op': 'add',
-    'path': '/multilineFieldsFormat/System.Description',
-    'value': 'Markdown',
-  };
-  group('format parameter', () {
+  _formatUpdateTests();
+  _formatFieldCommentCreateTests();
+}
+
+void _formatUpdateTests() {
+  group('format parameter (update)', () {
     test('update_description: markdown adds the format op', () {
       for (final f in ['markdown', 'MD', ' Markdown ']) {
         expect(
@@ -423,7 +429,7 @@ void _formatTests() {
                 {'id': 4, 'description': '# x', 'format': f})),
             patched('4', [
               ..._setOp('System.Description', '# x'),
-              mdOp,
+              _mdOp,
             ]),
             reason: f);
       }
@@ -463,13 +469,13 @@ void _formatTests() {
         'value': 'x',
         'format': 'md',
       });
-      expect(patchOf(echo).last, {
-        'op': 'add',
-        'path': '/multilineFieldsFormat/System.Description',
-        'value': 'Markdown',
-      });
+      expect(patchOf(echo).last, _mdOp);
     });
+  });
+}
 
+void _formatFieldCommentCreateTests() {
+  group('format parameter (comment/create)', () {
     test('add_work_item_comment: markdown adds format=markdown query', () {
       final echo = call('ado_add_work_item_comment',
           {'id': 5, 'comment': 'hi', 'format': 'markdown'});
@@ -500,7 +506,7 @@ void _formatTests() {
       expect(patchOf(echo), [
         {'op': 'add', 'path': '/fields/System.Title', 'value': 'T'},
         {'op': 'add', 'path': '/fields/System.Description', 'value': '**d**'},
-        mdOp,
+        _mdOp,
       ]);
     });
 

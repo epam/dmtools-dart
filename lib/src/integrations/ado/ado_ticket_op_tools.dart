@@ -213,14 +213,16 @@ String _s(Map<String, dynamic> a, String key, [String? alt]) =>
 
 /// Executor handlers for the ticket-operation tools.
 Map<String, _AdoHandler> _ticketOpHandlers(AdoWorkItemOps ops) => {
-      'ado_create_work_item': (a) => ops.createWorkItem(
+      'ado_create_work_item': (a) => ops.createWorkItemWithParent(
             project: _s(a, 'project'),
             workItemType: _s(a, 'workItemType', 'type'),
             title: _s(a, 'title'),
             description: a['description'] as String?,
             fieldsJson: _fieldsJsonArg(a['fieldsJson']),
-            parentId: _optInt(a['parentId']),
-            format: a['format'] as String?,
+            opts: (
+              parentId: _optInt(a['parentId']),
+              format: a['format'] as String?
+            ),
           ),
       'ado_move_to_state': (a) => ops.moveToState(_id(a), _s(a, 'state')),
       'ado_assign_work_item': (a) => ops.assign(_id(a), _s(a, 'userEmail')),

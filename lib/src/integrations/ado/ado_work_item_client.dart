@@ -97,18 +97,36 @@ class AdoWorkItemOps {
     required String title,
     String? description,
     Map<String, dynamic>? fieldsJson,
-    int? parentId,
     String? format,
+  }) async =>
+      jsonDecode(await _http.postPatch(
+        'wit/workitems/\$$workItemType',
+        body: adoCreatePatch(title, description, fieldsJson,
+            markdown: isAdoMarkdownFormat(format)),
+        project: project.isEmpty ? null : project,
+      )) as Map<String, dynamic>;
+
+  /// Creates a work item and, when [parentId] is given, links it as the
+  /// parent's child (Hierarchy-Forward on the parent).
+  Future<Map<String, dynamic>> createWorkItemWithParent({
+    required String project,
+    required String workItemType,
+    required String title,
+    String? description,
+    Map<String, dynamic>? fieldsJson,
+    ({int? parentId, String? format})? opts,
   }) async {
-    final body = await _http.postPatch(
-      'wit/workitems/\$$workItemType',
-      body: adoCreatePatch(title, description, fieldsJson,
-          markdown: isAdoMarkdownFormat(format)),
-      project: project.isEmpty ? null : project,
+    final created = await createWorkItem(
+      project: project,
+      workItemType: workItemType,
+      title: title,
+      description: description,
+      fieldsJson: fieldsJson,
+      format: opts?.format,
     );
-    final created = jsonDecode(body) as Map<String, dynamic>;
-    final childId = created['id'];
+    final parentId = opts?.parentId;
     if (parentId != null) {
+      final childId = created['id'];
       if (childId == null) {
         throw StateError('Work item was created but the response carries no '
             'id, cannot link parent $parentId');

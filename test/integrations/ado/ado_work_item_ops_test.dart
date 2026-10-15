@@ -113,8 +113,11 @@ void _linkCreateTests() {
     test('create without id in the response fails when a parent is given', () {
       final f = mockAdo((_) => '{}');
       expect(
-          () => f.client.workItemOps.createWorkItem(
-              project: '', workItemType: 'Task', title: 't', parentId: 1),
+          () => f.client.workItemOps.createWorkItemWithParent(
+              project: '',
+              workItemType: 'Task',
+              title: 't',
+              opts: (parentId: 1, format: null)),
           throwsStateError);
     });
   });

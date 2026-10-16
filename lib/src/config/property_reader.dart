@@ -28,7 +28,7 @@ class PropertyReader {
   /// pubspec.yaml: the Dart port mirrors the Java marker contract.
   static const _gradleMarkers = <String>[
     'settings.gradle',
-    'settings.gradle.kts'
+    'settings.gradle.kts',
   ];
 
   /// Resource path consulted by the config.properties fallback tier (Java
@@ -100,10 +100,7 @@ class PropertyReader {
     Map<String, String> overrides,
     Future<T> Function() body,
   ) {
-    return runZoned(
-      body,
-      zoneValues: {_overridesZoneKey: overrides},
-    );
+    return runZoned(body, zoneValues: {_overridesZoneKey: overrides});
   }
 
   /// Returns the current override map (empty if none set).
@@ -201,8 +198,9 @@ class PropertyReader {
 
   void _ensureEnvLoaded() {
     if (_envPropsLoaded) return;
-    _envProps =
-        _isolationBlocksDefaultFiles() ? {} : _loadEnvFile('dmtools.env');
+    _envProps = _isolationBlocksDefaultFiles()
+        ? {}
+        : _loadEnvFile('dmtools.env');
     _envPropsLoaded = true;
   }
 

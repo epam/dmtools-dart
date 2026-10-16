@@ -12,6 +12,5 @@ extension JiraExportClient on JiraClient {
   Future<List<Map<String, dynamic>>> exportData(
     String jql, [
     List<String>? fields,
-  ]) =>
-      searchByJql(jql, fields);
+  ]) => searchByJql(jql, fields);
 }

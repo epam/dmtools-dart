@@ -36,10 +36,7 @@ class CliCommandBuilder {
     if (trackerPrompts == null || trackerPrompts.isEmpty) {
       return baseCliPrompts;
     }
-    return [
-      if (baseCliPrompts != null) ...baseCliPrompts,
-      ...trackerPrompts,
-    ];
+    return [if (baseCliPrompts != null) ...baseCliPrompts, ...trackerPrompts];
   }
 
   /// Builds the final CLI commands for execution.
@@ -68,11 +65,7 @@ class CliCommandBuilder {
       cliPromptsByTracker,
       trackerType,
     );
-    final combined = _buildCombinedPrompt(
-      cliPrompt,
-      merged,
-      workingDirectory,
-    );
+    final combined = _buildCombinedPrompt(cliPrompt, merged, workingDirectory);
     if (combined == null || combined.trim().isEmpty) return cliCommands;
     return _appendPromptToCommands(cliCommands, combined);
   }

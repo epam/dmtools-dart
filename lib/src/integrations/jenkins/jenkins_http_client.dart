@@ -33,8 +33,9 @@ class JenkinsHttpClient extends BaseHttpClient {
     if (token == null || token.isEmpty) {
       throw StateError('JENKINS_API_TOKEN is not configured');
     }
-    final basicAuth =
-        base64Encode(utf8.encode('${user.trim()}:${token.trim()}'));
+    final basicAuth = base64Encode(
+      utf8.encode('${user.trim()}:${token.trim()}'),
+    );
     return JenkinsHttpClient._(
       dio: dio ?? BaseHttpClient.createDefaultDio(),
       basePath: basePath,
@@ -49,9 +50,7 @@ class JenkinsHttpClient extends BaseHttpClient {
   }) : _basicAuth = basicAuth;
 
   @override
-  Map<String, String> get authHeaders => {
-        'Authorization': 'Basic $_basicAuth',
-      };
+  Map<String, String> get authHeaders => {'Authorization': 'Basic $_basicAuth'};
 
   @override
   String buildUrl(String path) => '$basePath/$path';

@@ -22,9 +22,9 @@ abstract class BaseHttpClient {
 
   /// Returns all headers (auth + content type).
   Map<String, String> get headers => {
-        ...authHeaders,
-        'Content-Type': 'application/json',
-      };
+    ...authHeaders,
+    'Content-Type': 'application/json',
+  };
 
   /// Builds the full URL for a relative path. Override per integration.
   String buildUrl(String path);
@@ -97,10 +97,10 @@ abstract class BaseHttpClient {
 
   /// Creates a [Dio] with the standard 60-second timeouts.
   static Dio createDefaultDio() => Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 60),
-          sendTimeout: const Duration(seconds: 60),
-          receiveTimeout: const Duration(seconds: 60),
-        ),
-      );
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
 }

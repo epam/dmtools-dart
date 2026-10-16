@@ -57,9 +57,9 @@ extension AiClientChat on AiChatClient {
 
 /// Bearer-auth + JSON content-type headers for OpenAI-compatible clients.
 Map<String, String> bearerHeaders(String apiKey) => {
-      'Authorization': 'Bearer $apiKey',
-      'Content-Type': 'application/json',
-    };
+  'Authorization': 'Bearer $apiKey',
+  'Content-Type': 'application/json',
+};
 
 /// Plain JSON content-type headers for clients that authenticate out of band.
 Map<String, String> jsonHeaders() => const {'Content-Type': 'application/json'};

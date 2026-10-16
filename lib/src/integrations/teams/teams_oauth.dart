@@ -38,13 +38,12 @@ class TeamsOAuth {
       data:
           'grant_type=refresh_token&client_id=${Uri.encodeQueryComponent(clientId)}'
           '&refresh_token=${Uri.encodeQueryComponent(refreshToken)}',
-      options: Options(
-        contentType: Headers.formUrlEncodedContentType,
-      ),
+      options: Options(contentType: Headers.formUrlEncodedContentType),
     );
     final decoded = jsonDecode(response.data ?? '{}');
-    final access =
-        decoded is Map<String, dynamic> ? decoded['access_token'] : null;
+    final access = decoded is Map<String, dynamic>
+        ? decoded['access_token']
+        : null;
     if (access is! String || access.isEmpty) {
       throw StateError('Token refresh failed: $decoded');
     }

@@ -42,10 +42,7 @@ FigmaRequest figmaStructureRequest(String cleanHref) {
   }
   return (
     path: 'files/$fileId',
-    params: const {
-      'geometry': 'paths',
-      'depth': '2',
-    }
+    params: const {'geometry': 'paths', 'depth': '2'},
   );
 }
 
@@ -64,20 +61,21 @@ Map<String, String> figmaRenderParams(
   String nodeId,
   String format,
   int scale,
-) =>
-    {'ids': nodeId, 'format': format, 'scale': '$scale'};
+) => {'ids': nodeId, 'format': format, 'scale': '$scale'};
 
 /// Render request params for `getImageById` — Java parity: a 2x scale is
 /// added only for png exports.
 Map<String, String> figmaIconRenderParams(String nodeId, String format) =>
     format == 'png'
-        ? {'ids': nodeId, 'format': format, 'scale': '2'}
-        : {'ids': nodeId, 'format': format};
+    ? {'ids': nodeId, 'format': format, 'scale': '2'}
+    : {'ids': nodeId, 'format': format};
 
 /// Splits [ids] into consecutive batches of at most [size] — Java
 /// `renderNodes` batching.
-List<List<String>> figmaBatches(List<String> ids,
-    [int size = figmaRenderBatchSize]) {
+List<List<String>> figmaBatches(
+  List<String> ids, [
+  int size = figmaRenderBatchSize,
+]) {
   return [
     for (var i = 0; i < ids.length; i += size)
       ids.sublist(i, min(i + size, ids.length)),
@@ -93,9 +91,9 @@ Map<String, dynamic>? figmaImagesOf(Map<String, dynamic>? response) {
 /// (fileId, node-id) pair of a cleaned design URL — the shared prefix of
 /// the layer/children tools.
 ({String fileId, String nodeId}) figmaUrlNodeId(String cleanHref) => (
-      fileId: figmaParseFileId(cleanHref),
-      nodeId: figmaExtractQueryParam(cleanHref, figmaNodeIdParam),
-    );
+  fileId: figmaParseFileId(cleanHref),
+  nodeId: figmaExtractQueryParam(cleanHref, figmaNodeIdParam),
+);
 
 /// Splits a comma-separated id list, trims each entry, and caps the result
 /// at [max] (Java `Arrays.copyOf` parity).

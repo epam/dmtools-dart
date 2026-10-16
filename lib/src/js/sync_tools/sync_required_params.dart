@@ -49,11 +49,7 @@ const Map<String, List<String>> kGithubRequiredParams = {
     'branchNameRegex',
   ],
   'github_get_job_logs': ['workspace', 'repository', 'jobId'],
-  'github_get_or_create_draft_release': [
-    'workspace',
-    'repository',
-    'tagName',
-  ],
+  'github_get_or_create_draft_release': ['workspace', 'repository', 'tagName'],
   'github_get_pr': ['workspace', 'repository', 'pullRequestId'],
   'github_get_pr_activities': ['workspace', 'repository', 'pullRequestId'],
   'github_get_pr_conversations': ['workspace', 'repository', 'pullRequestId'],
@@ -102,12 +98,7 @@ const Map<String, List<String>> kGithubRequiredParams = {
     'checkRunId',
     'status',
   ],
-  'github_update_pr_comment': [
-    'workspace',
-    'repository',
-    'commentId',
-    'text',
-  ],
+  'github_update_pr_comment': ['workspace', 'repository', 'commentId', 'text'],
   'github_upload_release_asset': [
     'workspace',
     'repository',
@@ -297,18 +288,17 @@ Map<String, String Function(Map<String, dynamic> args)> syncGuardRequired(
   Map<String, List<String>> requiredParams,
   Map<String, Map<String, List<String>>> paramAliases, [
   Map<String, List<String>> acceptedNames = const {},
-]) =>
-    {
-      for (final entry in handlers.entries)
-        entry.key: (args) {
-          final missing = syncMissingRequiredParam(
-            entry.key,
-            args,
-            requiredParams,
-            paramAliases,
-            acceptedNames,
-          );
-          if (missing != null) return missing;
-          return entry.value(args);
-        },
-    };
+]) => {
+  for (final entry in handlers.entries)
+    entry.key: (args) {
+      final missing = syncMissingRequiredParam(
+        entry.key,
+        args,
+        requiredParams,
+        paramAliases,
+        acceptedNames,
+      );
+      if (missing != null) return missing;
+      return entry.value(args);
+    },
+};

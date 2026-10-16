@@ -30,10 +30,10 @@ class KbSearchResult {
 
   /// Converts to MCP protocol JSON.
   Map<String, dynamic> toJson() => {
-        'path': path,
-        'line': lineNumber,
-        'snippet': snippet,
-      };
+    'path': path,
+    'line': lineNumber,
+    'snippet': snippet,
+  };
 }
 
 /// Filesystem-backed client for knowledge-base Markdown operations.
@@ -153,8 +153,11 @@ class KbClient {
   /// the updated document content.
   Future<String> updateDoc(String path, String section, String content) async {
     final file = File(_resolve(path));
-    final updated =
-        _replaceSection(await file.readAsString(), section, content);
+    final updated = _replaceSection(
+      await file.readAsString(),
+      section,
+      content,
+    );
     await file.writeAsString(updated);
     return updated;
   }
@@ -169,8 +172,12 @@ class KbClient {
     final level = _headingLevel(lines[start]);
     final end = _findSectionEnd(lines, start + 1, level);
     final body = replacement.trim().split('\n');
-    return [...lines.sublist(0, start + 1), '', ...body, ..._tail(lines, end)]
-        .join('\n');
+    return [
+      ...lines.sublist(0, start + 1),
+      '',
+      ...body,
+      ..._tail(lines, end),
+    ].join('\n');
   }
 
   /// Index of the heading whose title equals [section], or `-1`.

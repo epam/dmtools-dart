@@ -240,8 +240,9 @@ int _parseTable(List<String> lines, int i, List<_Block> blocks) {
   final buf = StringBuffer();
   for (var r = 0; r < rows.length; r++) {
     final tag = r == 0 ? 'th' : 'td';
-    final cells =
-        rows[r].map((c) => '<$tag>${_inline(c.trim())}</$tag>').join();
+    final cells = rows[r]
+        .map((c) => '<$tag>${_inline(c.trim())}</$tag>')
+        .join();
     buf.write('<tr>$cells</tr>');
   }
   blocks.add(_Block('table', '<tbody>$buf</tbody>'));
@@ -288,13 +289,12 @@ _Block _listBlock(
   bool ordered,
   String flags,
   List<List<_Block>> items,
-) =>
-    _Block(
-      taskList ? 'tasks' : (ordered ? 'ol' : 'ul'),
-      '',
-      info: flags,
-      children: items,
-    );
+) => _Block(
+  taskList ? 'tasks' : (ordered ? 'ol' : 'ul'),
+  '',
+  info: flags,
+  children: items,
+);
 
 /// Parses one list item's payload into [items]/[flags] (`-` plain, `u`
 /// unchecked, `c` checked); returns whether the item was a task item.
@@ -421,11 +421,14 @@ String _renderList(_Block block) {
   if (block.kind == 'tasks') {
     final items = <String>[];
     for (var i = 0; i < block.children.length; i++) {
-      final status =
-          i < flags.length && flags[i] == 'c' ? 'complete' : 'incomplete';
+      final status = i < flags.length && flags[i] == 'c'
+          ? 'complete'
+          : 'incomplete';
       final body = block.children[i].map(_renderBlock).join();
-      items.add('<ac:task><ac:task-status>$status</ac:task-status>'
-          '<ac:task-body>$body</ac:task-body></ac:task>');
+      items.add(
+        '<ac:task><ac:task-status>$status</ac:task-status>'
+        '<ac:task-body>$body</ac:task-body></ac:task>',
+      );
     }
     return '<ac:task-list>${items.join()}</ac:task-list>';
   }
@@ -439,23 +442,48 @@ String _renderList(_Block block) {
 /// Renders inline Markdown ([text]) into storage XHTML.
 String _inline(String text) {
   final stash = <String>[];
-  var work = _stashPattern(text, stash, RegExp(r'`([^`]+)`'),
-      (m) => '<code>${escapeXml(m[1]!)}</code>');
+  var work = _stashPattern(
+    text,
+    stash,
+    RegExp(r'`([^`]+)`'),
+    (m) => '<code>${escapeXml(m[1]!)}</code>',
+  );
   work = _stashPattern(
-      work, stash, RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'), _renderImage);
+    work,
+    stash,
+    RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'),
+    _renderImage,
+  );
   work = _stashPattern(
-      work, stash, RegExp(r'\[([^\]]*)\]\(([^)]+)\)'), _renderLink);
-  work = _stashPattern(work, stash, RegExp(r'\*\*([^*]+)\*\*'),
-      (m) => '<strong>${escapeXml(m[1]!)}</strong>');
-  work = _stashPattern(work, stash, RegExp(r'(?<!\*)\*([^*\n]+)\*(?!\*)'),
-      (m) => '<em>${escapeXml(m[1]!)}</em>');
-  work = _stashPattern(work, stash, RegExp(r'~~([^~]+)~~'),
-      (m) => '<del>${escapeXml(m[1]!)}</del>');
+    work,
+    stash,
+    RegExp(r'\[([^\]]*)\]\(([^)]+)\)'),
+    _renderLink,
+  );
   work = _stashPattern(
-      work,
-      stash,
-      RegExp(r'(?<![\("=\u0000])(https?://[^\s<)]+)'),
-      (m) => '<a href="${escapeXml(m[1]!)}">${escapeXml(m[1]!)}</a>');
+    work,
+    stash,
+    RegExp(r'\*\*([^*]+)\*\*'),
+    (m) => '<strong>${escapeXml(m[1]!)}</strong>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'(?<!\*)\*([^*\n]+)\*(?!\*)'),
+    (m) => '<em>${escapeXml(m[1]!)}</em>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'~~([^~]+)~~'),
+    (m) => '<del>${escapeXml(m[1]!)}</del>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'(?<![\("=\u0000])(https?://[^\s<)]+)'),
+    (m) => '<a href="${escapeXml(m[1]!)}">${escapeXml(m[1]!)}</a>',
+  );
   return _restore(escapeXml(work), stash);
 }
 
@@ -474,9 +502,9 @@ String _stashPattern(
 
 /// Restores stashed fragments into escaped [text].
 String _restore(String text, List<String> stash) => text.replaceAllMapped(
-      RegExp('\u0000(\\d+)\u0000'),
-      (m) => stash[int.parse(m.group(1)!)],
-    );
+  RegExp('\u0000(\\d+)\u0000'),
+  (m) => stash[int.parse(m.group(1)!)],
+);
 
 /// Renders a Markdown image reference.
 String _renderImage(RegExpMatch m) {

@@ -46,8 +46,7 @@ class AnthropicClient implements AiChatClient {
     String model,
     ChatMessages messages, [
     String? systemPrompt,
-  ]) =>
-      _post(_buildBody(model, messages, systemPrompt, _maxTokens));
+  ]) => _post(_buildBody(model, messages, systemPrompt, _maxTokens));
 
   /// Sends a low-level completion with an explicit token cap and temperature.
   ///
@@ -59,14 +58,15 @@ class AnthropicClient implements AiChatClient {
     String prompt,
     int maxTokens, [
     double? temperature,
-  ]) =>
-      _post(_buildBody(
-        model,
-        userMessages(prompt),
-        null,
-        maxTokens,
-        temperature: temperature,
-      ));
+  ]) => _post(
+    _buildBody(
+      model,
+      userMessages(prompt),
+      null,
+      maxTokens,
+      temperature: temperature,
+    ),
+  );
 
   /// Anthropic does not provide an embeddings API.
   @override
@@ -74,19 +74,14 @@ class AnthropicClient implements AiChatClient {
       throw UnsupportedError('Anthropic does not provide an embeddings API');
 
   /// Posts a messages request [body] with the client's auth and headers.
-  Future<String> _post(Map<String, dynamic> body) => postChat(
-        _dio,
-        _basePath,
-        body,
-        _headers,
-        extractContentBlockText,
-      );
+  Future<String> _post(Map<String, dynamic> body) =>
+      postChat(_dio, _basePath, body, _headers, extractContentBlockText);
 
   /// Auth and content headers sent with every request.
   Map<String, String> get _headers => {
-        'x-api-key': _apiKey,
-        'Content-Type': 'application/json',
-      };
+    'x-api-key': _apiKey,
+    'Content-Type': 'application/json',
+  };
 
   /// Builds the messages request body.
   Map<String, dynamic> _buildBody(

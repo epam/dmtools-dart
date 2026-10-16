@@ -62,33 +62,32 @@ class GitlabClient {
   Future<Map<String, dynamic>?> _getObject(
     String path, [
     Map<String, dynamic>? queryParams,
-  ]) async =>
-      _asMap(await _http.get(path, queryParams: queryParams));
+  ]) async => _asMap(await _http.get(path, queryParams: queryParams));
 
   /// POSTs [path] with [payload] and returns the JSON object body, or `null`.
   Future<Map<String, dynamic>?> _postObject(
-          String path, Object? payload) async =>
-      _asMap(await _http.post(path, body: payload));
+    String path,
+    Object? payload,
+  ) async => _asMap(await _http.post(path, body: payload));
 
   /// PUTs [path] with [payload] and returns the JSON object body, or `null`.
   Future<Map<String, dynamic>?> _putObject(
-          String path, Object? payload) async =>
-      _asMap(await _http.put(path, body: payload));
+    String path,
+    Object? payload,
+  ) async => _asMap(await _http.put(path, body: payload));
 
   /// GETs [path] and returns the JSON array body, or empty if not an array.
   Future<List<Map<String, dynamic>>> _getList(
     String path, {
     Map<String, dynamic>? queryParams,
-  }) async =>
-      _asList(await _http.get(path, queryParams: queryParams));
+  }) async => _asList(await _http.get(path, queryParams: queryParams));
 
   /// `gitlab_get_mr` — GET `/api/v4/projects/{id}/merge_requests/{iid}`.
   ///
   /// [project] is the numeric id or `group/project` path. Returns `null`
   /// for non-object bodies.
-  Future<Map<String, dynamic>?> getMr(String project, int iid) => _getObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid',
-      );
+  Future<Map<String, dynamic>?> getMr(String project, int iid) =>
+      _getObject('projects/${_encodeProject(project)}/merge_requests/$iid');
 
   /// `gitlab_list_mrs` — GET `/api/v4/projects/{id}/merge_requests`.
   ///
@@ -97,11 +96,10 @@ class GitlabClient {
   Future<List<Map<String, dynamic>>> listMrs(
     String project, [
     String state = 'opened',
-  ]) =>
-      _getList(
-        'projects/${_encodeProject(project)}/merge_requests',
-        queryParams: {'state': state, 'per_page': 20},
-      );
+  ]) => _getList(
+    'projects/${_encodeProject(project)}/merge_requests',
+    queryParams: {'state': state, 'per_page': 20},
+  );
 
   /// `gitlab_create_mr_note` — POST a note on a merge request.
   ///
@@ -110,11 +108,10 @@ class GitlabClient {
     String project,
     int iid,
     String body,
-  ) =>
-      _postObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/notes',
-        jsonEncode({'body': body}),
-      );
+  ) => _postObject(
+    'projects/${_encodeProject(project)}/merge_requests/$iid/notes',
+    jsonEncode({'body': body}),
+  );
 
   /// `gitlab_merge_mr` — PUT
   /// `/api/v4/projects/{id}/merge_requests/{iid}/merge`.
@@ -124,9 +121,9 @@ class GitlabClient {
   ///
   /// Returns the merged merge request, or `null` for non-object bodies.
   Future<Map<String, dynamic>?> mergeMr(String project, int iid) => _putObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/merge',
-        '{}',
-      );
+    'projects/${_encodeProject(project)}/merge_requests/$iid/merge',
+    '{}',
+  );
 
   /// `gitlab_close_mr` — PUT `/api/v4/projects/{id}/merge_requests/{iid}`
   /// with `state_event=close`.
@@ -143,11 +140,10 @@ class GitlabClient {
     String project,
     int iid,
     String event,
-  ) =>
-      _putObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid',
-        jsonEncode({'state_event': event}),
-      );
+  ) => _putObject(
+    'projects/${_encodeProject(project)}/merge_requests/$iid',
+    jsonEncode({'state_event': event}),
+  );
 
   /// `gitlab_get_mr_diff` — GET
   /// `/api/v4/projects/{id}/merge_requests/{iid}/changes`.
@@ -182,9 +178,7 @@ class GitlabClient {
   /// `gitlab_get_mr_notes` — GET
   /// `/api/v4/projects/{id}/merge_requests/{iid}/notes`.
   Future<List<Map<String, dynamic>>> getMrNotes(String project, int iid) =>
-      _getList(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/notes',
-      );
+      _getList('projects/${_encodeProject(project)}/merge_requests/$iid/notes');
 
   /// `gitlab_get_mr_approvals` — GET
   /// `/api/v4/projects/{id}/merge_requests/{iid}/approvals`.
@@ -201,10 +195,9 @@ class GitlabClient {
   Future<List<Map<String, dynamic>>> getMrDiscussions(
     String project,
     int iid,
-  ) =>
-      _getList(
-        'projects/${_encodeProject(project)}/merge_requests/$iid/discussions',
-      );
+  ) => _getList(
+    'projects/${_encodeProject(project)}/merge_requests/$iid/discussions',
+  );
 
   /// `gitlab_trigger_mr_discussion_resolve` — PUT
   /// `/api/v4/projects/{id}/merge_requests/{iid}/discussions/{discussionId}`
@@ -217,12 +210,11 @@ class GitlabClient {
     int iid,
     String discussionId,
     bool resolved,
-  ) =>
-      _putObject(
-        'projects/${_encodeProject(project)}/merge_requests/$iid'
-        '/discussions/$discussionId',
-        jsonEncode({'resolved': resolved}),
-      );
+  ) => _putObject(
+    'projects/${_encodeProject(project)}/merge_requests/$iid'
+    '/discussions/$discussionId',
+    jsonEncode({'resolved': resolved}),
+  );
 
   /// `gitlab_get_issue` — GET `/api/v4/projects/{id}/issues/{iid}`.
   ///
@@ -254,11 +246,10 @@ class GitlabClient {
   Future<List<Map<String, dynamic>>> listIssues(
     String project, [
     String state = 'opened',
-  ]) =>
-      _getList(
-        'projects/${_encodeProject(project)}/issues',
-        queryParams: {'state': state, 'per_page': 20},
-      );
+  ]) => _getList(
+    'projects/${_encodeProject(project)}/issues',
+    queryParams: {'state': state, 'per_page': 20},
+  );
 
   /// `gitlab_get_pipelines` — GET `/api/v4/projects/{id}/pipelines`.
   Future<List<Map<String, dynamic>>> getPipelines(String project) =>
@@ -268,10 +259,7 @@ class GitlabClient {
   ///
   /// [ref] is the branch or tag to run the pipeline for. Returns the created
   /// pipeline, or `null` for non-object bodies.
-  Future<Map<String, dynamic>?> triggerPipeline(
-    String project,
-    String ref,
-  ) =>
+  Future<Map<String, dynamic>?> triggerPipeline(String project, String ref) =>
       _postObject(
         'projects/${_encodeProject(project)}/pipeline',
         jsonEncode({'ref': ref}),
@@ -293,11 +281,10 @@ class GitlabClient {
     String project,
     String branch,
     String ref,
-  ) =>
-      _postObject(
-        'projects/${_encodeProject(project)}/repository/branches',
-        jsonEncode({'branch': branch, 'ref': ref}),
-      );
+  ) => _postObject(
+    'projects/${_encodeProject(project)}/repository/branches',
+    jsonEncode({'branch': branch, 'ref': ref}),
+  );
 
   /// `gitlab_get_file_content` — GET
   /// `/api/v4/projects/{id}/repository/files/{encodedPath}`.
@@ -309,12 +296,11 @@ class GitlabClient {
     String project,
     String filePath, [
     String? ref,
-  ]) =>
-      _getObject(
-        'projects/${_encodeProject(project)}/repository/files/'
-        '${Uri.encodeComponent(filePath)}',
-        ref == null ? null : {'ref': ref},
-      );
+  ]) => _getObject(
+    'projects/${_encodeProject(project)}/repository/files/'
+    '${Uri.encodeComponent(filePath)}',
+    ref == null ? null : {'ref': ref},
+  );
 
   /// `gitlab_create_tag` — POST
   /// `/api/v4/projects/{id}/repository/tags`.
@@ -325,11 +311,10 @@ class GitlabClient {
     String project,
     String tagName,
     String ref,
-  ) =>
-      _postObject(
-        'projects/${_encodeProject(project)}/repository/tags',
-        jsonEncode({'tag_name': tagName, 'ref': ref}),
-      );
+  ) => _postObject(
+    'projects/${_encodeProject(project)}/repository/tags',
+    jsonEncode({'tag_name': tagName, 'ref': ref}),
+  );
 
   /// `gitlab_get_tags` — GET `/api/v4/projects/{id}/repository/tags`.
   Future<List<Map<String, dynamic>>> getTags(String project) =>
@@ -375,10 +360,7 @@ class GitlabClient {
   ///
   /// [url] is the webhook callback URL. Returns the created hook, or `null`
   /// for non-object bodies.
-  Future<Map<String, dynamic>?> addProjectHook(
-    String project,
-    String url,
-  ) =>
+  Future<Map<String, dynamic>?> addProjectHook(String project, String url) =>
       _postObject(
         'projects/${_encodeProject(project)}/hooks',
         jsonEncode({'url': url}),

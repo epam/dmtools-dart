@@ -44,9 +44,7 @@ class GitlabHttpClient extends BaseHttpClient {
   }) : _token = token;
 
   @override
-  Map<String, String> get authHeaders => {
-        'PRIVATE-TOKEN': _token,
-      };
+  Map<String, String> get authHeaders => {'PRIVATE-TOKEN': _token};
 
   @override
   String buildUrl(String path) => '$basePath/api/v4/$path';

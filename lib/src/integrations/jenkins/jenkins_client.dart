@@ -33,8 +33,10 @@ class JenkinsClient {
   /// `job/folder/job/job-name` — each `/`-separated element encoded as its
   /// own `job/` segment (never `%2F`-encoded as one segment).
   String _apiJobPath(String name) {
-    final segments =
-        name.split('/').where((s) => s.isNotEmpty).map(Uri.encodeComponent);
+    final segments = name
+        .split('/')
+        .where((s) => s.isNotEmpty)
+        .map(Uri.encodeComponent);
     return segments.map((s) => 'job/$s').join('/');
   }
 
@@ -113,11 +115,7 @@ class JenkinsClient {
         '${_apiJobPath(name)}/build',
         extra: await _crumbHeaders(),
       );
-      return {
-        'success': true,
-        'message': 'Job $name triggered',
-        'job': name,
-      };
+      return {'success': true, 'message': 'Job $name triggered', 'job': name};
     } on Object catch (e) {
       return {
         'success': false,
@@ -130,13 +128,8 @@ class JenkinsClient {
   /// `jenkins_get_build` — GET `job/{name}/{buildNumber}/api/json`.
   ///
   /// Returns `null` when the response body is not a JSON object.
-  Future<Map<String, dynamic>?> getBuild(
-    String name,
-    int buildNumber,
-  ) async {
-    final body = await _http.get(
-      '${_apiJobPath(name)}/$buildNumber/api/json',
-    );
+  Future<Map<String, dynamic>?> getBuild(String name, int buildNumber) async {
+    final body = await _http.get('${_apiJobPath(name)}/$buildNumber/api/json');
     return _decodeMap(body);
   }
 
@@ -240,9 +233,7 @@ class JenkinsClient {
   ) async {
     final body = await _http.get(
       '${_apiJobPath(name)}/$buildNumber/api/json',
-      queryParams: {
-        'tree': 'artifacts[fileName,relativePath]',
-      },
+      queryParams: {'tree': 'artifacts[fileName,relativePath]'},
     );
     return _decodeMap(body);
   }

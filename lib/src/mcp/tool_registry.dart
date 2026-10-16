@@ -2,8 +2,10 @@ import 'tool_definition.dart';
 
 /// GitHub key formats (`gh-123`, `owner/repo#123`) — unambiguously GitHub
 /// keys, never valid anywhere else (dm.ai #577 `ToolAliasResolver`).
-final RegExp _gitHubKeyHint =
-    RegExp(r'^(?:gh-\d+|[\w.-]+/[\w.-]+#\d+)$', caseSensitive: false);
+final RegExp _gitHubKeyHint = RegExp(
+  r'^(?:gh-\d+|[\w.-]+/[\w.-]+#\d+)$',
+  caseSensitive: false,
+);
 
 /// Classic Jira key: `PROJ-123`.
 final RegExp _jiraKeyHint = RegExp(r'^[A-Z][A-Z0-9]+-\d+$');
@@ -121,7 +123,9 @@ class ToolRegistry {
   /// or `null` when [hint] gives no such signal or no GitHub carrier
   /// exists.
   ToolDefinition? _githubHintCarrier(
-      List<ToolDefinition> candidates, String? keyHint) {
+    List<ToolDefinition> candidates,
+    String? keyHint,
+  ) {
     final hint = keyHint?.trim();
     if (hint == null || hint.isEmpty || !_gitHubKeyHint.hasMatch(hint)) {
       return null;
@@ -133,7 +137,9 @@ class ToolRegistry {
   /// (`PROJ-123`) routes to Jira, a bare integer to ADO — or `null` when
   /// the hint gives no vendor signal or the carrier is absent.
   ToolDefinition? _keyFormatCarrier(
-      List<ToolDefinition> candidates, String? keyHint) {
+    List<ToolDefinition> candidates,
+    String? keyHint,
+  ) {
     final hint = keyHint?.trim();
     if (hint == null || hint.isEmpty) return null;
     if (_jiraKeyHint.hasMatch(hint)) {
@@ -147,7 +153,9 @@ class ToolRegistry {
 
   /// The first candidate from [integration], or `null` when none exists.
   ToolDefinition? _firstByIntegration(
-      List<ToolDefinition> candidates, String integration) {
+    List<ToolDefinition> candidates,
+    String integration,
+  ) {
     for (final candidate in candidates) {
       if (candidate.integration == integration) return candidate;
     }
@@ -159,11 +167,14 @@ class ToolRegistry {
   /// unrestricted candidate list, leaving the visibility decision to the
   /// caller's filter.
   List<ToolDefinition> _aliasCandidates(
-      String alias, Set<String>? integrations) {
+    String alias,
+    Set<String>? integrations,
+  ) {
     final candidates = toolsByAlias(alias);
     if (integrations == null) return candidates;
-    final visible =
-        candidates.where((t) => integrations.contains(t.integration)).toList();
+    final visible = candidates
+        .where((t) => integrations.contains(t.integration))
+        .toList();
     return visible.isNotEmpty ? visible : candidates;
   }
 
@@ -180,8 +191,8 @@ class ToolRegistry {
     final raw = alias.startsWith('tracker_')
         ? defaultTracker
         : alias.startsWith('source_code_')
-            ? defaultSourceCode
-            : null;
+        ? defaultSourceCode
+        : null;
     if (raw == null) return null;
     final value = raw.trim().toLowerCase();
     return value.isEmpty ? null : value;
@@ -217,9 +228,7 @@ class ToolRegistry {
   /// included; otherwise every registered tool is returned.
   Map<String, dynamic> generateToolsListResponse([Set<String>? integrations]) {
     final tools = toolsForIntegrations(integrations);
-    return {
-      'tools': tools.map((t) => t.toJson()).toList(),
-    };
+    return {'tools': tools.map((t) => t.toJson()).toList()};
   }
 
   /// Filters a tools list response by a case-insensitive substring match on

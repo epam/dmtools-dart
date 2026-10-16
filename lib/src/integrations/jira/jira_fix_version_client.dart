@@ -13,19 +13,15 @@ extension JiraFixVersionClient on JiraClient {
       _mutateFixVersions(key, 'remove', version);
 
   /// PUTs an `update.fixVersions` operation ([op] is `add` or `remove`).
-  Future<void> _mutateFixVersions(
-    String key,
-    String op,
-    String version,
-  ) async {
+  Future<void> _mutateFixVersions(String key, String op, String version) async {
     await _http.put(
       'issue/$key',
       body: jsonEncode({
         'update': {
           'fixVersions': [
             {
-              op: {'name': version}
-            }
+              op: {'name': version},
+            },
           ],
         },
       }),

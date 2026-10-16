@@ -31,8 +31,7 @@ class AdoWorkItemOps {
     String field,
     Object? value, {
     bool markdown = false,
-  }) =>
-      _patchItem(id, adoFieldsPatch({field: value}, markdown: markdown));
+  }) => _patchItem(id, adoFieldsPatch({field: value}, markdown: markdown));
 
   /// `ado_move_to_state` — sets `System.State`.
   Future<Map<String, dynamic>> moveToState(int id, String state) =>
@@ -48,9 +47,12 @@ class AdoWorkItemOps {
     int id,
     String description, {
     String? format,
-  }) =>
-      setField(id, 'System.Description', description,
-          markdown: isAdoMarkdownFormat(format));
+  }) => setField(
+    id,
+    'System.Description',
+    description,
+    markdown: isAdoMarkdownFormat(format),
+  );
 
   /// `ado_update_tags` — sets `System.Tags` (semicolon-separated).
   Future<Map<String, dynamic>> updateTags(int id, String tags) =>
@@ -63,9 +65,12 @@ class AdoWorkItemOps {
     String field,
     Object? value, {
     String? format,
-  }) =>
-      setField(id, resolveAdoFieldName(field), value,
-          markdown: isAdoMarkdownFormat(format));
+  }) => setField(
+    id,
+    resolveAdoFieldName(field),
+    value,
+    markdown: isAdoMarkdownFormat(format),
+  );
 
   /// `ado_set_priority` — sets the numeric priority.
   ///
@@ -79,14 +84,13 @@ class AdoWorkItemOps {
     int sourceId,
     int targetId,
     String relationship,
-  ) =>
-      _patchItem(
-        sourceId,
-        adoRelationPatch(
-          mapAdoRelationship(relationship),
-          _http.buildOrgUrl('wit/workItems/$targetId'),
-        ),
-      );
+  ) => _patchItem(
+    sourceId,
+    adoRelationPatch(
+      mapAdoRelationship(relationship),
+      _http.buildOrgUrl('wit/workItems/$targetId'),
+    ),
+  );
 
   /// `ado_create_work_item` — creates a work item in [project] and, when
   /// [parentId] is given, links it as the parent's child (Hierarchy-Forward
@@ -98,13 +102,18 @@ class AdoWorkItemOps {
     String? description,
     Map<String, dynamic>? fieldsJson,
     String? format,
-  }) async =>
-      jsonDecode(await _http.postPatch(
-        'wit/workitems/\$$workItemType',
-        body: adoCreatePatch(title, description, fieldsJson,
-            markdown: isAdoMarkdownFormat(format)),
-        project: project.isEmpty ? null : project,
-      )) as Map<String, dynamic>;
+  }) async => jsonDecode(
+    await _http.postPatch(
+      'wit/workitems/\$$workItemType',
+      body: adoCreatePatch(
+        title,
+        description,
+        fieldsJson,
+        markdown: isAdoMarkdownFormat(format),
+      ),
+      project: project.isEmpty ? null : project,
+    ),
+  ) as Map<String, dynamic>;
 
   /// Creates a work item and, when [parentId] is given, links it as the
   /// parent's child (Hierarchy-Forward on the parent).
@@ -128,8 +137,10 @@ class AdoWorkItemOps {
     if (parentId != null) {
       final childId = created['id'];
       if (childId == null) {
-        throw StateError('Work item was created but the response carries no '
-            'id, cannot link parent $parentId');
+        throw StateError(
+          'Work item was created but the response carries no '
+          'id, cannot link parent $parentId',
+        );
       }
       await linkWorkItems(parentId, int.parse('$childId'), 'child');
     }
@@ -157,11 +168,16 @@ class AdoWorkItemOps {
     if (!file.existsSync()) {
       throw FileSystemException('File does not exist', filePath);
     }
-    final existing = jsonDecode(await _http
-        .get('wit/workitems/$id', queryParams: {r'$expand': 'relations'}));
+    final existing = jsonDecode(
+      await _http.get(
+        'wit/workitems/$id',
+        queryParams: {r'$expand': 'relations'},
+      ),
+    );
     if (!adoHasAttachment(existing, name)) {
       final uploaded = jsonDecode(
-          await _http.uploadAttachment(name, await file.readAsBytes()));
+        await _http.uploadAttachment(name, await file.readAsBytes()),
+      );
       final url = uploaded is Map ? uploaded['url'] : null;
       if (url is! String || url.isEmpty) {
         throw StateError('ADO attachment upload returned no url for $name');

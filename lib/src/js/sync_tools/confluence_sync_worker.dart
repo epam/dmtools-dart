@@ -101,8 +101,10 @@ Future<void> bootConfluenceSyncPool(
   try {
     await (pool ?? confluenceSyncWorkerPool).boot();
   } catch (e) {
-    onError('dmtools: Confluence worker pool boot failed '
-        '(confluence tools run sequentially): $e');
+    onError(
+      'dmtools: Confluence worker pool boot failed '
+      '(confluence tools run sequentially): $e',
+    );
   }
 }
 
@@ -115,18 +117,23 @@ Map<String, dynamic>? _runConfluenceJob(
 ) {
   switch (kind) {
     case _kJobHttpGet:
-      return _httpJobEnvelope(SyncHttpClient.get(
-        args['url'] as String,
-        headers: _argsHeaders(args),
-        followRedirects: args['followRedirects'] == true,
-      ));
+      return _httpJobEnvelope(
+        SyncHttpClient.get(
+          args['url'] as String,
+          headers: _argsHeaders(args),
+          followRedirects: args['followRedirects'] == true,
+        ),
+      );
     case _kJobAttachmentGet:
-      return _httpJobEnvelope(fetchConfluenceAttachmentWithRetry(
-        args['url'] as String,
-        _argsHeaders(args),
-        baseDelayMs:
-            args['baseDelayMs'] as int? ?? confluenceAttachmentRetryBaseDelayMs,
-      ));
+      return _httpJobEnvelope(
+        fetchConfluenceAttachmentWithRetry(
+          args['url'] as String,
+          _argsHeaders(args),
+          baseDelayMs:
+              args['baseDelayMs'] as int? ??
+              confluenceAttachmentRetryBaseDelayMs,
+        ),
+      );
     case _kJobResolve:
       return _resolveContentJob(args);
     default:
@@ -155,22 +162,22 @@ Map<String, dynamic>? _resolveContentJob(Map<String, dynamic> args) {
 
 /// One `resolve` job per URL of [urls]; results keep the input order.
 List<SyncParallelJob> _resolveJobs(_Conf config, List<String> urls) => [
-      for (var i = 0; i < urls.length; i++)
-        SyncParallelJob(
-          index: i,
-          kind: _kJobResolve,
-          args: {..._jobArgsOf(config), 'url': urls[i]},
-        ),
-    ];
+  for (var i = 0; i < urls.length; i++)
+    SyncParallelJob(
+      index: i,
+      kind: _kJobResolve,
+      args: {..._jobArgsOf(config), 'url': urls[i]},
+    ),
+];
 
 /// The sendable config fields shared by every Confluence job.
 Map<String, dynamic> _jobArgsOf(_Conf config) => <String, dynamic>{
-      'rootUrl': config.rootUrl,
-      'baseUrl': config.baseUrl,
-      'headers': config.headers,
-      'apiVersion': config.apiVersion,
-      'baseDelayMs': config.attachmentRetryBaseDelayMs,
-    };
+  'rootUrl': config.rootUrl,
+  'baseUrl': config.baseUrl,
+  'headers': config.headers,
+  'apiVersion': config.apiVersion,
+  'baseDelayMs': config.attachmentRetryBaseDelayMs,
+};
 
 /// String map coercion of a job's `headers` argument.
 Map<String, String> _argsHeaders(Map<String, dynamic> args) =>
@@ -199,9 +206,7 @@ SyncHttpResponse? _httpJobResponse(Map<String, dynamic>? envelope) {
 
 /// Runs [jobs] on the Confluence pool, or inline — in input order, one
 /// at a time on the calling isolate — when the pool is not booted.
-List<Map<String, dynamic>?> _runConfluenceParallel(
-  List<SyncParallelJob> jobs,
-) {
+List<Map<String, dynamic>?> _runConfluenceParallel(List<SyncParallelJob> jobs) {
   final pool = confluenceSyncWorkerPool;
   if (pool.ready) return pool.run(jobs);
   return <Map<String, dynamic>?>[for (final job in jobs) _runJobInline(job)];

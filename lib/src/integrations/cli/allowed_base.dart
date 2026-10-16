@@ -9,6 +9,7 @@
 library;
 
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 /// Canonicalizes [dirPath] and validates that it lies within the job
@@ -28,8 +29,10 @@ void validateWithinAllowedBase(String dirPath, String base) {
   // thread 3); the boolean outcome is unchanged (pure OR).
   if (within(base) || within(Directory.systemTemp.path)) return;
   if (within(gitRepositoryRoot(base))) return;
-  throw Exception('Working directory is outside allowed base paths '
-      '(user.dir, git root, tmpdir): $dirPath');
+  throw Exception(
+    'Working directory is outside allowed base paths '
+    '(user.dir, git root, tmpdir): $dirPath',
+  );
 }
 
 /// Resolves a `file_*` tool [path] the way Java `FileTools` does —
@@ -72,8 +75,9 @@ String resolveWithinAllowedBase(
   String base, {
   String? configuredAllowedPaths,
 }) {
-  final resolved =
-      canonicalizePath(p.normalize(p.isAbsolute(path) ? path : '$base/$path'));
+  final resolved = canonicalizePath(
+    p.normalize(p.isAbsolute(path) ? path : '$base/$path'),
+  );
   bool within(String? candidate) {
     if (candidate == null) return false;
     return pathIsWithin(resolved, canonicalizePath(candidate));
@@ -87,8 +91,10 @@ String resolveWithinAllowedBase(
   if (isAllowedByConfig(resolved, base, configuredAllowedPaths)) {
     return resolved;
   }
-  throw Exception('Path traversal attempt blocked: $path '
-      '(resolved: $resolved, working dir: $base)');
+  throw Exception(
+    'Path traversal attempt blocked: $path '
+    '(resolved: $resolved, working dir: $base)',
+  );
 }
 
 /// Canonical form of [path]: resolves symlinks for the deepest existing
@@ -144,9 +150,10 @@ bool pathIsWithin(String dir, String base, {String? separator}) {
 /// git-root detection parity).
 String? gitRepositoryRoot(String base) {
   try {
-    final result = Process.runSync(
-        'git', const ['rev-parse', '--show-toplevel'],
-        workingDirectory: base);
+    final result = Process.runSync('git', const [
+      'rev-parse',
+      '--show-toplevel',
+    ], workingDirectory: base);
     final root = result.stdout.toString().trim();
     if (result.exitCode == 0 &&
         root.isNotEmpty &&
@@ -205,14 +212,18 @@ bool matchesPattern(String path, String workingDir, String rawPattern) {
     final exact = canonicalizePath(p.normalize(p.join(workingDir, rawPattern)));
     return path == exact;
   }
-  final slashBefore =
-      wildcardIdx == 0 ? -1 : rawPattern.lastIndexOf('/', wildcardIdx - 1);
-  final literalPrefix =
-      slashBefore >= 0 ? rawPattern.substring(0, slashBefore) : '';
-  final globSuffix =
-      slashBefore >= 0 ? rawPattern.substring(slashBefore + 1) : rawPattern;
-  final canonicalBase =
-      canonicalizePath(_patternBase(workingDir, literalPrefix));
+  final slashBefore = wildcardIdx == 0
+      ? -1
+      : rawPattern.lastIndexOf('/', wildcardIdx - 1);
+  final literalPrefix = slashBefore >= 0
+      ? rawPattern.substring(0, slashBefore)
+      : '';
+  final globSuffix = slashBefore >= 0
+      ? rawPattern.substring(slashBefore + 1)
+      : rawPattern;
+  final canonicalBase = canonicalizePath(
+    _patternBase(workingDir, literalPrefix),
+  );
   // Canonicalize the candidate too: a symlinked machine prefix (macOS
   // `/home` autofs) would otherwise drift away from a literal path that
   // names the same location — both sides must land in the same form.

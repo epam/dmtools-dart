@@ -4,7 +4,7 @@ part of 'jira_sync_tools.dart';
 typedef _JiraSyncConfig = ({
   String basePath,
   String baseUrl,
-  Map<String, String> headers
+  Map<String, String> headers,
 });
 
 /// Media type for JSON request/response bodies.
@@ -42,21 +42,19 @@ Object _getJsonOrError(String url, _JiraSyncConfig config) {
   try {
     final decoded = jsonDecode(resp.body);
     if (decoded is Map<String, dynamic>) return decoded;
-  } catch (_) {/* fall through to the malformed-body error */}
+  } catch (_) {
+    /* fall through to the malformed-body error */
+  }
   return 'fetch failed: malformed JSON response';
 }
 
 /// POSTs [body] to [url] and returns the result string.
 String _postBody(_JiraSyncConfig config, String url, String body) =>
-    _bodyOrError(
-      SyncHttpClient.post(url, headers: config.headers, body: body),
-    );
+    _bodyOrError(SyncHttpClient.post(url, headers: config.headers, body: body));
 
 /// PUTs [body] to [url] and returns the result string.
 String _putBody(_JiraSyncConfig config, String url, String body) =>
-    _bodyOrError(
-      SyncHttpClient.put(url, headers: config.headers, body: body),
-    );
+    _bodyOrError(SyncHttpClient.put(url, headers: config.headers, body: body));
 
 /// Returns the 2xx body verbatim, or the body re-encoded as a JSON string
 /// when it is not valid JSON.

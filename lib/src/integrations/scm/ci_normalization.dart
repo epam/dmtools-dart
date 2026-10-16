@@ -83,10 +83,10 @@ String ghCheckRunsVerdict(List<dynamic> runs) {
 /// One GitHub Actions run (status + conclusion) to a verdict: a
 /// non-completed run has no verdict yet.
 String ghRunVerdict(String? status, String? conclusion) => _rollupVerdicts([
-      (status?.trim().toLowerCase() ?? '') == 'completed'
-          ? ghConclusionVerdict(conclusion)
-          : verdictPending,
-    ]);
+  (status?.trim().toLowerCase() ?? '') == 'completed'
+      ? ghConclusionVerdict(conclusion)
+      : verdictPending,
+]);
 
 /// Normalizes one GitLab pipeline/job/commit status to the verdict enum.
 /// Unmappable values are [verdictPending].
@@ -100,9 +100,9 @@ String gitlabStatusVerdict(String? raw) {
 /// Rollup of a GitLab pipeline/status list (`[{status: …}, …]`) to one
 /// verdict. Empty input is [verdictNone].
 String gitlabStatusListVerdict(List<dynamic> items) => _rollupVerdicts([
-      for (final item in items)
-        gitlabStatusVerdict((item as Map?)?['status'] as String?),
-    ]);
+  for (final item in items)
+    gitlabStatusVerdict((item as Map?)?['status'] as String?),
+]);
 
 /// A per-check verdict candidate: `null` marks "no evidence from this
 /// check" (excluded from the rollup rather than read as pending).
@@ -144,9 +144,9 @@ class MergeState {
 
   /// The alias wire shape: `{"mergeState": …, "reason": …}`.
   Map<String, dynamic> toJson() => {
-        'mergeState': state,
-        if (reason != null) 'reason': reason,
-      };
+    'mergeState': state,
+    if (reason != null) 'reason': reason,
+  };
 }
 
 const _ghBlockedReasons = {
@@ -171,7 +171,8 @@ const _ghSimpleStates = {
 /// GraphQL (`mergeStateStatus`) spellings — GraphQL wins when both are
 /// present.
 String _ghStateToken(String? mergeStateStatus, String? mergeableState) {
-  final raw = mergeStateStatus ??
+  final raw =
+      mergeStateStatus ??
       (mergeableState != null && mergeableState.isNotEmpty
           ? mergeableState.toUpperCase()
           : '');

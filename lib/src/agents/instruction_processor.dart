@@ -34,9 +34,7 @@ final RegExp _githubPrRegExp = RegExp(
 );
 
 /// Matches Jira ticket keys such as `PROJ-123`.
-final RegExp _jiraKeyRegExp = RegExp(
-  r'\b[A-Z][A-Z0-9]+-\d+\b',
-);
+final RegExp _jiraKeyRegExp = RegExp(r'\b[A-Z][A-Z0-9]+-\d+\b');
 
 /// Processes CLI prompt strings by extracting and embedding content from
 /// URLs and file paths found in the text.

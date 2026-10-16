@@ -17,7 +17,9 @@ import 'dart:io';
 
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
+
 import 'package:quickjs_runtime/quickjs_runtime.dart';
+
 import 'require_loader.dart';
 import 'sync_http_client.dart';
 import 'tool_bridge.dart';
@@ -81,11 +83,11 @@ class EngineContext {
   /// main engine composed — JSON round-tripped); the composition fields
   /// are ignored.
   const EngineContext.direct(Map<String, dynamic> params)
-      : directParams = params,
-        jobParams = const {},
-        ticket = null,
-        contextParams = null,
-        extraGlobals = null;
+    : directParams = params,
+      jobParams = const {},
+      ticket = null,
+      contextParams = null,
+      extraGlobals = null;
 
   /// Injected as `params.jobParams` (ignored in [EngineContext.direct]).
   final Map<String, dynamic> jobParams;
@@ -126,7 +128,8 @@ Map<String, dynamic> buildParamsMap({
 /// [rt] per [spec].
 NodeCompatHandle? wireEngine(QuickjsRuntime rt, EngineSpec spec) {
   final ctx = spec.context;
-  final params = ctx.directParams ??
+  final params =
+      ctx.directParams ??
       buildParamsMap(
         jobParams: ctx.jobParams,
         ticket: ctx.ticket,
@@ -214,8 +217,9 @@ String? _syncFetch(String requestJson) {
   final request = jsonDecode(requestJson) as Map<String, dynamic>;
   final method = (request['method'] as String? ?? 'GET').toUpperCase();
   final url = request['url'] as String? ?? '';
-  final headers = (request['headers'] as Map<String, dynamic>? ?? const {})
-      .map((k, v) => MapEntry(k, '$v'));
+  final headers = (request['headers'] as Map<String, dynamic>? ?? const {}).map(
+    (k, v) => MapEntry(k, '$v'),
+  );
   final body = request['body'] as String?;
   try {
     final resp = SyncHttpClient.dispatch(

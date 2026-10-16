@@ -33,67 +33,55 @@ class IntegrationClients {
       _cache.putIfAbsent(key, build) as T;
 
   /// The shared Jira client (built on first access).
-  JiraClient jira() => _cached(
-        'jira',
-        () => JiraClient(JiraHttpClient(PropertyReader())),
-      );
+  JiraClient jira() =>
+      _cached('jira', () => JiraClient(JiraHttpClient(PropertyReader())));
 
   /// The shared GitHub client (built on first access).
-  GithubClient github() => _cached(
-        'github',
-        () => GithubClient(GithubHttpClient(PropertyReader())),
-      );
+  GithubClient github() =>
+      _cached('github', () => GithubClient(GithubHttpClient(PropertyReader())));
 
   /// The shared GitLab client (built on first access).
-  GitlabClient gitlab() => _cached(
-        'gitlab',
-        () => GitlabClient(GitlabHttpClient(PropertyReader())),
-      );
+  GitlabClient gitlab() =>
+      _cached('gitlab', () => GitlabClient(GitlabHttpClient(PropertyReader())));
 
   /// The shared Confluence client (built on first access).
   ConfluenceClient confluence() => _cached(
-        'confluence',
-        () => ConfluenceClient(
-          ConfluenceHttpClient(PropertyReader()),
-          defaultSpace: PropertyReader().getConfluenceDefaultSpace(),
-        ),
-      );
+    'confluence',
+    () => ConfluenceClient(
+      ConfluenceHttpClient(PropertyReader()),
+      defaultSpace: PropertyReader().getConfluenceDefaultSpace(),
+    ),
+  );
 
   /// The shared Azure DevOps client (built on first access).
-  AdoClient ado() => _cached(
-        'ado',
-        () => AdoClient(AdoHttpClient(PropertyReader())),
-      );
+  AdoClient ado() =>
+      _cached('ado', () => AdoClient(AdoHttpClient(PropertyReader())));
 
   /// The shared TestRail client (built on first access).
   TestRailClient testrail() => _cached(
-        'testrail',
-        () => TestRailClient(TestRailHttpClient(PropertyReader())),
-      );
+    'testrail',
+    () => TestRailClient(TestRailHttpClient(PropertyReader())),
+  );
 
   /// The shared Bitrise client (built on first access).
   BitriseClient bitrise() => _cached(
-        'bitrise',
-        () => BitriseClient(BitriseHttpClient(PropertyReader())),
-      );
+    'bitrise',
+    () => BitriseClient(BitriseHttpClient(PropertyReader())),
+  );
 
   /// The shared Jenkins client (built on first access).
   JenkinsClient jenkins() => _cached(
-        'jenkins',
-        () => JenkinsClient(JenkinsHttpClient(PropertyReader())),
-      );
+    'jenkins',
+    () => JenkinsClient(JenkinsHttpClient(PropertyReader())),
+  );
 
   /// The shared Figma client (built on first access).
-  FigmaClient figma() => _cached(
-        'figma',
-        () => FigmaClient(FigmaHttpClient(PropertyReader())),
-      );
+  FigmaClient figma() =>
+      _cached('figma', () => FigmaClient(FigmaHttpClient(PropertyReader())));
 
   /// The shared Xray client (built on first access).
-  XrayClient xray() => _cached(
-        'xray',
-        () => XrayClient(XrayHttpClient(PropertyReader())),
-      );
+  XrayClient xray() =>
+      _cached('xray', () => XrayClient(XrayHttpClient(PropertyReader())));
 
   /// Drops every cached client.
   ///

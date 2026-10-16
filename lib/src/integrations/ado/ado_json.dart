@@ -29,9 +29,9 @@ List<Map<String, dynamic>> unwrapAdoItems(dynamic decoded) {
 
 /// Collects the integer work-item ids from a WIQL `workItems` stub list.
 List<int> wiqlStubIds(List stubs) => [
-      for (final stub in stubs)
-        if (stub is Map && stub['id'] is int) stub['id'] as int,
-    ];
+  for (final stub in stubs)
+    if (stub is Map && stub['id'] is int) stub['id'] as int,
+];
 
 /// Splits [ids] into batches of [size] — ADO caps `wit/workitems` at 200
 /// ids per request (Java `searchAndPerform` batches the same way).

@@ -36,66 +36,65 @@ const Set<String> mermaidDiagramKeywords = {
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> mermaidTools() => [
-      _renderTool(),
-      _validateTool(),
-      _exportTool(),
-      _listTypesTool(),
-    ];
+  _renderTool(),
+  _validateTool(),
+  _exportTool(),
+  _listTypesTool(),
+];
 
 /// `mermaid_render` — validate and wrap a diagram in a code block.
 ToolDefinition _renderTool() => ToolDefinition(
-      name: 'mermaid_render',
-      description:
-          'Validate Mermaid diagram syntax and wrap it in a code block',
-      integration: 'mermaid',
-      category: 'diagrams',
-      params: [
-        ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
-        ToolParam(
-          name: 'format',
-          description: 'Output format: markdown (default) or raw',
-          required: false,
-        ),
-      ],
-    );
+  name: 'mermaid_render',
+  description: 'Validate Mermaid diagram syntax and wrap it in a code block',
+  integration: 'mermaid',
+  category: 'diagrams',
+  params: [
+    ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
+    ToolParam(
+      name: 'format',
+      description: 'Output format: markdown (default) or raw',
+      required: false,
+    ),
+  ],
+);
 
 /// `mermaid_validate` — check diagram syntax without rendering it.
 ToolDefinition _validateTool() => ToolDefinition(
-      name: 'mermaid_validate',
-      description: 'Validate Mermaid diagram syntax without rendering it',
-      integration: 'mermaid',
-      category: 'diagrams',
-      params: [
-        ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
-      ],
-    );
+  name: 'mermaid_validate',
+  description: 'Validate Mermaid diagram syntax without rendering it',
+  integration: 'mermaid',
+  category: 'diagrams',
+  params: [
+    ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
+  ],
+);
 
 /// `mermaid_export` — return a diagram in a requested output format.
 ToolDefinition _exportTool() => ToolDefinition(
-      name: 'mermaid_export',
-      description:
-          'Validate a Mermaid diagram and return it in the requested format '
-          '(markdown, raw, or svg)',
-      integration: 'mermaid',
-      category: 'diagrams',
-      params: [
-        ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
-        ToolParam(
-          name: 'format',
-          description: 'Output format: markdown (default), raw, or svg',
-          required: false,
-        ),
-      ],
-    );
+  name: 'mermaid_export',
+  description:
+      'Validate a Mermaid diagram and return it in the requested format '
+      '(markdown, raw, or svg)',
+  integration: 'mermaid',
+  category: 'diagrams',
+  params: [
+    ToolParam(name: 'diagram', description: 'The Mermaid diagram source'),
+    ToolParam(
+      name: 'format',
+      description: 'Output format: markdown (default), raw, or svg',
+      required: false,
+    ),
+  ],
+);
 
 /// `mermaid_list_types` — list the supported Mermaid diagram types.
 ToolDefinition _listTypesTool() => ToolDefinition(
-      name: 'mermaid_list_types',
-      description: 'List the supported Mermaid diagram types',
-      integration: 'mermaid',
-      category: 'diagrams',
-      params: [],
-    );
+  name: 'mermaid_list_types',
+  description: 'List the supported Mermaid diagram types',
+  integration: 'mermaid',
+  category: 'diagrams',
+  params: [],
+);
 
 /// Executes the Mermaid MCP tools.
 ///
@@ -121,7 +120,7 @@ class MermaidToolExecutor {
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _handlers = {
+  _handlers = {
     'mermaid_render': (a) =>
         render(a['diagram'] as String, a['format'] as String?),
     'mermaid_validate': (a) => validate(a['diagram'] as String),

@@ -28,10 +28,8 @@ class FigmaClient {
   ///
   /// [cacheDir] overrides where [downloadImage] stores files (tests);
   /// production code gets `<systemTemp>/dmtools_figma_cache`.
-  FigmaClient(
-    this._http, {
-    String? cacheDir,
-  }) : cacheDir = cacheDir ?? _defaultCacheDir;
+  FigmaClient(this._http, {String? cacheDir})
+    : cacheDir = cacheDir ?? _defaultCacheDir;
 
   static final _defaultCacheDir =
       '${Directory.systemTemp.path}/dmtools_figma_cache';
@@ -68,10 +66,7 @@ class FigmaClient {
   }
 
   /// GET helper returning the raw response body (non-JSON endpoints).
-  Future<String> _getText(
-    String path, {
-    Map<String, dynamic>? queryParams,
-  }) =>
+  Future<String> _getText(String path, {Map<String, dynamic>? queryParams}) =>
       _http.get(path, queryParams: queryParams);
 
   /// POST helper that JSON-encodes [body] and decodes the response.
@@ -137,10 +132,10 @@ class FigmaClient {
     for (var i = 0; i < ids.length; i += 100) {
       final end = (i + 100 > ids.length) ? ids.length : i + 100;
       final batchIds = ids.sublist(i, end).join(',');
-      final response = await _getJson('images/$fileId', queryParams: {
-        'ids': batchIds,
-        'format': effectiveFormat,
-      });
+      final response = await _getJson(
+        'images/$fileId',
+        queryParams: {'ids': batchIds, 'format': effectiveFormat},
+      );
       final images = response['images'];
       if (images is Map) {
         images.forEach((key, value) => combined['$key'] = value);
@@ -155,9 +150,10 @@ class FigmaClient {
     try {
       final fileId = figmaParseFileId(url);
       final nodeId = figmaExtractQueryParam(url, figmaNodeIdParam);
-      final response = await _getJson('images/$fileId', queryParams: {
-        'ids': nodeId,
-      });
+      final response = await _getJson(
+        'images/$fileId',
+        queryParams: {'ids': nodeId},
+      );
       return figmaImagesOf(response)?[figmaColonNodeId(nodeId)]?.toString();
     } on Object {
       return null;
@@ -294,10 +290,7 @@ class FigmaClient {
   }
 
   /// GET `files/{fileId}/nodes` for the comma-joined [ids].
-  Future<Map<String, dynamic>> _nodesRequest(
-    String fileId,
-    List<String> ids,
-  ) =>
+  Future<Map<String, dynamic>> _nodesRequest(String fileId, List<String> ids) =>
       _getJson('files/$fileId/nodes', queryParams: {'ids': ids.join(',')});
 
   /// `figma_get_styles` (Java parity) — hits the styles endpoint but
@@ -322,8 +315,10 @@ class FigmaClient {
       // `null` like every other failure, not escape as a StateError.
       final target = figmaUrlNodeId(figmaCleanHref(href));
       final response = await _nodesRequest(target.fileId, [target.nodeId]);
-      final document =
-          figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
+      final document = figmaNodeDocument(
+        response,
+        figmaColonNodeId(target.nodeId),
+      );
       if (document == null) {
         return null;
       }
@@ -349,14 +344,17 @@ class FigmaClient {
       final ids = requested.length > figmaMaxDetailIds
           ? requested.sublist(0, figmaMaxDetailIds)
           : requested;
-      final response = await _getJson('files/$fileId/nodes', queryParams: {
-        'ids': ids.join(','),
-      });
+      final response = await _getJson(
+        'files/$fileId/nodes',
+        queryParams: {'ids': ids.join(',')},
+      );
       final results = <String, Map<String, dynamic>>{};
       for (final rawId in ids) {
         final colonId = figmaColonNodeId(rawId.trim());
-        final document =
-            figmaNodeDocument(response, figmaColonNodeId(rawId.trim()));
+        final document = figmaNodeDocument(
+          response,
+          figmaColonNodeId(rawId.trim()),
+        );
         if (document == null) {
           continue;
         }
@@ -374,27 +372,22 @@ class FigmaClient {
   /// propagate (Java rethrows).
   Future<Map<String, dynamic>?> getNodeChildren(String href) async {
     final target = figmaUrlNodeId(figmaCleanHref(href));
-    final response =
-        await _getJson('files/${target.fileId}/nodes', queryParams: {
-      'ids': target.nodeId,
-      'depth': '1',
-    });
+    final response = await _getJson(
+      'files/${target.fileId}/nodes',
+      queryParams: {'ids': target.nodeId, 'depth': '1'},
+    );
     final document = figmaNodeDocument(response, target.nodeId);
     if (document == null) {
       return null;
     }
-    return _childrenEnvelope(
-      target.nodeId,
-      figmaLayerSummaries(document),
-    );
+    return _childrenEnvelope(target.nodeId, figmaLayerSummaries(document));
   }
 
   /// `{parentNodeId, children}` result envelope.
   Map<String, dynamic> _childrenEnvelope(
     String nodeId,
     List<Map<String, dynamic>> children,
-  ) =>
-      {'parentNodeId': nodeId, 'children': children};
+  ) => {'parentNodeId': nodeId, 'children': children};
 
   /// `figma_list_team_projects` — projects array of the team (raw numeric
   /// id or `/team/<id>` URL).

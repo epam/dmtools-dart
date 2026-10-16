@@ -45,7 +45,7 @@ typedef TrackerIssueRef = (String owner, String repo, String number);
 class GithubTrackerClient {
   /// Creates the client; [execute] defaults to the real sync dispatcher.
   GithubTrackerClient({SyncToolExecute? execute})
-      : _execute = execute ?? _defaultExecute;
+    : _execute = execute ?? _defaultExecute;
 
   final SyncToolExecute _execute;
 
@@ -55,65 +55,65 @@ class GithubTrackerClient {
 
   /// Posts a comment to the issue [key] refers to (Java `postComment`).
   void postComment(String key, String body) => _run(
-        key,
-        'github_create_comment',
-        (owner, repo, number) => {
-          'workspace': owner,
-          'repository': repo,
-          'pullRequestId': number,
-          'body': body,
-        },
-      );
+    key,
+    'github_create_comment',
+    (owner, repo, number) => {
+      'workspace': owner,
+      'repository': repo,
+      'pullRequestId': number,
+      'body': body,
+    },
+  );
 
   /// Moves the issue to [status] — done/closed close it, open-ish names
   /// reopen it, anything else lands as a label (Java `moveToStatus`).
   void moveToStatus(String key, String status) => _run(
-        key,
-        'github_move_issue_to_status',
-        (owner, repo, number) => {
-          'owner': owner,
-          'repo': repo,
-          'number': number,
-          'statusName': status,
-        },
-      );
+    key,
+    'github_move_issue_to_status',
+    (owner, repo, number) => {
+      'owner': owner,
+      'repo': repo,
+      'number': number,
+      'statusName': status,
+    },
+  );
 
   /// Assigns the issue to [user] (Java `assignTo`).
   void assignTo(String key, String user) => _run(
-        key,
-        'github_assign_issue',
-        (owner, repo, number) => {
-          'owner': owner,
-          'repo': repo,
-          'number': number,
-          'user': user,
-        },
-      );
+    key,
+    'github_assign_issue',
+    (owner, repo, number) => {
+      'owner': owner,
+      'repo': repo,
+      'number': number,
+      'user': user,
+    },
+  );
 
   /// Adds [label] to the issue (Java `addLabelIfNotExists` — existence
   /// checks belong to the caller, which holds the ticket labels).
   void addLabel(String key, String label) => _run(
-        key,
-        'github_add_labels',
-        (owner, repo, number) => {
-          'owner': owner,
-          'repo': repo,
-          'number': number,
-          'labels': [label],
-        },
-      );
+    key,
+    'github_add_labels',
+    (owner, repo, number) => {
+      'owner': owner,
+      'repo': repo,
+      'number': number,
+      'labels': [label],
+    },
+  );
 
   /// Removes [label] from the issue (Java `deleteLabelInTicket`).
   void removeLabel(String key, String label) => _run(
-        key,
-        'github_remove_label',
-        (owner, repo, number) => {
-          'owner': owner,
-          'repo': repo,
-          'number': number,
-          'label': label,
-        },
-      );
+    key,
+    'github_remove_label',
+    (owner, repo, number) => {
+      'owner': owner,
+      'repo': repo,
+      'number': number,
+      'label': label,
+    },
+  );
 
   /// Creates an issue in [project] (`owner/repo`) and returns the
   /// composite key `owner/repo#<number>` (Java `createTicketInProject`
@@ -153,7 +153,7 @@ class GithubTrackerClient {
     String key,
     String tool,
     Map<String, dynamic> Function(String owner, String repo, String number)
-        argsFor,
+    argsFor,
   ) {
     final ref = resolveIssueRef(key);
     if (ref == null) {
@@ -177,18 +177,15 @@ class GithubTrackerClient {
   /// `SOURCE_GITHUB_REPOSITORY`. `null` when anything is missing.
   TrackerIssueRef? resolveIssueRef(String key) {
     final trimmed = key.trim();
-    final composite =
-        RegExp(r'^([\w.-]+)/([\w.-]+)#(\d+)$').firstMatch(trimmed);
+    final composite = RegExp(r'^([\w.-]+)/([\w.-]+)#(\d+)$')
+        .firstMatch(trimmed);
     if (composite != null) {
-      return (
-        composite.group(1)!,
-        composite.group(2)!,
-        composite.group(3)!,
-      );
+      return (composite.group(1)!, composite.group(2)!, composite.group(3)!);
     }
-    final bare = RegExp(r'^(?:gh-)?(\d+)$', caseSensitive: false)
-        .firstMatch(trimmed)
-        ?.group(1);
+    final bare = RegExp(
+      r'^(?:gh-)?(\d+)$',
+      caseSensitive: false,
+    ).firstMatch(trimmed)?.group(1);
     if (bare == null) return null;
     final reader = PropertyReader();
     final ghRepo = (reader.getValue('GITHUB_REPOSITORY') ?? '').trim();

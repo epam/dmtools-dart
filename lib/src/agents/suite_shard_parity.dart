@@ -47,7 +47,8 @@ class ShardOutcome {
   final String? crash;
 
   @override
-  String toString() => '$label: success=$success passed=$passed failed=$failed'
+  String toString() =>
+      '$label: success=$success passed=$passed failed=$failed'
       '${crash == null ? '' : ' (crashed: $crash)'}';
 }
 
@@ -138,12 +139,12 @@ ShardOutcome _decodeOutcome(String label, String? result) {
 }
 
 ShardOutcome _crashOutcome(String label, String crash) => ShardOutcome(
-      label: label,
-      success: false,
-      passed: 0,
-      failed: 0,
-      crash: crash,
-    );
+  label: label,
+  success: false,
+  passed: 0,
+  failed: 0,
+  crash: crash,
+);
 
 /// A unusable payload is a crash, whatever the reason: the runtime
 /// JSON-encodes every action() return, so non-JSON text here means the
@@ -165,10 +166,7 @@ bool _wellFormedOutcome(dynamic decoded) =>
 
 /// Outcome equality: shard successes must match the serial run, and the
 /// passed/failed counters must sum to the serial counters.
-List<String> _compare(
-  ShardOutcome serial,
-  List<ShardOutcome> shards,
-) {
+List<String> _compare(ShardOutcome serial, List<ShardOutcome> shards) {
   final mismatches = <String>[];
   _counterMismatches(serial, shards, mismatches);
   _successMismatches(serial, shards, mismatches);

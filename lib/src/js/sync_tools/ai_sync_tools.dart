@@ -78,8 +78,8 @@ BedrockModelType detectBedrockModelType(String? modelId) {
 /// for spaces, so no `+` fixup is needed).
 String bedrockModelPath(String modelId) =>
     modelId.contains('inference-profile/')
-        ? Uri.encodeComponent(modelId)
-        : modelId;
+    ? Uri.encodeComponent(modelId)
+    : modelId;
 
 /// Builds the Bedrock invoke request body for [type].
 ///
@@ -201,13 +201,13 @@ class AiSyncTools {
   /// The keys match [aiChatTools] 1:1 so the generated JS wrapper globals
   /// (`globalThis.gemini_ai_chat`, …) dispatch to these executors.
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-        'gemini_ai_chat': _geminiAiChat,
-        'openai_ai_chat': _openaiAiChat,
-        'anthropic_ai_chat': _anthropicAiChat,
-        'ollama_ai_chat': _ollamaAiChat,
-        'dial_ai_chat': _dialAiChat,
-        'bedrock_ai_chat': _bedrockAiChat,
-      };
+    'gemini_ai_chat': _geminiAiChat,
+    'openai_ai_chat': _openaiAiChat,
+    'anthropic_ai_chat': _anthropicAiChat,
+    'ollama_ai_chat': _ollamaAiChat,
+    'dial_ai_chat': _dialAiChat,
+    'bedrock_ai_chat': _bedrockAiChat,
+  };
 
   /// `gemini_ai_chat` — POST `{base}/{model}:generateContent?key={key}`.
   ///
@@ -218,23 +218,19 @@ class AiSyncTools {
       return _jsError('Gemini is not configured (GEMINI_API_KEY)');
     }
     final model = _reader.getGeminiDefaultModel() ?? _defaultModel('gemini');
-    final url = '${_reader.getGeminiBasePath()}/$model:generateContent'
+    final url =
+        '${_reader.getGeminiBasePath()}/$model:generateContent'
         '?key=${Uri.encodeQueryComponent(apiKey)}';
-    return _postChat(
-      url,
-      jsonHeaders(),
-      {
-        'contents': [
-          {
-            'role': 'user',
-            'parts': [
-              {'text': _message(args)},
-            ],
-          },
-        ],
-      },
-      extractGeminiText,
-    );
+    return _postChat(url, jsonHeaders(), {
+      'contents': [
+        {
+          'role': 'user',
+          'parts': [
+            {'text': _message(args)},
+          ],
+        },
+      ],
+    }, extractGeminiText);
   }
 
   /// `openai_ai_chat` — POST to the configured chat-completions endpoint.
@@ -287,16 +283,11 @@ class AiSyncTools {
   /// Ollama is local and unauthenticated, so it is always configured; the
   /// base path defaults to `http://localhost:11434`.
   String _ollamaAiChat(Map<String, dynamic> args) {
-    return _postChat(
-      '${_reader.getOllamaBasePath()}/api/chat',
-      jsonHeaders(),
-      {
-        'model': _reader.getOllamaModel() ?? _defaultModel('ollama'),
-        'messages': [_userMessage(_message(args))],
-        'stream': false,
-      },
-      extractMessageContent,
-    );
+    return _postChat('${_reader.getOllamaBasePath()}/api/chat', jsonHeaders(), {
+      'model': _reader.getOllamaModel() ?? _defaultModel('ollama'),
+      'messages': [_userMessage(_message(args))],
+      'stream': false,
+    }, extractMessageContent);
   }
 
   /// `dial_ai_chat` — POST to the configured DIAL endpoint.
@@ -312,15 +303,10 @@ class AiSyncTools {
     if (apiKey == null || apiKey.isEmpty) {
       return _jsError('Dial is not configured (DIAL_API_KEY)');
     }
-    return _postChat(
-      basePath,
-      bearerHeaders(apiKey),
-      {
-        'model': _reader.getDialModel() ?? _defaultModel('dial'),
-        'messages': [_userMessage(_message(args))],
-      },
-      extractChoiceContent,
-    );
+    return _postChat(basePath, bearerHeaders(apiKey), {
+      'model': _reader.getDialModel() ?? _defaultModel('dial'),
+      'messages': [_userMessage(_message(args))],
+    }, extractChoiceContent);
   }
 
   /// `bedrock_ai_chat` — POST `{base}/model/{id}/invoke` with the model
@@ -406,8 +392,10 @@ class AiSyncTools {
   }
 
   /// Wraps [message] as an OpenAI-style `{role, content}` user message.
-  static Map<String, String> _userMessage(String message) =>
-      {'role': 'user', 'content': message};
+  static Map<String, String> _userMessage(String message) => {
+    'role': 'user',
+    'content': message,
+  };
 
   /// Reads the `message` tool argument.
   static String _message(Map<String, dynamic> args) =>

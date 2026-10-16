@@ -133,8 +133,7 @@ class GitHubSyncTools {
 String _run(
   String Function(GhSyncConfig, Map<String, dynamic>) fn,
   Map<String, dynamic> args,
-) =>
-    const GitHubSyncTools()._run(fn, args);
+) => const GitHubSyncTools()._run(fn, args);
 
 // ── Pull requests ──────────────────────────────────────────────────────
 
@@ -147,11 +146,12 @@ String _getPr(GhSyncConfig c, Map<String, dynamic> a) =>
 /// The SM provider reads the default-branch HEAD from it to compute
 /// behind/CLEAN deterministically (REST `mergeable_state` lazily
 /// recomputes to `unknown` right after a base push).
-String _listBranches(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.get(
-      '${c.baseUrl}/${_repoSeg(a)}/branches?per_page=100&page=1',
-      headers: c.headers,
-    ));
+String _listBranches(GhSyncConfig c, Map<String, dynamic> a) => syncBodyOrError(
+  SyncHttpClient.get(
+    '${c.baseUrl}/${_repoSeg(a)}/branches?per_page=100&page=1',
+    headers: c.headers,
+  ),
+);
 
 /// `github_list_prs` — first page (up to 100) of `repos/{w}/{r}/pulls`.
 ///
@@ -165,15 +165,17 @@ String _listPrs(GhSyncConfig c, Map<String, dynamic> a) {
     'declined' || 'merged' => 'closed',
     _ => requested,
   };
-  final url = '${c.baseUrl}/${_repoSeg(a)}/pulls'
+  final url =
+      '${c.baseUrl}/${_repoSeg(a)}/pulls'
       '?state=$normalized&sort=updated&direction=desc&per_page=100&page=1';
   final resp = SyncHttpClient.get(url, headers: c.headers);
   final body = syncBodyOrError(resp);
   if (requested != 'merged' || !resp.isOk) return body;
   final decoded = syncTryDecode(body);
   final prs = decoded is List ? decoded : const [];
-  final merged =
-      prs.where((pr) => pr is Map && pr['merged_at'] != null).toList();
+  final merged = prs
+      .where((pr) => pr is Map && pr['merged_at'] != null)
+      .toList();
   return jsonEncode(merged);
 }
 
@@ -186,19 +188,16 @@ String _postIssueComment(
   GhSyncConfig c,
   Map<String, dynamic> a,
   dynamic text,
-) =>
-    _postJson(
-      c,
-      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
-      {'body': syncAsStr(text)},
-    );
+) => _postJson(c, '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments', {
+  'body': syncAsStr(text),
+});
 
 /// `github_add_pr_label` — POST `repos/{w}/{r}/issues/{id}/labels`.
 String _addPrLabel(GhSyncConfig c, Map<String, dynamic> a) => _postJson(
-      c,
-      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/labels',
-      [syncAsStr(a['label'])],
-    );
+  c,
+  '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/labels',
+  [syncAsStr(a['label'])],
+);
 
 /// `github_remove_pr_label` — DELETE `repos/{w}/{r}/issues/{id}/labels/{l}`.
 String _removePrLabel(GhSyncConfig c, Map<String, dynamic> a) =>
@@ -301,16 +300,18 @@ String _getPrConversations(GhSyncConfig c, Map<String, dynamic> a) {
 /// Both PR comment listings for [a]'s pull request, or a sync tool error
 /// JSON on a non-OK page.
 ({String? error, PrCommentPages? pages}) _prCommentPagesOrError(
-        GhSyncConfig c, Map<String, dynamic> a) =>
-    prCommentPagesOrError(
-      headers: c.headers,
-      inlineUrl: '${c.baseUrl}/${_prSeg(a)}/comments',
-      issueUrl: '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
-    );
+  GhSyncConfig c,
+  Map<String, dynamic> a,
+) => prCommentPagesOrError(
+  headers: c.headers,
+  inlineUrl: '${c.baseUrl}/${_prSeg(a)}/comments',
+  issueUrl: '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
+);
 
 /// `github_get_pr_review_threads` — GraphQL `reviewThreads` query.
 String _getPrReviewThreads(GhSyncConfig c, Map<String, dynamic> a) {
-  const query = 'query(\$owner: String!, \$repo: String!, \$prNumber: Int!) '
+  const query =
+      'query(\$owner: String!, \$repo: String!, \$prNumber: Int!) '
       '{ repository(owner: \$owner, name: \$repo) '
       '{ pullRequest(number: \$prNumber) { reviewThreads(first: 100) '
       '{ nodes { id isResolved path line startLine '
@@ -441,11 +442,7 @@ void _submitPendingReview(GhSyncConfig c, Map<String, dynamic> a) {
 }
 
 /// POSTs a GraphQL `query` (+ optional [variables]) to `{base}/graphql`.
-String _graphQl(
-  GhSyncConfig c,
-  String query,
-  Map<String, dynamic>? variables,
-) {
+String _graphQl(GhSyncConfig c, String query, Map<String, dynamic>? variables) {
   final body = <String, dynamic>{'query': query};
   if (variables != null) body['variables'] = variables;
   return _postJson(c, '${c.baseUrl}/graphql', body);
@@ -462,7 +459,8 @@ String _graphQl(
 /// fix lands here first because the fleet's SM runs the Dart CLI.
 /// Non-paged shapes (echo stubs, error bodies) pass through untouched.
 String _getCommitCheckRuns(GhSyncConfig c, Map<String, dynamic> a) {
-  final base = '${c.baseUrl}/${_repoSeg(a)}'
+  final base =
+      '${c.baseUrl}/${_repoSeg(a)}'
       '/commits/${syncAsStr(a['commitSha'])}/check-runs?per_page=100';
   final first = SyncHttpClient.get('$base&page=1', headers: c.headers);
   if (!first.isOk) return syncBodyOrError(first);
@@ -481,9 +479,12 @@ String _getCommitCheckRuns(GhSyncConfig c, Map<String, dynamic> a) {
 /// undecodable page ends the walk (later-page failures degrade to the
 /// pages already collected, never to an error the caller must parse).
 List<dynamic> _walkCheckRunPages(
-    GhSyncConfig c, String base, List<dynamic> firstPage) {
+  GhSyncConfig c,
+  String base,
+  List<dynamic> firstPage,
+) {
   final runs = <dynamic>[...firstPage];
-  for (var page = 2;; page++) {
+  for (var page = 2; ; page++) {
     final next = _getJson(c, '$base&page=$page');
     if (next is! Map || next['check_runs'] is! List) break;
     final items = next['check_runs'] as List;
@@ -516,10 +517,7 @@ String _listWorkflowRuns(GhSyncConfig c, Map<String, dynamic> a) {
   addIf('status', syncAsStr(a['status']).trim());
   addIf('per_page', syncAsStr(a['perPage']).trim());
   addIf('page', syncAsStr(a['page']).trim());
-  addIf(
-    'created',
-    Uri.encodeQueryComponent(syncAsStr(a['created']).trim()),
-  );
+  addIf('created', Uri.encodeQueryComponent(syncAsStr(a['created']).trim()));
   final suffix = query.isEmpty ? '' : '?${query.join('&')}';
   return syncBodyOrError(
     SyncHttpClient.get('${c.baseUrl}/$base$suffix', headers: c.headers),
@@ -532,9 +530,7 @@ String _listWorkflowRuns(GhSyncConfig c, Map<String, dynamic> a) {
 /// plain String, not JSON).
 String _triggerWorkflow(GhSyncConfig c, Map<String, dynamic> a) {
   final workflowId = syncAsStr(a['workflowId']);
-  final body = <String, dynamic>{
-    'ref': _orDefault(a['ref'], 'main'),
-  };
+  final body = <String, dynamic>{'ref': _orDefault(a['ref'], 'main')};
   final inputs = syncAsStr(a['inputs']).trim();
   final decodedInputs = inputs.isEmpty ? null : syncTryDecode(inputs);
   if (decodedInputs is Map) body['inputs'] = decodedInputs;
@@ -553,8 +549,10 @@ String _triggerWorkflow(GhSyncConfig c, Map<String, dynamic> a) {
   // success message (Java parity) is returned JSON-encoded and surfaces
   // to JS as an unquoted string — raw text here breaks the QuickJS bridge
   // with "host callback returned invalid JSON" (live: #687 SM dispatch).
-  return jsonEncode("Workflow '$workflowId' triggered successfully on "
-      '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}');
+  return jsonEncode(
+    "Workflow '$workflowId' triggered successfully on "
+    '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}',
+  );
 }
 
 /// `github_get_workflow_run_logs` — download + extract the run's log ZIP.
@@ -601,8 +599,9 @@ Map<String, dynamic>? _findReleaseByTagOrName(
   String releaseName,
 ) {
   Map<String, dynamic>? nameMatch;
-  for (var page = 1;; page++) {
-    final url = '${c.baseUrl}/${_repoSeg(a)}/releases'
+  for (var page = 1; ; page++) {
+    final url =
+        '${c.baseUrl}/${_repoSeg(a)}/releases'
         '?per_page=100&page=$page';
     final releases = _getJson(c, url);
     if (releases is! List) return nameMatch;
@@ -653,11 +652,7 @@ String _createDraftRelease(
 /// `github_upload_release_asset` — validates then binary-uploads the file
 /// (see `github_release_assets.dart`).
 String _uploadReleaseAsset(GhSyncConfig c, Map<String, dynamic> a) =>
-    uploadReleaseAsset(
-      baseUrl: c.baseUrl,
-      headers: c.headers,
-      args: a,
-    );
+    uploadReleaseAsset(baseUrl: c.baseUrl, headers: c.headers, args: a);
 
 // ── Shared helpers ─────────────────────────────────────────────────────
 
@@ -706,8 +701,10 @@ String _submitPrReview(GhSyncConfig c, Map<String, dynamic> a) {
 /// `github_list_pr_reviews` — GET `repos/{w}/{r}/pulls/{id}/reviews`
 /// (Java #495). An empty response comes back as `[]` (Java parity).
 String _listPrReviews(GhSyncConfig c, Map<String, dynamic> a) {
-  final resp =
-      SyncHttpClient.get('${_prUrl(c, a)}/reviews', headers: c.headers);
+  final resp = SyncHttpClient.get(
+    '${_prUrl(c, a)}/reviews',
+    headers: c.headers,
+  );
   final body = syncBodyOrError(resp);
   if (!resp.isOk) return body;
   return body.trim().isEmpty ? '[]' : body;
@@ -717,21 +714,25 @@ String _listPrReviews(GhSyncConfig c, Map<String, dynamic> a) {
 /// `repos/{w}/{r}/pulls/{id}/reviews/{reviewId}/dismissals` (Java #495).
 /// Always sends `event: DISMISS` alongside the message.
 String _dismissPrReview(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.put(
-      '${_prUrl(c, a)}/reviews/${syncAsStr(a['reviewId'])}/dismissals',
-      headers: c.headers,
-      body: jsonEncode({
-        'message': syncAsStr(a['message']),
-        'event': 'DISMISS',
-      }),
-    ));
+    syncBodyOrError(
+      SyncHttpClient.put(
+        '${_prUrl(c, a)}/reviews/${syncAsStr(a['reviewId'])}/dismissals',
+        headers: c.headers,
+        body: jsonEncode({
+          'message': syncAsStr(a['message']),
+          'event': 'DISMISS',
+        }),
+      ),
+    );
 
 /// GETs `{base}/{repoSeg}/{suffix}` and returns the response body.
 String _getRepoPath(GhSyncConfig c, Map<String, dynamic> a, String suffix) =>
-    syncBodyOrError(SyncHttpClient.get(
-      '${c.baseUrl}/${_repoSeg(a)}/$suffix',
-      headers: c.headers,
-    ));
+    syncBodyOrError(
+      SyncHttpClient.get(
+        '${c.baseUrl}/${_repoSeg(a)}/$suffix',
+        headers: c.headers,
+      ),
+    );
 
 /// `repos/{workspace}/{repository}/pulls/{pullRequestId}` segment.
 String _prSeg(Map<String, dynamic> a) => '${_repoSeg(a)}/pulls/${_prId(a)}';
@@ -752,13 +753,13 @@ dynamic _getJson(GhSyncConfig c, String url) {
 
 /// POSTs [body] as JSON and returns the response body.
 String _postJson(GhSyncConfig c, String url, Object? body) => syncBodyOrError(
-      SyncHttpClient.post(url, headers: c.headers, body: jsonEncode(body)),
-    );
+  SyncHttpClient.post(url, headers: c.headers, body: jsonEncode(body)),
+);
 
 /// PUTs [body] as JSON and returns the response body.
 String _putJson(GhSyncConfig c, String url, Object? body) => syncBodyOrError(
-      SyncHttpClient.put(url, headers: c.headers, body: jsonEncode(body)),
-    );
+  SyncHttpClient.put(url, headers: c.headers, body: jsonEncode(body)),
+);
 
 /// Sets `body[key] = value.trim()` when [value] is non-blank.
 void _putIfNotBlank(Map<String, dynamic> body, String key, dynamic value) {

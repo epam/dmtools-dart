@@ -42,9 +42,8 @@ class TicketInputContextBuilder {
   /// Writes ticket.md, ticket.json, subtasks/, and comments.md.
   void _writeTicketFiles(String dir, Map<String, dynamic> ticket) {
     File('$dir/ticket.md').writeAsStringSync(_formatMarkdown(ticket));
-    File('$dir/ticket.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(ticket),
-    );
+    File('$dir/ticket.json')
+        .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(ticket));
     final fields = _mapValue(ticket['fields']);
     _writeSubtasks(dir, fields);
     _writeComments(dir, fields);
@@ -59,9 +58,7 @@ class TicketInputContextBuilder {
       if (st.isEmpty) continue;
       subtaskDir ??= Directory('$dir/subtasks')..createSync(recursive: true);
       final key = _stringValue(st['key']) ?? 'subtask';
-      File('${subtaskDir.path}/$key.md').writeAsStringSync(
-        _formatMarkdown(st),
-      );
+      File('${subtaskDir.path}/$key.md').writeAsStringSync(_formatMarkdown(st));
     }
   }
 

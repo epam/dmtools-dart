@@ -161,8 +161,10 @@ class _Converter {
     if (panel == null) return false;
     final title = panel.group(1)?.trim();
     final rest = _convertText(line.substring(panel.end).trim());
-    _out.add('> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
-        .trimRight());
+    _out.add(
+      '> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
+          .trimRight(),
+    );
     _inPanel = true;
     return true;
   }
@@ -227,7 +229,8 @@ String _convertPairs(String s) {
     buf.write(_convertText(s.substring(last, m.start)));
     var content = m.group(2)?.trim() ?? '';
     var lang = m.group(1) ?? '';
-    final wholeLine = s.substring(0, m.start).trim().isEmpty &&
+    final wholeLine =
+        s.substring(0, m.start).trim().isEmpty &&
         s.substring(m.end).trim().isEmpty;
     if (wholeLine && lang.isEmpty) {
       final derived = _derivePairHint(content);

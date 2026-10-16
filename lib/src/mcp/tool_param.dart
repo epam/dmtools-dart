@@ -28,8 +28,5 @@ class ToolParam {
   });
 
   /// Converts to a JSON Schema property object.
-  Map<String, dynamic> toJson() => {
-        'type': type,
-        'description': description,
-      };
+  Map<String, dynamic> toJson() => {'type': type, 'description': description};
 }

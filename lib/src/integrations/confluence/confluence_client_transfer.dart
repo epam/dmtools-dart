@@ -27,10 +27,9 @@ extension ConfluenceTransfer on ConfluenceClient {
         data: FormData.fromMap(<String, dynamic>{
           'file': await MultipartFile.fromFile(filePath, filename: name),
         }),
-        options: Options(headers: {
-          ..._http.authHeaders,
-          'X-Atlassian-Token': 'nocheck',
-        }),
+        options: Options(
+          headers: {..._http.authHeaders, 'X-Atlassian-Token': 'nocheck'},
+        ),
       );
       final decoded = _decodeDioBody(body.data);
       final attachment = decoded?['results'] is List
@@ -67,8 +66,7 @@ extension ConfluenceTransfer on ConfluenceClient {
         'created' || 'updated' => uploaded,
         'skipped' => skipped,
         _ => failed,
-      })
-          .add(name);
+      }).add(name);
     }
     return {'uploaded': uploaded, 'skipped': skipped, 'failed': failed};
   }
@@ -88,7 +86,11 @@ extension ConfluenceTransfer on ConfluenceClient {
       final content = await contentByUrl(url);
       if (content == null) continue;
       written += await _downloadPageTree(
-          content, Directory(outputPath), depth, downloadAttachments);
+        content,
+        Directory(outputPath),
+        depth,
+        downloadAttachments,
+      );
     }
     return 'Downloaded $written Confluence page(s) to $outputPath';
   }
@@ -108,8 +110,9 @@ extension ConfluenceTransfer on ConfluenceClient {
     final value = storage?['value'];
     if (value is! String) return 0;
     output.createSync(recursive: true);
-    final fileName =
-        ConfluenceClient._sanitizeFileName(content['title']?.toString() ?? id);
+    final fileName = ConfluenceClient._sanitizeFileName(
+      content['title']?.toString() ?? id,
+    );
     File('${output.path}/$fileName.md')
         .writeAsStringSync(confluenceStorageToMarkdown(value));
     var written = 1;
@@ -119,7 +122,11 @@ extension ConfluenceTransfer on ConfluenceClient {
     if (depth > 1) {
       for (final child in await _getChildrenWithBody(id)) {
         written += await _downloadPageTree(
-            child, output, depth - 1, downloadAttachments);
+          child,
+          output,
+          depth - 1,
+          downloadAttachments,
+        );
       }
     }
     return written;
@@ -156,7 +163,11 @@ extension ConfluenceTransfer on ConfluenceClient {
       final downloadPath = links is Map ? links['download'] : null;
       if (downloadPath is! String || downloadPath.isEmpty) continue;
       await _downloadOneAttachment(
-          attachment, downloadPath, output, pageFolder);
+        attachment,
+        downloadPath,
+        output,
+        pageFolder,
+      );
     }
   }
 
@@ -186,10 +197,7 @@ extension ConfluenceTransfer on ConfluenceClient {
     try {
       final response = await _http.dio.get<List<int>>(
         '$uri',
-        options: Options(
-          responseType: ResponseType.bytes,
-          headers: headers,
-        ),
+        options: Options(responseType: ResponseType.bytes, headers: headers),
       );
       final bytes = response.data;
       if (bytes == null) return;

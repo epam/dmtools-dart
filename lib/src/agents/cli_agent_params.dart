@@ -141,8 +141,9 @@ class CliAgentParams {
       ..cliCommands = _parseStringList(json['cliCommands'])
       ..cliPrompt = _parseString(json['cliPrompt'])
       ..cliPrompts = json['cliPrompts']
-      ..cliPromptsByTracker =
-          _parsePromptsByTracker(json['cliPromptsByTracker'])
+      ..cliPromptsByTracker = _parsePromptsByTracker(
+        json['cliPromptsByTracker'],
+      )
       ..setup = _parseString(json['setup'])
       ..cache = _parseString(json['cache'])
       ..reset = _parseString(json['reset'])
@@ -151,13 +152,15 @@ class CliAgentParams {
       ..requireCliOutputFile = _parseBool(json['requireCliOutputFile'], false)
       ..workingDirectory = _parseString(json['workingDirectory'])
       ..excludedEnvVariables = _parseStringList(json['excludedEnvVariables'])
-      ..excludeEnvVariablesByRegex =
-          _parseStringList(json['excludeEnvVariablesByRegex'])
+      ..excludeEnvVariablesByRegex = _parseStringList(
+        json['excludeEnvVariablesByRegex'],
+      )
       ..timerJSAction = _parseString(json['timerJSAction'])
       ..timerIntervalSeconds = _parseInt(json['timerIntervalSeconds'], 60)
       ..cleanupOutputsFolder = _parseBool(json['cleanupOutputsFolder'], false)
-      ..cliExecutionErrorJSAction =
-          _parseString(json['cliExecutionErrorJSAction'])
+      ..cliExecutionErrorJSAction = _parseString(
+        json['cliExecutionErrorJSAction'],
+      )
       ..cliOutputLineJSAction = _parseString(json['cliOutputLineJSAction'])
       ..skipPreJSAction = _parseBool(json['skipPreJSAction'], false)
       ..skipPreCliJSAction = _parseBool(json['skipPreCliJSAction'], false)
@@ -216,8 +219,9 @@ Map<String, List<String>>? _parsePromptsByTracker(dynamic value) {
   final result = <String, List<String>>{};
   for (final entry in value.entries) {
     if (entry.value is List) {
-      result[entry.key.toString()] =
-          (entry.value as List).whereType<String>().toList();
+      result[entry.key.toString()] = (entry.value as List)
+          .whereType<String>()
+          .toList();
     }
   }
   return result;

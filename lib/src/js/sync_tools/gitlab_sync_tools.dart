@@ -62,50 +62,49 @@ class GitLabSyncTools {
 /// GitLab is unconfigured) before the executor runs.
 Map<String, String Function(Map<String, dynamic>)> _wrapHandlers(
   Map<String, _GitlabExecutor> fns,
-) =>
-    {
-      for (final entry in fns.entries)
-        entry.key: (args) {
-          final config = _gitlabConfig();
-          if (config == null) return syncErr('GitLab not configured');
-          return entry.value(config, args);
-        },
-    };
+) => {
+  for (final entry in fns.entries)
+    entry.key: (args) {
+      final config = _gitlabConfig();
+      if (config == null) return syncErr('GitLab not configured');
+      return entry.value(config, args);
+    },
+};
 
 /// All GitLab sync executors (Java `GitLab` MCP tool surface).
 final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
     _wrapHandlers({
-  'gitlab_get_mr': _getMr,
-  'gitlab_list_mrs': _listMrs,
-  'gitlab_get_mr_pipelines': _getMrPipelines,
-  'gitlab_list_issues': _listIssues,
-  'gitlab_create_mr_note': _addMrComment,
-  'gitlab_add_mr_comment': _addMrComment,
-  'gitlab_get_mr_comments': _getMrComments,
-  'gitlab_get_mr_diff_text': _getMrDiffText,
-  'gitlab_get_mr_diff': _getMrDiff,
-  'gitlab_reply_to_mr_thread': _replyToMrThread,
-  'gitlab_resolve_mr_thread': _resolveMrThread,
-  'gitlab_add_inline_mr_comment': _addInlineMrComment,
-  'gitlab_merge_mr': _mergeMr,
-  'gitlab_rebase_mr': _rebaseMr,
-  'gitlab_approve_mr': _approveMr,
-  'gitlab_unapprove_mr': _unapproveMr,
-  'gitlab_add_mr_label': _addMrLabel,
-  'gitlab_remove_mr_label': _removeMrLabel,
-  'gitlab_get_mr_discussions': _getMrDiscussions,
-  'gitlab_get_commit_statuses': _getCommitStatuses,
-  'gitlab_get_job_logs': _getJobLogs,
-  'gitlab_list_pipeline_runs': _listPipelineRuns,
-  'gitlab_list_project_jobs': _listProjectJobs,
-  'gitlab_get_pipelines': _getPipelines,
-  'gitlab_get_pipeline': _getPipeline,
-  'gitlab_trigger_pipeline': _triggerPipeline,
-  'gitlab_create_mr': _createMr,
-  'gitlab_get_or_create_release': _getOrCreateRelease,
-  'gitlab_upload_release_asset': _uploadReleaseAsset,
-  'gitlab_download_release_asset': _downloadReleaseAsset,
-});
+      'gitlab_get_mr': _getMr,
+      'gitlab_list_mrs': _listMrs,
+      'gitlab_get_mr_pipelines': _getMrPipelines,
+      'gitlab_list_issues': _listIssues,
+      'gitlab_create_mr_note': _addMrComment,
+      'gitlab_add_mr_comment': _addMrComment,
+      'gitlab_get_mr_comments': _getMrComments,
+      'gitlab_get_mr_diff_text': _getMrDiffText,
+      'gitlab_get_mr_diff': _getMrDiff,
+      'gitlab_reply_to_mr_thread': _replyToMrThread,
+      'gitlab_resolve_mr_thread': _resolveMrThread,
+      'gitlab_add_inline_mr_comment': _addInlineMrComment,
+      'gitlab_merge_mr': _mergeMr,
+      'gitlab_rebase_mr': _rebaseMr,
+      'gitlab_approve_mr': _approveMr,
+      'gitlab_unapprove_mr': _unapproveMr,
+      'gitlab_add_mr_label': _addMrLabel,
+      'gitlab_remove_mr_label': _removeMrLabel,
+      'gitlab_get_mr_discussions': _getMrDiscussions,
+      'gitlab_get_commit_statuses': _getCommitStatuses,
+      'gitlab_get_job_logs': _getJobLogs,
+      'gitlab_list_pipeline_runs': _listPipelineRuns,
+      'gitlab_list_project_jobs': _listProjectJobs,
+      'gitlab_get_pipelines': _getPipelines,
+      'gitlab_get_pipeline': _getPipeline,
+      'gitlab_trigger_pipeline': _triggerPipeline,
+      'gitlab_create_mr': _createMr,
+      'gitlab_get_or_create_release': _getOrCreateRelease,
+      'gitlab_upload_release_asset': _uploadReleaseAsset,
+      'gitlab_download_release_asset': _downloadReleaseAsset,
+    });
 
 /// Builds GitLab config, or `null` when base path / token is missing.
 _GitlabConfig? _gitlabConfig() {
@@ -116,10 +115,7 @@ _GitlabConfig? _gitlabConfig() {
   if (token == null || token.isEmpty) return null;
   return (
     baseUrl: '$basePath/api/v4',
-    headers: {
-      'PRIVATE-TOKEN': token,
-      'Content-Type': 'application/json',
-    },
+    headers: {'PRIVATE-TOKEN': token, 'Content-Type': 'application/json'},
   );
 }
 
@@ -151,10 +147,12 @@ String _mrPath(_GitlabConfig config, Map<String, dynamic> args) =>
 /// `checkAllRequests=false` path).
 String _listMrs(_GitlabConfig config, Map<String, dynamic> args) {
   final filter = _mrListStateFilter(syncAsStr(args['state']));
-  final url = '${_projectsPath(config, args)}/merge_requests'
+  final url =
+      '${_projectsPath(config, args)}/merge_requests'
       '?state=${filter.state}&per_page=100&order_by=created_at&sort=asc';
-  final body =
-      syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  final body = syncBodyOrError(
+    SyncHttpClient.get(url, headers: config.headers),
+  );
   if (!filter.closedAndMergedOnly) return body;
   return _closedAndMergedMrsOnly(body);
 }
@@ -174,7 +172,8 @@ String _listIssues(_GitlabConfig config, Map<String, dynamic> args) {
   var state = syncAsStr(args['state']);
   if (state.isEmpty || state.toLowerCase() == 'open') state = 'opened';
   final perPage = _parsePositiveInt(syncAsStr(args['perPage']), 20);
-  final url = '${_projectsPath(config, args)}/issues'
+  final url =
+      '${_projectsPath(config, args)}/issues'
       '?state=${Uri.encodeQueryComponent(state)}&per_page=$perPage';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 }
@@ -200,8 +199,10 @@ String _closedAndMergedMrsOnly(String body) {
   return jsonEncode([
     for (final mr in decoded)
       if (mr is Map &&
-          const ['closed', 'merged']
-              .contains((mr['state'] ?? '').toString().toLowerCase()))
+          const [
+            'closed',
+            'merged',
+          ].contains((mr['state'] ?? '').toString().toLowerCase()))
         mr,
   ]);
 }
@@ -211,8 +212,11 @@ String _closedAndMergedMrsOnly(String body) {
 String _addMrComment(_GitlabConfig config, Map<String, dynamic> args) {
   final text = syncAsStr(args['text']);
   final body = syncAsStr(args['body']);
-  return syncPostJson(config.headers, '${_mrPath(config, args)}/notes',
-      jsonEncode({'body': text.isEmpty ? body : text}));
+  return syncPostJson(
+    config.headers,
+    '${_mrPath(config, args)}/notes',
+    jsonEncode({'body': text.isEmpty ? body : text}),
+  );
 }
 
 /// `gitlab_get_mr_comments` — GET `…/notes`, non-system notes only.
@@ -254,9 +258,12 @@ String _getMrDiff(_GitlabConfig config, Map<String, dynamic> args) {
   _GitlabConfig config,
   Map<String, dynamic> args,
 ) {
-  final body = syncBodyOrError(SyncHttpClient.get(
+  final body = syncBodyOrError(
+    SyncHttpClient.get(
       '${_mrPath(config, args)}/changes',
-      headers: config.headers));
+      headers: config.headers,
+    ),
+  );
   final decoded = syncTryDecode(body);
   return (
     body: body,
@@ -267,7 +274,8 @@ String _getMrDiff(_GitlabConfig config, Map<String, dynamic> args) {
 /// `gitlab_reply_to_mr_thread` — POST
 /// `…/discussions/{id}/notes` with `{body: text}`.
 String _replyToMrThread(_GitlabConfig config, Map<String, dynamic> args) {
-  final url = '${_mrPath(config, args)}'
+  final url =
+      '${_mrPath(config, args)}'
       '/discussions/${_discussionIdArg(args)}/notes';
   return syncPostJson(
     config.headers,
@@ -290,7 +298,8 @@ String _addInlineMrComment(_GitlabConfig config, Map<String, dynamic> args) {
   final line = int.tryParse(syncAsStr(args['line']));
   if (line == null) {
     return syncErr(
-        "Invalid line: expected numeric, got: '${syncAsStr(args['line'])}'");
+      "Invalid line: expected numeric, got: '${syncAsStr(args['line'])}'",
+    );
   }
   final filePath = syncAsStr(args['filePath']);
   final body = jsonEncode({
@@ -312,8 +321,9 @@ String _addInlineMrComment(_GitlabConfig config, Map<String, dynamic> args) {
 /// `gitlab_merge_mr` — PUT `…/merge` with an optional commit message.
 String _mergeMr(_GitlabConfig config, Map<String, dynamic> args) {
   final message = syncAsStr(args['mergeCommitMessage']);
-  final body =
-      message.isEmpty ? '{}' : jsonEncode({'merge_commit_message': message});
+  final body = message.isEmpty
+      ? '{}'
+      : jsonEncode({'merge_commit_message': message});
   return _putBody(config, '${_mrPath(config, args)}/merge', body);
 }
 
@@ -346,8 +356,11 @@ String _updateMrLabels(
   Map<String, dynamic> args,
   String field,
 ) {
-  return _putBody(config, _mrPath(config, args),
-      jsonEncode({field: syncAsStr(args['label'])}));
+  return _putBody(
+    config,
+    _mrPath(config, args),
+    jsonEncode({field: syncAsStr(args['label'])}),
+  );
 }
 
 /// `gitlab_get_mr_discussions` — GET `…/discussions` (all pages).
@@ -377,8 +390,11 @@ String _createMr(_GitlabConfig config, Map<String, dynamic> args) {
   if (removeSourceBranch.isNotEmpty) {
     body['remove_source_branch'] = removeSourceBranch.toLowerCase() == 'true';
   }
-  return syncPostJson(config.headers,
-      '${_projectsPath(config, args)}/merge_requests', jsonEncode(body));
+  return syncPostJson(
+    config.headers,
+    '${_projectsPath(config, args)}/merge_requests',
+    jsonEncode(body),
+  );
 }
 
 // ── CI (jobs, pipelines, commit statuses) ─────────────────────────────────
@@ -398,7 +414,8 @@ String _getCommitStatuses(_GitlabConfig config, Map<String, dynamic> args) {
 
 /// `gitlab_get_job_logs` — GET `projects/{id}/jobs/{jobId}/trace` (raw text).
 String _getJobLogs(_GitlabConfig config, Map<String, dynamic> args) {
-  final url = '${_projectsPath(config, args)}'
+  final url =
+      '${_projectsPath(config, args)}'
       '/jobs/${syncAsInt(args['jobId'])}/trace';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 }
@@ -456,10 +473,12 @@ String _listProjectJobs(_GitlabConfig config, Map<String, dynamic> args) {
     for (final scope in _scopeList(args['scope']))
       'scope%5B%5D=${Uri.encodeQueryComponent(scope)}',
   ];
-  final body = syncBodyOrError(SyncHttpClient.get(
-    '${config.baseUrl}/$path?${query.join('&')}',
-    headers: config.headers,
-  ));
+  final body = syncBodyOrError(
+    SyncHttpClient.get(
+      '${config.baseUrl}/$path?${query.join('&')}',
+      headers: config.headers,
+    ),
+  );
   final name = syncAsStr(args['name']);
   if (name.isEmpty) return body;
   final decoded = syncTryDecode(body);
@@ -500,10 +519,12 @@ List<String> _scopeList(dynamic scope) {
 /// the registry tool gains a sync executor, closing the phantom JS
 /// wrapper that died with 'Unsupported GitLab tool').
 String _getPipelines(_GitlabConfig config, Map<String, dynamic> args) =>
-    syncBodyOrError(SyncHttpClient.get(
-      '${_projectsPath(config, args)}/pipelines',
-      headers: config.headers,
-    ));
+    syncBodyOrError(
+      SyncHttpClient.get(
+        '${_projectsPath(config, args)}/pipelines',
+        headers: config.headers,
+      ),
+    );
 
 /// `gitlab_get_pipeline` — GET `projects/{id}/pipelines/{id}` (gh-380
 /// AC5, the same coherence closure as [_getPipelines]). Accepts the
@@ -512,18 +533,23 @@ String _getPipelines(_GitlabConfig config, Map<String, dynamic> args) =>
 String _getPipeline(_GitlabConfig config, Map<String, dynamic> args) {
   final pipelineId = syncAsStr(args['pipelineId']);
   final id = pipelineId.isEmpty ? syncAsStr(args['pipeline_id']) : pipelineId;
-  return syncBodyOrError(SyncHttpClient.get(
-    '${_projectsPath(config, args)}/pipelines/$id',
-    headers: config.headers,
-  ));
+  return syncBodyOrError(
+    SyncHttpClient.get(
+      '${_projectsPath(config, args)}/pipelines/$id',
+      headers: config.headers,
+    ),
+  );
 }
 
 /// `gitlab_trigger_pipeline` — POST `projects/{id}/pipeline`.
 String _triggerPipeline(_GitlabConfig config, Map<String, dynamic> args) {
   final body = _pipelineBody(args);
   if (body == null) return syncErr('Invalid variablesJson');
-  return syncPostJson(config.headers, '${_projectsPath(config, args)}/pipeline',
-      jsonEncode(body));
+  return syncPostJson(
+    config.headers,
+    '${_projectsPath(config, args)}/pipeline',
+    jsonEncode(body),
+  );
 }
 
 /// Builds the pipeline trigger body (Java `triggerPipeline`): `ref` plus an
@@ -632,7 +658,7 @@ Map<String, dynamic> parseGitlabDiffStats(Map<String, dynamic> response) {
       'deletions': deletions,
     },
     'changes': [
-      for (final file in files) {'filePath': file}
+      for (final file in files) {'filePath': file},
     ],
   };
 }
@@ -663,8 +689,9 @@ List<Map<String, dynamic>> latestGitlabStatusPerName(List<dynamic> statuses) {
   final latestTimestamp = <String, int>{};
   for (final status in statuses) {
     if (status is! Map) continue;
-    final key =
-        status.containsKey('name') ? syncAsStr(status['name']) : 'unknown';
+    final key = status.containsKey('name')
+        ? syncAsStr(status['name'])
+        : 'unknown';
     final createdAt = _parseTimestamp(syncAsStr(status['created_at']));
     if (createdAt >= (latestTimestamp[key] ?? -1)) {
       latestByName[key] = Map<String, dynamic>.from(status);
@@ -683,14 +710,14 @@ int _parseTimestamp(String isoDate) {
 /// Resolves the MR iid: Java `pullRequestId` or legacy `iid`.
 String _prIdArg(Map<String, dynamic> args) =>
     syncAsStr(args['pullRequestId']).isEmpty
-        ? syncAsStr(args['iid'])
-        : syncAsStr(args['pullRequestId']);
+    ? syncAsStr(args['iid'])
+    : syncAsStr(args['pullRequestId']);
 
 /// Resolves the discussion id: `discussionId` or its `threadId` alias.
 String _discussionIdArg(Map<String, dynamic> args) =>
     syncAsStr(args['discussionId']).isEmpty
-        ? syncAsStr(args['threadId'])
-        : syncAsStr(args['discussionId']);
+    ? syncAsStr(args['threadId'])
+    : syncAsStr(args['discussionId']);
 
 /// Normalizes a pipeline status filter (Java `normalizePipelineStatus`):
 /// `failure` → `failed`, `in_progress` → `running`; anything else passes
@@ -712,4 +739,5 @@ int _parsePositiveInt(String raw, int defaultValue) {
 /// PUTs [body] to [url] and returns the result string.
 String _putBody(_GitlabConfig config, String url, String body) =>
     syncBodyOrError(
-        SyncHttpClient.put(url, headers: config.headers, body: body));
+      SyncHttpClient.put(url, headers: config.headers, body: body),
+    );

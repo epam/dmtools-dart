@@ -42,9 +42,7 @@ class SharepointClient {
     String? token,
   }) {
     validateClientId(reader.getTeamsClientId());
-    return SharepointClient(
-      TeamsHttpClient(reader, dio: dio, token: token),
-    );
+    return SharepointClient(TeamsHttpClient(reader, dio: dio, token: token));
   }
 
   /// Validates that the Teams/SharePoint client id is configured —

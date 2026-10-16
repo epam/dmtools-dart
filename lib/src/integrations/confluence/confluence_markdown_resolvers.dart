@@ -159,7 +159,7 @@ class ConfluenceExcerptInliner {
     return (
       title: title!,
       targetSpace: targetSpace,
-      name: _macroParamText(macro, 'name')
+      name: _macroParamText(macro, 'name'),
     );
   }
 
@@ -213,11 +213,12 @@ List<String> _excerptBodies(
 
 /// Case/whitespace/`&nbsp;`-insensitive excerpt name key (Java
 /// `normalize`).
-String _normalizeExcerptName(String name) => unescapeXml(name)
-    .replaceAll('\u00a0', ' ')
-    .replaceAll(RegExp(r'\s+'), ' ')
-    .trim()
-    .toLowerCase();
+String _normalizeExcerptName(String name) =>
+    unescapeXml(name)
+        .replaceAll('\u00a0', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
 
 /// Every `ac:structured-macro` element of the given `ac:name` [kind] in
 /// [html], with raw inner HTML (depth-aware scan — macros nested inside
@@ -267,24 +268,24 @@ String? _macroNameOf(String tag) => _attrOf(tag, 'ac:name');
 
 /// The full text of the first open `<[tag]>` in [html]; `null` when absent.
 String? _firstOpenTag(String html, String tag) => RegExp(
-      '<$tag\\b[^>]*>',
-      dotAll: true,
-      caseSensitive: false,
-    ).firstMatch(html)?.group(0);
+  '<$tag\\b[^>]*>',
+  dotAll: true,
+  caseSensitive: false,
+).firstMatch(html)?.group(0);
 
 /// The value of attribute [attr] inside a raw [tag]; `null` when absent.
 String? _attrOf(String tag, String attr) => RegExp(
-      '$attr\\s*=\\s*"([^"]*)"',
-      caseSensitive: false,
-    ).firstMatch(tag)?.group(1);
+  '$attr\\s*=\\s*"([^"]*)"',
+  caseSensitive: false,
+).firstMatch(tag)?.group(1);
 
 /// The raw inner HTML of the first `<[tag]>…</[tag]>` element of [html];
 /// `null` when absent.
 String? _firstTagInner(String html, String tag) => RegExp(
-      '<$tag\\b[^>]*>(.*?)</$tag\\s*>',
-      dotAll: true,
-      caseSensitive: false,
-    ).firstMatch(html)?.group(1);
+  '<$tag\\b[^>]*>(.*?)</$tag\\s*>',
+  dotAll: true,
+  caseSensitive: false,
+).firstMatch(html)?.group(1);
 
 /// The text of the `ac:parameter` named [paramName] inside a raw macro
 /// [macroXml] (Jsoup `parameter()` parity): concatenated parameter text,

@@ -66,10 +66,7 @@ extension JiraAgileClient on JiraClient {
     while (true) {
       final body = await _http.getAgile(
         'board/$boardId/sprint',
-        queryParams: {
-          'startAt': startAt.toString(),
-          'maxResults': '100',
-        },
+        queryParams: {'startAt': startAt.toString(), 'maxResults': '100'},
       );
       final decoded = _decodeMap(body);
       all.addAll(_castObjectList(decoded['values'] as List? ?? const []));

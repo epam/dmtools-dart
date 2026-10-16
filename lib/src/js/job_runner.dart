@@ -22,7 +22,9 @@ import 'dart:io';
 
 import '../mcp/default_tool_registry.dart';
 import '../mcp/tool_registry.dart';
+
 import 'package:quickjs_runtime/quickjs_runtime.dart';
+
 import 'async_job_pool.dart';
 import 'engine_factory.dart';
 import 'sync_http_client.dart';
@@ -134,8 +136,14 @@ class JsJobRunner {
     final rt = QuickjsRuntime();
     try {
       final reg = cfg.registry ?? createDefaultToolRegistry();
-      final compat =
-          _wireRuntime(rt, reg, jobParams, ticket, workingDirectory, cfg);
+      final compat = _wireRuntime(
+        rt,
+        reg,
+        jobParams,
+        ticket,
+        workingDirectory,
+        cfg,
+      );
       if (JsJobRunner.needsAsyncPool(jobParams)) {
         _wireAsyncPool(
           rt,
@@ -294,12 +302,10 @@ class JsJobRunner {
   _LoadedScript _loadJavaScriptCode(String jsSourceOrPath) {
     if (jsSourceOrPath.startsWith('http://') ||
         jsSourceOrPath.startsWith('https://')) {
-      return _LoadedScript(
-        _loadFromUrl(jsSourceOrPath),
-        jsSourceOrPath,
-      );
+      return _LoadedScript(_loadFromUrl(jsSourceOrPath), jsSourceOrPath);
     }
-    final isInline = jsSourceOrPath.trim().startsWith('function') ||
+    final isInline =
+        jsSourceOrPath.trim().startsWith('function') ||
         jsSourceOrPath.contains('action') ||
         (!jsSourceOrPath.contains('/') && !jsSourceOrPath.endsWith('.js'));
     if (isInline) return _LoadedScript.inline(jsSourceOrPath);

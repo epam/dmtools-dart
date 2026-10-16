@@ -13,180 +13,180 @@ import 'teams_client.dart';
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> teamsTools() => [
-      _testTool(),
-      _sendMessageTool(),
-      _listChatsTool(),
-      _getChatMessagesTool(),
-      _sendEmailTool(),
-      _getChatMembersTool(),
-      _createChatTool(),
-      _getTeamsTool(),
-      _getTeamChannelsTool(),
-      _sendChannelMessageTool(),
-      _getChannelMessagesTool(),
-    ];
+  _testTool(),
+  _sendMessageTool(),
+  _listChatsTool(),
+  _getChatMessagesTool(),
+  _sendEmailTool(),
+  _getChatMembersTool(),
+  _createChatTool(),
+  _getTeamsTool(),
+  _getTeamChannelsTool(),
+  _sendChannelMessageTool(),
+  _getChannelMessagesTool(),
+];
 
 /// Connectivity-check tool: `teams_test`.
 ToolDefinition _testTool() => ToolDefinition(
-      name: 'teams_test',
-      description: 'Test Teams connectivity by fetching the current user',
-      integration: 'teams',
-      category: 'system',
-      params: [],
-    );
+  name: 'teams_test',
+  description: 'Test Teams connectivity by fetching the current user',
+  integration: 'teams',
+  category: 'system',
+  params: [],
+);
 
 /// Send-message tool: `teams_send_message`.
 ToolDefinition _sendMessageTool() => ToolDefinition(
-      name: 'teams_send_message',
-      description: 'Send a message to a Teams chat by chat id',
-      integration: 'teams',
-      category: 'messages',
-      params: [
-        ToolParam(
-          name: 'chat_id',
-          description: 'The Teams chat id',
-          required: true,
-        ),
-        _messageParam(),
-      ],
-    );
+  name: 'teams_send_message',
+  description: 'Send a message to a Teams chat by chat id',
+  integration: 'teams',
+  category: 'messages',
+  params: [
+    ToolParam(
+      name: 'chat_id',
+      description: 'The Teams chat id',
+      required: true,
+    ),
+    _messageParam(),
+  ],
+);
 
 /// List-chats tool: `teams_list_chats`.
 ToolDefinition _listChatsTool() => ToolDefinition(
-      name: 'teams_list_chats',
-      description: 'List the Teams chats of the current user',
-      integration: 'teams',
-      category: 'messages',
-      params: [],
-    );
+  name: 'teams_list_chats',
+  description: 'List the Teams chats of the current user',
+  integration: 'teams',
+  category: 'messages',
+  params: [],
+);
 
 /// Get-chat-messages tool: `teams_get_chat_messages`.
 ToolDefinition _getChatMessagesTool() => ToolDefinition(
-      name: 'teams_get_chat_messages',
-      description: 'Get messages from a Teams chat by chat id',
-      integration: 'teams',
-      category: 'messages',
-      params: [
-        ToolParam(
-          name: 'chat_id',
-          description: 'The Teams chat id',
-          required: true,
-        ),
-      ],
-    );
+  name: 'teams_get_chat_messages',
+  description: 'Get messages from a Teams chat by chat id',
+  integration: 'teams',
+  category: 'messages',
+  params: [
+    ToolParam(
+      name: 'chat_id',
+      description: 'The Teams chat id',
+      required: true,
+    ),
+  ],
+);
 
 /// Send-email tool: `teams_send_email`.
 ToolDefinition _sendEmailTool() => ToolDefinition(
-      name: 'teams_send_email',
-      description: 'Send an email via Microsoft Graph on behalf of the user',
-      integration: 'teams',
-      category: 'messages',
-      params: [
-        ToolParam(
-          name: 'to',
-          description: 'The recipient email address',
-          required: true,
-        ),
-        ToolParam(
-          name: 'subject',
-          description: 'The email subject',
-          required: true,
-        ),
-        ToolParam(
-          name: 'body',
-          description: 'The email body content',
-          required: true,
-        ),
-      ],
-    );
+  name: 'teams_send_email',
+  description: 'Send an email via Microsoft Graph on behalf of the user',
+  integration: 'teams',
+  category: 'messages',
+  params: [
+    ToolParam(
+      name: 'to',
+      description: 'The recipient email address',
+      required: true,
+    ),
+    ToolParam(
+      name: 'subject',
+      description: 'The email subject',
+      required: true,
+    ),
+    ToolParam(
+      name: 'body',
+      description: 'The email body content',
+      required: true,
+    ),
+  ],
+);
 
 /// Get-chat-members tool: `teams_get_chat_members`.
 ToolDefinition _getChatMembersTool() => ToolDefinition(
-      name: 'teams_get_chat_members',
-      description: 'Get the members of a Teams chat by chat id',
-      integration: 'teams',
-      category: 'chats',
-      params: [
-        ToolParam(
-          name: 'chat_id',
-          description: 'The Teams chat id',
-          required: true,
-        ),
-      ],
-    );
+  name: 'teams_get_chat_members',
+  description: 'Get the members of a Teams chat by chat id',
+  integration: 'teams',
+  category: 'chats',
+  params: [
+    ToolParam(
+      name: 'chat_id',
+      description: 'The Teams chat id',
+      required: true,
+    ),
+  ],
+);
 
 /// Create-chat tool: `teams_create_chat`.
 ToolDefinition _createChatTool() => ToolDefinition(
-      name: 'teams_create_chat',
-      description: 'Create a Teams chat with the given member user ids',
-      integration: 'teams',
-      category: 'chats',
-      params: [
-        ToolParam(
-          name: 'members',
-          description: 'The member Graph user ids or UPNs for the chat',
-          required: true,
-          type: 'array',
-        ),
-      ],
-    );
+  name: 'teams_create_chat',
+  description: 'Create a Teams chat with the given member user ids',
+  integration: 'teams',
+  category: 'chats',
+  params: [
+    ToolParam(
+      name: 'members',
+      description: 'The member Graph user ids or UPNs for the chat',
+      required: true,
+      type: 'array',
+    ),
+  ],
+);
 
 /// Get-teams tool: `teams_get_teams`.
 ToolDefinition _getTeamsTool() => ToolDefinition(
-      name: 'teams_get_teams',
-      description: 'List the teams the current user has joined',
-      integration: 'teams',
-      category: 'teams',
-      params: [],
-    );
+  name: 'teams_get_teams',
+  description: 'List the teams the current user has joined',
+  integration: 'teams',
+  category: 'teams',
+  params: [],
+);
 
 /// Get-team-channels tool: `teams_get_team_channels`.
 ToolDefinition _getTeamChannelsTool() => ToolDefinition(
-      name: 'teams_get_team_channels',
-      description: 'Get the channels of a Teams team by team id',
-      integration: 'teams',
-      category: 'channels',
-      params: [_teamIdParam()],
-    );
+  name: 'teams_get_team_channels',
+  description: 'Get the channels of a Teams team by team id',
+  integration: 'teams',
+  category: 'channels',
+  params: [_teamIdParam()],
+);
 
 /// Send-channel-message tool: `teams_send_channel_message`.
 ToolDefinition _sendChannelMessageTool() => ToolDefinition(
-      name: 'teams_send_channel_message',
-      description: 'Send a message to a Teams channel by team and channel id',
-      integration: 'teams',
-      category: 'channels',
-      params: [_teamIdParam(), _channelIdParam(), _messageParam()],
-    );
+  name: 'teams_send_channel_message',
+  description: 'Send a message to a Teams channel by team and channel id',
+  integration: 'teams',
+  category: 'channels',
+  params: [_teamIdParam(), _channelIdParam(), _messageParam()],
+);
 
 /// Get-channel-messages tool: `teams_get_channel_messages`.
 ToolDefinition _getChannelMessagesTool() => ToolDefinition(
-      name: 'teams_get_channel_messages',
-      description: 'Get messages from a Teams channel by team and channel id',
-      integration: 'teams',
-      category: 'channels',
-      params: [_teamIdParam(), _channelIdParam()],
-    );
+  name: 'teams_get_channel_messages',
+  description: 'Get messages from a Teams channel by team and channel id',
+  integration: 'teams',
+  category: 'channels',
+  params: [_teamIdParam(), _channelIdParam()],
+);
 
 /// Shared `team_id` parameter.
 ToolParam _teamIdParam() => ToolParam(
-      name: 'team_id',
-      description: 'The Teams team id',
-      required: true,
-    );
+  name: 'team_id',
+  description: 'The Teams team id',
+  required: true,
+);
 
 /// Shared `channel_id` parameter.
 ToolParam _channelIdParam() => ToolParam(
-      name: 'channel_id',
-      description: 'The Teams channel id',
-      required: true,
-    );
+  name: 'channel_id',
+  description: 'The Teams channel id',
+  required: true,
+);
 
 /// Shared `message` parameter (message content to send).
 ToolParam _messageParam() => ToolParam(
-      name: 'message',
-      description: 'The message content to send',
-      required: true,
-    );
+  name: 'message',
+  description: 'The message content to send',
+  required: true,
+);
 
 /// Executes Teams MCP tools by dispatching to [TeamsClient].
 class TeamsToolExecutor {
@@ -208,39 +208,33 @@ class TeamsToolExecutor {
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _handlers = {
+  _handlers = {
     'teams_test': (_) => _client.testConnection(),
-    'teams_send_message': (a) => _client.sendMessage(
-          a['chat_id'] as String,
-          a['message'] as String,
-        ),
+    'teams_send_message': (a) =>
+        _client.sendMessage(a['chat_id'] as String, a['message'] as String),
     'teams_list_chats': (_) => _client.listChats(),
-    'teams_get_chat_messages': (a) => _client.getChatMessages(
-          a['chat_id'] as String,
-        ),
+    'teams_get_chat_messages': (a) =>
+        _client.getChatMessages(a['chat_id'] as String),
     'teams_send_email': (a) => _client.sendEmail(
-          a['to'] as String,
-          a['subject'] as String,
-          a['body'] as String,
-        ),
-    'teams_get_chat_members': (a) => _client.getChatMembers(
-          a['chat_id'] as String,
-        ),
-    'teams_create_chat': (a) => _client.createChat(
-          (a['members'] as List).cast<String>(),
-        ),
+      a['to'] as String,
+      a['subject'] as String,
+      a['body'] as String,
+    ),
+    'teams_get_chat_members': (a) =>
+        _client.getChatMembers(a['chat_id'] as String),
+    'teams_create_chat': (a) =>
+        _client.createChat((a['members'] as List).cast<String>()),
     'teams_get_teams': (_) => _client.getTeams(),
-    'teams_get_team_channels': (a) => _client.getTeamChannels(
-          a['team_id'] as String,
-        ),
+    'teams_get_team_channels': (a) =>
+        _client.getTeamChannels(a['team_id'] as String),
     'teams_send_channel_message': (a) => _client.sendChannelMessage(
-          a['team_id'] as String,
-          a['channel_id'] as String,
-          a['message'] as String,
-        ),
+      a['team_id'] as String,
+      a['channel_id'] as String,
+      a['message'] as String,
+    ),
     'teams_get_channel_messages': (a) => _client.getChannelMessages(
-          a['team_id'] as String,
-          a['channel_id'] as String,
-        ),
+      a['team_id'] as String,
+      a['channel_id'] as String,
+    ),
   };
 }

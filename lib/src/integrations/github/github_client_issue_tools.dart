@@ -39,7 +39,11 @@ final RegExp _ghBareNumber = RegExp(r'^\d+$');
 /// blank parts fall back to the configured defaults; anything still missing
 /// throws [ArgumentError] with the Java message.
 GhIssueRef resolveGhIssueRef(
-    String? key, String? owner, String? repo, int? number) {
+  String? key,
+  String? owner,
+  String? repo,
+  int? number,
+) {
   var resolvedOwner = owner;
   var resolvedRepo = repo;
   var resolvedNumber = number;

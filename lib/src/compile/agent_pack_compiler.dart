@@ -52,7 +52,7 @@ class AgentPackCompiler {
   /// Creates a compiler rooted at the agents checkout (contains `js/`,
   /// `instructions/`, etc.).
   AgentPackCompiler(this.agentRoot)
-      : _rootPath = p.normalize(Directory(agentRoot).absolute.path);
+    : _rootPath = p.normalize(Directory(agentRoot).absolute.path);
 
   /// The agents checkout root path as given.
   final String agentRoot;
@@ -75,12 +75,14 @@ class AgentPackCompiler {
   ];
 
   /// Matches `require('./x.js')` / `loadModule('./x.js')`.
-  static final _jsModuleRef =
-      RegExp("(?:require|loadModule)\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)");
+  static final _jsModuleRef = RegExp(
+    "(?:require|loadModule)\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)",
+  );
 
   /// A string that references a repo file (has an extension and a separator).
-  static final _pathLike =
-      RegExp(r'^[./]*[\w./-]+\.(js|json|md|sh|py|txt|yaml|yml|properties)$');
+  static final _pathLike = RegExp(
+    r'^[./]*[\w./-]+\.(js|json|md|sh|py|txt|yaml|yml|properties)$',
+  );
 
   /// Compiles the pack for [entryJson].
   ///
@@ -119,11 +121,17 @@ class AgentPackCompiler {
 
     if (closure.isEmpty) {
       throw AgentPackException(
-          'Empty closure for ${_basename(entryJson.path)} — nothing to pack');
+        'Empty closure for ${_basename(entryJson.path)} — nothing to pack',
+      );
     }
 
     final manifest = _buildManifest(
-        agentName, version, sourceCommit, _basename(entryJson.path), closure);
+      agentName,
+      version,
+      sourceCommit,
+      _basename(entryJson.path),
+      closure,
+    );
 
     if (!outDir.existsSync()) outDir.createSync(recursive: true);
     final base = '$agentName-$version';
@@ -133,9 +141,11 @@ class AgentPackCompiler {
 
     _writeDeterministicZip(closure, manifest, zipFile);
     manifestFile.writeAsStringSync(
-        const JsonEncoder.withIndent('  ').convert(manifest));
+      const JsonEncoder.withIndent('  ').convert(manifest),
+    );
     shaFile.writeAsStringSync(
-        '${_sha256Hex(zipFile.readAsBytesSync())}  ${_basename(zipFile.path)}\n');
+      '${_sha256Hex(zipFile.readAsBytesSync())}  ${_basename(zipFile.path)}\n',
+    );
 
     return PackResult(
       zipFile: zipFile,
@@ -150,8 +160,12 @@ class AgentPackCompiler {
   // ------------------------------------------------------------------
 
   /// Recursively collects a config and its `parent.path` chain.
-  void _collectConfig(File configFile, Map<String, File> closure,
-      Set<String> visitedConfigs, Set<String> visitedJs) {
+  void _collectConfig(
+    File configFile,
+    Map<String, File> closure,
+    Set<String> visitedConfigs,
+    Set<String> visitedJs,
+  ) {
     final normalized = configFile.absolute.path;
     if (!visitedConfigs.add(normalized)) return; // cycle safety
     if (!configFile.existsSync()) {
@@ -168,7 +182,8 @@ class AgentPackCompiler {
         final resolved = _resolveReference(parentPath);
         if (resolved == null) {
           throw AgentPackException(
-              'parent.path not found: $parentPath (referenced from $normalized)');
+            'parent.path not found: $parentPath (referenced from $normalized)',
+          );
         }
         closure.putIfAbsent(_packRelative(resolved), () => resolved);
         _collectConfig(resolved, closure, visitedConfigs, visitedJs);
@@ -187,8 +202,11 @@ class AgentPackCompiler {
   }
 
   /// Walks the config JSON, collecting referenced files from known fields.
-  void _collectPathsFromJson(Map<String, dynamic> config,
-      Map<String, File> closure, Set<String> visitedJs) {
+  void _collectPathsFromJson(
+    Map<String, dynamic> config,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     _collectSinglePathKeys(config, closure, visitedJs);
 
     for (final item in _findList(config, 'cliPrompts')) {
@@ -200,8 +218,11 @@ class AgentPackCompiler {
 
   /// Collects `cliCommands` paths; any `scripts/**` reference embeds the whole
   /// subtree (scripts self-locate via SCRIPT_DIR).
-  void _collectCliCommands(Map<String, dynamic> config,
-      Map<String, File> closure, Set<String> visitedJs) {
+  void _collectCliCommands(
+    Map<String, dynamic> config,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     var referencesScripts = false;
     for (final item in _findList(config, 'cliCommands')) {
       if (item is String) {
@@ -216,8 +237,11 @@ class AgentPackCompiler {
   }
 
   /// Adds the file for each known single-path key found in the object tree.
-  void _collectSinglePathKeys(Map<String, dynamic> obj,
-      Map<String, File> closure, Set<String> visitedJs) {
+  void _collectSinglePathKeys(
+    Map<String, dynamic> obj,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     for (final key in _singlePathKeys) {
       final value = _deepFindString(obj, key);
       if (value != null) _addPathReference(value, closure, visitedJs);
@@ -231,7 +255,10 @@ class AgentPackCompiler {
 
   /// Adds a cliPrompts/cliCommands item only when it looks like a file path.
   void _maybeAddPathReference(
-      String value, Map<String, File> closure, Set<String> visitedJs) {
+    String value,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     final trimmed = value.trim();
     if (_pathLike.hasMatch(trimmed))
       _addPathReference(trimmed, closure, visitedJs);
@@ -239,7 +266,10 @@ class AgentPackCompiler {
 
   /// Extracts a repo path from a shell command token (`./agents/scripts/x.sh`).
   void _maybeAddCommandPath(
-      String command, Map<String, File> closure, Set<String> visitedJs) {
+    String command,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     for (final token in command.split(RegExp(r'\s+'))) {
       final cleaned = token.replaceAll(RegExp("^['\"]+|['\"]+\$"), '');
       if (_pathLike.hasMatch(cleaned)) {
@@ -251,7 +281,10 @@ class AgentPackCompiler {
   /// Records [rawReference] in the closure under its normalized pack-relative
   /// path; JS files are transitively scanned.
   void _addPathReference(
-      String rawReference, Map<String, File> closure, Set<String> visitedJs) {
+    String rawReference,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     final packRelative = _normalizeReference(rawReference);
     if (packRelative == null) return; // URL / classpath: / literal
     final source = File('${_rootPath}/$packRelative');
@@ -261,7 +294,8 @@ class AgentPackCompiler {
     }
     if (!resolved.existsSync()) {
       throw AgentPackException(
-          'Referenced file missing: $rawReference (resolved to ${resolved.path})');
+        'Referenced file missing: $rawReference (resolved to ${resolved.path})',
+      );
     }
     closure.putIfAbsent(packRelative, () => resolved);
     if (packRelative.endsWith('.js')) {
@@ -271,7 +305,10 @@ class AgentPackCompiler {
 
   /// Transitively scans a JS file for `require(...)`/`loadModule(...)`.
   void _scanJsTransitive(
-      File jsFile, Map<String, File> closure, Set<String> visitedJs) {
+    File jsFile,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     final normalized = jsFile.absolute.path;
     if (!visitedJs.add(normalized)) return; // cycle safety
     final content = jsFile.readAsStringSync();
@@ -284,7 +321,12 @@ class AgentPackCompiler {
       final refMatch = _jsModuleRef.firstMatch(raw);
       if (refMatch == null) continue;
       _resolveJsModule(
-          refMatch.group(1)!, parentDir, normalized, closure, visitedJs);
+        refMatch.group(1)!,
+        parentDir,
+        normalized,
+        closure,
+        visitedJs,
+      );
     }
   }
 
@@ -317,17 +359,24 @@ class AgentPackCompiler {
   static String scrubForScan(String src) => scrubJsForScan(src);
 
   /// Resolves one relative JS module reference and recurses into it.
-  void _resolveJsModule(String ref, String parentDir, String fromFile,
-      Map<String, File> closure, Set<String> visitedJs) {
+  void _resolveJsModule(
+    String ref,
+    String parentDir,
+    String fromFile,
+    Map<String, File> closure,
+    Set<String> visitedJs,
+  ) {
     if (!ref.startsWith('./') && !ref.startsWith('../')) return;
     final refWithExt = ref.endsWith('.js') ? ref : '$ref.js';
-    final normalizedResolved =
-        _normalizePath(p.normalize(p.join(parentDir, refWithExt)));
+    final normalizedResolved = _normalizePath(
+      p.normalize(p.join(parentDir, refWithExt)),
+    );
     if (!_isWithinRoot(normalizedResolved)) return;
     final refFile = File(normalizedResolved);
     if (!refFile.existsSync()) {
       throw AgentPackException(
-          'JS module not found: $ref (required from $fromFile)');
+        'JS module not found: $ref (required from $fromFile)',
+      );
     }
     final packRelative = _packRelative(refFile);
     if (closure.containsKey(packRelative)) return;
@@ -339,8 +388,10 @@ class AgentPackCompiler {
   void _includeScriptsSubtree(Map<String, File> closure) {
     final scriptsDir = Directory('${_rootPath}/scripts');
     if (!scriptsDir.existsSync()) return;
-    for (final entity
-        in scriptsDir.listSync(recursive: true, followLinks: false)) {
+    for (final entity in scriptsDir.listSync(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entity is File) {
         closure[_packRelative(entity.absolute)] = entity.absolute;
       }
@@ -367,15 +418,19 @@ class AgentPackCompiler {
     final rootPath = p.normalize(rootDir.absolute.path);
     if (!p.isWithin(_rootPath, rootPath) || rootPath == _rootPath) {
       throw AgentPackException(
-          '--include directory escapes the agents root: $dir '
-          '(resolved to $normalized, root $_rootPath)');
+        '--include directory escapes the agents root: $dir '
+        '(resolved to $normalized, root $_rootPath)',
+      );
     }
     if (!rootDir.existsSync()) {
       throw AgentPackException(
-          '--include directory not found: $normalized (under $_rootPath)');
+        '--include directory not found: $normalized (under $_rootPath)',
+      );
     }
-    for (final entity
-        in rootDir.listSync(recursive: true, followLinks: false)) {
+    for (final entity in rootDir.listSync(
+      recursive: true,
+      followLinks: false,
+    )) {
       if (entity is! File) continue;
       closure[_packRelative(entity.absolute)] = entity.absolute;
     }
@@ -426,8 +481,13 @@ class AgentPackCompiler {
   // Manifest + deterministic zip
   // ------------------------------------------------------------------
 
-  Map<String, dynamic> _buildManifest(String agentName, String version,
-      String sourceCommit, String defaultEntry, Map<String, File> closure) {
+  Map<String, dynamic> _buildManifest(
+    String agentName,
+    String version,
+    String sourceCommit,
+    String defaultEntry,
+    Map<String, File> closure,
+  ) {
     final files = <Map<String, dynamic>>[];
     final sortedKeys = closure.keys.toList()..sort();
     for (final path in sortedKeys) {
@@ -449,10 +509,14 @@ class AgentPackCompiler {
   }
 
   void _writeDeterministicZip(
-      Map<String, File> closure, Map<String, dynamic> manifest, File zipFile) {
+    Map<String, File> closure,
+    Map<String, dynamic> manifest,
+    File zipFile,
+  ) {
     final archive = Archive();
-    final manifestBytes =
-        utf8.encode(const JsonEncoder.withIndent('  ').convert(manifest));
+    final manifestBytes = utf8.encode(
+      const JsonEncoder.withIndent('  ').convert(manifest),
+    );
     _addEntry(archive, 'manifest.json', manifestBytes, 0644);
 
     final sortedKeys = closure.keys.toList()..sort();

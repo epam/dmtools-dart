@@ -57,17 +57,18 @@ class GithubRateLimitRetryInterceptor extends Interceptor {
     SyncRetryPolicy? policy,
     this.maxAttempts = defaultMaxAttempts,
     Future<void> Function(Duration duration)? sleep,
-  })  : _dio = dio,
-        policy = policy ??
-            SyncRetryPolicy(
-              maxAttempts: maxAttempts,
-              baseDelayMs: 1000,
-              maxDelayMs: 60000,
-              backoffMultiplier: 2.0,
-              jitterFactor: 0.3,
-              random: Random(),
-            ),
-        _sleep = sleep ?? ((duration) => Future.delayed(duration));
+  }) : _dio = dio,
+       policy =
+           policy ??
+           SyncRetryPolicy(
+             maxAttempts: maxAttempts,
+             baseDelayMs: 1000,
+             maxDelayMs: 60000,
+             backoffMultiplier: 2.0,
+             jitterFactor: 0.3,
+             random: Random(),
+           ),
+       _sleep = sleep ?? ((duration) => Future.delayed(duration));
 
   /// Handles a failed request: only HTTP 429 responses are retried, after
   /// the server-mandated wait; everything else passes through untouched.
@@ -105,7 +106,7 @@ class GithubRateLimitRetryInterceptor extends Interceptor {
   /// Flattens dio's multi-value [headers] to the single-value map the
   /// policy's case-insensitive lookup expects.
   static Map<String, String> _flattenHeaders(Headers headers) => {
-        for (final entry in headers.map.entries)
-          if (entry.value.isNotEmpty) entry.key: entry.value.first,
-      };
+    for (final entry in headers.map.entries)
+      if (entry.value.isNotEmpty) entry.key: entry.value.first,
+  };
 }

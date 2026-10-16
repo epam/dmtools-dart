@@ -26,10 +26,10 @@ class DialClient implements AiChatClient {
   ///
   /// Throws [StateError] when `DIAL_API_KEY` or `DIAL_BASE_PATH` is missing.
   factory DialClient(PropertyReader reader, {Dio? dio}) => DialClient._(
-        dio ?? createDefaultAiDio(),
-        requiredConfig(reader.getDialBathPath(), 'DIAL_BASE_PATH'),
-        requiredConfig(reader.getDialIApiKey(), 'DIAL_API_KEY'),
-      );
+    dio ?? createDefaultAiDio(),
+    requiredConfig(reader.getDialBathPath(), 'DIAL_BASE_PATH'),
+    requiredConfig(reader.getDialIApiKey(), 'DIAL_API_KEY'),
+  );
 
   DialClient._(this._dio, this._basePath, this._apiKey);
 
@@ -42,11 +42,10 @@ class DialClient implements AiChatClient {
     String model,
     ChatMessages messages, [
     String? systemPrompt,
-  ]) =>
-      _post({
-        'model': model,
-        'messages': withSystemMessage(messages, systemPrompt),
-      });
+  ]) => _post({
+    'model': model,
+    'messages': withSystemMessage(messages, systemPrompt),
+  });
 
   /// Sends a low-level completion with an explicit token cap and temperature.
   ///
@@ -72,17 +71,22 @@ class DialClient implements AiChatClient {
   /// Generates an embedding for [text] using [model].
   /// Posts a chat-completions [body] with the client's Bearer auth.
   Future<String> _post(Map<String, dynamic> body) => postChat(
-      _dio, _basePath, body, bearerHeaders(_apiKey), extractChoiceContent);
+    _dio,
+    _basePath,
+    body,
+    bearerHeaders(_apiKey),
+    extractChoiceContent,
+  );
 
   /// Generates an embedding via the DIAL (OpenAI-compatible) endpoint.
   @override
   Future<String> embed(String model, String text) => postChat(
-        _dio,
-        _basePath,
-        {'model': model, 'input': text},
-        bearerHeaders(_apiKey),
-        extractEmbeddingArray,
-      );
+    _dio,
+    _basePath,
+    {'model': model, 'input': text},
+    bearerHeaders(_apiKey),
+    extractEmbeddingArray,
+  );
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

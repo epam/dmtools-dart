@@ -32,56 +32,58 @@ const Set<String> defaultAllowedCommands = {
 
 /// Returns the CLI MCP tool definitions.
 List<ToolDefinition> cliTools() => [
-      ToolDefinition(
-        name: 'cli_execute_command',
-        description: 'Execute a whitelisted CLI command and capture output',
-        integration: 'cli',
-        category: 'system',
-        params: [
-          ToolParam(
-            name: 'command',
-            description: 'CLI command to execute. Must start with a '
-                'whitelisted command. Extend the whitelist via '
-                'CLI_ALLOWED_COMMANDS in dmtools.env.',
-            required: true,
-          ),
-          ToolParam(
-            name: 'workingDirectory',
-            description: 'Working directory for command execution. Defaults '
-                'to repository root if not specified. Use absolute path or '
-                'path relative to current directory.',
-            required: false,
-          ),
-        ],
+  ToolDefinition(
+    name: 'cli_execute_command',
+    description: 'Execute a whitelisted CLI command and capture output',
+    integration: 'cli',
+    category: 'system',
+    params: [
+      ToolParam(
+        name: 'command',
+        description:
+            'CLI command to execute. Must start with a '
+            'whitelisted command. Extend the whitelist via '
+            'CLI_ALLOWED_COMMANDS in dmtools.env.',
+        required: true,
       ),
-      ToolDefinition(
-        name: 'cli_execute_command_with_env',
-        description: 'Execute a whitelisted CLI command with extra env vars',
-        integration: 'cli',
-        category: 'system',
-        params: [
-          ToolParam(name: 'command', description: 'The CLI command to run'),
-          ToolParam(
-            name: 'args',
-            description: 'Arguments to pass to the command',
-            type: 'array',
-            required: false,
-          ),
-          ToolParam(
-            name: 'env_vars',
-            description: 'Extra environment variables for the process',
-            type: 'object',
-            required: false,
-          ),
-        ],
+      ToolParam(
+        name: 'workingDirectory',
+        description:
+            'Working directory for command execution. Defaults '
+            'to repository root if not specified. Use absolute path or '
+            'path relative to current directory.',
+        required: false,
       ),
-      ToolDefinition(
-        name: 'cli_list_allowed_commands',
-        description: 'List all whitelisted CLI commands as a sorted array',
-        integration: 'cli',
-        category: 'system',
+    ],
+  ),
+  ToolDefinition(
+    name: 'cli_execute_command_with_env',
+    description: 'Execute a whitelisted CLI command with extra env vars',
+    integration: 'cli',
+    category: 'system',
+    params: [
+      ToolParam(name: 'command', description: 'The CLI command to run'),
+      ToolParam(
+        name: 'args',
+        description: 'Arguments to pass to the command',
+        type: 'array',
+        required: false,
       ),
-    ];
+      ToolParam(
+        name: 'env_vars',
+        description: 'Extra environment variables for the process',
+        type: 'object',
+        required: false,
+      ),
+    ],
+  ),
+  ToolDefinition(
+    name: 'cli_list_allowed_commands',
+    description: 'List all whitelisted CLI commands as a sorted array',
+    integration: 'cli',
+    category: 'system',
+  ),
+];
 
 /// Executes CLI MCP tools via a streaming capture process run, enforcing
 /// the command whitelist. Output lines are mirrored live to dmtools' stderr
@@ -163,8 +165,9 @@ class CliToolExecutor {
     }
     final base = Directory.current.path;
     final specified = Directory(workingDirectory.trim());
-    final resolved =
-        specified.isAbsolute ? specified : Directory('$base/${specified.path}');
+    final resolved = specified.isAbsolute
+        ? specified
+        : Directory('$base/${specified.path}');
     if (!resolved.existsSync()) {
       return gitRepositoryRoot(base) ?? base;
     }
@@ -197,10 +200,10 @@ class CliToolExecutor {
   }
 
   Map<String, dynamic> _resultMap(CapturedProcessResult result) => {
-        'stdout': result.stdout,
-        'stderr': result.stderr,
-        'exitCode': result.exitCode,
-      };
+    'stdout': result.stdout,
+    'stderr': result.stderr,
+    'exitCode': result.exitCode,
+  };
 
   /// Dispatches [toolName] with [args] to the matching CLI executor method.
   ///
@@ -227,19 +230,23 @@ class CliToolExecutor {
   }
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
-  late final Map<String,
-      Future<Map<String, dynamic>> Function(Map<String, dynamic>)> _handlers = {
+  late final Map<
+    String,
+    Future<Map<String, dynamic>> Function(Map<String, dynamic>)
+  >
+  _handlers = {
     'cli_execute_command': (a) => executeCommand(
-          a['command'] as String,
-          args: _parseArgs(a['args']),
-          workingDirectory: a['workingDirectory'] as String?,
-        ),
+      a['command'] as String,
+      args: _parseArgs(a['args']),
+      workingDirectory: a['workingDirectory'] as String?,
+    ),
     'cli_execute_command_with_env': (a) => executeCommandWithEnv(
-          a['command'] as String,
-          args: _parseArgs(a['args']),
-          envVars: _parseEnv(a['env_vars']),
-        ),
-    'cli_list_allowed_commands': (a) async =>
-        {'commands': getAllowedCommands()},
+      a['command'] as String,
+      args: _parseArgs(a['args']),
+      envVars: _parseEnv(a['env_vars']),
+    ),
+    'cli_list_allowed_commands': (a) async => {
+      'commands': getAllowedCommands(),
+    },
   };
 }

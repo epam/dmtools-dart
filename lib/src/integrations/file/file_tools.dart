@@ -17,249 +17,230 @@ import '../../mcp/tool_param.dart';
 ///
 /// Tool names and argument schemas mirror the Java `@MCPTool` annotations.
 List<ToolDefinition> fileTools() => [
-      _readTool(),
-      _writeTool(),
-      _listTool(),
-      _existsTool(),
-      _deleteTool(),
-      _copyTool(),
-      _moveTool(),
-      _mkdirTool(),
-      _readLinesTool(),
-      _writeLinesTool(),
-      _appendTool(),
-      _infoTool(),
-      _readJsonTool(),
-      _writeJsonTool(),
-      _existsInPathTool(),
-      _getSizeTool(),
-      _watchTool(),
-      _renameTool(),
-      _searchTool(),
-    ];
+  _readTool(),
+  _writeTool(),
+  _listTool(),
+  _existsTool(),
+  _deleteTool(),
+  _copyTool(),
+  _moveTool(),
+  _mkdirTool(),
+  _readLinesTool(),
+  _writeLinesTool(),
+  _appendTool(),
+  _infoTool(),
+  _readJsonTool(),
+  _writeJsonTool(),
+  _existsInPathTool(),
+  _getSizeTool(),
+  _watchTool(),
+  _renameTool(),
+  _searchTool(),
+];
 
 /// `file_read` — read the contents of a text file.
 ToolDefinition _readTool() => ToolDefinition(
-      name: 'file_read',
-      description: 'Read the contents of a text file',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to read'),
-      ],
-    );
+  name: 'file_read',
+  description: 'Read the contents of a text file',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'File path to read')],
+);
 
 /// `file_write` — write content to a file, creating or overwriting it.
 ToolDefinition _writeTool() => ToolDefinition(
-      name: 'file_write',
-      description: 'Write content to a file, creating or overwriting it',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to write'),
-        ToolParam(name: 'content', description: 'The text content to write'),
-      ],
-    );
+  name: 'file_write',
+  description: 'Write content to a file, creating or overwriting it',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'path', description: 'File path to write'),
+    ToolParam(name: 'content', description: 'The text content to write'),
+  ],
+);
 
 /// `file_list` — list entries in a directory.
 ToolDefinition _listTool() => ToolDefinition(
-      name: 'file_list',
-      description: 'List entries in a directory',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Directory path to list'),
-      ],
-    );
+  name: 'file_list',
+  description: 'List entries in a directory',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'Directory path to list')],
+);
 
 /// `file_exists` — check whether a file or directory exists.
 ToolDefinition _existsTool() => ToolDefinition(
-      name: 'file_exists',
-      description: 'Check whether a file or directory exists',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Path to check'),
-      ],
-    );
+  name: 'file_exists',
+  description: 'Check whether a file or directory exists',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'Path to check')],
+);
 
 /// `file_delete` — delete a file.
 ToolDefinition _deleteTool() => ToolDefinition(
-      name: 'file_delete',
-      description: 'Delete a file',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Path of the file to delete'),
-      ],
-    );
+  name: 'file_delete',
+  description: 'Delete a file',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'Path of the file to delete')],
+);
 
 /// `file_copy` — copy a file from source to destination.
 ToolDefinition _copyTool() => ToolDefinition(
-      name: 'file_copy',
-      description: 'Copy a file from source to destination',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'source', description: 'Source file path'),
-        ToolParam(name: 'dest', description: 'Destination file path'),
-      ],
-    );
+  name: 'file_copy',
+  description: 'Copy a file from source to destination',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'source', description: 'Source file path'),
+    ToolParam(name: 'dest', description: 'Destination file path'),
+  ],
+);
 
 /// `file_move` — move or rename a file.
 ToolDefinition _moveTool() => ToolDefinition(
-      name: 'file_move',
-      description: 'Move or rename a file',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'source', description: 'Source file path'),
-        ToolParam(name: 'dest', description: 'Destination file path'),
-      ],
-    );
+  name: 'file_move',
+  description: 'Move or rename a file',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'source', description: 'Source file path'),
+    ToolParam(name: 'dest', description: 'Destination file path'),
+  ],
+);
 
 /// `file_mkdir` — create a directory (including parents).
 ToolDefinition _mkdirTool() => ToolDefinition(
-      name: 'file_mkdir',
-      description: 'Create a directory, including parents',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Directory path to create'),
-      ],
-    );
+  name: 'file_mkdir',
+  description: 'Create a directory, including parents',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'Directory path to create')],
+);
 
 /// `file_read_lines` — read a file and return its lines.
 ToolDefinition _readLinesTool() => ToolDefinition(
-      name: 'file_read_lines',
-      description: 'Read a file and return its lines as a list',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to read'),
-      ],
-    );
+  name: 'file_read_lines',
+  description: 'Read a file and return its lines as a list',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'File path to read')],
+);
 
 /// `file_write_lines` — write a list of lines to a file.
 ToolDefinition _writeLinesTool() => ToolDefinition(
-      name: 'file_write_lines',
-      description: 'Write a list of lines to a file, joined by newlines',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to write'),
-        ToolParam(name: 'lines', description: 'Lines to write', type: 'array'),
-      ],
-    );
+  name: 'file_write_lines',
+  description: 'Write a list of lines to a file, joined by newlines',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'path', description: 'File path to write'),
+    ToolParam(name: 'lines', description: 'Lines to write', type: 'array'),
+  ],
+);
 
 /// `file_append` — append content to a file.
 ToolDefinition _appendTool() => ToolDefinition(
-      name: 'file_append',
-      description: 'Append content to the end of a file',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to append to'),
-        ToolParam(name: 'content', description: 'The text content to append'),
-      ],
-    );
+  name: 'file_append',
+  description: 'Append content to the end of a file',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'path', description: 'File path to append to'),
+    ToolParam(name: 'content', description: 'The text content to append'),
+  ],
+);
 
 /// `file_info` — return metadata about a file or directory.
 ToolDefinition _infoTool() => ToolDefinition(
-      name: 'file_info',
-      description: 'Return file metadata: size, modified, isDirectory, exists',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Path to inspect'),
-      ],
-    );
+  name: 'file_info',
+  description: 'Return file metadata: size, modified, isDirectory, exists',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'Path to inspect')],
+);
 
 /// `file_read_json` — read a file and parse it as JSON.
 ToolDefinition _readJsonTool() => ToolDefinition(
-      name: 'file_read_json',
-      description: 'Read a file and parse it as JSON',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to read'),
-      ],
-    );
+  name: 'file_read_json',
+  description: 'Read a file and parse it as JSON',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'File path to read')],
+);
 
 /// `file_write_json` — serialize a map to a file as JSON.
 ToolDefinition _writeJsonTool() => ToolDefinition(
-      name: 'file_write_json',
-      description: 'Write a map to a file as JSON',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to write'),
-        ToolParam(
-          name: 'data',
-          description: 'The map to serialize',
-          type: 'object',
-        ),
-      ],
-    );
+  name: 'file_write_json',
+  description: 'Write a map to a file as JSON',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'path', description: 'File path to write'),
+    ToolParam(
+      name: 'data',
+      description: 'The map to serialize',
+      type: 'object',
+    ),
+  ],
+);
 
 /// `file_exists_in_path` — search for a file by name within a directory tree.
 ToolDefinition _existsInPathTool() => ToolDefinition(
-      name: 'file_exists_in_path',
-      description: 'Search for a file by name within a directory tree',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'Root directory to search'),
-        ToolParam(name: 'filename', description: 'File name to find'),
-      ],
-    );
+  name: 'file_exists_in_path',
+  description: 'Search for a file by name within a directory tree',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'path', description: 'Root directory to search'),
+    ToolParam(name: 'filename', description: 'File name to find'),
+  ],
+);
 
 /// `file_get_size` — return the size of a file in bytes.
 ToolDefinition _getSizeTool() => ToolDefinition(
-      name: 'file_get_size',
-      description: 'Return the size of a file in bytes',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to measure'),
-      ],
-    );
+  name: 'file_get_size',
+  description: 'Return the size of a file in bytes',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'File path to measure')],
+);
 
 /// `file_watch` — return a file's last-modified time and size.
 ToolDefinition _watchTool() => ToolDefinition(
-      name: 'file_watch',
-      description: 'Return a file\'s last-modified time and size as a map',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'path', description: 'File path to watch'),
-      ],
-    );
+  name: 'file_watch',
+  description: 'Return a file\'s last-modified time and size as a map',
+  integration: 'file',
+  category: 'filesystem',
+  params: [ToolParam(name: 'path', description: 'File path to watch')],
+);
 
 /// `file_rename` — rename a file (alias of move).
 ToolDefinition _renameTool() => ToolDefinition(
-      name: 'file_rename',
-      description: 'Rename (move) a file from source to destination',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'source', description: 'Source file path'),
-        ToolParam(name: 'dest', description: 'Destination file path'),
-      ],
-    );
+  name: 'file_rename',
+  description: 'Rename (move) a file from source to destination',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'source', description: 'Source file path'),
+    ToolParam(name: 'dest', description: 'Destination file path'),
+  ],
+);
 
 /// `file_search` — recursively search for files matching a glob pattern.
 ToolDefinition _searchTool() => ToolDefinition(
-      name: 'file_search',
-      description: 'Recursively search a directory for files matching a glob '
-          'pattern (supports * and ?)',
-      integration: 'file',
-      category: 'filesystem',
-      params: [
-        ToolParam(name: 'dir', description: 'Root directory to search'),
-        ToolParam(name: 'pattern', description: 'Glob pattern, e.g. *.dart'),
-      ],
-    );
+  name: 'file_search',
+  description:
+      'Recursively search a directory for files matching a glob '
+      'pattern (supports * and ?)',
+  integration: 'file',
+  category: 'filesystem',
+  params: [
+    ToolParam(name: 'dir', description: 'Root directory to search'),
+    ToolParam(name: 'pattern', description: 'Glob pattern, e.g. *.dart'),
+  ],
+);
 
 /// Executes file MCP tools using `dart:io`.
 ///
@@ -304,10 +285,10 @@ class FileToolExecutor {
   /// read fresh from [PropertyReader] on every call exactly like Java's
   /// `new PropertyReader().getFileReadAllowedPaths()` per tool call.
   String _checkRead(String path) => resolveWithinAllowedBase(
-        path,
-        _base,
-        configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths(),
-      );
+    path,
+    _base,
+    configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths(),
+  );
 
   /// Dispatches [toolName] with [args] to the matching file operation.
   ///
@@ -469,7 +450,7 @@ class FileToolExecutor {
 
   /// Tool-name → handler dispatch table, mirroring the Java method routing.
   late final Map<String, Future<dynamic> Function(Map<String, dynamic>)>
-      _handlers = {
+  _handlers = {
     'file_read': (a) => read(a['path'] as String),
     'file_write': (a) => write(a['path'] as String, a['content'] as String),
     'file_list': (a) => list(a['path'] as String),
@@ -479,21 +460,17 @@ class FileToolExecutor {
     'file_move': (a) => move(a['source'] as String, a['dest'] as String),
     'file_mkdir': (a) => mkdir(a['path'] as String),
     'file_read_lines': (a) => readLines(a['path'] as String),
-    'file_write_lines': (a) => writeLines(
-          a['path'] as String,
-          (a['lines'] as List).cast<String>(),
-        ),
+    'file_write_lines': (a) =>
+        writeLines(a['path'] as String, (a['lines'] as List).cast<String>()),
     'file_append': (a) => append(a['path'] as String, a['content'] as String),
     'file_info': (a) => getFileInfo(a['path'] as String),
     'file_read_json': (a) => readJson(a['path'] as String),
     'file_write_json': (a) => writeJson(
-          a['path'] as String,
-          (a['data'] as Map).cast<String, dynamic>(),
-        ),
-    'file_exists_in_path': (a) => existsInPath(
-          a['path'] as String,
-          a['filename'] as String,
-        ),
+      a['path'] as String,
+      (a['data'] as Map).cast<String, dynamic>(),
+    ),
+    'file_exists_in_path': (a) =>
+        existsInPath(a['path'] as String, a['filename'] as String),
     'file_get_size': (a) => getSize(a['path'] as String),
     'file_watch': (a) => watch(a['path'] as String),
     'file_rename': (a) => rename(a['source'] as String, a['dest'] as String),

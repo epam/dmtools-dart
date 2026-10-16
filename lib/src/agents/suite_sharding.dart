@@ -33,11 +33,10 @@ class ShardPlanner {
     List<String> files,
     int shardIndex,
     int totalShards,
-  ) =>
-      [
-        for (var pos = 0; pos < files.length; pos++)
-          if (pos % totalShards == shardIndex) files[pos],
-      ];
+  ) => [
+    for (var pos = 0; pos < files.length; pos++)
+      if (pos % totalShards == shardIndex) files[pos],
+  ];
 }
 
 /// A suite-shard manifest: what one `agents-suite` matrix shard planned
@@ -91,13 +90,13 @@ class ShardManifest {
 
   /// Encodes the manifest for the artifact upload.
   Map<String, dynamic> toJson() => {
-        'shard': shard,
-        'total': total,
-        'plannedFiles': List<String>.of(plannedFiles),
-        'success': success,
-        'passed': passed,
-        'failed': failed,
-      };
+    'shard': shard,
+    'total': total,
+    'plannedFiles': List<String>.of(plannedFiles),
+    'success': success,
+    'passed': passed,
+    'failed': failed,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -136,9 +135,7 @@ class ShardManifest {
 
   static bool _listEquals(List<String> a, List<String> b) =>
       a.length == b.length &&
-      [
-        for (var i = 0; i < a.length; i++) a[i] == b[i],
-      ].every((same) => same);
+      [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
 }
 
 /// Thrown when a manifest does not satisfy the inter-job schema.
@@ -206,7 +203,10 @@ class ShardManifestMerger {
     if (manifestJsons.isEmpty) {
       problems.add('no manifests found — no shard reported');
       return ShardMergeResult(
-          problems: problems, passedTotal: 0, failedTotal: 0);
+        problems: problems,
+        passedTotal: 0,
+        failedTotal: 0,
+      );
     }
     _collectShardProblems(manifests, problems);
     if (manifests.isNotEmpty) {
@@ -241,8 +241,10 @@ class ShardManifestMerger {
     final total = manifests.first.total;
     for (final m in manifests) {
       if (m.total != total) {
-        problems.add('shard ${m.shard}: total=${m.total} disagrees with '
-            'the other manifests (total=$total)');
+        problems.add(
+          'shard ${m.shard}: total=${m.total} disagrees with '
+          'the other manifests (total=$total)',
+        );
       }
     }
     if (manifests.length != total) {
@@ -251,8 +253,10 @@ class ShardManifestMerger {
         for (var i = 0; i < total; i++)
           if (!seen.contains(i)) 'shard $i',
       ];
-      problems.add('expected $total shard manifests, found '
-          '${manifests.length} — missing shard manifests: $missingShards');
+      problems.add(
+        'expected $total shard manifests, found '
+        '${manifests.length} — missing shard manifests: $missingShards',
+      );
     }
     final seen = <int, int>{};
     for (final m in manifests) {
@@ -272,11 +276,15 @@ class ShardManifestMerger {
   ) {
     for (final m in manifests) {
       if (m.success != true) {
-        problems.add('shard ${m.shard} failed (success=false, '
-            'passed=${m.passed}, failed=${m.failed})');
+        problems.add(
+          'shard ${m.shard} failed (success=false, '
+          'passed=${m.passed}, failed=${m.failed})',
+        );
       } else if (m.failed > 0) {
-        problems.add('shard ${m.shard} reports failed=${m.failed} '
-            'despite success=true');
+        problems.add(
+          'shard ${m.shard} reports failed=${m.failed} '
+          'despite success=true',
+        );
       }
     }
   }
@@ -314,12 +322,16 @@ class ShardManifestMerger {
         if (!expected.containsKey(file)) file,
     ];
     if (missing.isNotEmpty) {
-      problems.add('planned-file partition is missing files never covered '
-          'by any shard: $missing');
+      problems.add(
+        'planned-file partition is missing files never covered '
+        'by any shard: $missing',
+      );
     }
     if (duplicated.isNotEmpty) {
-      problems.add('duplicate planned entries (a file may not run twice): '
-          '$duplicated');
+      problems.add(
+        'duplicate planned entries (a file may not run twice): '
+        '$duplicated',
+      );
     }
     if (unexpected.isNotEmpty) {
       problems.add('planned files not present in run_all.json: $unexpected');

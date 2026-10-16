@@ -17,15 +17,18 @@ Directory? _existingDir(String path) {
 }
 
 /// GETs `content/{suffix}` with the resolved config's auth headers.
-SyncHttpResponse _contentGet(_Conf config, String suffix) =>
-    SyncHttpClient.get('${config.baseUrl}/content/$suffix',
-        headers: config.headers);
+SyncHttpResponse _contentGet(_Conf config, String suffix) => SyncHttpClient.get(
+  '${config.baseUrl}/content/$suffix',
+  headers: config.headers,
+);
 
 /// GETs one page by id (Java `contentById`, v2-aware): v2
 /// `pages/{id}?body-format=storage`, v1 `content/{id}?expand=…`.
 SyncHttpResponse _pageByIdResponse(_Conf config, String id) => _isApiV2(config)
-    ? SyncHttpClient.get('${_baseUrlV2(config)}/pages/$id?body-format=storage',
-        headers: config.headers)
+    ? SyncHttpClient.get(
+        '${_baseUrlV2(config)}/pages/$id?body-format=storage',
+        headers: config.headers,
+      )
     : _contentGet(config, '$id?expand=$_contentExpand');
 
 /// GETs the child page list of [id] (Java `getChildrenOfContentById`,
@@ -36,7 +39,8 @@ SyncHttpResponse _childrenResponse(_Conf config, String id) => _isApiV2(config)
     ? SyncHttpClient.get(
         '${_baseUrlV2(config)}/pages?parent-id=$id'
         '&limit=100&body-format=storage',
-        headers: config.headers)
+        headers: config.headers,
+      )
     : _contentGet(config, '$id/child/page?limit=100&expand=$_contentExpand');
 
 /// The attachment-listing URL of page [id] (Java `getContentAttachments`,
@@ -77,20 +81,19 @@ Map<String, dynamic> _contentPayload({
   required String body,
   required String space,
   Map<String, dynamic>? version,
-}) =>
-    {
-      if (id != null) 'id': id,
-      'type': 'page',
-      'title': title,
-      'ancestors': [
-        {'id': parentId},
-      ],
-      'space': {'key': space},
-      if (version != null) 'version': version,
-      'body': {
-        'storage': {'value': body, 'representation': 'storage'},
-      },
-    };
+}) => {
+  if (id != null) 'id': id,
+  'type': 'page',
+  'title': title,
+  'ancestors': [
+    {'id': parentId},
+  ],
+  'space': {'key': space},
+  if (version != null) 'version': version,
+  'body': {
+    'storage': {'value': body, 'representation': 'storage'},
+  },
+};
 
 /// Builds the v2 page creation payload (Java `createPage` v2 branch):
 /// numeric `spaceId`, explicit `current` status, and the storage body
@@ -102,14 +105,13 @@ Map<String, dynamic> _pagePayloadV2(
   String title,
   String parentId,
   String body,
-) =>
-    {
-      'spaceId': spaceId,
-      'status': 'current',
-      'title': title,
-      if (parentId.isNotEmpty) 'parentId': parentId,
-      'body': {'representation': 'storage', 'value': body},
-    };
+) => {
+  'spaceId': spaceId,
+  'status': 'current',
+  'title': title,
+  if (parentId.isNotEmpty) 'parentId': parentId,
+  'body': {'representation': 'storage', 'value': body},
+};
 
 /// Builds the v2 page update payload (Java `updatePage` v2 branch): no
 /// ancestors/space, explicit `current` status, and the bumped version
@@ -120,14 +122,13 @@ Map<String, dynamic> _updatePayloadV2(
   String body,
   int version,
   String historyComment,
-) =>
-    {
-      'id': contentId,
-      'status': 'current',
-      'title': title,
-      'body': {'representation': 'storage', 'value': body},
-      'version': {'number': version, 'message': historyComment},
-    };
+) => {
+  'id': contentId,
+  'status': 'current',
+  'title': title,
+  'body': {'representation': 'storage', 'value': body},
+  'version': {'number': version, 'message': historyComment},
+};
 
 /// The syncErr message of a failed v2 space resolution (Java
 /// `spaceIdFromKey` IOException text).

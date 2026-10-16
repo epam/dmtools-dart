@@ -62,9 +62,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Gemini API base path.
   /// Key: `GEMINI_BASE_PATH`, default: generativelanguage endpoint.
   String getGeminiBasePath() => getValueWithDefault(
-        'GEMINI_BASE_PATH',
-        'https://generativelanguage.googleapis.com/v1beta/models',
-      );
+    'GEMINI_BASE_PATH',
+    'https://generativelanguage.googleapis.com/v1beta/models',
+  );
 
   /// Whether Gemini Vertex AI mode is enabled.
   /// Key: `GEMINI_VERTEX_ENABLED`, default: false.
@@ -138,9 +138,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Anthropic API base path.
   /// Key: `ANTHROPIC_BASE_PATH`, default: messages endpoint.
   String getAnthropicBasePath() => getValueWithDefault(
-        'ANTHROPIC_BASE_PATH',
-        'https://api.anthropic.com/v1/messages',
-      );
+    'ANTHROPIC_BASE_PATH',
+    'https://api.anthropic.com/v1/messages',
+  );
 
   /// Anthropic model name. Key: `ANTHROPIC_MODEL`.
   String? getAnthropicModel() => getValue('ANTHROPIC_MODEL');
@@ -240,9 +240,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// OpenAI API base path.
   /// Key: `OPENAI_BASE_PATH`, default: chat completions endpoint.
   String getOpenAIBasePath() => getValueWithDefault(
-        'OPENAI_BASE_PATH',
-        'https://api.openai.com/v1/chat/completions',
-      );
+    'OPENAI_BASE_PATH',
+    'https://api.openai.com/v1/chat/completions',
+  );
 
   /// OpenAI model name. Key: `OPENAI_MODEL`.
   String? getOpenAIModel() => getValue('OPENAI_MODEL');
@@ -272,9 +272,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// OpenAI max-tokens request parameter name.
   /// Key: `OPENAI_MAX_TOKENS_PARAM_NAME`, default: `max_completion_tokens`.
   String getOpenAIMaxTokensParamName() => getValueWithDefault(
-        'OPENAI_MAX_TOKENS_PARAM_NAME',
-        'max_completion_tokens',
-      );
+    'OPENAI_MAX_TOKENS_PARAM_NAME',
+    'max_completion_tokens',
+  );
 
   // --- JSAI ---
 
@@ -335,8 +335,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Dynamic key: `TICKET_FIELDS_CHANGED_DIVIDER_<FIELD>`, falls back to
   /// `TICKET_FIELDS_CHANGED_DIVIDER_DEFAULT`, then 1.0. THROWS on invalid.
   double getTicketFieldsChangedDivider(String fieldName) {
-    final v =
-        getValue('TICKET_FIELDS_CHANGED_DIVIDER_${fieldName.toUpperCase()}');
+    final v = getValue(
+      'TICKET_FIELDS_CHANGED_DIVIDER_${fieldName.toUpperCase()}',
+    );
     if (v != null) return double.parse(v);
     final def = getValue('TICKET_FIELDS_CHANGED_DIVIDER_DEFAULT');
     if (def != null && def.isNotEmpty) return double.parse(def);

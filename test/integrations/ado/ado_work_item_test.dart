@@ -14,6 +14,7 @@ void main() {
   updateWorkItemTests();
   getWorkItemsTests();
   listWorkItemsTests();
+  _listWorkItemsQueryTests();
   getWorkItemTypesTests();
   getWorkItemRevisionsTests();
   getWorkItemCommentsTests();
@@ -109,7 +110,11 @@ void listWorkItemsTests() {
       expect(calls.last.queryParameters['ids'], '1,2');
       expect(calls.last.queryParameters[r'$expand'], 'relations');
     });
+  });
+}
 
+void _listWorkItemsQueryTests() {
+  group('list work items WIQL handling', () {
     test('requests explicit fields instead of \$expand when given', () async {
       final f = mockAdo(_wiqlRouter);
       await f.client

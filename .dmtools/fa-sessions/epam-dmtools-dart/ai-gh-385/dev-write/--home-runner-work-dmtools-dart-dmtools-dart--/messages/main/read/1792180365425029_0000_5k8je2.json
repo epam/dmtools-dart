@@ -1,0 +1,1 @@
+{"id":"1792180365425029_0000_5k8je2","fromId":"main","toId":"main","text":"[scheduled] Check bash job sh-14-hn9wago541i8kkad (full dart test --coverage run for PR #416 rework). Then rerun `crap4dart check --all` (PATH includes ~/.pub-cache/bin) to confirm test_coverage passes, and write outputs/response.md with the ledger.","sentAt":"2026-10-16T19:55:45.428052Z","hops":0}

@@ -143,12 +143,15 @@ void _plannerRealListTests() {
       return [for (final f in jobParams['testFiles'] as List) f as String];
     }
 
-    test('partitions exactly (92 entries, N=4)', () {
+    test('partitions exactly (the real run_all.json list, N=4)', () {
       final testFiles = realFiles();
       if (testFiles == null) {
         return; // Submodule not checked out — synthetic cases cover the rest.
       }
-      expect(testFiles, hasLength(92));
+      // The upstream suite evolves (was 92 entries at the 09-30 pin, 134 at
+      // the 10-15 pin) — derive the expectations from the list itself; the
+      // invariants that matter are exact partitioning and balanced shards.
+      expect(testFiles, isNotEmpty);
       final shards = [
         for (var i = 0; i < 4; i++) ShardPlanner.split(testFiles, i, 4),
       ];
@@ -159,7 +162,14 @@ void _plannerRealListTests() {
       expect(union.length, testFiles.length,
           reason: 'no file may be lost or duplicated by the split');
       expect([...union]..sort(), [...testFiles]..sort());
-      expect(shards.map((s) => s.length), everyElement(23));
+      final base = testFiles.length ~/ 4;
+      final remainder = testFiles.length % 4;
+      expect(
+        shards.map((s) => s.length),
+        everyElement(anyOf(base, base + 1)),
+        reason: 'shards stay balanced (remainder spread one each)',
+      );
+      expect(union.length, base * 4 + remainder);
     });
 
     test('split accepts every N in {1..len+}', () {

@@ -630,6 +630,10 @@ class FixtureTree {
       'js/unit-tests/testRunner.js',
       'js/config.js',
       'js/common/scm.js',
+      // Upstream testRunner pre-loads machineNotice as a base module
+      // (added with the network guard, 2026-10) — the minimal tree must
+      // carry everything the preload reads.
+      'js/common/machineNotice.js',
       'js/configLoader.js',
     ]) {
       final src = File('$agentsPath/$rel');

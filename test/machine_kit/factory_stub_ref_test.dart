@@ -11,9 +11,11 @@
 ///   with no re-pin ceremony per consumer (the 2026-10-04 kicker outages
 ///   (#13/#14) took ~1h to propagate through three manual re-pin PRs).
 /// - Agent code and the dmtools CLI still resolve from RELEASES at run time
-///   (vars.AGENTS_VERSION / vars.DMTOOLS_VERSION, 'latest' defaults) — the
-///   `agents` submodule gitlink rides `factory_ref` as the ENGINE pin and
-///   stays an immutable SHA (uses-ref ≠ factory_ref by design).
+///   (vars.AGENTS_VERSION / vars.DMTOOLS_VERSION, 'latest' defaults).
+///   2026-10-15: the `agents` submodule is removed — integration tests
+///   fetch dmtools-agents MAIN via tool/fetch_agents.sh (no engine pin);
+///   factory_ref is a plain literal (provenance only, the factory runs
+///   from agents-rel-* releases).
 /// - Trade-off accepted by the owner: awf main is load-bearing for all
 ///   factories; awf pushes stay review-gated.
 ///
@@ -168,16 +170,16 @@ void _mergeTriggerPin() {
 }
 
 /// ai-teammate pins uses: to the factory home (dmtools-agentic-workflows,
-/// immutable SHA) AND passes the agents submodule gitlink as factory_ref —
-/// the engine pin. The factory cannot see its own uses: ref, so the stub
-/// hands it the engine ref explicitly.
+/// immutable SHA) AND passes a factory_ref (the engine ref) — the factory
+/// cannot see its own uses: ref, so the stub hands it the ref explicitly.
+/// 2026-10-15: the agents submodule is GONE — the integration surface
+/// fetches dmtools-agents from main (tool/fetch_agents.sh), and factory_ref
+/// is a plain literal (provenance for the factory's FACTORY_REF env; the
+/// factory resolves the engine from agents-rel-* releases, never a tree
+/// checkout — owner mandate 2026-10-03), so there is no lockstep duty left
+/// to enforce here.
 void _teammateLockstepPin() {
-  test(
-      'pins uses: to the factory home SHA + factory_ref to the engine submodule',
-      () {
-    final sha = _submodulePin();
-    expect(sha, matches(RegExp(r'^[0-9a-f]{40}$')),
-        reason: 'gitlink must be a full SHA');
+  test('pins uses: to the factory home SHA + passes a factory_ref literal', () {
     final yml = File(_teammateStub).readAsStringSync();
     final match = _agenticUsesRe.firstMatch(yml);
     expect(match, isNotNull,
@@ -193,7 +195,7 @@ void _teammateLockstepPin() {
       reason: 'the factory home must track main '
           '(got ${match.group(2)}) — always-latest (owner 2026-10-04)',
     );
-    final refLine = RegExp(r'factory_ref:\s*([0-9a-f]{40})').firstMatch(yml);
+    final refLine = RegExp(r'factory_ref:\s*(\S+)').firstMatch(yml);
     expect(
       refLine,
       isNotNull,
@@ -202,9 +204,8 @@ void _teammateLockstepPin() {
     );
     expect(
       refLine!.group(1),
-      sha,
-      reason: 'factory_ref must equal the agents submodule gitlink — '
-          'engine and factory must execute the same commit',
+      isNot(contains('${'{'}')),
+      reason: 'factory_ref must be a literal ref, not an expression',
     );
   });
 }
@@ -214,8 +215,7 @@ void _teammateLockstepPin() {
 /// SKIPPED until dmtools-agents#591 (retire legacy copies) merges and
 /// this stub's submodule bump lands past it.
 void _teammateFactoryExists() {
-  test('the engine submodule carries no factory-teammate copy',
-      skip: 'pending dmtools-agents#591 + submodule bump', () {
+  test('the fetched agents tree carries no factory-teammate copy', () {
     expect(
       File('agents/$_teammateFactoryPath').existsSync(),
       isFalse,
@@ -250,16 +250,6 @@ Set<String> _mappedSecrets(String yml) {
     r'^\s{6}([A-Z_]+):',
     multiLine: true,
   ).allMatches(secretsBlock).map((m) => m.group(1)!).toSet();
-}
-
-/// The `agents` gitlink at HEAD (the reviewed factory commit).
-String _submodulePin() {
-  final result = Process.runSync('git', ['ls-tree', 'HEAD', 'agents']);
-  expect(result.exitCode, 0, reason: 'git ls-tree failed inside the repo');
-  final parts = result.stdout.toString().trim().split(RegExp(r'\s+'));
-  expect(parts, hasLength(greaterThanOrEqualTo(3)));
-  expect(parts[1], 'commit', reason: 'agents must stay a submodule');
-  return parts[2];
 }
 
 /// The `secrets:` names the factory-teammate.yml declares. The workflow

@@ -111,8 +111,23 @@ void wiringTests() {
     });
 
     test('workflow invokes the script and defines the cap', () {
-      final yml = File('agents/.github/workflows/factory-teammate.yml')
-          .readAsStringSync();
+      // 2026-10-15: the factory teammate workflow moved to
+      // dmtools-agentic-workflows. When a pinned submodule still vendors it
+      // the wiring invariants run; on the new tree the dart tree owns only
+      // the delegation (content invariants re-homed to awf).
+      final workflowFile =
+          File('agents/.github/workflows/factory-teammate.yml');
+      if (!workflowFile.existsSync()) {
+        final stub =
+            File('agents/.github/workflows/ai-teammate.yml').readAsStringSync();
+        expect(
+          stub.contains('factory-teammate.yml'),
+          isTrue,
+          reason: 'the agents stub must delegate to the awf factory workflow',
+        );
+        return;
+      }
+      final yml = workflowFile.readAsStringSync();
       expect(yml, contains('review-verdict.sh'));
       expect(yml, contains('MAX_AUTO_REWORK_ROUNDS'));
       expect(yml, contains('needs-human'));

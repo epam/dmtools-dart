@@ -541,7 +541,11 @@ void threadSummaryTests() {
 /// an unbalanced query made GitHub reject the call with a syntax error that
 /// the `|| true` swallow turned into an always-empty thread summary).
 void escalationThreadSummaryWiringTests() {
-  group('machine wiring: escalation thread summary', () {
+  group('machine wiring: escalation thread summary',
+      skip: _factoryWorkflowPresent()
+          ? null
+          : 'factory teammate workflow moved to dmtools-agentic-workflows; '
+              'wiring invariants re-homed (2026-10-15)', () {
     test('the embedded reviewThreads GraphQL query is balanced', () {
       final query = _workflowGraphqlQuery();
       expect(
@@ -576,8 +580,9 @@ void escalationThreadSummaryWiringTests() {
     });
 
     test('a failed thread fetch is surfaced as a warning, not swallowed', () {
-      final yml = File('agents/.github/workflows/factory-teammate.yml')
-          .readAsStringSync();
+      _skipWhenFactoryMoved();
+      if (!_factoryWorkflowPresent()) return;
+      final yml = _factoryWorkflowFile.readAsStringSync();
       expect(yml, contains('reviewThreads fetch failed'),
           reason: 'the error JSON of a failed gh api graphql call parses to '
               'zero threads — without an annotation the empty summary looks '
@@ -586,11 +591,26 @@ void escalationThreadSummaryWiringTests() {
   });
 }
 
+/// 2026-10-15: the factory teammate workflow moved to
+/// dmtools-agentic-workflows. Wiring tests that read it skip on the new
+/// tree (invariants re-homed there) and still run on older pins.
+final _factoryWorkflowFile =
+    File('agents/.github/workflows/factory-teammate.yml');
+bool _factoryWorkflowPresent() => _factoryWorkflowFile.existsSync();
+
+void _skipWhenFactoryMoved() {
+  if (!_factoryWorkflowPresent()) {
+    markTestSkipped('factory teammate workflow moved to '
+        'dmtools-agentic-workflows; wiring invariants re-homed (2026-10-15)');
+  }
+}
+
 /// Extracts the escalation path's `-f query='…'` GraphQL string from the
 /// workflow (there is exactly one).
 String _workflowGraphqlQuery() {
-  final yml =
-      File('agents/.github/workflows/factory-teammate.yml').readAsStringSync();
+  _skipWhenFactoryMoved();
+  if (!_factoryWorkflowPresent()) return '';
+  final yml = _factoryWorkflowFile.readAsStringSync();
   final match = RegExp(r"-f query='([^']+)'").firstMatch(yml);
   expect(match, isNotNull,
       reason: 'no -f query=… GraphQL string in factory/teammate.yml');
@@ -603,22 +623,23 @@ String _workflowGraphqlQuery() {
 /// label must be added before the counter).
 void verdictLabelWiringTests() {
   group('machine wiring: bounded-verdict labels', () {
-    test('quality job checks out the agents submodule (wiring tests need it)',
-        () {
+    test('quality job fetches the agents tree (wiring tests need it)', () {
       final yml = File('.github/workflows/quality.yml').readAsStringSync();
+      // 2026-10-15: the submodule is gone — the machine-wiring tests read
+      // the tree fetched by tool/fetch_agents.sh (dmtools-agents MAIN).
       expect(
         yml.split('agents-suite:').first,
-        contains('submodules: true'),
+        contains('tool/fetch_agents.sh'),
         reason: 'the machine-wiring tests resolve the runner parents under '
-            'agents/ (a git submodule) — the dart test job must check it '
-            'out, or parent-config resolution dies with '
-            'PathNotFoundException (observed on CI, gh-71 rework)',
+            'agents/ (fetched from main) — the dart test job must fetch it, '
+            'or parent-config resolution dies with PathNotFoundException',
       );
     });
 
     test('dynamic verdict labels are created before they are added', () {
-      final yml = File('agents/.github/workflows/factory-teammate.yml')
-          .readAsStringSync();
+      _skipWhenFactoryMoved();
+      if (!_factoryWorkflowPresent()) return;
+      final yml = _factoryWorkflowFile.readAsStringSync();
       // gh issue edit --add-label hard-fails on an unknown label ("not
       // found") — and the step runs under bash -e, so a missing label
       // definition would abort the verdict transition mid-way (the loop
@@ -638,8 +659,9 @@ void verdictLabelWiringTests() {
     test(
         'agent:rework is labeled before the round counter '
         '(supersession-safe order)', () {
-      final yml = File('agents/.github/workflows/factory-teammate.yml')
-          .readAsStringSync();
+      _skipWhenFactoryMoved();
+      if (!_factoryWorkflowPresent()) return;
+      final yml = _factoryWorkflowFile.readAsStringSync();
       final rework = yml.indexOf('--add-label "agent:rework"');
       final round = yml.indexOf('--add-label "rework-round-');
       expect(rework, greaterThanOrEqualTo(0));

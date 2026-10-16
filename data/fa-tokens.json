@@ -1193,5 +1193,16 @@
       "cacheRead": 349532,
       "model": "claude-haiku-5.5"
     }
+  ],
+  "issue-395": [
+    {
+      "leg": "dev",
+      "at": "2026-10-16T19:21:24Z",
+      "prompt": 61403,
+      "completion": 15908,
+      "total": 77311,
+      "cacheRead": 1399447,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

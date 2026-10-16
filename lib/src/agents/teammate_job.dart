@@ -16,7 +16,6 @@ library;
 import '../config/property_reader.dart';
 import '../js/job_runner.dart';
 import '../js/sync_tool_dispatcher.dart';
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -28,8 +27,7 @@ import 'cli_agent_params.dart';
 /// Fetches the hydrated tickets for [inputJql]: each ticket is a raw tracker
 /// JSON map with at least `key` and `fields` (comments included).
 typedef TeammateTicketSource = Future<List<Map<String, dynamic>>> Function(
-  String inputJql,
-);
+    String inputJql);
 
 /// Posts a trace/status comment to [key] (Jira comment parity).
 typedef TeammateCommentPoster = Future<void> Function(String key, String body);
@@ -96,8 +94,7 @@ class TeammateJob {
       return _runSingle(prepared);
     }
     _sourceIsGithub = looksLikeGithubQuery(inputJql);
-    final source =
-        ticketSource ??
+    final source = ticketSource ??
         (_sourceIsGithub ? githubIssueTicketSource : jiraTicketSource);
     final tickets = await source(inputJql);
     return _runTickets(tickets);
@@ -108,8 +105,7 @@ class TeammateJob {
   /// tickets are attempted, but if any `preCliJSAction` threw an uncaught
   /// exception the overall job fails so the CI step actually goes red.
   Future<Map<String, dynamic>> _runTickets(
-    List<Map<String, dynamic>> tickets,
-  ) async {
+      List<Map<String, dynamic>> tickets) async {
     final results = <Map<String, dynamic>>[];
     final unexpectedSetupFailures = <String>[];
     for (final ticket in tickets) {
@@ -201,7 +197,7 @@ class TeammateJob {
     return {
       'success': result['success'] == true,
       'results': [
-        {'ticket': key, 'success': result['success'] == true, ...result},
+        {'ticket': key, 'success': result['success'] == true, ...result}
       ],
     };
   }
@@ -223,12 +219,10 @@ class TeammateJob {
     final content = file.readAsStringSync().trim();
     if (content.isEmpty) return null;
     final newline = content.indexOf('\n');
-    final summary = newline < 0
-        ? content
-        : content.substring(0, newline).trim();
-    final description = newline < 0
-        ? ''
-        : content.substring(newline + 1).trim();
+    final summary =
+        newline < 0 ? content : content.substring(0, newline).trim();
+    final description =
+        newline < 0 ? '' : content.substring(newline + 1).trim();
     return {
       'key': _contextId(),
       'fields': {'summary': summary, 'description': description},
@@ -289,15 +283,13 @@ class TeammateJob {
   Future<void> _postTraceComment(String key) async {
     final ciRunUrl = (params['ciRunUrl'] as String?)?.trim() ?? '';
     if (ciRunUrl.isEmpty || !_shouldPostComments) return;
-    final poster =
-        commentPoster ??
+    final poster = commentPoster ??
         (_sourceIsGithub ? _githubCommentPoster : _jiraCommentPoster);
     try {
       await poster(
-        key,
-        '${_agentNamePrefix()}'
-        'Processing started. CI Run: $ciRunUrl',
-      );
+          key,
+          '${_agentNamePrefix()}'
+          'Processing started. CI Run: $ciRunUrl');
     } catch (_) {
       // Advisory comment only — processing continues (Java parity).
     }
@@ -450,9 +442,9 @@ class _TicketOutcome {
   });
 
   _TicketOutcome.resultOnly(this.result)
-    : key = null,
-      setupThrew = false,
-      postJsError = null;
+      : key = null,
+        setupThrew = false,
+        postJsError = null;
 
   /// The per-ticket result item merged into the job's `results` list.
   final Map<String, dynamic> result;

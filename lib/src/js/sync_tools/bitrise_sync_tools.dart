@@ -30,12 +30,12 @@ class BitriseSyncTools {
 
   /// Tool executors; config is resolved inside each handler.
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-    'bitrise_list_builds': _listBuilds,
-    'bitrise_trigger_build': _triggerBuild,
-    'bitrise_abort_build': _abortBuild,
-    'bitrise_list_build_artifacts': _listBuildArtifacts,
-    'bitrise_get_build_artifact': _getBuildArtifact,
-  };
+        'bitrise_list_builds': _listBuilds,
+        'bitrise_trigger_build': _triggerBuild,
+        'bitrise_abort_build': _abortBuild,
+        'bitrise_list_build_artifacts': _listBuildArtifacts,
+        'bitrise_get_build_artifact': _getBuildArtifact,
+      };
 
   /// Dispatches a Bitrise tool call, mirroring the dispatcher's errors.
   String dispatch(String toolName, Map<String, dynamic> args) {
@@ -65,15 +65,13 @@ class BitriseSyncTools {
   /// `bitrise_list_builds` — GET `apps/{appSlug}/builds` with the optional
   /// workflow/branch/status/limit/next filters (Java `listBuilds`).
   String _listBuilds(Map<String, dynamic> args) => syncWithConfig(
-    _config(),
-    _notConfiguredError,
-    (config) => syncBodyOrError(
-      SyncHttpClient.get(
-        '${_buildsPath(config, args)}${_buildListQuery(args)}',
-        headers: config.headers,
-      ),
-    ),
-  );
+        _config(),
+        _notConfiguredError,
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          '${_buildsPath(config, args)}${_buildListQuery(args)}',
+          headers: config.headers,
+        )),
+      );
 
   /// `bitrise_trigger_build` — POST `apps/{appSlug}/builds` with
   /// `build_params` + `hook_info` (Java `triggerBuild`); guarded.
@@ -81,16 +79,14 @@ class BitriseSyncTools {
       syncWithConfig(_config(), _notConfiguredError, (config) {
         final guardError = _writesAllowed('bitrise_trigger_build');
         if (guardError != null) return guardError;
-        return syncBodyOrError(
-          SyncHttpClient.post(
-            _buildsPath(config, args),
-            headers: config.headers,
-            body: jsonEncode({
-              'build_params': _buildParams(args),
-              'hook_info': {'type': 'bitrise'},
-            }),
-          ),
-        );
+        return syncBodyOrError(SyncHttpClient.post(
+          _buildsPath(config, args),
+          headers: config.headers,
+          body: jsonEncode({
+            'build_params': _buildParams(args),
+            'hook_info': {'type': 'bitrise'},
+          }),
+        ));
       });
 
   /// `bitrise_abort_build` — POST `apps/{appSlug}/builds/{buildSlug}/abort`
@@ -99,37 +95,34 @@ class BitriseSyncTools {
       syncWithConfig(_config(), _notConfiguredError, (config) {
         final guardError = _writesAllowed('bitrise_abort_build');
         if (guardError != null) return guardError;
-        return syncBodyOrError(
-          SyncHttpClient.post(
-            '${_buildsPath(config, args)}/${_slug(args['buildSlug'])}/abort',
-            headers: config.headers,
-            body: jsonEncode(_abortBody(args)),
-          ),
-        );
+        return syncBodyOrError(SyncHttpClient.post(
+          '${_buildsPath(config, args)}/${_slug(args['buildSlug'])}/abort',
+          headers: config.headers,
+          body: jsonEncode(_abortBody(args)),
+        ));
       });
 
   /// `bitrise_list_build_artifacts` — GET
   /// `apps/{appSlug}/builds/{buildSlug}/artifacts` (Java `listBuildArtifacts`).
   String _listBuildArtifacts(Map<String, dynamic> args) => syncWithConfig(
-    _config(),
-    _notConfiguredError,
-    (config) => syncBodyOrError(
-      SyncHttpClient.get(_artifactsPath(config, args), headers: config.headers),
-    ),
-  );
+        _config(),
+        _notConfiguredError,
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          _artifactsPath(config, args),
+          headers: config.headers,
+        )),
+      );
 
   /// `bitrise_get_build_artifact` — GET
   /// `apps/{a}/builds/{b}/artifacts/{artifactSlug}` (Java `getBuildArtifact`).
   String _getBuildArtifact(Map<String, dynamic> args) => syncWithConfig(
-    _config(),
-    _notConfiguredError,
-    (config) => syncBodyOrError(
-      SyncHttpClient.get(
-        '${_artifactsPath(config, args)}/${_slug(args['artifactSlug'])}',
-        headers: config.headers,
-      ),
-    ),
-  );
+        _config(),
+        _notConfiguredError,
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          '${_artifactsPath(config, args)}/${_slug(args['artifactSlug'])}',
+          headers: config.headers,
+        )),
+      );
 
   /// Builds the `list_builds` query string from optional filters.
   String _buildListQuery(Map<String, dynamic> args) {
@@ -198,8 +191,8 @@ class BitriseSyncTools {
   /// Returns the guard's error JSON for [operation], or `null` when writes
   /// are enabled — port of the async client's `_ensureWritesAllowed`.
   String? _writesAllowed(String operation) {
-    final flag = BitriseClient.environment['BITRISE_ALLOW_WRITES']
-        ?.toLowerCase();
+    final flag =
+        BitriseClient.environment['BITRISE_ALLOW_WRITES']?.toLowerCase();
     final allowed = flag == '1' || flag == 'true' || flag == 'yes';
     if (allowed) return null;
     return syncErr(

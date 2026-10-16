@@ -11,7 +11,7 @@ import 'sync_request_helpers.dart';
 /// Both comment listings of one PR.
 typedef PrCommentPages = ({
   List<Map<String, dynamic>> inline,
-  List<Map<String, dynamic>> issue,
+  List<Map<String, dynamic>> issue
 });
 
 /// Fetches all pages of a comment listing endpoint (100 per page).
@@ -42,17 +42,13 @@ List<Map<String, dynamic>> fetchCommentPages({
   bool tolerateNotFound = false,
 }) {
   final out = <Map<String, dynamic>>[];
-  for (var page = 1; ; page++) {
-    final resp = SyncHttpClient.get(
-      '$urlBase?per_page=100&page=$page',
-      headers: headers,
-    );
+  for (var page = 1;; page++) {
+    final resp = SyncHttpClient.get('$urlBase?per_page=100&page=$page',
+        headers: headers);
     if (!resp.isOk) {
       if (tolerateNotFound && resp.statusCode == 404) break;
-      throw StateError(
-        'HTTP ${resp.statusCode} fetching comments '
-        '(page $page): ${resp.body}',
-      );
+      throw StateError('HTTP ${resp.statusCode} fetching comments '
+          '(page $page): ${resp.body}');
     }
     final decoded = syncTryDecode(resp.body);
     if (decoded is! List) break;
@@ -74,14 +70,12 @@ PrCommentPages prCommentPages({
   required Map<String, String> headers,
   required String inlineUrl,
   required String issueUrl,
-}) => (
-  inline: fetchCommentPages(
-    headers: headers,
-    urlBase: inlineUrl,
-    tolerateNotFound: true,
-  ),
-  issue: fetchCommentPages(headers: headers, urlBase: issueUrl),
-);
+}) =>
+    (
+      inline: fetchCommentPages(
+          headers: headers, urlBase: inlineUrl, tolerateNotFound: true),
+      issue: fetchCommentPages(headers: headers, urlBase: issueUrl),
+    );
 
 /// Both PR comment listings, or a sync tool error JSON on a non-OK page.
 ///
@@ -96,10 +90,7 @@ PrCommentPages prCommentPages({
     return (
       error: null,
       pages: prCommentPages(
-        headers: headers,
-        inlineUrl: inlineUrl,
-        issueUrl: issueUrl,
-      ),
+          headers: headers, inlineUrl: inlineUrl, issueUrl: issueUrl),
     );
   } on StateError catch (e) {
     return (error: syncErr(e.message), pages: null);
@@ -132,8 +123,8 @@ List<Map<String, dynamic>> groupConversations(
 
 /// Builds one `GitHubConversation.toJSON()` object for [root].
 Map<String, dynamic> _conversation(Map<String, dynamic> root) => {
-  'path': root['path'],
-  'rootComment': root,
-  'replies': <dynamic>[],
-  'totalComments': 1,
-};
+      'path': root['path'],
+      'rootComment': root,
+      'replies': <dynamic>[],
+      'totalComments': 1,
+    };

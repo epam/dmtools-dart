@@ -94,52 +94,47 @@ class SyncRetryPolicy {
   /// Java `RetryPolicyConfig.forJiraCloud`: Atlassian-recommended Cloud
   /// tuning — more attempts, longer cap, wider jitter.
   factory SyncRetryPolicy.forJiraCloud([Random? random]) => SyncRetryPolicy(
-    maxAttempts: 7,
-    baseDelayMs: 2000,
-    maxDelayMs: 120000,
-    backoffMultiplier: 2.0,
-    jitterFactor: 0.4,
-    random: random ?? Random(),
-  );
+        maxAttempts: 7,
+        baseDelayMs: 2000,
+        maxDelayMs: 120000,
+        backoffMultiplier: 2.0,
+        jitterFactor: 0.4,
+        random: random ?? Random(),
+      );
 
   /// Java `RetryPolicyConfig.fromEnvironment`; [get] resolves `JIRA_RETRY_*`
   /// values (defaults to `Platform.environment` when omitted).
-  factory SyncRetryPolicy.fromEnvironment([
-    String? Function(String key)? get,
-    Random? random,
-  ]) => SyncRetryPolicy.fromEnvMap(
-    (key) => get?.call(key) ?? Platform.environment[key],
-    random,
-  );
+  factory SyncRetryPolicy.fromEnvironment(
+          [String? Function(String key)? get, Random? random]) =>
+      SyncRetryPolicy.fromEnvMap(
+        (key) => get?.call(key) ?? Platform.environment[key],
+        random,
+      );
 
   /// Java `RetryPolicyConfig` semantics over an explicit key/value lookup.
-  factory SyncRetryPolicy.fromEnvMap(
-    String? Function(String) get, [
-    Random? random,
-  ]) => (get('JIRA_RETRY_ENABLED')?.toLowerCase() == 'false')
-      ? const SyncRetryPolicy(
-          maxAttempts: 0,
-          baseDelayMs: 0,
-          maxDelayMs: 0,
-          backoffMultiplier: 1.0,
-          jitterFactor: 0.0,
-        )
-      : SyncRetryPolicy(
-          maxAttempts: _intEnv(get, 'JIRA_RETRY_MAX_ATTEMPTS', 5),
-          baseDelayMs: _intEnv(get, 'JIRA_RETRY_BASE_DELAY_MS', 1000),
-          maxDelayMs: _intEnv(get, 'JIRA_RETRY_MAX_DELAY_MS', 60000),
-          backoffMultiplier: _doubleEnv(
-            get,
-            'JIRA_RETRY_BACKOFF_MULTIPLIER',
-            2.0,
-          ),
-          jitterFactor: _doubleEnv(get, 'JIRA_RETRY_JITTER_FACTOR', 0.3),
-          waitBeforePerform:
-              get('JIRA_WAIT_BEFORE_PERFORM')?.toLowerCase() == 'true',
-          sleepTimeRequestMs: _intEnv(get, 'SLEEP_TIME_REQUEST', 300),
-          rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(get),
-          random: random ?? Random(),
-        );
+  factory SyncRetryPolicy.fromEnvMap(String? Function(String) get,
+          [Random? random]) =>
+      (get('JIRA_RETRY_ENABLED')?.toLowerCase() == 'false')
+          ? const SyncRetryPolicy(
+              maxAttempts: 0,
+              baseDelayMs: 0,
+              maxDelayMs: 0,
+              backoffMultiplier: 1.0,
+              jitterFactor: 0.0,
+            )
+          : SyncRetryPolicy(
+              maxAttempts: _intEnv(get, 'JIRA_RETRY_MAX_ATTEMPTS', 5),
+              baseDelayMs: _intEnv(get, 'JIRA_RETRY_BASE_DELAY_MS', 1000),
+              maxDelayMs: _intEnv(get, 'JIRA_RETRY_MAX_DELAY_MS', 60000),
+              backoffMultiplier:
+                  _doubleEnv(get, 'JIRA_RETRY_BACKOFF_MULTIPLIER', 2.0),
+              jitterFactor: _doubleEnv(get, 'JIRA_RETRY_JITTER_FACTOR', 0.3),
+              waitBeforePerform:
+                  get('JIRA_WAIT_BEFORE_PERFORM')?.toLowerCase() == 'true',
+              sleepTimeRequestMs: _intEnv(get, 'SLEEP_TIME_REQUEST', 300),
+              rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(get),
+              random: random ?? Random(),
+            );
 
   /// Java `JiraClient` constructor logic: `JIRA_CLOUD=true` or an
   /// `atlassian.net` base path selects the Cloud policy, everything else
@@ -149,8 +144,7 @@ class SyncRetryPolicy {
     String? Function(String key)? get,
     Random? random,
   }) {
-    final cloud =
-        get?.call('JIRA_CLOUD')?.toLowerCase() == 'true' ||
+    final cloud = get?.call('JIRA_CLOUD')?.toLowerCase() == 'true' ||
         url.contains('atlassian.net');
     return cloud
         ? SyncRetryPolicy.forJiraCloud(random)
@@ -198,11 +192,8 @@ class SyncRetryPolicy {
   /// [rateLimitMaxWaitSeconds] instead (Java PR epam/dm.ai#624). Returns
   /// `null` when a non-rate-limit `Retry-After` above [maxRetryAfterSeconds]
   /// demands an abort (Java throws IOException).
-  int? statusDelayMs(
-    int attempt, [
-    Map<String, String> headers = const {},
-    int statusCode = 0,
-  ]) {
+  int? statusDelayMs(int attempt,
+      [Map<String, String> headers = const {}, int statusCode = 0]) {
     final server = _serverDelayMs(headers, DateTime.now(), statusCode);
     if (server == null) return null; // Retry-After over the cap: abort
     if (server.ms > 0)
@@ -227,10 +218,7 @@ class SyncRetryPolicy {
   /// `X-RateLimit-Reset` does not). `(0, jittered: false)` = no server
   /// header applies — fall through to exponential backoff.
   _ServerDelay? _serverDelayMs(
-    Map<String, String> headers,
-    DateTime now,
-    int statusCode,
-  ) {
+      Map<String, String> headers, DateTime now, int statusCode) {
     final retryAfter = _header(headers, 'retry-after');
     if (retryAfter != null) {
       final seconds = int.tryParse(retryAfter);
@@ -247,9 +235,7 @@ class SyncRetryPolicy {
           // never by [maxDelayMs], never aborted, no jitter (Java parity).
           return (
             ms: min(
-              delay + _msPerSecond,
-              rateLimitMaxWaitSeconds * _msPerSecond,
-            ),
+                delay + _msPerSecond, rateLimitMaxWaitSeconds * _msPerSecond),
             jittered: false,
           );
         }
@@ -299,10 +285,8 @@ class SyncRetryPolicy {
   }
 
   static double _doubleEnv(
-    String? Function(String) get,
-    String key,
-    double fallback,
-  ) => double.tryParse(get(key) ?? '') ?? fallback;
+          String? Function(String) get, String key, double fallback) =>
+      double.tryParse(get(key) ?? '') ?? fallback;
 }
 
 /// Server-mandated delay outcome: the milliseconds to wait plus whether

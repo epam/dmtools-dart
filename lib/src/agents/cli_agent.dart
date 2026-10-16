@@ -64,8 +64,8 @@ class CliAgent {
     PropertyReader? propertyReader,
     JsJobRunner? jsRunner,
     this.failOnJsActionErrors = false,
-  }) : propertyReader = propertyReader ?? PropertyReader(),
-       jsRunner = jsRunner ?? const JsJobRunner();
+  })  : propertyReader = propertyReader ?? PropertyReader(),
+        jsRunner = jsRunner ?? const JsJobRunner();
 
   /// Parameters from the job config.
   final CliAgentParams params;
@@ -162,14 +162,8 @@ class CliAgent {
       _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
-      _executeJsAction(
-        'preJSAction',
-        params.preJSAction,
-        null,
-        null,
-        workDir,
-        skip: params.skipPreJSAction,
-      );
+      _executeJsAction('preJSAction', params.preJSAction, null, null, workDir,
+          skip: params.skipPreJSAction);
       _inputContextPath = _createInputContext(workDir);
       _executeJsAction(
         'preCliJSAction',
@@ -219,7 +213,9 @@ class CliAgent {
           scriptPath: script,
           jobParams: _buildJobParams(response, null),
           workingDirectory: workDir,
-          config: JsRunConfig(extraGlobals: {'workingDirectory': workDir}),
+          config: JsRunConfig(
+            extraGlobals: {'workingDirectory': workDir},
+          ),
         );
       } else {
         await _runShell(script, workDir, applyEnvFilters: false);
@@ -313,11 +309,9 @@ class CliAgent {
         !_isPreCliJsActionFailure(result)) {
       return;
     }
-    stderr.writeln(
-      'preCliJSAction reported failure — skipping CLI '
-      'execution and postJSAction; the JS action is responsible '
-      'for its own failure notification.',
-    );
+    stderr.writeln('preCliJSAction reported failure — skipping CLI '
+        'execution and postJSAction; the JS action is responsible '
+        'for its own failure notification.');
     _preCliJsActionSkipped = true;
   }
 
@@ -341,10 +335,8 @@ class CliAgent {
         '${_ticketKeySuffix()}: $e',
       );
     }
-    stderr.writeln(
-      'preCliJSAction threw, treating as setup failure '
-      '(skipping CLI execution and postJSAction): $e',
-    );
+    stderr.writeln('preCliJSAction threw, treating as setup failure '
+        '(skipping CLI execution and postJSAction): $e');
     _preCliSetupThrew = true;
     _preCliJsActionSkipped = true;
     return null;
@@ -481,24 +473,26 @@ class CliAgent {
   void Function()? _buildTimerAction(String workDir, LiveCliOutput live) {
     final action = params.timerJSAction;
     if (action == null || action.trim().isEmpty) return null;
-    return () => _runContextJsAction('timerJSAction', action, workDir, {
-      'currentCliOutput': live.value,
-    }, contextParams: _metadataContextParams());
+    return () => _runContextJsAction(
+          'timerJSAction',
+          action,
+          workDir,
+          {'currentCliOutput': live.value},
+          contextParams: _metadataContextParams(),
+        );
   }
 
   /// Builds the CLI-failure callback (Java `buildErrorHandler`).
   void Function(String)? _buildErrorHandler(
-    String workDir,
-    LiveCliOutput live,
-  ) {
+      String workDir, LiveCliOutput live) {
     final action = params.cliExecutionErrorJSAction;
     if (action == null || action.trim().isEmpty) return null;
     return (String errorMessage) => _runContextJsAction(
-      'cliExecutionErrorJSAction',
-      action,
-      workDir,
-      {'errorMessage': errorMessage, 'currentCliOutput': live.value},
-    );
+          'cliExecutionErrorJSAction',
+          action,
+          workDir,
+          {'errorMessage': errorMessage, 'currentCliOutput': live.value},
+        );
   }
 
   /// Builds the per-line stop predicate (Java `buildLineStopPredicate`).
@@ -686,8 +680,10 @@ class CliAgent {
   /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty
   /// folder is created — the ticket-agnostic behavior.
   String _createInputContext(String workDir) {
-    return TicketInputContextBuilder(workDir)
-        .build(params.contextId, ticketData: _resolvedTicketData ?? ticketData);
+    return TicketInputContextBuilder(workDir).build(
+      params.contextId,
+      ticketData: _resolvedTicketData ?? ticketData,
+    );
   }
 
   /// Resolves the ticket data for the JS `params.ticket` contract.

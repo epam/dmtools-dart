@@ -46,17 +46,11 @@ const String _consoleBootstrap = '''
 /// JS `undefined`, so `console.log(...)` calls chain as no-ops.
 void _registerConsole(QuickjsRuntime runtime, String? prefix) {
   runtime.registerHostFunction(
-    '__consoleLog',
-    (argsJson) => _printTo(stdout, argsJson, prefix),
-  );
+      '__consoleLog', (argsJson) => _printTo(stdout, argsJson, prefix));
   runtime.registerHostFunction(
-    '__consoleWarn',
-    (argsJson) => _printTo(stderr, argsJson, prefix),
-  );
+      '__consoleWarn', (argsJson) => _printTo(stderr, argsJson, prefix));
   runtime.registerHostFunction(
-    '__consoleError',
-    (argsJson) => _printTo(stderr, argsJson, prefix),
-  );
+      '__consoleError', (argsJson) => _printTo(stderr, argsJson, prefix));
   runtime.eval(_consoleBootstrap, filename: '<console>');
 }
 
@@ -77,7 +71,7 @@ String? _printTo(IOSink sink, String argsJson, String? prefix) {
   final capped = line.length <= _consoleLineLimit
       ? line
       : '${line.substring(0, _consoleLineLimit)}'
-            ' …[truncated ${line.length - _consoleLineLimit} chars]';
+          ' …[truncated ${line.length - _consoleLineLimit} chars]';
   sink.writeln(prefix == null ? capped : '$prefix$capped');
   return null;
 }

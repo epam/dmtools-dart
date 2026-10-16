@@ -30,7 +30,9 @@ class TestRailClient {
   /// failure.
   Future<Map<String, dynamic>> testConnection() async {
     try {
-      final body = await _http.get('get_user_by_email&email=${_http.username}');
+      final body = await _http.get(
+        'get_user_by_email&email=${_http.username}',
+      );
       final user = jsonDecode(body) as Map<String, dynamic>;
       return {
         'success': true,
@@ -60,7 +62,10 @@ class TestRailClient {
   /// endpoint answers with the pagination envelope (`cases` key + `_links`),
   /// so the list is collected page by page like the Java client.
   Future<List<Map<String, dynamic>>> getCases(int suiteId) async =>
-      _collectPages('get_cases/${_http.projectId}&suite_id=$suiteId', 'cases');
+      _collectPages(
+        'get_cases/${_http.projectId}&suite_id=$suiteId',
+        'cases',
+      );
 
   /// `testrail_add_result` — POST `add_result/{testId}`.
   ///
@@ -69,10 +74,11 @@ class TestRailClient {
     int testId,
     int statusId,
     String comment,
-  ) => _postForMap('add_result/$testId', {
-    'status_id': statusId,
-    'comment': comment,
-  });
+  ) =>
+      _postForMap(
+        'add_result/$testId',
+        {'status_id': statusId, 'comment': comment},
+      );
 
   /// `testrail_get_runs` — GET `get_runs/{projectId}`.
   ///
@@ -126,7 +132,8 @@ class TestRailClient {
   Future<Map<String, dynamic>> updateCase(
     int id,
     Map<String, dynamic> fields,
-  ) => _postForMap('update_case/$id', fields);
+  ) =>
+      _postForMap('update_case/$id', fields);
 
   /// `testrail_delete_case` — POST `delete_case/{id}`.
   ///
@@ -302,8 +309,7 @@ class TestRailClient {
     const basePath = 'get_projects';
     String? nextPagePath = _buildPagedPath(basePath, 250, 0);
     while (nextPagePath != null) {
-      final response =
-          _decodeMap(await _http.get(nextPagePath)) ??
+      final response = _decodeMap(await _http.get(nextPagePath)) ??
           const <String, dynamic>{};
       final projects = _asListOfMaps(response['projects']);
       if (projects.isEmpty) break;
@@ -351,9 +357,8 @@ class TestRailClient {
 
   /// Creates the fallback "Test Cases" section and returns its ID.
   Future<int> _createDefaultSection(int projectId) async {
-    final created = await _postForMap('add_section/$projectId', {
-      'name': 'Test Cases',
-    });
+    final created =
+        await _postForMap('add_section/$projectId', {'name': 'Test Cases'});
     return (created['id'] as num?)?.toInt() ?? -1;
   }
 
@@ -371,8 +376,7 @@ class TestRailClient {
     final items = <Map<String, dynamic>>[];
     String? nextPagePath = _buildPagedPath(baseApiPath, limit, 0);
     while (nextPagePath != null) {
-      final response =
-          _decodeMap(await _http.get(nextPagePath)) ??
+      final response = _decodeMap(await _http.get(nextPagePath)) ??
           const <String, dynamic>{};
       final page = _asListOfMaps(response[itemKey]);
       if (page.isEmpty) break;
@@ -449,7 +453,11 @@ class TestRailClient {
   }
 
   /// Sets [key] to the TestRail-format conversion of [value] when non-empty.
-  void _setConverted(Map<String, dynamic> caseData, String key, String? value) {
+  void _setConverted(
+    Map<String, dynamic> caseData,
+    String key,
+    String? value,
+  ) {
     if (value != null && value.isNotEmpty) {
       caseData[key] = convertMarkdownTablesToTestRailFormat(value);
     }
@@ -502,12 +510,12 @@ class TestRailClient {
 
   /// Converts one parsed step, HTML-converting its Markdown tables.
   Map<String, dynamic> _convertStep(Map<String, dynamic> input) => {
-    'content': convertMarkdownTablesToHtml(_optStr(input['content'])),
-    'expected': convertMarkdownTablesToHtml(_optStr(input['expected'])),
-    'additional_info': _optStr(input['additional_info']),
-    'refs': _optStr(input['refs']),
-    'markdown_editor_id': 1,
-  };
+        'content': convertMarkdownTablesToHtml(_optStr(input['content'])),
+        'expected': convertMarkdownTablesToHtml(_optStr(input['expected'])),
+        'additional_info': _optStr(input['additional_info']),
+        'refs': _optStr(input['refs']),
+        'markdown_editor_id': 1,
+      };
 
   /// Decodes [stepsJson], requiring a JSON array.
   List<dynamic> _tryDecodeSteps(String stepsJson) {

@@ -24,7 +24,9 @@ abstract class BearerHttpClient extends BaseHttpClient {
   }) : _token = token;
 
   @override
-  Map<String, String> get authHeaders => {'Authorization': 'Bearer $_token'};
+  Map<String, String> get authHeaders => {
+        'Authorization': 'Bearer $_token',
+      };
 
   @override
   String buildUrl(String path) => '$basePath/$path';

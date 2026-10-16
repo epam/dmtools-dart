@@ -46,7 +46,10 @@ Map<String, dynamic> buildSuiteJobParams(
   AgentsSuiteConfig config,
   List<String> testFiles,
 ) {
-  return <String, dynamic>{...config.jobParams, 'testFiles': testFiles};
+  return <String, dynamic>{
+    ...config.jobParams,
+    'testFiles': testFiles,
+  };
 }
 
 /// Thrown when `run_all.json` is missing or malformed.
@@ -158,10 +161,8 @@ void _shardFlagProblems(SuiteShardArgs args, List<String> problems) {
   _totalRangeProblems(args.totalShards, problems);
   _indexRangeProblems(args, problems);
   if (args.manifestOut == null || args.manifestOut!.isEmpty) {
-    problems.add(
-      '--manifest-out <path> is required for sharded runs: the '
-      'agents-gate merge job parses it (never evaled)',
-    );
+    problems.add('--manifest-out <path> is required for sharded runs: the '
+        'agents-gate merge job parses it (never evaled)');
   }
 }
 
@@ -177,10 +178,8 @@ void _indexRangeProblems(SuiteShardArgs args, List<String> problems) {
     problems.add('--shard-index must be >= 0, got $index');
   }
   if (index != null && args.totalShards != null && index >= args.totalShards!) {
-    problems.add(
-      '--shard-index $index must be < '
-      '--total-shards ${args.totalShards}',
-    );
+    problems.add('--shard-index $index must be < '
+        '--total-shards ${args.totalShards}');
   }
 }
 
@@ -209,11 +208,9 @@ List<String>? _planOrReport(
     args.totalShards!,
   );
   if (planned.isNotEmpty) return planned;
-  err(
-    'Shard ${args.shardIndex}/${args.totalShards} is empty: the suite '
-    'has ${config.testFiles.length} files, which cannot fill '
-    '${args.totalShards} shards. Reduce --total-shards.',
-  );
+  err('Shard ${args.shardIndex}/${args.totalShards} is empty: the suite '
+      'has ${config.testFiles.length} files, which cannot fill '
+      '${args.totalShards} shards. Reduce --total-shards.');
   return null;
 }
 
@@ -242,10 +239,8 @@ bool _preflightOrReport(
 ) {
   final problems = preflightTestFiles(args.agentsPath, planned);
   if (problems.isEmpty) return true;
-  err(
-    'Pre-flight failed — planned test files are missing or empty '
-    '(testRunner.js would silently skip them):',
-  );
+  err('Pre-flight failed — planned test files are missing or empty '
+      '(testRunner.js would silently skip them):');
   for (final problem in problems) {
     err('  - $problem');
   }
@@ -262,10 +257,8 @@ int _runEngine(
   void Function(String line) err,
 ) {
   if (args.isSharded) {
-    out(
-      'Shard ${args.shardIndex}/${args.totalShards}: '
-      'planned ${planned.length} test file(s)',
-    );
+    out('Shard ${args.shardIndex}/${args.totalShards}: '
+        'planned ${planned.length} test file(s)');
   }
 
   String? result;

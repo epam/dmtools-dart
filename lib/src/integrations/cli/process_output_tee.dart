@@ -167,10 +167,13 @@ class _CaptureSink implements Sink<List<int>> {
 
   final OutputLineSink _mirror;
   final StringBuffer captured = StringBuffer();
-  late final Sink<String> _splitter = const LineSplitter()
-      .startChunkedConversion(_LineSink(_mirror));
-  late final Sink<List<int>> _decoder = const Utf8Decoder(allowMalformed: true)
-      .startChunkedConversion(_TeeSink(captured, _splitter));
+  late final Sink<String> _splitter =
+      const LineSplitter().startChunkedConversion(_LineSink(_mirror));
+  late final Sink<List<int>> _decoder =
+      const Utf8Decoder(allowMalformed: true).startChunkedConversion(_TeeSink(
+    captured,
+    _splitter,
+  ));
 
   @override
   void add(List<int> chunk) => _decoder.add(chunk);

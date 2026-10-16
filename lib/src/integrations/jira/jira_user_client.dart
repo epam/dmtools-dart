@@ -21,7 +21,10 @@ extension JiraUserClient on JiraClient {
 
   /// `jira_get_user_profile` — GET `user?accountId={userId}`.
   Future<Map<String, dynamic>> getUserProfile(String userId) async {
-    final body = await _http.get('user', queryParams: {'accountId': userId});
+    final body = await _http.get(
+      'user',
+      queryParams: {'accountId': userId},
+    );
     return _decodeMap(body);
   }
 

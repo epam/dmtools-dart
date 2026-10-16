@@ -112,7 +112,11 @@ class SuiteShardArgs {
     return args[index + 1];
   }
 
-  static int? _intValue(String raw, List<String> problems, String flagName) {
+  static int? _intValue(
+    String raw,
+    List<String> problems,
+    String flagName,
+  ) {
     final value = int.tryParse(raw);
     if (value == null) {
       problems.add('$flagName expects an integer, got "$raw"');

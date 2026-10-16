@@ -150,9 +150,8 @@ class BitriseClient {
   /// `build-slots` route). Returns the decoded response object, or an
   /// empty map for non-object bodies.
   Future<Map<String, dynamic>> getWorkflows(String appSlug) async {
-    final body = await _http.get(
-      'apps/${_encodeSlug(appSlug)}/build-workflows',
-    );
+    final body =
+        await _http.get('apps/${_encodeSlug(appSlug)}/build-workflows');
     return _decodeObject(body) ?? const {};
   }
 

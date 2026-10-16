@@ -19,9 +19,11 @@ SyncHttpResponse syncCurlUpload(
 }) {
   final dir = Directory.systemTemp.createTempSync(tempPrefix);
   try {
-    final headerFile = File(
-      '${dir.path}/headers',
-    )..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers), flush: true);
+    final headerFile = File('${dir.path}/headers')
+      ..writeAsStringSync(
+        SyncHttpClient.renderHeaderFile(headers),
+        flush: true,
+      );
     final result = Process.runSync('curl', [
       '-s',
       '-X',

@@ -100,9 +100,7 @@ class SyncParallelJob {
 /// Every failure path answers — the caller is parked in a blocking
 /// `Mailbox.take()` and must always wake.
 Future<void> serveSyncWorker(
-  SyncWorkerBoot boot,
-  SyncWorkerRunner runner,
-) async {
+    SyncWorkerBoot boot, SyncWorkerRunner runner) async {
   await SyncHttpBridge.shared.boot();
   final inbox = ReceivePort();
   boot.handshake.send(inbox.sendPort);
@@ -127,11 +125,9 @@ Future<void> serveSyncWorker(
     } catch (_) {
       result = null; // Java parity: a failing task yields null, not abort.
     }
-    reply.put(
-      Uint8List.fromList(
-        utf8.encode(jsonEncode(<String, dynamic>{'i': job['i'], 'r': result})),
-      ),
-    );
+    reply.put(Uint8List.fromList(
+      utf8.encode(jsonEncode(<String, dynamic>{'i': job['i'], 'r': result})),
+    ));
   }
 }
 
@@ -170,12 +166,11 @@ class SyncWorkerPool {
   /// [boot] call attempts a fresh boot, so a transient failure (isolate
   /// quota, sandbox limit) does not disable the pool for the process
   /// lifetime.
-  Future<void> boot() =>
-      _booting ??= _boot(workerCount < 1 ? 1 : workerCount)
-          .catchError((Object e) {
-            _booting = null; // let the next boot() retry
-            throw e;
-          });
+  Future<void> boot() => _booting ??=
+          _boot(workerCount < 1 ? 1 : workerCount).catchError((Object e) {
+        _booting = null; // let the next boot() retry
+        throw e;
+      });
 
   Future<void> _boot(int workers) async {
     for (var i = 0; i < workers; i++) {

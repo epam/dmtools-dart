@@ -70,9 +70,10 @@ class AgentPackResolver {
   /// first use). Pass [registryBaseUrl] to pin the registry explicitly (tests);
   /// an empty string disables the registry hermetically.
   AgentPackResolver({Directory? packsRoot, String? registryBaseUrl})
-    : _packsRoot = packsRoot ?? Directory(p.join(_home(), '.dmtools', 'packs')),
-      _registryBaseUrl = registryBaseUrl,
-      _registryLookedUp = registryBaseUrl != null;
+      : _packsRoot =
+            packsRoot ?? Directory(p.join(_home(), '.dmtools', 'packs')),
+        _registryBaseUrl = registryBaseUrl,
+        _registryLookedUp = registryBaseUrl != null;
 
   final Directory _packsRoot;
 
@@ -85,9 +86,8 @@ class AgentPackResolver {
   bool _registryLookedUp = false;
 
   /// Matches `<agent>@<version|latest>` (never a path, URL, or `.json` file).
-  static final RegExp _registryRef = RegExp(
-    r'^([A-Za-z0-9_-]+)@(latest|[A-Za-z0-9][A-Za-z0-9._-]*)$',
-  );
+  static final RegExp _registryRef =
+      RegExp(r'^([A-Za-z0-9_-]+)@(latest|[A-Za-z0-9][A-Za-z0-9._-]*)$');
 
   /// Per-file unpack size cap (64 MiB).
   static const int maxFileBytes = 64 * 1024 * 1024;
@@ -176,16 +176,14 @@ class AgentPackResolver {
       final entryFile = File(p.join(packRoot.path, entryName));
       if (!entryFile.existsSync()) {
         throw AgentPackException(
-          "Entry '$entryName' not found in pack $agent-$version. "
-          "manifest.json defaultEntry: ${manifest['defaultEntry']}",
-        );
+            "Entry '$entryName' not found in pack $agent-$version. "
+            "manifest.json defaultEntry: ${manifest['defaultEntry']}");
       }
       return ResolvedPack(
-        packRoot: packRoot,
-        entryFile: entryFile,
-        agent: agent,
-        version: version,
-      );
+          packRoot: packRoot,
+          entryFile: entryFile,
+          agent: agent,
+          version: version);
     } finally {
       // Clean up a downloaded temp zip (local files are left in place).
       if (base.startsWith('http') && zipFile.existsSync()) zipFile.deleteSync();
@@ -245,30 +243,25 @@ class AgentPackResolver {
     // URL (Java parity: the resolver follows redirects on every fetch).
     final response = SyncHttpClient.get(catalogUrl, followRedirects: true);
     if (response.statusCode != 200) {
-      throw AgentPackException(
-        'Failed to read registry catalog: '
-        'HTTP ${response.statusCode} for $catalogUrl',
-      );
+      throw AgentPackException('Failed to read registry catalog: '
+          'HTTP ${response.statusCode} for $catalogUrl');
     }
     try {
       return jsonDecode(response.body);
     } on FormatException catch (e) {
       throw AgentPackException(
-        'Malformed registry catalog $catalogUrl: ${e.message}',
-      );
+          'Malformed registry catalog $catalogUrl: ${e.message}');
     }
   }
 
   /// Extracts [agent]'s version from the decoded catalog (flat or nested).
   String _catalogVersion(Object? catalog, String agent, String catalogUrl) {
-    final version = catalog is Map
-        ? _versionFromCatalogMap(catalog, agent)
-        : null;
+    final version =
+        catalog is Map ? _versionFromCatalogMap(catalog, agent) : null;
     if (version == null || version.isEmpty) {
       throw AgentPackException(
-        "Agent '$agent' not found in registry catalog $catalogUrl. "
-        'Available agents: ${_availableAgentNames(catalog)}',
-      );
+          "Agent '$agent' not found in registry catalog $catalogUrl. "
+          'Available agents: ${_availableAgentNames(catalog)}');
     }
     return version;
   }
@@ -308,10 +301,8 @@ class AgentPackResolver {
   /// pin it to the same strict charset the manifest version is held to.
   void _assertSafeCatalogVersion(String version, String agent) {
     if (!_safeSegment.hasMatch(version) || _dotsOnly.hasMatch(version)) {
-      throw AgentPackException(
-        'Unsafe catalog version for $agent: "$version" '
-        '(allowed: [A-Za-z0-9._-], no dot-only segments)',
-      );
+      throw AgentPackException('Unsafe catalog version for $agent: "$version" '
+          '(allowed: [A-Za-z0-9._-], no dot-only segments)');
     }
   }
 
@@ -335,19 +326,14 @@ class AgentPackResolver {
     if (githubToken != null && Uri.parse(urlString).host == 'github.com') {
       headers['Authorization'] = 'Bearer $githubToken';
     }
-    final response = SyncHttpClient.get(
-      urlString,
-      headers: headers,
-      followRedirects: true,
-    );
+    final response =
+        SyncHttpClient.get(urlString, headers: headers, followRedirects: true);
     if (response.statusCode != 200) {
       throw AgentPackException(
-        'Failed to download pack: HTTP ${response.statusCode} for $urlString',
-      );
+          'Failed to download pack: HTTP ${response.statusCode} for $urlString');
     }
     final tmp = File(
-      '${Directory.systemTemp.path}/dmtools-pack-${DateTime.now().microsecondsSinceEpoch}.zip',
-    );
+        '${Directory.systemTemp.path}/dmtools-pack-${DateTime.now().microsecondsSinceEpoch}.zip');
     tmp.writeAsBytesSync(response.bodyBytes);
     _verifyDownloadedSha256(tmp, urlString, githubToken);
     return tmp;
@@ -355,27 +341,19 @@ class AgentPackResolver {
 
   /// Verifies the downloaded zip against the sibling `.sha256` asset.
   void _verifyDownloadedSha256(
-    File zipFile,
-    String zipUrl,
-    String? githubToken,
-  ) {
+      File zipFile, String zipUrl, String? githubToken) {
     final headers = <String, String>{'Accept': 'application/octet-stream'};
     if (githubToken != null && Uri.parse(zipUrl).host == 'github.com') {
       headers['Authorization'] = 'Bearer $githubToken';
     }
-    final response = SyncHttpClient.get(
-      '$zipUrl.sha256',
-      headers: headers,
-      followRedirects: true,
-    );
+    final response = SyncHttpClient.get('$zipUrl.sha256',
+        headers: headers, followRedirects: true);
     if (response.statusCode != 200) {
       // Java parity (AgentPackResolver logs a warning): an absent sidecar
       // means "no checksum published" — verification is skipped, not failed,
       // but the skip is announced loudly so it shows up in run logs.
-      stderr.writeln(
-        'WARNING: no .sha256 checksum asset for $zipUrl '
-        '(HTTP ${response.statusCode}) — skipping download integrity check',
-      );
+      stderr.writeln('WARNING: no .sha256 checksum asset for $zipUrl '
+          '(HTTP ${response.statusCode}) — skipping download integrity check');
       return;
     }
     final expected = response.body.trim().split(RegExp(r'\s+')).first;
@@ -383,8 +361,7 @@ class AgentPackResolver {
     if (expected.toLowerCase() != actual) {
       zipFile.deleteSync();
       throw AgentPackException(
-        'SHA-256 mismatch for $zipUrl (expected $expected, got $actual)',
-      );
+          'SHA-256 mismatch for $zipUrl (expected $expected, got $actual)');
     }
   }
 
@@ -399,18 +376,15 @@ class AgentPackResolver {
     final manifestEntry = _findEntry(archive, 'manifest.json');
     if (manifestEntry == null) {
       throw AgentPackException(
-        'Pack has no manifest.json: ${p.basename(zipFile.path)}',
-      );
+          'Pack has no manifest.json: ${p.basename(zipFile.path)}');
     }
-    final manifest = jsonDecode(
-      utf8.decode(manifestEntry.content as List<int>),
-    ) as Map<String, dynamic>;
+    final manifest = jsonDecode(utf8.decode(manifestEntry.content as List<int>))
+        as Map<String, dynamic>;
     if (!manifest.containsKey('agent') ||
         !manifest.containsKey('version') ||
         !manifest.containsKey('defaultEntry')) {
       throw const AgentPackException(
-        'manifest.json missing required keys (agent/version/defaultEntry)',
-      );
+          'manifest.json missing required keys (agent/version/defaultEntry)');
     }
     return manifest;
   }
@@ -420,10 +394,8 @@ class AgentPackResolver {
   static String _manifestString(Map<String, dynamic> manifest, String key) {
     final value = manifest[key];
     if (value is! String) {
-      throw AgentPackException(
-        'manifest.json "$key" must be a string '
-        '(got ${value.runtimeType})',
-      );
+      throw AgentPackException('manifest.json "$key" must be a string '
+          '(got ${value.runtimeType})');
     }
     return value;
   }
@@ -450,10 +422,8 @@ class AgentPackResolver {
       if (value.isEmpty ||
           !_safeSegment.hasMatch(value) ||
           _dotsOnly.hasMatch(value)) {
-        throw AgentPackException(
-          'Unsafe manifest ${pair.key}: "$value" '
-          '(allowed: [A-Za-z0-9._-], no dot-only segments)',
-        );
+        throw AgentPackException('Unsafe manifest ${pair.key}: "$value" '
+            '(allowed: [A-Za-z0-9._-], no dot-only segments)');
       }
     }
   }
@@ -479,9 +449,8 @@ class AgentPackResolver {
     for (final flags in _centralDirectoryFlags(zipBytes)) {
       if (flags & 0x0001 != 0) {
         throw AgentPackException(
-          'Encrypted agent packs are not supported yet: ${p.basename(zipFile.path)} '
-          '(encryption support is a planned future hook)',
-        );
+            'Encrypted agent packs are not supported yet: ${p.basename(zipFile.path)} '
+            '(encryption support is a planned future hook)');
       }
     }
   }
@@ -497,8 +466,7 @@ class AgentPackResolver {
     for (var i = 0; i < count && offset + 46 <= bytes.length; i++) {
       if (_uint32(bytes, offset) != _centralHeaderSignature) return;
       yield _uint16(bytes, offset + 8);
-      offset +=
-          46 +
+      offset += 46 +
           _uint16(bytes, offset + 28) + // file name length
           _uint16(bytes, offset + 30) + // extra field length
           _uint16(bytes, offset + 32); // comment length
@@ -543,12 +511,8 @@ class AgentPackResolver {
   // Unpack + verify + cache
   // ------------------------------------------------------------------
 
-  void _unpackAndVerify(
-    File zipFile,
-    Map<String, dynamic> manifest,
-    Directory packRoot,
-    PackProvenance provenance,
-  ) {
+  void _unpackAndVerify(File zipFile, Map<String, dynamic> manifest,
+      Directory packRoot, PackProvenance provenance) {
     if (_isCacheHit(packRoot, manifest, provenance)) return;
 
     // Stage the unpack next to the cache (same filesystem) so the publish
@@ -577,8 +541,7 @@ class AgentPackResolver {
     final target = p.normalize(dir.absolute.path);
     if (!p.isWithin(root, target)) {
       throw AgentPackException(
-        'Refusing to delete outside the pack cache root: ${dir.path}',
-      );
+          'Refusing to delete outside the pack cache root: ${dir.path}');
     }
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   }
@@ -586,11 +549,8 @@ class AgentPackResolver {
   /// A cache hit needs the same manifest, the same zip sha256 and the same
   /// source URL (registry base included): a same-version pack with different
   /// content or a re-pinned registry is a miss and gets re-unpacked (gh-375).
-  bool _isCacheHit(
-    Directory packRoot,
-    Map<String, dynamic> manifest,
-    PackProvenance provenance,
-  ) {
+  bool _isCacheHit(Directory packRoot, Map<String, dynamic> manifest,
+      PackProvenance provenance) {
     final cachedManifest = File(p.join(packRoot.path, 'manifest.json'));
     if (!cachedManifest.existsSync()) return false;
     try {
@@ -634,41 +594,27 @@ class AgentPackResolver {
   }
 
   void _unzipSafe(
-    File zipFile,
-    Directory targetDir,
-    Map<String, String> hashes,
-  ) {
+      File zipFile, Directory targetDir, Map<String, String> hashes) {
     final targetRoot = p.normalize(targetDir.absolute.path);
     final archive = ZipDecoder().decodeBytes(zipFile.readAsBytesSync());
     final seen = <String>{};
     var totalBytes = 0;
     for (final entry in archive.files) {
       if (entry.isFile) seen.add(entry.name);
-      totalBytes = _unpackEntry(
-        entry,
-        targetDir,
-        targetRoot,
-        hashes,
-        totalBytes,
-      );
+      totalBytes =
+          _unpackEntry(entry, targetDir, targetRoot, hashes, totalBytes);
     }
     // The manifest is the source of truth in both directions: every listed
     // file must actually be present in the zip.
     final missing = hashes.keys.where((name) => !seen.contains(name)).toList();
     if (missing.isNotEmpty) {
       throw AgentPackException(
-        'Manifest files missing from the zip: ${missing.join(', ')}',
-      );
+          'Manifest files missing from the zip: ${missing.join(', ')}');
     }
   }
 
-  int _unpackEntry(
-    ArchiveFile entry,
-    Directory targetDir,
-    String targetRoot,
-    Map<String, String> hashes,
-    int totalBytes,
-  ) {
+  int _unpackEntry(ArchiveFile entry, Directory targetDir, String targetRoot,
+      Map<String, String> hashes, int totalBytes) {
     final target = _validateEntryTarget(entry, targetDir, targetRoot);
     if (!entry.isFile) {
       Directory(target.path).createSync(recursive: true);
@@ -689,10 +635,7 @@ class AgentPackResolver {
 
   /// Validates a zip entry path (AC4) and returns its safe target file.
   File _validateEntryTarget(
-    ArchiveFile entry,
-    Directory targetDir,
-    String targetRoot,
-  ) {
+      ArchiveFile entry, Directory targetDir, String targetRoot) {
     final name = entry.name;
     if (name.startsWith('/') || name.contains('..') || p.isAbsolute(name)) {
       throw AgentPackException('Zip-slip entry rejected: $name');
@@ -718,11 +661,7 @@ class AgentPackResolver {
 
   /// Verifies entry size caps and the manifest sha256; returns the new total.
   int _verifyEntryData(
-    String name,
-    List<int> data,
-    Map<String, String> hashes,
-    int totalBytes,
-  ) {
+      String name, List<int> data, Map<String, String> hashes, int totalBytes) {
     if (data.length > maxFileBytes) {
       throw AgentPackException('Entry too large: $name');
     }
@@ -735,8 +674,7 @@ class AgentPackResolver {
     // `manifest.json` is exempt — it IS the inventory.
     if (name != 'manifest.json' && !hashes.containsKey(name)) {
       throw AgentPackException(
-        'Zip entry not listed in manifest inventory: $name',
-      );
+          'Zip entry not listed in manifest inventory: $name');
     }
     final expectedHash = hashes[name];
     if (expectedHash != null &&

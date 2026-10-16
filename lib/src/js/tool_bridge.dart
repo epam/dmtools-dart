@@ -25,7 +25,6 @@ import '../config/property_reader_getters.dart';
 import '../integrations/cli/allowed_base.dart';
 import '../integrations/cli/cli_tools.dart';
 import '../mcp/tool_registry.dart';
-
 import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 
@@ -50,9 +49,9 @@ class ToolBridge {
     required ToolRegistry registry,
     String? workingDirectory,
     String? consolePrefix,
-  }) : _registry = registry,
-       _workingDirectory = workingDirectory,
-       _consolePrefix = consolePrefix;
+  })  : _registry = registry,
+        _workingDirectory = workingDirectory,
+        _consolePrefix = consolePrefix;
 
   /// The single tool dispatcher shared by every call through this bridge.
   ///
@@ -158,7 +157,9 @@ class ToolBridge {
       final toolName = parsed[0] as String;
       return _timed(
         toolName,
-        () => _toolCallResult(() => _execute(toolName, _castArgs(parsed[1]))),
+        () => _toolCallResult(
+          () => _execute(toolName, _castArgs(parsed[1])),
+        ),
       );
     }
     return _jsError(
@@ -175,10 +176,8 @@ class ToolBridge {
     try {
       return run();
     } finally {
-      stdout.writeln(
-        'Tool $toolName finished in '
-        '${sw.elapsedMilliseconds}ms',
-      );
+      stdout.writeln('Tool $toolName finished in '
+          '${sw.elapsedMilliseconds}ms');
     }
   }
 
@@ -235,10 +234,8 @@ class ToolBridge {
         'argument (got ${parsed == null ? 'no argument' : jsonEncode(parsed)})',
       );
     }
-    stdout.writeln(
-      'Calling tool file_read with args: '
-      '${jsonEncode(parsed is Map ? parsed : {'path': path})}',
-    );
+    stdout.writeln('Calling tool file_read with args: '
+        '${jsonEncode(parsed is Map ? parsed : {'path': path})}');
     return _timed('file_read', () => _fileReadResult(path));
   }
 
@@ -352,7 +349,7 @@ class ToolBridge {
       'ticketKey',
       'ticket',
       'issueKey',
-      'id',
+      'id'
     ]) {
       final value = args[field];
       if (value != null) return value.toString();
@@ -402,13 +399,11 @@ class ToolBridge {
     final allowed = _cliExecutor.allowedCommands.toList()..sort();
     if (!allowed.contains(firstWord)) {
       return _err(
-        'Command not allowed. Whitelisted commands: ${allowed.join(', ')}',
-      );
+          'Command not allowed. Whitelisted commands: ${allowed.join(', ')}');
     }
     try {
-      final workDir = _resolveCliWorkingDir(
-        args['workingDirectory'] as String?,
-      );
+      final workDir =
+          _resolveCliWorkingDir(args['workingDirectory'] as String?);
       return _runCommandLine(command, workDir);
     } catch (e) {
       // SecurityException parity for the allowed-base validation failure.
@@ -455,21 +450,15 @@ class ToolBridge {
     final env = _cliProcessEnv(workDir);
     try {
       final result = Platform.isWindows
-          ? Process.runSync(
-              'cmd.exe',
-              ['/c', '$command 2>&1'],
-              workingDirectory: workDir,
-              environment: env,
-            )
+          ? Process.runSync('cmd.exe', ['/c', '$command 2>&1'],
+              workingDirectory: workDir, environment: env)
           : _runShellScript(command, workDir, env);
       // Java merges stdout and stderr (`redirectErrorStream(true)`), so the
       // script redirects the whole command group into stdout.
       final output = result.stdout.toString().trim();
       if (result.exitCode != 0) {
-        return _err(
-          'Command execution failed (exit code '
-          '${result.exitCode}): $output',
-        );
+        return _err('Command execution failed (exit code '
+            '${result.exitCode}): $output');
       }
       // The FFI host callback marshals through JSON, so a plain-string
       // result (Java `executeCommand` parity) is returned JSON-encoded and
@@ -482,22 +471,13 @@ class ToolBridge {
 
   /// Writes [command] to a temp shell script and runs it with `/bin/sh`.
   ProcessResult _runShellScript(
-    String command,
-    String? workDir,
-    Map<String, String> env,
-  ) {
-    final script = File(
-      '${Directory.systemTemp.path}/dmtools_cli_'
-      '${DateTime.now().microsecondsSinceEpoch}.sh',
-    );
+      String command, String? workDir, Map<String, String> env) {
+    final script = File('${Directory.systemTemp.path}/dmtools_cli_'
+        '${DateTime.now().microsecondsSinceEpoch}.sh');
     script.writeAsStringSync('{\n$command\n} 2>&1\n');
     try {
-      return Process.runSync(
-        '/bin/sh',
-        [script.path],
-        workingDirectory: workDir,
-        environment: env,
-      );
+      return Process.runSync('/bin/sh', [script.path],
+          workingDirectory: workDir, environment: env);
     } finally {
       try {
         script.deleteSync();
@@ -543,7 +523,7 @@ class ToolBridge {
       '/usr/local/bin',
       '/opt/homebrew/bin',
       '/usr/bin',
-      '/bin',
+      '/bin'
     ]) {
       if (!path.contains(dir)) path = '$path:$dir';
     }
@@ -575,24 +555,19 @@ class ToolBridge {
   /// [resolveWithinAllowedBase] with the async FileToolExecutor surface so
   /// the two cannot drift apart on a security-flavored behavior again.
   String _sandboxPath(String path) => resolveWithinAllowedBase(
-    path,
-    _workingDirectory ?? Directory.current.path,
-  );
+      path, _workingDirectory ?? Directory.current.path);
 
   /// Sandbox resolver for read-flavored operations: containment plus the
   /// configured allow-list, read fresh from [PropertyReader] per call
   /// (Java `new PropertyReader().getFileReadAllowedPaths()` parity).
   String _sandboxReadPath(String path) => resolveWithinAllowedBase(
-    path,
-    _workingDirectory ?? Directory.current.path,
-    configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths(),
-  );
+      path, _workingDirectory ?? Directory.current.path,
+      configuredAllowedPaths: PropertyReader().getFileReadAllowedPaths());
 
   String _readFile(String path) {
     try {
-      return jsonEncode({
-        'content': File(_sandboxReadPath(path)).readAsStringSync(),
-      });
+      return jsonEncode(
+          {'content': File(_sandboxReadPath(path)).readAsStringSync()});
     } catch (e) {
       return _err(e.toString());
     }
@@ -626,9 +601,11 @@ class ToolBridge {
     try {
       // Java FileTools.listFiles parity (dm.ai#635): entries are absolute,
       // normalized, and sorted.
-      final entries = Directory(
-        _sandboxReadPath(path),
-      ).listSync().map((e) => p.normalize(e.path)).toList()..sort();
+      final entries = Directory(_sandboxReadPath(path))
+          .listSync()
+          .map((e) => p.normalize(e.path))
+          .toList()
+        ..sort();
       return jsonEncode({'entries': entries});
     } catch (e) {
       return _err(e.toString());

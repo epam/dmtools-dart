@@ -13,7 +13,8 @@ extension JiraTransitionClient on JiraClient {
     String key,
     String statusName,
     String resolution,
-  ) => _transitionIssue(key, statusName, {
-    'resolution': {'name': resolution},
-  });
+  ) =>
+      _transitionIssue(key, statusName, {
+        'resolution': {'name': resolution}
+      });
 }

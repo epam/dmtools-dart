@@ -45,11 +45,7 @@ class PackProvenance {
       return null;
     }
     return PackProvenance(
-      name: name,
-      version: version,
-      sha256: sha,
-      sourceUrl: source,
-    );
+        name: name, version: version, sha256: sha, sourceUrl: source);
   }
 
   /// Agent name from the manifest.
@@ -66,11 +62,11 @@ class PackProvenance {
 
   /// JSON map persisted as [packProvenanceFileName].
   Map<String, String> toJson() => {
-    'name': name,
-    'version': version,
-    'sha256': sha256,
-    'sourceUrl': sourceUrl,
-  };
+        'name': name,
+        'version': version,
+        'sha256': sha256,
+        'sourceUrl': sourceUrl,
+      };
 
   /// True when [other] describes the same zip content from the same source.
   bool matches(PackProvenance? other) =>

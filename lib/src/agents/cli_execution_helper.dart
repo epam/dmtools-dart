@@ -231,12 +231,8 @@ class CliExecutionHelper {
 
     for (final command in commands) {
       if (command.trim().isEmpty) continue;
-      final result = await _runOne(
-        command,
-        workingDirectory,
-        environment,
-        mirror,
-      );
+      final result =
+          await _runOne(command, workingDirectory, environment, mirror);
       responses.write('CLI Command: $command\n');
       if (result.exitCode != 0) {
         // Providers print their diagnostics on stdout (run-agent.sh echoes
@@ -335,13 +331,16 @@ class CliExecutionHelper {
   Timer? _startTimer(CliExecutionCallbacks cb) {
     final action = cb.timerAction;
     if (action == null || cb.timerIntervalSeconds <= 0) return null;
-    return Timer.periodic(Duration(seconds: cb.timerIntervalSeconds), (_) {
-      try {
-        action();
-      } catch (e) {
-        stderr.writeln('timerJSAction threw (ignored): $e');
-      }
-    });
+    return Timer.periodic(
+      Duration(seconds: cb.timerIntervalSeconds),
+      (_) {
+        try {
+          action();
+        } catch (e) {
+          stderr.writeln('timerJSAction threw (ignored): $e');
+        }
+      },
+    );
   }
 
   /// Runs the full command batch with monitoring, returning the accumulated
@@ -379,8 +378,7 @@ class CliExecutionHelper {
       if (one.exitCode != 0) {
         hasFatal = true;
         lastExit = one.exitCode;
-        final msg =
-            'Command failed (exit code ${one.exitCode}): $command\n'
+        final msg = 'Command failed (exit code ${one.exitCode}): $command\n'
             'Output:\n${one.output.trim()}';
         lastErr = msg;
         responses.write('Error: $msg\n\n');
@@ -424,10 +422,9 @@ class CliExecutionHelper {
     // captureAndMirror decode: malformed child output becomes U+FFFD on
     // both CliAgent paths instead of throwing mid-batch only here.
     try {
-      await for (final line
-          in proc.stdout
-              .transform(const Utf8Decoder(allowMalformed: true))
-              .transform(const LineSplitter())) {
+      await for (final line in proc.stdout
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())) {
         output.writeln(line);
         safeMirrorLine(lineMirror, line);
         final live = cb.liveOutput;

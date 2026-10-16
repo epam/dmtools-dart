@@ -109,7 +109,10 @@ class XrayClient {
   Future<void> authenticate(String clientId, String clientSecret) async {
     final body = await _http.post(
       'authenticate',
-      body: jsonEncode({'client_id': clientId, 'client_secret': clientSecret}),
+      body: jsonEncode({
+        'client_id': clientId,
+        'client_secret': clientSecret,
+      }),
     );
     final token = jsonDecode(body);
     if (token is String) _http.setToken(token);
@@ -145,10 +148,8 @@ class XrayClient {
   /// empty list when the response body is not a JSON array.
   Future<List<Map<String, dynamic>>> getTests(List<String> testKeys) async {
     await _ensureAuthenticated();
-    final body = await _http.post(
-      'tests',
-      body: jsonEncode({'keys': testKeys}),
-    );
+    final body =
+        await _http.post('tests', body: jsonEncode({'keys': testKeys}));
     return _decodeList(body);
   }
 
@@ -247,9 +248,8 @@ class XrayClient {
   Future<List<Map<String, dynamic>>> getPreconditions(String testKey) async {
     final details = await getTestDetails(testKey);
     final preconditions = details?['preconditions'];
-    final results = preconditions is Map<String, dynamic>
-        ? preconditions['results']
-        : null;
+    final results =
+        preconditions is Map<String, dynamic> ? preconditions['results'] : null;
     if (results is List) {
       return [for (final e in results) Map<String, dynamic>.from(e as Map)];
     }
@@ -428,9 +428,8 @@ class XrayClient {
     final errors = decoded['errors'];
     if (errors is List && errors.isNotEmpty) {
       final first = errors.first;
-      final message = first is Map
-          ? first['message'] ?? 'Unknown GraphQL error'
-          : null;
+      final message =
+          first is Map ? first['message'] ?? 'Unknown GraphQL error' : null;
       throw StateError('GraphQL mutation failed: $message');
     }
     final data = decoded['data'];
@@ -440,9 +439,8 @@ class XrayClient {
 
   /// First entry of a GraphQL `getTests` result wrapper, or `null`.
   Map<String, dynamic>? _firstResult(dynamic getTests) {
-    final results = getTests is Map<String, dynamic>
-        ? getTests['results']
-        : null;
+    final results =
+        getTests is Map<String, dynamic> ? getTests['results'] : null;
     if (results is List && results.isNotEmpty) {
       return Map<String, dynamic>.from(results.first as Map);
     }
@@ -501,9 +499,8 @@ class XrayClient {
       await _executeGraphQL(_testDetailsQuery('$jql ORDER BY key ASC', 100)),
     );
     final getTests = data?['getTests'];
-    final results = getTests is Map<String, dynamic>
-        ? getTests['results']
-        : null;
+    final results =
+        getTests is Map<String, dynamic> ? getTests['results'] : null;
     return results is List ? results : null;
   }
 
@@ -531,10 +528,8 @@ class XrayClient {
   /// `GET issue/{key}?fields=summary,description` collapsed to a flat map.
   Future<Map<String, String>> _jiraSummary(String key) async {
     try {
-      final ticket = await _jiraClient.getTicket(key, [
-        'summary',
-        'description',
-      ]);
+      final ticket =
+          await _jiraClient.getTicket(key, ['summary', 'description']);
       final fields = ticket?['fields'];
       if (fields is Map<String, dynamic>) {
         return {
@@ -590,9 +585,8 @@ class XrayClient {
     Map<String, Map<String, String>> summaries,
   ) {
     final preconditions = data['preconditions'];
-    final results = preconditions is Map<String, dynamic>
-        ? preconditions['results']
-        : null;
+    final results =
+        preconditions is Map<String, dynamic> ? preconditions['results'] : null;
     if (results is! List) return;
     for (final entry in results) {
       final summary = entry is Map ? summaries[_jiraKeyOf(entry)] : null;
@@ -653,8 +647,7 @@ class XrayClient {
       throw StateError('Cannot get issue ID for precondition $ticketKey');
     }
     final definition = _stepsToDefinition(steps);
-    final mutation =
-        'mutation { updatePrecondition( issueId: "$issueId", '
+    final mutation = 'mutation { updatePrecondition( issueId: "$issueId", '
         'precondition: { definition: "${_gqlEscape(definition)}" } ) '
         '{ issueId } }';
     _mutationResult(await _executeGraphQL(mutation), 'updatePrecondition');

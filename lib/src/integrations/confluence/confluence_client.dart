@@ -73,8 +73,7 @@ class ConfluenceClient {
       final results = json['results'] as List<dynamic>?;
       return {
         'success': true,
-        'message':
-            'Confluence connection successful (via space listing; '
+        'message': 'Confluence connection successful (via space listing; '
             'user/current unavailable with this token)',
         'user': 'scoped-token',
         'spacesVisible': results?.length ?? 0,
@@ -91,7 +90,10 @@ class ConfluenceClient {
   /// `confluence_get_page` — GET `content?spaceKey=&title=&expand=body.storage`.
   ///
   /// Returns the first matching page, or `null` when no page is found.
-  Future<Map<String, dynamic>?> getPage(String spaceKey, String title) async {
+  Future<Map<String, dynamic>?> getPage(
+    String spaceKey,
+    String title,
+  ) async {
     final body = await _http.get(
       'content',
       queryParams: {
@@ -126,8 +128,7 @@ class ConfluenceClient {
         ? await _http.postV2(
             'pages',
             body: jsonEncode(
-              await _pagePayloadV2(spaceKey, title, body, parentId),
-            ),
+                await _pagePayloadV2(spaceKey, title, body, parentId)),
           )
         : await _http.post(
             'content',
@@ -142,18 +143,19 @@ class ConfluenceClient {
     String title,
     String body, [
     String? parentId,
-  ]) => {
-    'type': 'page',
-    'title': title,
-    'space': {'key': spaceKey},
-    if (parentId != null && parentId.isNotEmpty)
-      'ancestors': [
-        {'id': parentId},
-      ],
-    'body': {
-      _kStorage: {'value': body, 'representation': _kStorage},
-    },
-  };
+  ]) =>
+      {
+        'type': 'page',
+        'title': title,
+        'space': {'key': spaceKey},
+        if (parentId != null && parentId.isNotEmpty)
+          'ancestors': [
+            {'id': parentId},
+          ],
+        'body': {
+          _kStorage: {'value': body, 'representation': _kStorage},
+        },
+      };
 
   /// Builds the v2 page creation payload (Java `createPage` v2 branch).
   ///
@@ -172,7 +174,10 @@ class ConfluenceClient {
       'status': 'current',
       'title': title,
       if (parentId != null && parentId.isNotEmpty) 'parentId': parentId,
-      'body': {'representation': _kStorage, 'value': body},
+      'body': {
+        'representation': _kStorage,
+        'value': body,
+      },
     };
   }
 
@@ -221,10 +226,9 @@ class ConfluenceClient {
   Future<int> _fetchVersion(String contentId) async {
     final body = _http.isApiV2
         ? await _http.getV2('pages/$contentId')
-        : await _http.get(
-            'content/$contentId',
-            queryParams: {'expand': 'version'},
-          );
+        : await _http.get('content/$contentId', queryParams: {
+            'expand': 'version',
+          });
     final decoded = jsonDecode(body) as Map<String, dynamic>;
     final version = decoded['version'] as Map<String, dynamic>?;
     return (version?['number'] as num?)?.toInt() ?? 0;
@@ -235,19 +239,20 @@ class ConfluenceClient {
     String id,
     _PageUpdateSpec page,
     int version,
-  ) => {
-    'id': id,
-    'type': 'page',
-    'title': page.title,
-    'ancestors': [
-      {'id': page.parentId},
-    ],
-    'space': {'key': page.space},
-    'version': {'number': version, 'message': page.historyComment},
-    'body': {
-      _kStorage: {'value': page.body, 'representation': _kStorage},
-    },
-  };
+  ) =>
+      {
+        'id': id,
+        'type': 'page',
+        'title': page.title,
+        'ancestors': [
+          {'id': page.parentId},
+        ],
+        'space': {'key': page.space},
+        'version': {'number': version, 'message': page.historyComment},
+        'body': {
+          _kStorage: {'value': page.body, 'representation': _kStorage},
+        },
+      };
 
   /// Builds the v2 page update payload (Java `updatePage` v2 branch): no
   /// ancestors/space, explicit `current` status, and the bumped version
@@ -256,13 +261,17 @@ class ConfluenceClient {
     String id,
     _PageUpdateSpec page,
     int version,
-  ) => {
-    'id': id,
-    'status': 'current',
-    'title': page.title,
-    'body': {'representation': _kStorage, 'value': page.body},
-    'version': {'number': version, 'message': page.historyComment},
-  };
+  ) =>
+      {
+        'id': id,
+        'status': 'current',
+        'title': page.title,
+        'body': {
+          'representation': _kStorage,
+          'value': page.body,
+        },
+        'version': {'number': version, 'message': page.historyComment},
+      };
 
   /// `confluence_search` — GET `content/search?cql=`.
   ///
@@ -339,7 +348,7 @@ class ConfluenceClient {
     final body = await _http.get(
       'content/$id',
       queryParams: {
-        'expand': 'body.storage,body.export_view,ancestors,version',
+        'expand': 'body.storage,body.export_view,ancestors,version'
       },
     );
     return jsonDecode(body) as Map<String, dynamic>;
@@ -372,7 +381,9 @@ class ConfluenceClient {
   ///
   /// Downloads the raw content of [attachmentId] attached to [pageId].
   Future<String> downloadAttachment(String pageId, String attachmentId) {
-    return _http.get('content/$pageId/child/attachment/$attachmentId/download');
+    return _http.get(
+      'content/$pageId/child/attachment/$attachmentId/download',
+    );
   }
 
   /// `confluence_add_label` — POST `content/{id}/label`.
@@ -396,10 +407,9 @@ class ConfluenceClient {
   /// `confluence_get_blog_posts` — GET `content?type=blogpost&spaceKey=`.
   ///
   /// Returns the blog posts in the space with [spaceKey].
-  Future<List<Map<String, dynamic>>> getBlogPosts(String spaceKey) => _getList(
-    'content',
-    queryParams: {'type': 'blogpost', 'spaceKey': spaceKey},
-  );
+  Future<List<Map<String, dynamic>>> getBlogPosts(String spaceKey) =>
+      _getList('content',
+          queryParams: {'type': 'blogpost', 'spaceKey': spaceKey});
 
   /// `confluence_get_content_children` — GET `content/{id}/child/page`.
   ///
@@ -410,14 +420,11 @@ class ConfluenceClient {
   /// 401s under them). Java parity: `Confluence.getChildrenOfContentById`.
   Future<List<Map<String, dynamic>>> getContentChildren(String id) {
     if (_http.isApiV2) {
-      return _getListV2(
-        'pages',
-        queryParams: {
-          'parent-id': id,
-          'limit': '100',
-          'body-format': _kStorage,
-        },
-      );
+      return _getListV2('pages', queryParams: {
+        'parent-id': id,
+        'limit': '100',
+        'body-format': _kStorage,
+      });
     }
     return _getList('content/$id/child/page');
   }
@@ -468,10 +475,9 @@ class ConfluenceClient {
   Future<List<Map<String, dynamic>>> getSpaceContent(
     String spaceKey,
     String contentType,
-  ) => _getList(
-    'space/$spaceKey/content/$contentType',
-    queryParams: {'depth': 'all'},
-  );
+  ) =>
+      _getList('space/$spaceKey/content/$contentType',
+          queryParams: {'depth': 'all'});
 
   /// `confluence_create_space` — POST `space`.
   ///
@@ -572,9 +578,7 @@ class ConfluenceClient {
   /// Applies the Java `applyFormat` contract: converts each content's
   /// storage body to Markdown in place when [format] is `md`/`markdown`.
   static void _applyFormat(
-    List<Map<String, dynamic>> contents,
-    String? format,
-  ) {
+      List<Map<String, dynamic>> contents, String? format) {
     final f = format?.toLowerCase();
     if (f != 'md' && f != 'markdown') return;
     for (final content in contents) {
@@ -582,9 +586,8 @@ class ConfluenceClient {
       final storage = body is Map ? body[_kStorage] : null;
       if (storage is! Map || storage['value'] is! String) continue;
       body.remove('export_view'); // redundant once Markdown is returned
-      storage['value'] = confluenceStorageToMarkdown(
-        storage['value'] as String,
-      );
+      storage['value'] =
+          confluenceStorageToMarkdown(storage['value'] as String);
       storage['representation'] = 'markdown';
     }
   }
@@ -622,41 +625,35 @@ class ConfluenceClient {
   }
 
   /// Builds a single global-prefix label entry for POST `content/{id}/label`.
-  Map<String, dynamic> _labelPayload(String label) => {
-    'prefix': 'global',
-    'name': label,
-  };
+  Map<String, dynamic> _labelPayload(String label) =>
+      {'prefix': 'global', 'name': label};
 
   /// Builds the space-update payload with a plain-text description.
   Map<String, dynamic> _spacePayload(String name, String description) => {
-    'name': name,
-    'description': {
-      'plain': {'value': description, 'representation': 'plain'},
-    },
-  };
+        'name': name,
+        'description': {
+          'plain': {'value': description, 'representation': 'plain'},
+        },
+      };
 
   /// Builds the move payload referencing the target page id.
   Map<String, dynamic> _movePayload(String targetId) => {
-    'target': {'id': targetId},
-  };
+        'target': {'id': targetId}
+      };
 
   /// Builds the create-space payload with [key] and [name].
-  Map<String, dynamic> _createSpacePayload(String key, String name) => {
-    'key': key,
-    'name': name,
-  };
+  Map<String, dynamic> _createSpacePayload(String key, String name) =>
+      {'key': key, 'name': name};
 
   /// Builds the status-change payload setting the page [status]
   /// (`archived` or `current`), shared by [archivePage] and [restorePage].
-  Map<String, dynamic> _statusPayload(String id, String status) => {
-    'id': id,
-    'type': 'page',
-    'status': status,
-  };
+  Map<String, dynamic> _statusPayload(String id, String status) =>
+      {'id': id, 'type': 'page', 'status': status};
 
   /// Builds the content-property payload for POST `content/{id}/property`.
   Map<String, dynamic> _propertyPayload(
     String key,
     Map<String, dynamic> value,
-  ) => {'key': key, 'value': value};
+  ) =>
+      {'key': key, 'value': value};
 }

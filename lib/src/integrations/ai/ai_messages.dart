@@ -13,14 +13,15 @@ typedef ChatMessages = List<Map<String, String>>;
 List<Map<String, String>> withSystemMessage(
   List<Map<String, String>> messages,
   String? systemPrompt,
-) => (systemPrompt == null || systemPrompt.isEmpty)
-    ? messages
-    : [
-        {'role': 'system', 'content': systemPrompt},
-        ...messages,
-      ];
+) =>
+    (systemPrompt == null || systemPrompt.isEmpty)
+        ? messages
+        : [
+            {'role': 'system', 'content': systemPrompt},
+            ...messages,
+          ];
 
 /// A single-message list wrapping [prompt] as a `user` turn.
 List<Map<String, String>> userMessages(String prompt) => [
-  {'role': 'user', 'content': prompt},
-];
+      {'role': 'user', 'content': prompt},
+    ];

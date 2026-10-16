@@ -21,7 +21,7 @@ class CompileCommand {
   /// dispatcher injects its own writer so command output flows through
   /// one channel.
   CompileCommand({void Function(String line)? writer})
-    : _writer = writer ?? print;
+      : _writer = writer ?? print;
 
   final void Function(String line) _writer;
 
@@ -37,18 +37,17 @@ class CompileCommand {
     final version = _resolveVersion(rest, agentName);
     if (version == null) {
       _writer(
-        'Error: --version <semver> or --versions-file versions.json is required',
-      );
+          'Error: --version <semver> or --versions-file versions.json is required');
       return 1;
     }
     try {
       final result = AgentPackCompiler(agentRoot).compile(
-        File(rest.first),
-        version,
-        _optionValue(rest, '--source-commit') ?? _detectSourceCommit(agentRoot),
-        Directory(_optionValue(rest, '--out') ?? 'dist'),
-        extraDirs: _optionValues(rest, '--include'),
-      );
+          File(rest.first),
+          version,
+          _optionValue(rest, '--source-commit') ??
+              _detectSourceCommit(agentRoot),
+          Directory(_optionValue(rest, '--out') ?? 'dist'),
+          extraDirs: _optionValues(rest, '--include'));
       _printResult(agentName, version, result);
       return 0;
     } on AgentPackException catch (e) {
@@ -121,10 +120,8 @@ Options:
   /// Best-effort source commit: `git rev-parse HEAD` in the agent root.
   String _detectSourceCommit(String agentRoot) {
     try {
-      final result = Process.runSync('git', [
-        'rev-parse',
-        'HEAD',
-      ], workingDirectory: agentRoot);
+      final result = Process.runSync('git', ['rev-parse', 'HEAD'],
+          workingDirectory: agentRoot);
       final out = (result.stdout as String).trim();
       if (result.exitCode == 0 && out.isNotEmpty) return out;
     } on Object {

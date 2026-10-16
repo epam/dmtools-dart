@@ -67,20 +67,18 @@ String mergeEncodedConfig(String baseJson, String? encodedConfig) {
     baseConfig = jsonDecode(baseJson) as Map<String, dynamic>;
   } on FormatException catch (e) {
     throw FormatException(
-      'Invalid JSON format: ${e.message}. File JSON content: $baseJson',
-      baseJson,
-      e.offset,
-    );
+        'Invalid JSON format: ${e.message}. File JSON content: $baseJson',
+        baseJson,
+        e.offset);
   }
   Map<String, dynamic> overrideConfig;
   try {
     overrideConfig = jsonDecode(decoded) as Map<String, dynamic>;
   } on FormatException catch (e) {
     throw FormatException(
-      'Invalid JSON format: ${e.message}. Encoded JSON content: $decoded',
-      decoded,
-      e.offset,
-    );
+        'Invalid JSON format: ${e.message}. Encoded JSON content: $decoded',
+        decoded,
+        e.offset);
   }
   final merged = deepMerge(baseConfig, overrideConfig);
   return jsonEncode(merged);

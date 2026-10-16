@@ -33,7 +33,7 @@ class DoctorCommand {
   /// [reader] backs every lookup; production code omits it so values load
   /// from the current working directory resolution chain.
   DoctorCommand({PropertyReader? reader})
-    : _reader = reader ?? PropertyReader();
+      : _reader = reader ?? PropertyReader();
 
   final PropertyReader _reader;
 
@@ -57,18 +57,18 @@ class DoctorCommand {
     'bitrise': ('Bitrise', ['BITRISE_TOKEN']),
     'xray': (
       'Xray',
-      ['XRAY_CLIENT_ID', 'XRAY_CLIENT_SECRET', 'XRAY_BASE_PATH'],
+      ['XRAY_CLIENT_ID', 'XRAY_CLIENT_SECRET', 'XRAY_BASE_PATH']
     ),
     // dm.ai #570: raw base-path check — the getter defaults to
     // localhost:8080 and would never report the variable as missing.
     'jenkins': (
       'Jenkins',
-      ['JENKINS_BASE_PATH', 'JENKINS_USER', 'JENKINS_API_TOKEN'],
+      ['JENKINS_BASE_PATH', 'JENKINS_USER', 'JENKINS_API_TOKEN']
     ),
     // SharePoint reuses the Teams (TEAMS_*) OAuth configuration.
     'sharepoint': (
       'SharePoint via Teams OAuth credentials',
-      ['TEAMS_CLIENT_ID', 'TEAMS_TENANT_ID'],
+      ['TEAMS_CLIENT_ID', 'TEAMS_TENANT_ID']
     ),
   };
 
@@ -107,9 +107,8 @@ class DoctorCommand {
     };
     final integrations = <String>{..._alwaysAvailable};
     for (final entry in _configuredMapping.entries) {
-      final ready = entry.value.every(
-        (name) => checks[name]?.configured == true,
-      );
+      final ready =
+          entry.value.every((name) => checks[name]?.configured == true);
       if (ready) integrations.addAll(entry.key);
     }
     return integrations;
@@ -164,28 +163,26 @@ class DoctorCommand {
   void _writeCheck(StringBuffer buf, _IntegrationCheck check) {
     final state = check.configured ? 'configured' : 'incomplete';
     final mark = check.configured ? '✓' : '✗';
-    buf.writeln(
-      '$mark ${check.name} - ${check.displayName} authentication '
-      '$state',
-    );
+    buf.writeln('$mark ${check.name} - ${check.displayName} authentication '
+        '$state');
     for (final variable in check.missing) {
       buf.writeln('    missing: $variable');
     }
   }
 
   List<_IntegrationCheck> _runChecks() => [
-    _IntegrationCheck('jira', 'Jira', _jiraMissing()),
-    _IntegrationCheck('confluence', 'Confluence', _confluenceMissing()),
-    _IntegrationCheck('figma', 'Figma', _figmaMissing()),
-    for (final entry in _simpleChecks.entries)
-      _IntegrationCheck(
-        entry.key,
-        entry.value.$1,
-        _missingRequired(entry.value.$2),
-      ),
-    _IntegrationCheck('ai', 'AI', _aiMissing()),
-    _IntegrationCheck('teams', 'Teams', _teamsMissing()),
-  ];
+        _IntegrationCheck('jira', 'Jira', _jiraMissing()),
+        _IntegrationCheck('confluence', 'Confluence', _confluenceMissing()),
+        _IntegrationCheck('figma', 'Figma', _figmaMissing()),
+        for (final entry in _simpleChecks.entries)
+          _IntegrationCheck(
+            entry.key,
+            entry.value.$1,
+            _missingRequired(entry.value.$2),
+          ),
+        _IntegrationCheck('ai', 'AI', _aiMissing()),
+        _IntegrationCheck('teams', 'Teams', _teamsMissing()),
+      ];
 
   // --- Auth-chain integrations ---
 

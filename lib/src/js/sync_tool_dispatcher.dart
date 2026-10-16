@@ -60,8 +60,10 @@ class SyncToolDispatcher {
   ///
   /// The optional [nonHttpHandler] receives `file_*` and `cli_*` tool calls
   /// so the dispatcher can serve as a single routing entry point.
-  SyncToolDispatcher(this._reader, {SyncNonHttpHandler? nonHttpHandler})
-    : _nonHttpHandler = nonHttpHandler;
+  SyncToolDispatcher(
+    this._reader, {
+    SyncNonHttpHandler? nonHttpHandler,
+  }) : _nonHttpHandler = nonHttpHandler;
 
   /// Confluence tools; built lazily on the first `confluence_*` dispatch.
   late final ConfluenceSyncTools _confluence = ConfluenceSyncTools(_reader);
@@ -128,11 +130,12 @@ class SyncToolDispatcher {
   _PrefixDispatch _viaHandlers(
     String integration,
     Map<String, String Function(Map<String, dynamic> args)> handlers,
-  ) => (toolName, args) {
-    final fn = handlers[toolName];
-    if (fn == null) {
-      return '{"error":"Unsupported $integration tool: $toolName"}';
-    }
-    return fn(args);
-  };
+  ) =>
+      (toolName, args) {
+        final fn = handlers[toolName];
+        if (fn == null) {
+          return '{"error":"Unsupported $integration tool: $toolName"}';
+        }
+        return fn(args);
+      };
 }

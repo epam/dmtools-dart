@@ -20,9 +20,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
-
 import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
-
 import 'tracker_github_router.dart';
 
 part 'jira_sync_http_helpers.dart';
@@ -36,7 +34,7 @@ class JiraSyncTools {
   /// when Jira is unconfigured (see [TrackerGitHubRouter]); tests inject a
   /// logger-capturing instance.
   const JiraSyncTools({TrackerGitHubRouter trackerRouter = _defaultRouter})
-    : _trackerRouter = trackerRouter;
+      : _trackerRouter = trackerRouter;
 
   static const _defaultRouter = TrackerGitHubRouter();
 
@@ -50,32 +48,32 @@ class JiraSyncTools {
   /// a fresh [PropertyReader] — the same per-call pattern the dispatcher's
   /// `executeToolViaJava` entry point uses.
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-    'jira_get_ticket': _getTicket,
-    'jira_post_comment': _postComment,
-    'jira_search_by_jql': _searchByJql,
-    'jira_add_label': _addLabel,
-    'jira_remove_label': _removeLabel,
-    'jira_move_to_status': _moveToStatus,
-    'jira_get_comments': _getComments,
-    'jira_update_field': _updateField,
-    'jira_update_description': _updateDescription,
-    'jira_get_transitions': _getTransitions,
-    'jira_get_my_profile': _getMyProfile,
-    'jira_delete_ticket': _deleteTicket,
-    'jira_create_ticket_basic': _createTicketBasic,
-    'jira_create_ticket': _createTicketBasic,
-    'jira_assign_ticket_to': _assignTicketTo,
-    'jira_assign_to': _assignTicketTo,
-    'jira_assign': _assignTicketTo,
-    'tracker_assign_ticket': _assignTicketTo,
-    'jira_set_priority': _setPriority,
-    'jira_create_ticket_with_parent': _createTicketWithParent,
-    'jira_create_ticket_with_json': _createTicketWithJson,
-    'jira_link_issues': _linkIssues,
-    'tracker_link_tickets': _linkIssues,
-    'jira_get_field_custom_code': _getFieldCustomCode,
-    'jira_attach_file_to_ticket': _attachFileToTicket,
-  };
+        'jira_get_ticket': _getTicket,
+        'jira_post_comment': _postComment,
+        'jira_search_by_jql': _searchByJql,
+        'jira_add_label': _addLabel,
+        'jira_remove_label': _removeLabel,
+        'jira_move_to_status': _moveToStatus,
+        'jira_get_comments': _getComments,
+        'jira_update_field': _updateField,
+        'jira_update_description': _updateDescription,
+        'jira_get_transitions': _getTransitions,
+        'jira_get_my_profile': _getMyProfile,
+        'jira_delete_ticket': _deleteTicket,
+        'jira_create_ticket_basic': _createTicketBasic,
+        'jira_create_ticket': _createTicketBasic,
+        'jira_assign_ticket_to': _assignTicketTo,
+        'jira_assign_to': _assignTicketTo,
+        'jira_assign': _assignTicketTo,
+        'tracker_assign_ticket': _assignTicketTo,
+        'jira_set_priority': _setPriority,
+        'jira_create_ticket_with_parent': _createTicketWithParent,
+        'jira_create_ticket_with_json': _createTicketWithJson,
+        'jira_link_issues': _linkIssues,
+        'tracker_link_tickets': _linkIssues,
+        'jira_get_field_custom_code': _getFieldCustomCode,
+        'jira_attach_file_to_ticket': _attachFileToTicket,
+      };
 
   /// Dispatches a Jira tool call against [handlers].
   ///
@@ -94,11 +92,10 @@ class JiraSyncTools {
 
   /// `jira_get_ticket` — GET `issue/{key}?fields={fields}`.
   String _getTicket(Map<String, dynamic> args) => _run((config) {
-    final url =
-        '${config.baseUrl}/issue/${_asStr(args['key'])}'
-        '?fields=${Uri.encodeQueryComponent(_joinFields(args['fields']))}';
-    return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
-  });
+        final url = '${config.baseUrl}/issue/${_asStr(args['key'])}'
+            '?fields=${Uri.encodeQueryComponent(_joinFields(args['fields']))}';
+        return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+      });
 
   /// `jira_post_comment` — POST `issue/{key}/comment`.
   ///
@@ -107,15 +104,15 @@ class JiraSyncTools {
   /// `TrackerClient.TextType == MARKDOWN` (gh-191, P6-JSY-09), and
   /// `BasicJiraClient.getTextType()` always returns MARKDOWN for Jira.
   String _postComment(Map<String, dynamic> args) => _run((config) {
-    final body = jsonEncode({
-      'body': markdownToJiraMarkup(_asStr(args['comment'])),
-    });
-    return _postBody(
-      config,
-      '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
-      body,
-    );
-  });
+        final body = jsonEncode(
+          {'body': markdownToJiraMarkup(_asStr(args['comment']))},
+        );
+        return _postBody(
+          config,
+          '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
+          body,
+        );
+      });
 
   /// `jira_search_by_jql` — GET `search/jql` (Cloud) or `search` (Server).
   ///
@@ -126,12 +123,12 @@ class JiraSyncTools {
   /// the Java tool returns `List<Ticket>`, so the JS side receives an
   /// array, not the `{issues: …}` envelope.
   String _searchByJql(Map<String, dynamic> args) => _run((config) {
-    final jql = Uri.encodeQueryComponent(_asStr(args['jql']));
-    final fields = Uri.encodeQueryComponent(_joinFields(args['fields']));
-    return _isCloudJira(config)
-        ? _cloudSearchPages(config, jql, fields)
-        : _serverSearchPages(config, jql, fields);
-  });
+        final jql = Uri.encodeQueryComponent(_asStr(args['jql']));
+        final fields = Uri.encodeQueryComponent(_joinFields(args['fields']));
+        return _isCloudJira(config)
+            ? _cloudSearchPages(config, jql, fields)
+            : _serverSearchPages(config, jql, fields);
+      });
 
   /// Cloud pagination: walk `search/jql` pages by `nextPageToken`.
   ///
@@ -139,10 +136,8 @@ class JiraSyncTools {
   /// error-carrying first page surfaces as an error before the walk; the
   /// walk itself then follows Java's break order per page.
   String _cloudSearchPages(_JiraSyncConfig config, String jql, String fields) {
-    final page = _fetchSearchPage(
-      config,
-      _searchJqlUrl(config, jql, fields, ''),
-    );
+    final page =
+        _fetchSearchPage(config, _searchJqlUrl(config, jql, fields, ''));
     if (page is String) return page;
     final firstError = _firstPageError(page);
     if (firstError != null) return firstError;
@@ -189,10 +184,8 @@ class JiraSyncTools {
   /// first page surfaces as an error, `total == 0` returns early, and the
   /// walk follows Java's loop conditions with per-page counter refresh.
   String _serverSearchPages(_JiraSyncConfig config, String jql, String fields) {
-    final page = _fetchSearchPage(
-      config,
-      _legacySearchUrl(config, jql, fields, 0),
-    );
+    final page =
+        _fetchSearchPage(config, _legacySearchUrl(config, jql, fields, 0));
     if (page is String) return page;
     final firstError = _firstPageError(page);
     if (firstError != null) return firstError;
@@ -261,9 +254,8 @@ class JiraSyncTools {
   /// [_bodyOrError] (curl error, non-2xx status, or a non-JSON body) so
   /// callers can map it to the Java exception paths.
   dynamic _fetchSearchPage(_JiraSyncConfig config, String url) {
-    final result = _bodyOrError(
-      SyncHttpClient.get(url, headers: config.headers),
-    );
+    final result =
+        _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
     final decoded = _tryDecode(result);
     if (decoded == null) return null;
     return decoded is Map<String, dynamic> && !decoded.containsKey('error')
@@ -287,7 +279,8 @@ class JiraSyncTools {
     String jql,
     String fields,
     int startAt,
-  ) => '${config.baseUrl}/search?jql=$jql&fields=$fields&startAt=$startAt';
+  ) =>
+      '${config.baseUrl}/search?jql=$jql&fields=$fields&startAt=$startAt';
 
   /// Deployment-detection cache, keyed by Jira base path.
   ///
@@ -318,54 +311,53 @@ class JiraSyncTools {
   /// The PUT is skipped when the fetch fails: PUTting a set built from an
   /// empty failure result would wipe every existing label on the ticket.
   String _addLabel(Map<String, dynamic> args) => _run((config) {
-    final key = _asStr(args['key']);
-    final labels = _fetchLabels(config, key);
-    if (labels == null) return _err('Failed to fetch labels for $key');
-    final label = _asStr(args['label']);
-    if (!labels.contains(label)) labels.add(label);
-    return _putLabels(config, key, labels);
-  });
+        final key = _asStr(args['key']);
+        final labels = _fetchLabels(config, key);
+        if (labels == null) return _err('Failed to fetch labels for $key');
+        final label = _asStr(args['label']);
+        if (!labels.contains(label)) labels.add(label);
+        return _putLabels(config, key, labels);
+      });
 
   /// `jira_remove_label` — fetches labels, removes, PUTs the full set.
   ///
   /// Same failure contract as [_addLabel]: no PUT without a confirmed fetch.
   String _removeLabel(Map<String, dynamic> args) => _run((config) {
-    final key = _asStr(args['key']);
-    final labels = _fetchLabels(config, key);
-    if (labels == null) return _err('Failed to fetch labels for $key');
-    labels.remove(_asStr(args['label']));
-    return _putLabels(config, key, labels);
-  });
+        final key = _asStr(args['key']);
+        final labels = _fetchLabels(config, key);
+        if (labels == null) return _err('Failed to fetch labels for $key');
+        labels.remove(_asStr(args['label']));
+        return _putLabels(config, key, labels);
+      });
 
   /// `jira_move_to_status` — finds the transition, then POSTs it. Fetch
   /// failures surface as their own error — a transient here used to
   /// masquerade as "No transition found" (nightly 2026-09-17).
   String _moveToStatus(Map<String, dynamic> args) => _run((config) {
-    final key = _asStr(args['key']);
-    final status = _asStr(args['statusName']);
-    final result = _getJsonOrError(
-      '${config.baseUrl}/issue/$key/transitions',
-      config,
-    );
-    if (result is String) return _err(result);
-    final list = (result as Map<String, dynamic>)['transitions'] as List? ?? [];
-    final transitions = list.cast<Map<String, dynamic>>();
-    final id = matchTransitionId(transitions, status);
-    if (id == null) return _err('No transition found for status: $status');
-    return _postBody(
-      config,
-      '${config.baseUrl}/issue/$key/transitions',
-      jsonEncode({
-        'transition': {'id': id},
-      }),
-    );
-  });
+        final key = _asStr(args['key']);
+        final status = _asStr(args['statusName']);
+        final result =
+            _getJsonOrError('${config.baseUrl}/issue/$key/transitions', config);
+        if (result is String) return _err(result);
+        final list =
+            (result as Map<String, dynamic>)['transitions'] as List? ?? [];
+        final transitions = list.cast<Map<String, dynamic>>();
+        final id = matchTransitionId(transitions, status);
+        if (id == null) return _err('No transition found for status: $status');
+        return _postBody(
+          config,
+          '${config.baseUrl}/issue/$key/transitions',
+          jsonEncode({
+            'transition': {'id': id},
+          }),
+        );
+      });
 
   /// `jira_get_comments` — GET `issue/{key}/comment`.
   String _getComments(Map<String, dynamic> args) => _run((config) {
-    final url = '${config.baseUrl}/issue/${_asStr(args['key'])}/comment';
-    return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
-  });
+        final url = '${config.baseUrl}/issue/${_asStr(args['key'])}/comment';
+        return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+      });
 
   /// `jira_update_field` — the Java `updateField` engine (body in
   /// `jira_sync_field_update.dart`).
@@ -373,36 +365,38 @@ class JiraSyncTools {
       _run((config) => _updateFieldFor(config, args));
 
   /// `jira_update_description` — PUT `issue/{key}` with the description.
-  String _updateDescription(Map<String, dynamic> args) =>
-      _putIssueFields(args, {'description': _asStr(args['description'])});
+  String _updateDescription(Map<String, dynamic> args) => _putIssueFields(
+        args,
+        {'description': _asStr(args['description'])},
+      );
 
   /// `jira_get_transitions` — GET `issue/{key}/transitions`.
   String _getTransitions(Map<String, dynamic> args) => _run((config) {
-    final url =
-        '${config.baseUrl}/issue/${_asStr(args['key'])}'
-        '/transitions';
-    return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
-  });
+        final url = '${config.baseUrl}/issue/${_asStr(args['key'])}'
+            '/transitions';
+        return _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
+      });
 
   /// `jira_get_my_profile` — GET `myself`.
   String _getMyProfile(Map<String, dynamic> args) => _run((config) {
-    return _bodyOrError(
-      SyncHttpClient.get('${config.baseUrl}/myself', headers: config.headers),
-    );
-  });
+        return _bodyOrError(
+          SyncHttpClient.get('${config.baseUrl}/myself',
+              headers: config.headers),
+        );
+      });
 
   /// `jira_delete_ticket` — DELETE `issue/{key}`.
   ///
   /// Java `deleteTicket`: an empty (204) response reports `"Success"`;
   /// any other body is returned as-is.
   String _deleteTicket(Map<String, dynamic> args) => _run((config) {
-    final resp = SyncHttpClient.delete(
-      '${config.baseUrl}/issue/${_asStr(args['key'])}',
-      headers: config.headers,
-    );
-    if (resp.isOk && resp.body.isEmpty) return jsonEncode('Success');
-    return _bodyOrError(resp);
-  });
+        final resp = SyncHttpClient.delete(
+          '${config.baseUrl}/issue/${_asStr(args['key'])}',
+          headers: config.headers,
+        );
+        if (resp.isOk && resp.body.isEmpty) return jsonEncode('Success');
+        return _bodyOrError(resp);
+      });
 
   /// `jira_create_ticket_basic` (alias `jira_create_ticket`) — POST `issue`.
   ///
@@ -413,17 +407,20 @@ class JiraSyncTools {
   /// `jira_assign_ticket_to` (aliases `jira_assign_to` / `jira_assign` /
   /// `tracker_assign_ticket`) — PUT `issue/{key}/assignee`.
   String _assignTicketTo(Map<String, dynamic> args) => _run((config) {
-    return _putBody(
-      config,
-      '${config.baseUrl}/issue/${_asStr(args['key'])}/assignee',
-      jsonEncode({'accountId': _asStr(args['accountId'])}),
-    );
-  });
+        return _putBody(
+          config,
+          '${config.baseUrl}/issue/${_asStr(args['key'])}/assignee',
+          jsonEncode({'accountId': _asStr(args['accountId'])}),
+        );
+      });
 
   /// `jira_set_priority` — PUT `issue/{key}` with `priority:{name}`.
-  String _setPriority(Map<String, dynamic> args) => _putIssueFields(args, {
-    'priority': {'name': _asStr(args['priority'])},
-  });
+  String _setPriority(Map<String, dynamic> args) => _putIssueFields(
+        args,
+        {
+          'priority': {'name': _asStr(args['priority'])},
+        },
+      );
 
   /// `jira_create_ticket_with_parent` — POST `issue` with a parent key.
   ///
@@ -435,25 +432,28 @@ class JiraSyncTools {
   /// (`?fields=summary`, failing upfront when it cannot be read) and the
   /// full parent object is embedded in the create payload.
   String _createTicketWithParent(Map<String, dynamic> args) => _run((config) {
-    final parentKey = _asStr(args['parentKey']);
-    final parent = _getJson(
-      config,
-      '${config.baseUrl}/issue/$parentKey?fields=summary',
-    );
-    if (parent == null) {
-      return _err('Failed to fetch parent ticket $parentKey');
-    }
-    return _postIssueCreate({..._basicCreateFields(args), 'parent': parent});
-  });
+        final parentKey = _asStr(args['parentKey']);
+        final parent = _getJson(
+          config,
+          '${config.baseUrl}/issue/$parentKey?fields=summary',
+        );
+        if (parent == null) {
+          return _err('Failed to fetch parent ticket $parentKey');
+        }
+        return _postIssueCreate({
+          ..._basicCreateFields(args),
+          'parent': parent,
+        });
+      });
 
   /// `jira_create_ticket_with_json` — POST `issue` with merged fields JSON.
   ///
   /// The `fieldsJson` object is merged over the mandatory `project` field
   /// (Java `createTicketInProjectWithJson`).
   String _createTicketWithJson(Map<String, dynamic> args) => _postIssueCreate({
-    'project': {'key': _asStr(args['project'])},
-    ..._fieldsJsonArg(args['fieldsJson']),
-  });
+        'project': {'key': _asStr(args['project'])},
+        ..._fieldsJsonArg(args['fieldsJson']),
+      });
 
   /// `jira_link_issues` (alias `tracker_link_tickets`) — POST `issueLink`.
   ///
@@ -462,26 +462,31 @@ class JiraSyncTools {
   /// places source/another keys on the side the matched direction implies,
   /// mirroring Java `linkIssueWithRelationship`.
   String _linkIssues(Map<String, dynamic> args) => _run((config) {
-    final relationship = _asStr(args['relationship']);
-    final resolved = resolveJiraLinkType(_fetchLinkTypes(config), relationship);
-    if (resolved == null) {
-      return _err('Unknown relationship type: $relationship');
-    }
-    final source = {'key': _asStr(args['sourceKey'])};
-    final another = {'key': _asStr(args['anotherKey'])};
-    final body = resolved.direction == 'inward'
-        ? {
-            'type': {'name': resolved.name},
-            'outwardIssue': source,
-            'inwardIssue': another,
-          }
-        : {
-            'type': {'name': resolved.name},
-            'inwardIssue': source,
-            'outwardIssue': another,
-          };
-    return _postBody(config, '${config.baseUrl}/issueLink', jsonEncode(body));
-  });
+        final relationship = _asStr(args['relationship']);
+        final resolved =
+            resolveJiraLinkType(_fetchLinkTypes(config), relationship);
+        if (resolved == null) {
+          return _err('Unknown relationship type: $relationship');
+        }
+        final source = {'key': _asStr(args['sourceKey'])};
+        final another = {'key': _asStr(args['anotherKey'])};
+        final body = resolved.direction == 'inward'
+            ? {
+                'type': {'name': resolved.name},
+                'outwardIssue': source,
+                'inwardIssue': another,
+              }
+            : {
+                'type': {'name': resolved.name},
+                'inwardIssue': source,
+                'outwardIssue': another,
+              };
+        return _postBody(
+          config,
+          '${config.baseUrl}/issueLink',
+          jsonEncode(body),
+        );
+      });
 
   /// `jira_get_field_custom_code` — resolve a display name to a field id.
   ///
@@ -490,16 +495,16 @@ class JiraSyncTools {
   /// candidate's id. Returns JSON `null` when nothing matches (Java returns
   /// `null`).
   String _getFieldCustomCode(Map<String, dynamic> args) => _run((config) {
-    final field = _asStr(args['fieldName']);
-    final listing = _fieldsListing(config, _asStr(args['project']));
-    if (listing.error != null) {
-      return _err("Failed to resolve field '$field': ${listing.error}");
-    }
-    final best = selectBestJiraField(
-      findAllJiraFieldsByName(field, listing.body!),
-    );
-    return best == null ? 'null' : jsonEncode(best.id);
-  });
+        final field = _asStr(args['fieldName']);
+        final listing = _fieldsListing(config, _asStr(args['project']));
+        if (listing.error != null) {
+          return _err("Failed to resolve field '$field': ${listing.error}");
+        }
+        final best = selectBestJiraField(
+          findAllJiraFieldsByName(field, listing.body!),
+        );
+        return best == null ? 'null' : jsonEncode(best.id);
+      });
 
   /// `jira_attach_file_to_ticket` — multipart POST `issue/{key}/attachments`.
   ///
@@ -508,39 +513,37 @@ class JiraSyncTools {
   /// and success is still reported; missing local files are an error;
   /// `contentType` defaults to `image/*`.
   String _attachFileToTicket(Map<String, dynamic> args) => _run((config) {
-    final ticketKey = _asStr(args['ticketKey']);
-    final name = _asStr(args['name']);
-    final filePath = _asStr(args['filePath']);
-    final file = File(filePath);
-    if (!file.existsSync()) return _err('File does not exist: $filePath');
-    if (_attachmentExists(config, ticketKey, name)) {
-      return _attachSuccess(ticketKey, name);
-    }
-    final contentType = _asStr(args['contentType']);
-    final effectiveContentType = contentType.isEmpty ? 'image/*' : contentType;
-    return _uploadAttachment(
-      config,
-      ticketKey,
-      name,
-      effectiveContentType,
-      filePath,
-    );
-  });
+        final ticketKey = _asStr(args['ticketKey']);
+        final name = _asStr(args['name']);
+        final filePath = _asStr(args['filePath']);
+        final file = File(filePath);
+        if (!file.existsSync()) return _err('File does not exist: $filePath');
+        if (_attachmentExists(config, ticketKey, name)) {
+          return _attachSuccess(ticketKey, name);
+        }
+        final contentType = _asStr(args['contentType']);
+        final effectiveContentType =
+            contentType.isEmpty ? 'image/*' : contentType;
+        return _uploadAttachment(
+          config,
+          ticketKey,
+          name,
+          effectiveContentType,
+          filePath,
+        );
+      });
 
   /// Builds the Java `attachFileToTicket` success result.
   String _attachSuccess(String ticketKey, String name) => jsonEncode({
-    'status': 'success',
-    'message': "File '$name' attached to ticket $ticketKey",
-    'ticket': ticketKey,
-    'fileName': name,
-  });
+        'status': 'success',
+        'message': "File '$name' attached to ticket $ticketKey",
+        'ticket': ticketKey,
+        'fileName': name,
+      });
 
   /// Whether [ticketKey] already has an attachment named [name].
   bool _attachmentExists(
-    _JiraSyncConfig config,
-    String ticketKey,
-    String name,
-  ) {
+      _JiraSyncConfig config, String ticketKey, String name) {
     final decoded = _getJson(
       config,
       '${config.baseUrl}/issue/$ticketKey?fields=attachment,summary',
@@ -584,24 +587,25 @@ class JiraSyncTools {
     final dir = Directory.systemTemp.createTempSync('dmtools_attach_');
     try {
       final headerFile = File('${dir.path}/headers')
-        ..writeAsStringSync(
-          SyncHttpClient.renderHeaderFile(headers),
-          flush: true,
-        );
-      final result = Process.runSync('curl', [
-        '-s',
-        '-w',
-        '\n%{http_code}',
-        '--connect-timeout',
-        '${SyncHttpClient.connectTimeoutSeconds}',
-        '--max-time',
-        '${SyncHttpClient.maxTimeSeconds}',
-        '-H',
-        '@${headerFile.path}',
-        '-F',
-        form,
-        url,
-      ], stdoutEncoding: utf8);
+        ..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers),
+            flush: true);
+      final result = Process.runSync(
+          'curl',
+          [
+            '-s',
+            '-w',
+            '\n%{http_code}',
+            '--connect-timeout',
+            '${SyncHttpClient.connectTimeoutSeconds}',
+            '--max-time',
+            '${SyncHttpClient.maxTimeSeconds}',
+            '-H',
+            '@${headerFile.path}',
+            '-F',
+            form,
+            url,
+          ],
+          stdoutEncoding: utf8);
       return SyncHttpClient.parseResponse(result);
     } finally {
       dir.deleteSync(recursive: true);
@@ -610,9 +614,9 @@ class JiraSyncTools {
 
   /// Drops `Content-Type` from [headers] for multipart requests.
   Map<String, String> _multipartHeaders(Map<String, String> headers) => {
-    for (final e in headers.entries)
-      if (e.key.toLowerCase() != 'content-type') e.key: e.value,
-  };
+        for (final e in headers.entries)
+          if (e.key.toLowerCase() != 'content-type') e.key: e.value,
+      };
 
   /// Coerces a `fieldsJson` argument (object or JSON string) to a map.
   Map<String, dynamic> _fieldsJsonArg(dynamic value) {
@@ -636,10 +640,8 @@ class JiraSyncTools {
   /// (non-2xx, malformed JSON, curl error). Callers must abort rather than
   /// PUT an empty set — the failure path is what protects existing labels.
   List<String>? _fetchLabels(_JiraSyncConfig config, String key) {
-    final decoded = _getJson(
-      config,
-      '${config.baseUrl}/issue/$key?fields=labels',
-    );
+    final decoded =
+        _getJson(config, '${config.baseUrl}/issue/$key?fields=labels');
     if (decoded == null) return null;
     final fields = decoded['fields'] as Map<String, dynamic>? ?? {};
     return List<String>.from(fields['labels'] as List? ?? []);
@@ -685,24 +687,20 @@ class JiraSyncTools {
 
   /// PUTs `issue/{key}` with a `fields` update payload.
   String _putIssueFields(
-    Map<String, dynamic> args,
-    Map<String, dynamic> fields,
-  ) => _run(
-    (config) => _putBody(
-      config,
-      '${config.baseUrl}/issue/${_asStr(args['key'])}',
-      jsonEncode({'fields': fields}),
-    ),
-  );
+          Map<String, dynamic> args, Map<String, dynamic> fields) =>
+      _run((config) => _putBody(
+            config,
+            '${config.baseUrl}/issue/${_asStr(args['key'])}',
+            jsonEncode({'fields': fields}),
+          ));
 
   /// POSTs a create payload (`{fields: …}`) to `issue`.
-  String _postIssueCreate(Map<String, dynamic> fields) => _run(
-    (config) => _postBody(
-      config,
-      '${config.baseUrl}/issue',
-      jsonEncode({'fields': fields}),
-    ),
-  );
+  String _postIssueCreate(Map<String, dynamic> fields) =>
+      _run((config) => _postBody(
+            config,
+            '${config.baseUrl}/issue',
+            jsonEncode({'fields': fields}),
+          ));
 
   /// The shared create fields (project/issuetype/summary, plus description
   /// when given) — the Java `createTicketBasic` payload base.

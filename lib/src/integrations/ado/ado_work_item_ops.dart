@@ -87,27 +87,25 @@ int mapAdoPriority(String? priority) {
   final p = priority.trim().toLowerCase();
   final number = RegExp(r'^[1-4]$').hasMatch(p) ? int.parse(p) : _priorities[p];
   if (number == null) {
-    throw ArgumentError(
-      "Unknown priority '$priority'. Use 1-4 or one of: "
-      'Blocker, Highest, Critical, High, Major, Medium, Normal, Low, '
-      'Minor, Lowest, Trivial',
-    );
+    throw ArgumentError("Unknown priority '$priority'. Use 1-4 or one of: "
+        'Blocker, Highest, Critical, High, Major, Medium, Normal, Low, '
+        'Minor, Lowest, Trivial');
   }
   return number;
 }
 
-Map<String, dynamic> _addField(String name, Object? value) => {
-  'op': 'add',
-  'path': '/fields/$name',
-  'value': value,
-};
+Map<String, dynamic> _addField(String name, Object? value) =>
+    {'op': 'add', 'path': '/fields/$name', 'value': value};
 
 /// JSON-Patch body (encoded) setting each entry of [fields] — Java
 /// `updateWorkItem`.
 ///
 /// With [markdown], each field also gets a `/multilineFieldsFormat/<field>`
 /// op set to `Markdown` (Java `AzureDevOpsClient` `format` support).
-String adoFieldsPatch(Map<String, Object?> fields, {bool markdown = false}) =>
+String adoFieldsPatch(
+  Map<String, Object?> fields, {
+  bool markdown = false,
+}) =>
     jsonEncode([
       for (final e in fields.entries) _addField(e.key, e.value),
       if (markdown)
@@ -123,10 +121,10 @@ bool isAdoMarkdownFormat(Object? format) {
 }
 
 Map<String, dynamic> _markdownFormatOp(String fieldRef) => {
-  'op': 'add',
-  'path': '/multilineFieldsFormat/$fieldRef',
-  'value': 'Markdown',
-};
+      'op': 'add',
+      'path': '/multilineFieldsFormat/$fieldRef',
+      'value': 'Markdown',
+    };
 
 /// JSON-Patch body for work-item creation: title, optional description,
 /// then [fieldsJson] keys (skipping Title/Description/WorkItemType).
@@ -155,17 +153,18 @@ String adoRelationPatch(
   String rel,
   String url, {
   Map<String, String>? attributes,
-}) => jsonEncode([
-  {
-    'op': 'add',
-    'path': '/relations/-',
-    'value': {
-      'rel': rel,
-      'url': url,
-      if (attributes != null) 'attributes': attributes,
-    },
-  },
-]);
+}) =>
+    jsonEncode([
+      {
+        'op': 'add',
+        'path': '/relations/-',
+        'value': {
+          'rel': rel,
+          'url': url,
+          if (attributes != null) 'attributes': attributes,
+        },
+      },
+    ]);
 
 /// The `referenceName` of the field whose `name` or `referenceName` equals
 /// [wanted] (case-insensitive) in a `wit/fields` response body, else `null`.

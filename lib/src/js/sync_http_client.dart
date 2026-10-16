@@ -41,12 +41,9 @@ class SyncHttpResponse {
   final List<int> bodyBytes;
 
   /// Creates a response with [statusCode], [body], and optional [headers].
-  SyncHttpResponse(
-    this.statusCode,
-    this.body, [
-    this.headers = const <String, String>{},
-    List<int>? rawBytes,
-  ]) : bodyBytes = rawBytes ?? utf8.encode(body);
+  SyncHttpResponse(this.statusCode, this.body,
+      [this.headers = const <String, String>{}, List<int>? rawBytes])
+      : bodyBytes = rawBytes ?? utf8.encode(body);
 
   /// Whether the request succeeded (2xx status code).
   bool get isOk => statusCode >= 200 && statusCode < 300;
@@ -88,14 +85,16 @@ class SyncHttpClient {
     String url, {
     Map<String, String>? headers,
     String? body,
-  }) => _dispatch('POST', url, headers: headers, body: body);
+  }) =>
+      _dispatch('POST', url, headers: headers, body: body);
 
   /// Performs a synchronous PUT request.
   static SyncHttpResponse put(
     String url, {
     Map<String, String>? headers,
     String? body,
-  }) => _dispatch('PUT', url, headers: headers, body: body);
+  }) =>
+      _dispatch('PUT', url, headers: headers, body: body);
 
   /// Performs a synchronous DELETE request.
   static SyncHttpResponse delete(String url, {Map<String, String>? headers}) =>
@@ -106,7 +105,8 @@ class SyncHttpClient {
     String url, {
     Map<String, String>? headers,
     String? body,
-  }) => _dispatch('PATCH', url, headers: headers, body: body);
+  }) =>
+      _dispatch('PATCH', url, headers: headers, body: body);
 
   /// Routes a request through the pooled-isolate bridge when booted, the
   /// curl subprocess otherwise, retrying retryable failures per
@@ -120,13 +120,9 @@ class SyncHttpClient {
     Map<String, String>? headers,
     String? body,
     bool followRedirects = false,
-  }) => _dispatch(
-    method,
-    url,
-    headers: headers,
-    body: body,
-    followRedirects: followRedirects,
-  );
+  }) =>
+      _dispatch(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
 
   static SyncHttpResponse _dispatch(
     String method,
@@ -141,13 +137,8 @@ class SyncHttpClient {
     if (performDelay > 0) sleep(Duration(milliseconds: performDelay));
     var attempt = 1;
     while (true) {
-      final resp = _transport(
-        method,
-        url,
-        headers: headers,
-        body: body,
-        followRedirects: followRedirects,
-      );
+      final resp = _transport(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
       if (!policy.shouldRetry(attempt, resp.statusCode, resp.body)) {
         return resp;
       }
@@ -175,21 +166,11 @@ class SyncHttpClient {
     final bridge = SyncHttpBridge.shared;
     if (!bridge.ready) {
       unawaited(bridge.boot());
-      return _curlRequest(
-        method,
-        url,
-        headers: headers,
-        body: body,
-        followRedirects: followRedirects,
-      );
+      return _curlRequest(method, url,
+          headers: headers, body: body, followRedirects: followRedirects);
     }
-    return bridge.request(
-      method,
-      url,
-      headers: headers,
-      body: body,
-      followRedirects: followRedirects,
-    );
+    return bridge.request(method, url,
+        headers: headers, body: body, followRedirects: followRedirects);
   }
 
   /// Builds the curl argument list for a request.
@@ -233,7 +214,8 @@ class SyncHttpClient {
   /// Renders a header map as a `-H @file` payload (one `Key: Value` line
   /// per header).
   static String renderHeaderFile(Map<String, String>? headers) =>
-      (headers ?? const <String, String>{}).entries
+      (headers ?? const <String, String>{})
+          .entries
           .map((e) => '${e.key}: ${e.value}')
           .join('\n');
 
@@ -255,10 +237,7 @@ class SyncHttpClient {
     final stdout = result.stdout;
     if (stdout is! String) {
       return _parseRawResponse(
-        stdout as List<int>,
-        result.exitCode,
-        result.stderr as String,
-      );
+          stdout as List<int>, result.exitCode, result.stderr as String);
     }
     final lines = stdout.split('\n');
     final statusCode = int.tryParse(lines.removeLast().trim()) ?? 0;
@@ -350,11 +329,7 @@ class SyncHttpClient {
     final dump = File(headerDumpFile);
     if (!dump.existsSync()) return resp;
     return SyncHttpResponse(
-      resp.statusCode,
-      resp.body,
-      parseHeaderDump(dump),
-      resp.bodyBytes,
-    );
+        resp.statusCode, resp.body, parseHeaderDump(dump), resp.bodyBytes);
   }
 
   /// Parses a curl `-D` dump into a name/value map (last value wins,
@@ -364,9 +339,8 @@ class SyncHttpClient {
     for (final line in dump.readAsLinesSync()) {
       final colon = line.indexOf(':');
       if (colon <= 0) continue;
-      headers[line.substring(0, colon).trim()] = line
-          .substring(colon + 1)
-          .trim();
+      headers[line.substring(0, colon).trim()] =
+          line.substring(colon + 1).trim();
     }
     return headers;
   }

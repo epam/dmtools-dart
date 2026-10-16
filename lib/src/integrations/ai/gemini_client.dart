@@ -26,10 +26,10 @@ class GeminiClient implements AiChatClient {
   ///
   /// Throws [StateError] when `GEMINI_API_KEY` is missing or empty.
   factory GeminiClient(PropertyReader reader, {Dio? dio}) => GeminiClient._(
-    dio ?? createDefaultAiDio(),
-    reader.getGeminiBasePath(),
-    requiredConfig(reader.getGeminiApiKey(), 'GEMINI_API_KEY'),
-  );
+        dio ?? createDefaultAiDio(),
+        reader.getGeminiBasePath(),
+        requiredConfig(reader.getGeminiApiKey(), 'GEMINI_API_KEY'),
+      );
 
   GeminiClient._(this._dio, this._basePath, this._apiKey);
 
@@ -42,7 +42,8 @@ class GeminiClient implements AiChatClient {
     String model,
     ChatMessages messages, [
     String? systemPrompt,
-  ]) => _post(model, _buildBody(messages, systemPrompt));
+  ]) =>
+      _post(model, _buildBody(messages, systemPrompt));
 
   /// Sends a low-level completion with an explicit token cap and temperature,
   /// serialized as a Gemini `generationConfig`.
@@ -52,36 +53,37 @@ class GeminiClient implements AiChatClient {
     String prompt,
     int maxTokens, [
     double? temperature,
-  ]) => _post(
-    model,
-    _buildBody(userMessages(prompt), null)
-      ..['generationConfig'] = _generationConfig(maxTokens, temperature),
-  );
+  ]) =>
+      _post(
+        model,
+        _buildBody(userMessages(prompt), null)
+          ..['generationConfig'] = _generationConfig(maxTokens, temperature),
+      );
 
   /// Posts a `generateContent` [body] for [model] with the client's headers.
   Future<String> _post(String model, Map<String, dynamic> body) => postChat(
-    _dio,
-    '$_basePath/$model:generateContent?key=$_apiKey',
-    body,
-    jsonHeaders(),
-    extractGeminiText,
-  );
+        _dio,
+        '$_basePath/$model:generateContent?key=$_apiKey',
+        body,
+        jsonHeaders(),
+        extractGeminiText,
+      );
 
   /// Generates an embedding via Gemini's `embedContent` endpoint.
   @override
   Future<String> embed(String model, String text) => postChat(
-    _dio,
-    '$_basePath/$model:embedContent?key=$_apiKey',
-    {
-      'content': {
-        'parts': [
-          {'text': text},
-        ],
-      },
-    },
-    jsonHeaders(),
-    extractValuesEmbedding,
-  );
+        _dio,
+        '$_basePath/$model:embedContent?key=$_apiKey',
+        {
+          'content': {
+            'parts': [
+              {'text': text}
+            ]
+          }
+        },
+        jsonHeaders(),
+        extractValuesEmbedding,
+      );
 
   /// Builds the `generationConfig` object for an explicit token cap.
   ///
@@ -117,11 +119,11 @@ class GeminiClient implements AiChatClient {
   /// The `assistant`/`model` role maps to Gemini's `model`; anything else
   /// maps to `user`.
   static Map<String, dynamic> _toContent(Map<String, String> message) => {
-    'role': message['role'] == 'assistant' ? 'model' : 'user',
-    'parts': [
-      {'text': message['content'] ?? ''},
-    ],
-  };
+        'role': message['role'] == 'assistant' ? 'model' : 'user',
+        'parts': [
+          {'text': message['content'] ?? ''},
+        ],
+      };
 
   /// Closes the underlying HTTP client and frees its connections.
   void close() => _dio.close();

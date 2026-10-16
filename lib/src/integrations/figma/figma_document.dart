@@ -42,7 +42,14 @@ const _vectorTypes = {
 const _pdfTypes = {'FRAME', 'COMPONENT', 'COMPONENT_SET'};
 
 /// Name fragments the Java `isLikelyIcon` matches.
-const _iconNameHints = ['icon', 'chevron', 'arrow', 'button', 'exit', 'badge'];
+const _iconNameHints = [
+  'icon',
+  'chevron',
+  'arrow',
+  'button',
+  'exit',
+  'badge',
+];
 
 /// Symbol characters the Java icon-name regex carries.
 const _iconSymbols = [
@@ -58,7 +65,7 @@ const _iconSymbols = [
   '🔒',
   '😊',
   '🤝',
-  'ℹ️',
+  'ℹ️'
 ];
 
 /// Finds all exportable visual elements in a file or nodes response —
@@ -76,10 +83,7 @@ List<Map<String, dynamic>> figmaFindAllComponents(
       final document = figmaNodeDataDocument(nodeData);
       if (document != null) {
         _findComponentsRecursively(
-          document,
-          document['id']?.toString(),
-          components,
-        );
+            document, document['id']?.toString(), components);
       }
     }
   } else {
@@ -277,7 +281,8 @@ Map<String, dynamic> _layerInfo(Map<String, dynamic> child) {
 Map<String, dynamic> figmaIconsResult(
   String fileId,
   List<Map<String, dynamic>> icons,
-) => {'fileId': fileId, 'totalIcons': icons.length, 'icons': icons};
+) =>
+    {'fileId': fileId, 'totalIcons': icons.length, 'icons': icons};
 
 /// Builds the `figma_get_text_content` result envelope — Java
 /// `FigmaTextContentResult.create` over the per-node extraction in
@@ -329,9 +334,9 @@ Map<String, dynamic> _textEntry(Map<String, dynamic> document) {
 /// The `figma_get_styles` envelope — Java returns empty token arrays (the
 /// styles endpoint carries metadata, not values).
 Map<String, dynamic> figmaStylesResult() => {
-  'colorStyles': <dynamic>[],
-  'textStyles': <dynamic>[],
-};
+      'colorStyles': <dynamic>[],
+      'textStyles': <dynamic>[],
+    };
 
 /// Builds the `figma_test` / `figma_me` result — Java `me()` parity.
 ///
@@ -427,11 +432,12 @@ Map<String, dynamic> _identityOf(
   Map<String, dynamic> node, {
   Object? idFallback = '',
   String typeFallback = '',
-}) => {
-  'id': node['id']?.toString() ?? idFallback,
-  'name': node['name']?.toString() ?? '',
-  'type': node['type']?.toString() ?? typeFallback,
-};
+}) =>
+    {
+      'id': node['id']?.toString() ?? idFallback,
+      'name': node['name']?.toString() ?? '',
+      'type': node['type']?.toString() ?? typeFallback,
+    };
 
 /// Width from `absoluteBoundingBox` (Java `getWidth`, default 0).
 double _widthOf(Map<String, dynamic> node) => _bboxDim(node, 'width');

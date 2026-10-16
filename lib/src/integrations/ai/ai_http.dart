@@ -11,9 +11,9 @@ import 'package:dio/dio.dart';
 /// Creates a [Dio] with the standard 60-second timeouts used by all AI
 /// provider clients.
 Dio createDefaultAiDio() => Dio(
-  BaseOptions(
-    connectTimeout: const Duration(seconds: 60),
-    sendTimeout: const Duration(seconds: 60),
-    receiveTimeout: const Duration(seconds: 60),
-  ),
-);
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 60),
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+      ),
+    );

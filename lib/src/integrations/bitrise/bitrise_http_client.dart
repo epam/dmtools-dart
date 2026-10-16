@@ -47,7 +47,9 @@ class BitriseHttpClient extends BaseHttpClient {
   }) : _token = token;
 
   @override
-  Map<String, String> get authHeaders => {'Authorization': 'token $_token'};
+  Map<String, String> get authHeaders => {
+        'Authorization': 'token $_token',
+      };
 
   @override
   String buildUrl(String path) => '$basePath/$path';

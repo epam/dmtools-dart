@@ -50,7 +50,10 @@ extension JiraProjectClient on JiraClient {
     for (final e in entities) {
       await _http.post(
         'project/$target/$endpoint',
-        body: jsonEncode({'name': e['name'], 'description': e['description']}),
+        body: jsonEncode({
+          'name': e['name'],
+          'description': e['description'],
+        }),
       );
     }
   }
@@ -67,12 +70,8 @@ extension JiraProjectClient on JiraClient {
     String? lead,
   ]) async {
     final details = await getProjectDetails(source);
-    final created = await _createTargetProject(
-      target,
-      targetName,
-      lead,
-      details,
-    );
+    final created =
+        await _createTargetProject(target, targetName, lead, details);
     await copyProjectStructure(source, target);
     await syncProjectWorkflow(source, target);
     return created;

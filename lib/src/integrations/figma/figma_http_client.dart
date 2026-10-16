@@ -30,7 +30,9 @@ class FigmaHttpClient extends BearerHttpClient {
     final token = reader.getFigmaApiKey();
     final basePath = reader.getFigmaBasePath() ?? figmaDefaultBasePath;
     if (token == null || token.isEmpty) {
-      throw StateError('Figma auth not configured (FIGMA_TOKEN is required)');
+      throw StateError(
+        'Figma auth not configured (FIGMA_TOKEN is required)',
+      );
     }
     return FigmaHttpClient._(
       dio: dio ?? BaseHttpClient.createDefaultDio(),

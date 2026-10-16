@@ -55,9 +55,9 @@ class JiraHttpClient extends BaseHttpClient {
 
   @override
   Map<String, String> get authHeaders => {
-    'Authorization': _authHeader,
-    'X-Atlassian-Token': 'nocheck',
-  };
+        'Authorization': _authHeader,
+        'X-Atlassian-Token': 'nocheck',
+      };
 
   @override
   String buildUrl(String path) => '$basePath/rest/api/latest/$path';
@@ -125,7 +125,10 @@ class JiraHttpClient extends BaseHttpClient {
   Future<List<int>> getBytes(String url) async {
     final response = await dio.get<List<int>>(
       url,
-      options: Options(headers: authHeaders, responseType: ResponseType.bytes),
+      options: Options(
+        headers: authHeaders,
+        responseType: ResponseType.bytes,
+      ),
     );
     return response.data ?? <int>[];
   }

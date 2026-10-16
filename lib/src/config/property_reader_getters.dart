@@ -491,11 +491,11 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// Teams OAuth scopes. Key: `TEAMS_SCOPES`.
   String getTeamsScopes() => getValueWithDefault(
-    'TEAMS_SCOPES',
-    'User.Read Chat.Read ChatMessage.Read Mail.Read '
-        'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
-        'offline_access',
-  );
+        'TEAMS_SCOPES',
+        'User.Read Chat.Read ChatMessage.Read Mail.Read '
+            'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
+            'offline_access',
+      );
 
   /// Teams auth method. Key: `TEAMS_AUTH_METHOD`, default: `device`.
   String getTeamsAuthMethod() =>
@@ -519,17 +519,17 @@ extension PropertyReaderGetters on PropertyReader {
   /// Microsoft Graph API base path.
   /// Key: `TEAMS_BASE_PATH`, default: `https://graph.microsoft.com/v1.0`.
   String getTeamsBasePath() => getValueWithDefault(
-    'TEAMS_BASE_PATH',
-    'https://graph.microsoft.com/v1.0',
-  );
+        'TEAMS_BASE_PATH',
+        'https://graph.microsoft.com/v1.0',
+      );
 
   /// SharePoint OAuth scopes. Key: `SHAREPOINT_SCOPES`.
   String getSharePointScopes() => getValueWithDefault(
-    'SHAREPOINT_SCOPES',
-    'User.Read Chat.Read ChatMessage.Read Mail.Read '
-        'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
-        'Sites.Read.All openid profile email offline_access',
-  );
+        'SHAREPOINT_SCOPES',
+        'User.Read Chat.Read ChatMessage.Read Mail.Read '
+            'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
+            'Sites.Read.All openid profile email offline_access',
+      );
 
   // --- TestRail ---
 

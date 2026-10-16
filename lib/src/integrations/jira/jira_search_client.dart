@@ -14,7 +14,10 @@ extension JiraSearchClient on JiraClient {
     String? nextPageToken,
     List<String>? fields,
   ]) async {
-    final params = <String, dynamic>{'jql': jql, 'fields': _joinFields(fields)};
+    final params = <String, dynamic>{
+      'jql': jql,
+      'fields': _joinFields(fields),
+    };
     if (nextPageToken != null) params['nextPageToken'] = nextPageToken;
     final body = await _http.get('search/jql', queryParams: params);
     return _decodeMap(body);
@@ -31,15 +34,12 @@ extension JiraSearchClient on JiraClient {
     int startAt = 0,
     List<String>? fields,
   ]) async {
-    final body = await _http.get(
-      'search',
-      queryParams: {
-        'jql': jql,
-        'fields': _joinFields(fields),
-        'startAt': startAt.toString(),
-        'maxResults': '100',
-      },
-    );
+    final body = await _http.get('search', queryParams: {
+      'jql': jql,
+      'fields': _joinFields(fields),
+      'startAt': startAt.toString(),
+      'maxResults': '100',
+    });
     return _decodeMap(body);
   }
 }

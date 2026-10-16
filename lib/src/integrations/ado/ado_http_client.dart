@@ -58,9 +58,9 @@ class AdoHttpClient extends BaseHttpClient {
     required String organization,
     required String project,
     required String authorization,
-  }) : _organization = organization,
-       _project = project,
-       _authorization = authorization;
+  })  : _organization = organization,
+        _project = project,
+        _authorization = authorization;
 
   /// Encodes a PAT as a Basic auth value: `Basic base64(':' + pat)`.
   static String _encodePat(String pat) =>
@@ -101,7 +101,9 @@ class AdoHttpClient extends BaseHttpClient {
     final response = await dio.get<String>(
       'https://app.vssps.visualstudio.com/_apis/$path',
       queryParameters: {'api-version': '7.1'},
-      options: Options(headers: {...headers, 'User-Agent': 'DMTools'}),
+      options: Options(
+        headers: {...headers, 'User-Agent': 'DMTools'},
+      ),
     );
     return response.data ?? '';
   }
@@ -112,11 +114,12 @@ class AdoHttpClient extends BaseHttpClient {
     String path, {
     Map<String, dynamic>? queryParams,
     Map<String, String>? extra,
-  }) => super.get(
-    path,
-    queryParams: {...?queryParams, 'api-version': apiVersion},
-    extra: extra,
-  );
+  }) =>
+      super.get(
+        path,
+        queryParams: {...?queryParams, 'api-version': apiVersion},
+        extra: extra,
+      );
 
   /// Sends [method] against a project-scoped path, attaching the API version
   /// and Basic auth. [contentType] overrides the default JSON content type
@@ -144,12 +147,11 @@ class AdoHttpClient extends BaseHttpClient {
   /// POSTs a JSON body, attaching the API version as a query parameter.
   /// [queryParams] are merged in (e.g. `format=markdown` for comments).
   @override
-  Future<String> post(
-    String path, {
-    Object? body,
-    Map<String, String>? extra,
-    Map<String, String>? queryParams,
-  }) => _request('POST', path, body: body, queryParams: queryParams);
+  Future<String> post(String path,
+          {Object? body,
+          Map<String, String>? extra,
+          Map<String, String>? queryParams}) =>
+      _request('POST', path, body: body, queryParams: queryParams);
 
   /// PUTs a JSON body, attaching the API version as a query parameter. Used
   /// to add pull-request reviewers.
@@ -207,9 +209,9 @@ class AdoHttpClient extends BaseHttpClient {
   /// PATCHes a JSON Patch document with ADO's `application/json-patch+json`
   /// content type, attaching the API version. Used for work-item updates.
   Future<String> patchPatch(String path, {Object? body}) => _request(
-    'PATCH',
-    path,
-    body: body,
-    contentType: 'application/json-patch+json',
-  );
+        'PATCH',
+        path,
+        body: body,
+        contentType: 'application/json-patch+json',
+      );
 }

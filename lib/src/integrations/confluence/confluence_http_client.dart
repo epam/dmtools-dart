@@ -118,9 +118,9 @@ class ConfluenceHttpClient extends BaseHttpClient {
 
   @override
   Map<String, String> get authHeaders => {
-    'Authorization': _authValue,
-    'Accept': 'application/json',
-  };
+        'Authorization': _authValue,
+        'Accept': 'application/json',
+      };
 
   /// Builds a REST URL under [basePath].
   ///

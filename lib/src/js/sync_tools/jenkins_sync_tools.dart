@@ -24,9 +24,9 @@ class JenkinsSyncTools {
 
   /// Tool executors; config is resolved inside each handler.
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-    'jenkins_get_job_info': _getJobInfo,
-    'jenkins_get_build_log': _getBuildLog,
-  };
+        'jenkins_get_job_info': _getJobInfo,
+        'jenkins_get_build_log': _getBuildLog,
+      };
 
   /// Dispatches a Jenkins tool call, mirroring the dispatcher's errors.
   String dispatch(String toolName, Map<String, dynamic> args) {
@@ -76,12 +76,10 @@ class JenkinsSyncTools {
     if (config == null) return syncErr('Jenkins not configured');
     final jobPath = apiJobPath(syncAsStr(args['jobPath']));
     final buildNumber = syncAsInt(args['buildNumber']);
-    return syncBodyOrError(
-      SyncHttpClient.get(
-        '${config.baseUrl}$jobPath$buildNumber/$suffix',
-        headers: config.headers,
-      ),
-    );
+    return syncBodyOrError(SyncHttpClient.get(
+      '${config.baseUrl}$jobPath$buildNumber/$suffix',
+      headers: config.headers,
+    ));
   }
 }
 
@@ -98,10 +96,8 @@ String apiJobPath(String jobPath) {
   if (normalized.startsWith('/job/')) {
     return normalized.endsWith('/') ? normalized : '$normalized/';
   }
-  final segments = normalized
-      .split('/')
-      .where((s) => s.isNotEmpty)
-      .map(Uri.encodeComponent);
+  final segments =
+      normalized.split('/').where((s) => s.isNotEmpty).map(Uri.encodeComponent);
   final joined = segments.map((s) => '/job/$s').join();
   return '$joined/';
 }

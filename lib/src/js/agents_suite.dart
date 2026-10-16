@@ -101,10 +101,8 @@ class SuiteRunConfig {
     }
     final testFiles = jobParams['testFiles'];
     if (testFiles is! List || testFiles.whereType<String>().isEmpty) {
-      throw StateError(
-        'Config params.jobParams.testFiles must be a '
-        'non-empty array of strings',
-      );
+      throw StateError('Config params.jobParams.testFiles must be a '
+          'non-empty array of strings');
     }
     return SuiteRunConfig(
       jsPath: jsPath,
@@ -318,10 +316,10 @@ List<ShardInvocation> invocationsFor({
           'testFiles': [...chunks[i].primeFiles, ...chunks[i].countedFiles],
         },
         workingDirectory: agentsPath,
-        preludeCode: primePreludeJs([
-          ...chunks[i].primeFiles,
-          ...chunks[i].countedFiles,
-        ], chunks[i].primeFiles.length),
+        preludeCode: primePreludeJs(
+          [...chunks[i].primeFiles, ...chunks[i].countedFiles],
+          chunks[i].primeFiles.length,
+        ),
       ),
   ];
 }
@@ -448,10 +446,10 @@ class AgentsSuiteReport {
   /// The `Result:` JSON body — same shape the serial `testRunner.js`
   /// result had (`{"success":…,"passed":…,"failed":…}`).
   Map<String, dynamic> toJson() => {
-    'success': success,
-    'passed': passed,
-    'failed': failed,
-  };
+        'success': success,
+        'passed': passed,
+        'failed': failed,
+      };
 }
 
 /// Per-chunk stderr diagnostics for crashed/malformed chunks (one line
@@ -624,9 +622,8 @@ Future<ChunkOutcome> runChunkInIsolate(ShardInvocation chunk) {
 /// a crashed outcome.
 ChunkOutcome _runChunkSync(ShardInvocation chunk) {
   if (!_copiesEnabled()) return _evalChunk(chunk);
-  final copyRoot = Directory.systemTemp
-      .createTempSync('dmtools-suite-chunk-')
-      .path;
+  final copyRoot =
+      Directory.systemTemp.createTempSync('dmtools-suite-chunk-').path;
   try {
     final copyWatch = Stopwatch()..start();
     copyAgentTree(chunk.workingDirectory, copyRoot);
@@ -643,11 +640,8 @@ ChunkOutcome _runChunkSync(ShardInvocation chunk) {
 /// One stderr timing line per chunk — wall-clock attribution for CI
 /// (chunk ends alone don't show when a chunk started or how long the
 /// tree copy took).
-void _logChunkTiming(
-  ShardInvocation chunk,
-  Stopwatch copyWatch, {
-  required String label,
-}) {
+void _logChunkTiming(ShardInvocation chunk, Stopwatch copyWatch,
+    {required String label}) {
   final secs = (copyWatch.elapsedMilliseconds / 1000).toStringAsFixed(1);
   stderr.writeln(
     '[chunk ${chunk.index + 1}/${chunk.total}] ⏱ $label took ${secs}s',
@@ -667,12 +661,9 @@ ShardInvocation _rebasedChunk(ShardInvocation chunk, String copyRoot) {
     total: chunk.total,
     scriptPath:
         rebasePath(chunk.scriptPath, chunk.workingDirectory, copyRoot) ??
-        chunk.scriptPath,
-    jobParams: rebaseJobParams(
-      chunk.jobParams,
-      chunk.workingDirectory,
-      copyRoot,
-    ),
+            chunk.scriptPath,
+    jobParams:
+        rebaseJobParams(chunk.jobParams, chunk.workingDirectory, copyRoot),
     workingDirectory: copyRoot,
     preludeCode: chunk.preludeCode,
   );
@@ -693,9 +684,8 @@ void copyAgentTree(String source, String destination) {
   for (final entity in Directory(source).listSync(followLinks: false)) {
     // Directory URIs end in '/', so the raw last pathSegment is '' —
     // filter empties before taking the name.
-    final name = entity.uri.pathSegments
-        .where((segment) => segment.isNotEmpty)
-        .last;
+    final name =
+        entity.uri.pathSegments.where((segment) => segment.isNotEmpty).last;
     final target = '$destination/$name';
     if (entity is Directory) {
       if (name == '.git') {

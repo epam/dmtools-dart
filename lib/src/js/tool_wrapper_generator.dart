@@ -77,8 +77,7 @@ class ToolWrapperGenerator {
       'JSON.stringify(args));\n';
 
   /// Wrapper for a tool that takes no parameters.
-  String _noArgWrapper(String name) =>
-      'globalThis.$name = function() {\n'
+  String _noArgWrapper(String name) => 'globalThis.$name = function() {\n'
       '  var args = {};\n'
       '${_callLog(name)}'
       "  return executeToolViaJava('$name', args);\n"

@@ -38,21 +38,23 @@ class GithubHttpClient extends BaseHttpClient {
       );
     }
     final clientDio = dio ?? BaseHttpClient.createDefaultDio();
-    clientDio.interceptors.add(
-      GithubRateLimitRetryInterceptor(
-        dio: clientDio,
-        policy: SyncRetryPolicy(
-          maxAttempts: GithubRateLimitRetryInterceptor.defaultMaxAttempts,
-          baseDelayMs: 1000,
-          maxDelayMs: 60000,
-          backoffMultiplier: 2.0,
-          jitterFactor: 0.3,
-          rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(reader),
-          random: Random(),
-        ),
+    clientDio.interceptors.add(GithubRateLimitRetryInterceptor(
+      dio: clientDio,
+      policy: SyncRetryPolicy(
+        maxAttempts: GithubRateLimitRetryInterceptor.defaultMaxAttempts,
+        baseDelayMs: 1000,
+        maxDelayMs: 60000,
+        backoffMultiplier: 2.0,
+        jitterFactor: 0.3,
+        rateLimitMaxWaitSeconds: _rateLimitMaxWaitSeconds(reader),
+        random: Random(),
       ),
+    ));
+    return GithubHttpClient._(
+      dio: clientDio,
+      basePath: basePath,
+      token: token,
     );
-    return GithubHttpClient._(dio: clientDio, basePath: basePath, token: token);
   }
 
   /// Java `RetryPolicy.resolveRateLimitMaxWaitSeconds`: parses the
@@ -75,10 +77,10 @@ class GithubHttpClient extends BaseHttpClient {
 
   @override
   Map<String, String> get authHeaders => {
-    'Authorization': 'Bearer $_token',
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-  };
+        'Authorization': 'Bearer $_token',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
 
   @override
   String buildUrl(String path) => '$basePath/$path';

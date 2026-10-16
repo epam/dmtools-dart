@@ -77,8 +77,8 @@ class GithubIssueSource {
   GithubIssueSource({
     Future<Map<String, dynamic>> Function(String path)? getJson,
     Map<String, String>? env,
-  }) : _getJson = getJson ?? _defaultGetJson,
-       _env = env ?? Platform.environment;
+  })  : _getJson = getJson ?? _defaultGetJson,
+        _env = env ?? Platform.environment;
 
   final Future<Map<String, dynamic>> Function(String path) _getJson;
   final Map<String, String> _env;
@@ -114,9 +114,8 @@ class GithubIssueSource {
         .firstMatch(effective)
         ?.groups(const [1, 2]);
     if (inline != null) return (inline[0]!, int.parse(inline[1]!));
-    final bare = RegExp(r'^(?:#|[Gg][Hh]-)?(\d+)$')
-        .firstMatch(effective)
-        ?.group(1);
+    final bare =
+        RegExp(r'^(?:#|[Gg][Hh]-)?(\d+)$').firstMatch(effective)?.group(1);
     if (bare == null) return null;
     final repo = _env['GITHUB_REPOSITORY'];
     if (repo == null || !repo.contains('/')) {
@@ -169,9 +168,8 @@ class GithubIssueSource {
     Map<String, dynamic> comments,
     int number,
   ) {
-    final rawComments = (comments as Map?)?['comments'] is List
-        ? comments
-        : const {};
+    final rawComments =
+        (comments as Map?)?['comments'] is List ? comments : const {};
     return {
       'key': 'GH-$number',
       'fields': {

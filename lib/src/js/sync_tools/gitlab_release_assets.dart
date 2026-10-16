@@ -92,18 +92,13 @@ String gitlabDownloadReleaseAsset({
   final tagName = syncAsStr(args['tagName']);
   final packageName = _resolvePackageName(args);
   final packageVersion = _sanitizePackageComponent(tagName);
-  final url =
-      '$baseUrl/projects/${gitlabEncodedProjectArg(args)}'
+  final url = '$baseUrl/projects/${gitlabEncodedProjectArg(args)}'
       '/packages/generic/$packageName/$packageVersion'
       '/${_encodePathSegment(syncAsStr(args['assetName']))}';
   final target = File(syncAsStr(args['targetFilePath']));
   target.parent.createSync(recursive: true);
-  final resp = syncCurlStaged(
-    'GET',
-    url,
-    headers: headers,
-    outputFile: target.path,
-  );
+  final resp =
+      syncCurlStaged('GET', url, headers: headers, outputFile: target.path);
   if (resp.statusCode == 0) return syncErr('HTTP request failed: ${resp.body}');
   return target.path;
 }
@@ -155,8 +150,7 @@ String _resolveDefaultBranch({
 }) {
   final url = '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}';
   final decoded = syncTryDecode(
-    syncBodyOrError(SyncHttpClient.get(url, headers: conn.headers)),
-  );
+      syncBodyOrError(SyncHttpClient.get(url, headers: conn.headers)));
   if (decoded is Map) {
     final branch = syncAsStr(decoded['default_branch']);
     if (branch.isNotEmpty) return branch;
@@ -175,8 +169,7 @@ String _resolveDefaultBranch({
   required String packageVersion,
 }) {
   final contentType = _detectContentType(file, syncAsStr(args['contentType']));
-  final url =
-      '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
+  final url = '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
       '/packages/generic/$packageName/$packageVersion'
       '/${_encodePathSegment(assetName)}';
   return (
@@ -200,8 +193,7 @@ String _postReleaseLink({
   required String packageName,
 }) {
   final packageVersion = _sanitizePackageComponent(tagName);
-  final linksUrl =
-      '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
+  final linksUrl = '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
       '/releases/${_encodePathSegment(tagName)}/assets/links';
   return syncPostJson(
     conn.headers,
@@ -218,8 +210,8 @@ String _postReleaseLink({
 /// Resolves the asset name: explicit `assetName` or the local file name.
 String _resolveAssetName(Map<String, dynamic> args, File file) =>
     syncIsBlank(syncAsStr(args['assetName']))
-    ? file.uri.pathSegments.last
-    : syncAsStr(args['assetName']).trim();
+        ? file.uri.pathSegments.last
+        : syncAsStr(args['assetName']).trim();
 
 /// Resolves the package registry name: explicit `packageName` or
 /// `release-assets` (the Java default).
@@ -269,8 +261,7 @@ void _deleteReleaseLinkByName({
   required String tagName,
   required String assetName,
 }) {
-  final linksUrl =
-      '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
+  final linksUrl = '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}'
       '/releases/${_encodePathSegment(tagName)}/assets/links';
   final links = syncTryDecode(
     syncBodyOrError(SyncHttpClient.get(linksUrl, headers: conn.headers)),

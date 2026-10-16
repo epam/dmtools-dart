@@ -82,7 +82,7 @@ String figmaRefreshTokenBody({
 typedef FigmaTokenResponse = ({
   String accessToken,
   String refreshToken,
-  int expiresIn,
+  int expiresIn
 });
 
 /// Parses a token endpoint body with the Java `optString`/`optLong`
@@ -92,9 +92,8 @@ FigmaTokenResponse figmaParseTokenResponse(String body) {
   return (
     accessToken: json['access_token']?.toString() ?? '',
     refreshToken: json['refresh_token']?.toString() ?? '',
-    expiresIn: json['expires_in'] is num
-        ? (json['expires_in'] as num).toInt()
-        : 3600,
+    expiresIn:
+        json['expires_in'] is num ? (json['expires_in'] as num).toInt() : 3600,
   );
 }
 
@@ -113,27 +112,25 @@ class FigmaOAuth2Exchange {
     required String redirectUri,
     required String clientId,
     required String clientSecret,
-  }) => _post(
-    figmaTokenRequestBody(
-      clientId: clientId,
-      clientSecret: clientSecret,
-      code: code,
-      redirectUri: redirectUri,
-    ),
-  );
+  }) =>
+      _post(figmaTokenRequestBody(
+        clientId: clientId,
+        clientSecret: clientSecret,
+        code: code,
+        redirectUri: redirectUri,
+      ));
 
   /// Refreshes an access token — Java `refreshAccessToken`.
   Future<FigmaTokenResponse> refresh({
     required String refreshToken,
     required String clientId,
     required String clientSecret,
-  }) => _post(
-    figmaRefreshTokenBody(
-      clientId: clientId,
-      clientSecret: clientSecret,
-      refreshToken: refreshToken,
-    ),
-  );
+  }) =>
+      _post(figmaRefreshTokenBody(
+        clientId: clientId,
+        clientSecret: clientSecret,
+        refreshToken: refreshToken,
+      ));
 
   Future<FigmaTokenResponse> _post(String body) async {
     Response<String> response;

@@ -78,13 +78,11 @@ class _DirNode {
 final _mdLink = RegExp(r'\[([^\]]*)\]\(([^)]+)\)', dotAll: true);
 final _h1 = RegExp('^#\\s+(.+)\$', multiLine: true);
 final _imageAttachment = RegExp(
-  r'<ac:image[^>]*>.*?<ri:attachment[^>]*ri:filename="([^"]+)".*?>.*?</ac:image>',
-  dotAll: true,
-);
+    r'<ac:image[^>]*>.*?<ri:attachment[^>]*ri:filename="([^"]+)".*?>.*?</ac:image>',
+    dotAll: true);
 final _linkAttachment = RegExp(
-  r'<ac:link[^>]*>.*?<ri:attachment[^>]*ri:filename="([^"]+)".*?>.*?</ac:link>',
-  dotAll: true,
-);
+    r'<ac:link[^>]*>.*?<ri:attachment[^>]*ri:filename="([^"]+)".*?>.*?</ac:link>',
+    dotAll: true);
 
 /// Drives a [ConfluencePageOperations]/[SyncAttachmentHelper] pair to mirror
 /// a local Markdown tree into Confluence.
@@ -114,9 +112,8 @@ class MarkdownConfluenceSync {
     root.contentId = parentId;
     _preserveRootMetadata(root, parentId);
     _syncDirNode(root, rootDir, pathToTitle, space, attachmentsDir);
-    final deleted = deleteOrphans
-        ? _deleteOrphanPages(parentId, expectedTitles)
-        : const [];
+    final deleted =
+        deleteOrphans ? _deleteOrphanPages(parentId, expectedTitles) : const [];
     return jsonEncode({
       'rootDirectory': rootDir.absolute.path,
       'parentId': parentId,
@@ -133,8 +130,8 @@ class MarkdownConfluenceSync {
       final existing = _pageOps.getContent(parentId);
       final ancestors = existing['ancestors'] as List?;
       if (ancestors != null && ancestors.isNotEmpty) {
-        root.parentId = (ancestors.last as Map<String, dynamic>)['id']
-            ?.toString();
+        root.parentId =
+            (ancestors.last as Map<String, dynamic>)['id']?.toString();
       }
       final title = existing['title']?.toString() ?? '';
       if (title.isNotEmpty) root.title = title;
@@ -155,49 +152,26 @@ class MarkdownConfluenceSync {
     Set<String> referenced = const {};
     if (node.indexFile != null) {
       final processed = _processMarkdownLinks(
-        _readFile(node.indexFile!),
-        rootDir,
-        node.indexFile!,
-        pathToTitle,
-      );
+          _readFile(node.indexFile!), rootDir, node.indexFile!, pathToTitle);
       folderBody = markdownToConfluenceStorage(processed);
       referenced = extractAttachmentReferences(processed);
       _uploadReferencedAttachments(
-        node.contentId,
-        processed,
-        node.indexFile!.parent,
-        attachmentsDir,
-      );
+          node.contentId, processed, node.indexFile!.parent, attachmentsDir);
     } else {
       folderBody = '<p>${escapeXml(node.title)}</p>';
     }
     final uploaded = _uploadDirectoryAttachments(node, referenced);
     folderBody = _appendAttachmentLinks(folderBody, uploaded);
-    _pageOps.updatePage(
-      node.contentId,
-      node.title,
-      node.parentId ?? node.contentId,
-      folderBody,
-      space,
-    );
+    _pageOps.updatePage(node.contentId, node.title,
+        node.parentId ?? node.contentId, folderBody, space);
 
     for (final fileNode in node.files) {
       _syncFileNode(
-        fileNode,
-        node,
-        rootDir,
-        pathToTitle,
-        space,
-        attachmentsDir,
-      );
+          fileNode, node, rootDir, pathToTitle, space, attachmentsDir);
     }
     for (final subdir in node.subdirs) {
-      final folderPage = _findOrCreateChildPage(
-        subdir.title,
-        node.contentId,
-        space,
-        '<p>${escapeXml(subdir.title)}</p>',
-      );
+      final folderPage = _findOrCreateChildPage(subdir.title, node.contentId,
+          space, '<p>${escapeXml(subdir.title)}</p>');
       subdir.contentId = folderPage['id']?.toString() ?? '';
       subdir.parentId = node.contentId;
       _syncDirNode(subdir, rootDir, pathToTitle, space, attachmentsDir);
@@ -214,25 +188,13 @@ class MarkdownConfluenceSync {
     String? attachmentsDir,
   ) {
     final processed = _processMarkdownLinks(
-      _readFile(fileNode.file),
-      rootDir,
-      fileNode.file,
-      pathToTitle,
-    );
+        _readFile(fileNode.file), rootDir, fileNode.file, pathToTitle);
     final storage = markdownToConfluenceStorage(processed);
     final page = _findOrCreateChildPage(
-      fileNode.title,
-      node.contentId,
-      space,
-      '<p>Placeholder</p>',
-    );
+        fileNode.title, node.contentId, space, '<p>Placeholder</p>');
     final pageId = page['id']?.toString() ?? '';
     _uploadReferencedAttachments(
-      pageId,
-      processed,
-      fileNode.file.parent,
-      attachmentsDir,
-    );
+        pageId, processed, fileNode.file.parent, attachmentsDir);
     _pageOps.updatePage(pageId, fileNode.title, node.contentId, storage, space);
     fileNode.contentId = pageId;
   }
@@ -375,9 +337,8 @@ class MarkdownConfluenceSync {
     return markdown.replaceAllMapped(_mdLink, (m) {
       final url = m.group(2)!.trim();
       if (_skippableLink(url)) return m[0]!;
-      final candidate = File(
-        '${currentFile.parent.path}/${url.split('#').first}',
-      );
+      final candidate =
+          File('${currentFile.parent.path}/${url.split('#').first}');
       if (!candidate.existsSync()) return m[0]!;
       final target = candidate.resolveSymbolicLinksSync();
       final title = pathToTitle[_relativePath(rootDir, File(target))];
@@ -416,26 +377,23 @@ class MarkdownConfluenceSync {
   String _appendAttachmentLinks(String storageBody, List<String> names) {
     final linkable = names
         .where(
-          (name) => !_referencedAttachmentNames(storageBody).contains(name),
-        )
+            (name) => !_referencedAttachmentNames(storageBody).contains(name))
         .toList();
     if (linkable.isEmpty) return storageBody;
     final buf = StringBuffer('<h2>Attachments</h2><ul>');
     for (final name in linkable) {
-      buf.write(
-        '<li><ac:link><ri:attachment ri:filename="'
-        '${escapeXml(name)}" /><ac:link-body>${escapeXml(name)}'
-        '</ac:link-body></ac:link></li>',
-      );
+      buf.write('<li><ac:link><ri:attachment ri:filename="'
+          '${escapeXml(name)}" /><ac:link-body>${escapeXml(name)}'
+          '</ac:link-body></ac:link></li>');
     }
     return '$storageBody${buf.toString()}</ul>';
   }
 
   /// Collects attachment names already referenced from a storage body.
   Set<String> _referencedAttachmentNames(String storageBody) => {
-    for (final m in _imageAttachment.allMatches(storageBody)) m.group(1)!,
-    for (final m in _linkAttachment.allMatches(storageBody)) m.group(1)!,
-  };
+        for (final m in _imageAttachment.allMatches(storageBody)) m.group(1)!,
+        for (final m in _linkAttachment.allMatches(storageBody)) m.group(1)!,
+      };
 
   /// Reads [file] as UTF-8 text.
   String _readFile(File file) => file.readAsStringSync(encoding: utf8);

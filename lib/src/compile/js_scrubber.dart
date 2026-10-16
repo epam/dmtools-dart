@@ -280,9 +280,8 @@ class _Scrubber {
   }
 
   void _trackWord(int c) {
-    _lastWord = _inWord
-        ? _lastWord + String.fromCharCode(c)
-        : String.fromCharCode(c);
+    _lastWord =
+        _inWord ? _lastWord + String.fromCharCode(c) : String.fromCharCode(c);
     _inWord = true;
     // After a word only the keyword set can put a `/` in expression
     // position — identifiers END expressions (division follows).

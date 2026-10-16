@@ -23,12 +23,12 @@ class _PageDownloader {
   /// inliner and mention resolver reuse one HTTP-backed client (Java
   /// `ConfluencePageDownloader`, dm.ai 932e0db0 / bb1b51e9).
   _PageDownloader(this._config, this._output, this._downloadAttachments)
-    : _excerptInliner = ConfluenceExcerptInliner(
-        _SyncConfluenceResolverClient(_config),
-      ),
-      _mentionResolver = ConfluenceMentionResolver(
-        _SyncConfluenceResolverClient(_config),
-      );
+      : _excerptInliner = ConfluenceExcerptInliner(
+          _SyncConfluenceResolverClient(_config),
+        ),
+        _mentionResolver = ConfluenceMentionResolver(
+          _SyncConfluenceResolverClient(_config),
+        );
 
   int _written = 0;
 
@@ -60,9 +60,8 @@ class _PageDownloader {
     final id = content['id']?.toString();
     if (id == null || id.isEmpty) return;
     final body = content['body'];
-    final storage = body is Map
-        ? body['storage'] as Map<String, dynamic>?
-        : null;
+    final storage =
+        body is Map ? body['storage'] as Map<String, dynamic>? : null;
     final value = storage?['value'];
     if (value is! String) return;
     _output.createSync(recursive: true);
@@ -80,11 +79,9 @@ class _PageDownloader {
       // `value is! String` guard below and the subtree is silently
       // dropped (gh-191 review). The v2 children listing always carries
       // bodies (body-format=storage is part of the request).
-      for (final child
-          in _childrenResults(
-                syncBodyOrError(_childrenResponse(_config, id)),
-              ) ??
-              const <Map<String, dynamic>>[]) {
+      for (final child in _childrenResults(
+              syncBodyOrError(_childrenResponse(_config, id))) ??
+          const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
       }
     }
@@ -111,11 +108,7 @@ class _PageDownloader {
     final targets = <_AttachmentTarget>[];
     for (var i = 0; i < listings.length; i++) {
       _collectAttachmentJobs(
-        listings[i],
-        _attachmentPages[i],
-        downloads,
-        targets,
-      );
+          listings[i], _attachmentPages[i], downloads, targets);
     }
     final responses = _runConfluenceParallel(downloads);
     for (var i = 0; i < responses.length; i++) {
@@ -126,16 +119,16 @@ class _PageDownloader {
   /// One listing GET per collected page, keyed by the page position
   /// (v2-aware listing URL — Java `getContentAttachments` parity).
   List<SyncParallelJob> _listingJobs() => <SyncParallelJob>[
-    for (var i = 0; i < _attachmentPages.length; i++)
-      SyncParallelJob(
-        index: i,
-        kind: _kJobHttpGet,
-        args: <String, dynamic>{
-          ..._jobArgsOf(_config),
-          'url': _attachmentsUrl(_config, _attachmentPages[i].contentId),
-        },
-      ),
-  ];
+        for (var i = 0; i < _attachmentPages.length; i++)
+          SyncParallelJob(
+            index: i,
+            kind: _kJobHttpGet,
+            args: <String, dynamic>{
+              ..._jobArgsOf(_config),
+              'url': _attachmentsUrl(_config, _attachmentPages[i].contentId),
+            },
+          ),
+      ];
 
   /// Parses one page's listing [envelope] and appends a download job +
   /// write target per attachment carrying a `_links.download` path.
@@ -153,17 +146,15 @@ class _PageDownloader {
     for (final attachment in results) {
       final downloadPath = _attachmentDownloadPath(attachment);
       if (downloadPath == null) continue;
-      downloads.add(
-        SyncParallelJob(
-          index: downloads.length,
-          kind: _kJobAttachmentGet,
-          args: <String, dynamic>{
-            ..._jobArgsOf(_config),
-            'url': _attachmentUrl(downloadPath, _config.rootUrl),
-            'headers': _attachmentHeaders(downloadPath, baseHost),
-          },
-        ),
-      );
+      downloads.add(SyncParallelJob(
+        index: downloads.length,
+        kind: _kJobAttachmentGet,
+        args: <String, dynamic>{
+          ..._jobArgsOf(_config),
+          'url': _attachmentUrl(downloadPath, _config.rootUrl),
+          'headers': _attachmentHeaders(downloadPath, baseHost),
+        },
+      ));
       targets.add((
         pageFolder: page.pageFolder,
         title: _sanitize(attachment['title']?.toString() ?? 'file'),
@@ -236,8 +227,7 @@ class _PageDownloader {
     var headers = _config.headers;
     if (downloadPath.startsWith('http') &&
         Uri.tryParse(downloadPath)?.host != baseHost) {
-      headers = {...headers}
-        ..removeWhere(
+      headers = {...headers}..removeWhere(
           (key, _) => key.toLowerCase() == HttpHeaders.authorizationHeader,
         );
     }
@@ -290,7 +280,7 @@ SyncHttpResponse fetchConfluenceAttachmentWithRetry(
       fetch ?? (url, headers) => SyncHttpClient.get(url, headers: headers);
   final pause = sleepDelay ?? (ms) => sleep(Duration(milliseconds: ms));
   final rnd = random ?? Random();
-  for (var attempt = 1; ; attempt++) {
+  for (var attempt = 1;; attempt++) {
     final resp = get(url, headers);
     if (resp.isOk ||
         !isConfluenceTransientAttachmentFailure(resp.statusCode) ||

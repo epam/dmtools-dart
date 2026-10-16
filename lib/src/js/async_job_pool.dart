@@ -123,10 +123,8 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
     try {
       compat?.drainTimers();
     } catch (e) {
-      stderr.writeln(
-        '[jsr:$workerId] timer drain failed (envelope '
-        'unchanged): $e',
-      );
+      stderr.writeln('[jsr:$workerId] timer drain failed (envelope '
+          'unchanged): $e');
     }
     return result;
   } catch (e) {
@@ -147,7 +145,10 @@ Map<String, dynamic> _runJobOnWorker(int workerId, AsyncJobRequest request) {
 class AsyncJobPool {
   /// Creates a pool that [boot]s [workers] engine isolates.
   AsyncJobPool({this.workers = defaultWorkerCount})
-    : _pool = AsyncEnginePool(workers: workers, workerMain: _dmtoolsWorkerMain);
+      : _pool = AsyncEnginePool(
+          workers: workers,
+          workerMain: _dmtoolsWorkerMain,
+        );
 
   /// Default worker count for the CLI pool.
   static const int defaultWorkerCount = 4;

@@ -23,7 +23,10 @@ extension GithubCiPrTools on GithubClient {
     String? text,
     String? externalId,
   }) async {
-    final body = <String, dynamic>{'name': name, 'head_sha': headSha};
+    final body = <String, dynamic>{
+      'name': name,
+      'head_sha': headSha,
+    };
     _ghPutIfNotBlank(body, 'status', status);
     _ghPutIfNotBlank(body, 'external_id', externalId);
     if (title != null || summary != null) {
@@ -132,10 +135,8 @@ extension GithubCiPrTools on GithubClient {
   ) async {
     final activities = <dynamic>[];
     activities.addAll(
-      await _ghPaginated(
-        'repos/$workspace/$repository'
-        '/pulls/$pullRequestId/reviews',
-      ),
+      await _ghPaginated('repos/$workspace/$repository'
+          '/pulls/$pullRequestId/reviews'),
     );
     for (final comment in await _ghPaginated(
       'repos/$workspace/$repository/pulls/$pullRequestId/comments',
@@ -173,7 +174,7 @@ extension GithubCiPrTools on GithubClient {
     final isMerged = normalized == 'merged';
     final pattern = RegExp(titleRegex);
     final out = <Map<String, dynamic>>[];
-    for (var page = 1; ; page++) {
+    for (var page = 1;; page++) {
       final body = await _http.get(
         'repos/$workspace/$repository/pulls',
         queryParams: {
@@ -216,9 +217,8 @@ extension GithubCiPrTools on GithubClient {
     String repository,
     String runId,
   ) async {
-    final body = await _http.get(
-      'repos/$workspace/$repository/actions/runs/$runId',
-    );
+    final body =
+        await _http.get('repos/$workspace/$repository/actions/runs/$runId');
     return jsonDecode(body) as Map<String, dynamic>;
   }
 
@@ -263,7 +263,9 @@ extension GithubCiPrTools on GithubClient {
     String repository,
     String assetId,
   ) async {
-    await _http.delete('repos/$workspace/$repository/releases/assets/$assetId');
+    await _http.delete(
+      'repos/$workspace/$repository/releases/assets/$assetId',
+    );
   }
 
   /// `github_get_commits_from_branches` — commits from every branch whose
@@ -309,7 +311,7 @@ extension GithubCiPrTools on GithubClient {
     String? since,
   ) async {
     final out = <dynamic>[];
-    for (var page = 1; ; page++) {
+    for (var page = 1;; page++) {
       final query = <String, dynamic>{
         'sha': branch,
         'per_page': '100',
@@ -338,7 +340,7 @@ extension GithubCiPrTools on GithubClient {
     bool tolerate404 = false,
   }) async {
     final out = <Map<String, dynamic>>[];
-    for (var page = 1; ; page++) {
+    for (var page = 1;; page++) {
       final String body;
       try {
         body = await _http.get(

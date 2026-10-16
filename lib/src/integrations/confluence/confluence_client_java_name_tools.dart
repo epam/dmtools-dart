@@ -41,14 +41,11 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
             'pages',
             queryParams: await _titleQueryV2(title, space),
           )
-        : await _http.get(
-            'content',
-            queryParams: {
-              'expand': 'body.storage,body.export_view,ancestors,version',
-              'title': title,
-              if (space.isNotEmpty) 'spaceKey': space,
-            },
-          );
+        : await _http.get('content', queryParams: {
+            'expand': 'body.storage,body.export_view,ancestors,version',
+            'title': title,
+            if (space.isNotEmpty) 'spaceKey': space,
+          });
     final decoded = jsonDecode(body) as Map<String, dynamic>;
     ConfluenceClient._applyFormat(_resultList(decoded), format);
     return decoded;
@@ -145,14 +142,16 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
   Future<List<Map<String, dynamic>>> searchContentByText(
     String query, [
     int? limit,
-  ]) => _getList(
-    'content/search',
-    queryParams: {
-      'cql': '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
-      'limit': '${limit ?? 20}',
-      'expand': 'title,body.excerpt,history,space,body.storage',
-    },
-  );
+  ]) =>
+      _getList(
+        'content/search',
+        queryParams: {
+          'cql':
+              '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
+          'limit': '${limit ?? 20}',
+          'expand': 'title,body.excerpt,history,space,body.storage',
+        },
+      );
 
   /// `confluence_update_page_with_history` — [updatePage] whose bumped
   /// version message is [historyComment] (Java tool of the same name).
@@ -163,7 +162,8 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
     required String body,
     required String space,
     required String historyComment,
-  }) => updatePage(contentId, title, parentId, body, space, historyComment);
+  }) =>
+      updatePage(contentId, title, parentId, body, space, historyComment);
 
   /// `confluence_contents_by_urls` — resolve each URL to its content,
   /// skipping failures like Java (`contentsByUrls`).

@@ -108,10 +108,11 @@ class JiraClient {
     final all = _extractIssues(body);
     var nextToken = _nextToken(body);
     while (nextToken != null) {
-      final pageBody = await _http.get(
-        'search/jql',
-        queryParams: {'jql': jql, 'fields': fields, 'nextPageToken': nextToken},
-      );
+      final pageBody = await _http.get('search/jql', queryParams: {
+        'jql': jql,
+        'fields': fields,
+        'nextPageToken': nextToken,
+      });
       all.addAll(_extractIssues(pageBody));
       nextToken = _nextToken(pageBody);
     }
@@ -142,15 +143,12 @@ class JiraClient {
     var startAt = 0;
     var total = 0;
     do {
-      final body = await _http.get(
-        'search',
-        queryParams: {
-          'jql': jql,
-          'fields': fields,
-          'startAt': startAt.toString(),
-          'maxResults': maxResults.toString(),
-        },
-      );
+      final body = await _http.get('search', queryParams: {
+        'jql': jql,
+        'fields': fields,
+        'startAt': startAt.toString(),
+        'maxResults': maxResults.toString(),
+      });
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       final issues = decoded['issues'] as List? ?? [];
       all.addAll(issues.map((i) => i as Map<String, dynamic>));
@@ -200,16 +198,14 @@ class JiraClient {
 
   /// PUTs the full labels set for [key] using `update.labels[].set`.
   Future<void> _setLabels(String key, List<String> labels) async {
-    await _http.put(
-      'issue/$key',
-      body: jsonEncode({
-        'update': {
-          'labels': [
-            {'set': labels},
-          ],
-        },
-      }),
-    );
+    await _http.put('issue/$key',
+        body: jsonEncode({
+          'update': {
+            'labels': [
+              {'set': labels}
+            ]
+          },
+        }));
   }
 
   /// `jira_move_to_status` — transitions [key] to [statusName].
@@ -231,10 +227,13 @@ class JiraClient {
       return 'No transition found for status: $statusName';
     }
     final body = <String, dynamic>{
-      'transition': {'id': transitionId},
+      'transition': {'id': transitionId}
     };
     if (extraFields != null) body['fields'] = extraFields;
-    return _http.post('issue/$key/transitions', body: jsonEncode(body));
+    return _http.post(
+      'issue/$key/transitions',
+      body: jsonEncode(body),
+    );
   }
 
   /// Finds a transition id matching [statusName] for [key].
@@ -282,10 +281,8 @@ class JiraClient {
       'summary': summary,
     };
     if (description != null) fields['description'] = description;
-    final body = await _http.post(
-      'issue',
-      body: jsonEncode({'fields': fields}),
-    );
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
     return _decodeMap(body);
   }
 
@@ -341,19 +338,24 @@ class JiraClient {
   /// `jira_set_fix_version` — PUT `issue/{key}`.
   ///
   /// Replaces the fix-version set with `[{name: versionName}]`.
-  Future<void> setFixVersion(String key, String versionName) =>
-      _putFields(key, {
-        'fixVersions': [
-          {'name': versionName},
-        ],
-      });
+  Future<void> setFixVersion(String key, String versionName) => _putFields(
+        key,
+        {
+          'fixVersions': [
+            {'name': versionName}
+          ],
+        },
+      );
 
   /// `jira_set_priority` — PUT `issue/{key}`.
   ///
   /// Sets the `priority` field to `{name: priorityName}`.
-  Future<void> setPriority(String key, String priorityName) => _putFields(key, {
-    'priority': {'name': priorityName},
-  });
+  Future<void> setPriority(String key, String priorityName) => _putFields(
+        key,
+        {
+          'priority': {'name': priorityName},
+        },
+      );
 
   /// `jira_get_subtasks` — parses `fields.subtasks` from the ticket.
   Future<List<Map<String, dynamic>>> getSubtasks(String key) async {
@@ -389,10 +391,8 @@ class JiraClient {
     if (description != null && description.isNotEmpty) {
       fields['description'] = description;
     }
-    final body = await _http.post(
-      'issue',
-      body: jsonEncode({'fields': fields}),
-    );
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
     return _decodeMap(body);
   }
 
@@ -418,7 +418,10 @@ class JiraClient {
 
   /// PUTs a `fields` object to `issue/{key}`.
   Future<void> _putFields(String key, Map<String, dynamic> fields) async {
-    await _http.put('issue/$key', body: jsonEncode({'fields': fields}));
+    await _http.put(
+      'issue/$key',
+      body: jsonEncode({'fields': fields}),
+    );
   }
 
   /// Decodes a JSON body to a map, defaulting to an empty map.
@@ -459,7 +462,7 @@ class JiraClient {
     await _http.putV3(
       'issue/$key',
       body: jsonEncode({
-        'fields': {field: value},
+        'fields': {field: value}
       }),
     );
   }
@@ -517,8 +520,8 @@ class JiraClient {
   Future<void> updateTicketParent(String key, String parentKey) async {
     await updateTicket(key, {
       'fields': {
-        'parent': {'key': parentKey},
-      },
+        'parent': {'key': parentKey}
+      }
     });
   }
 
@@ -534,10 +537,8 @@ class JiraClient {
       'project': {'key': project},
       ...fieldsJson,
     };
-    final body = await _http.post(
-      'issue',
-      body: jsonEncode({'fields': fields}),
-    );
+    final body =
+        await _http.post('issue', body: jsonEncode({'fields': fields}));
     return _decodeMap(body);
   }
 
@@ -585,9 +586,14 @@ class JiraClient {
   /// `issue/createmeta` expand as fallback), finds every field whose name
   /// matches [fieldName] case-insensitively, and returns the best
   /// candidate's id — or `null` when nothing matches.
-  Future<String?> getFieldCustomCode(String project, String fieldName) async {
+  Future<String?> getFieldCustomCode(
+    String project,
+    String fieldName,
+  ) async {
     final body = await _fieldsListing(project);
-    final best = selectBestJiraField(findAllJiraFieldsByName(fieldName, body));
+    final best = selectBestJiraField(
+      findAllJiraFieldsByName(fieldName, body),
+    );
     return best?.id;
   }
 

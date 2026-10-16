@@ -51,7 +51,10 @@ class TestRailHttpClient extends BaseHttpClient {
       'TESTRAIL_USERNAME',
     );
     final apiKey = _require(reader.getTestRailApiKey(), 'TESTRAIL_API_KEY');
-    final project = _require(reader.getTestRailProject(), 'TESTRAIL_PROJECT');
+    final project = _require(
+      reader.getTestRailProject(),
+      'TESTRAIL_PROJECT',
+    );
     final creds = '$username:$apiKey';
     return TestRailHttpClient._(
       dio: dio ?? BaseHttpClient.createDefaultDio(),

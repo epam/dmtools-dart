@@ -93,19 +93,13 @@ final class SyncHttpBridge {
     bool followRedirects = false,
   }) {
     final port = _workerPort!;
-    port.send(
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'method': method,
-            'url': url,
-            'headers': headers,
-            'body': body,
-            'followRedirects': followRedirects,
-          }),
-        ),
-      ),
-    );
+    port.send(Uint8List.fromList(utf8.encode(jsonEncode({
+      'method': method,
+      'url': url,
+      'headers': headers,
+      'body': body,
+      'followRedirects': followRedirects,
+    }))));
     final response = utf8.decode(_responses.take(), allowMalformed: true);
     final decoded = jsonDecode(response) as Map<String, dynamic>;
     final rawHeaders = decoded['headers'] as Map<String, dynamic>?;
@@ -149,11 +143,9 @@ Future<void> _httpWorkerEntry(_WorkerInit init) async {
   init.handshakeSendPort.send(inbox.sendPort);
   final client = HttpClient()
     ..maxConnectionsPerHost = 8
-    ..connectionTimeout = const Duration(
-      seconds: SyncHttpClient.connectTimeoutSeconds,
-    )
-    ..autoUncompress =
-        false // curl parity: no implicit gzip decoding
+    ..connectionTimeout =
+        const Duration(seconds: SyncHttpClient.connectTimeoutSeconds)
+    ..autoUncompress = false // curl parity: no implicit gzip decoding
     ..findProxy = HttpClient.findProxyFromEnvironment; // http_proxy parity
   await for (final message in inbox) {
     if (message == 'shutdown') return;
@@ -182,8 +174,7 @@ Future<void> _serveOne(
     // otherwise lowercase them, which breaks case-sensitive peers).
     request.headers.remove(HttpHeaders.acceptEncodingHeader, 'gzip');
     (req['headers'] as Map<String, dynamic>?)?.forEach(
-      (k, v) => request.headers.set(k, '$v', preserveHeaderCase: true),
-    );
+        (k, v) => request.headers.set(k, '$v', preserveHeaderCase: true));
     final body = req['body'] as String?;
     if (body != null) {
       // Fixed-length body (Content-Length, never chunked) — matches curl's
@@ -201,41 +192,21 @@ Future<void> _serveOne(
     final bytes = await response
         .fold<BytesBuilder>(BytesBuilder(), (b, d) => b..add(d))
         .timeout(budget);
-    responses.put(
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'status': response.statusCode,
-            // base64 so binary payloads (agent-pack zips) survive the JSON
-            // envelope byte-verbatim — a UTF-8 string would corrupt them.
-            'body': base64Encode(bytes.toBytes()),
-            'headers': headers,
-          }),
-        ),
-      ),
-    );
+    responses.put(Uint8List.fromList(utf8.encode(jsonEncode({
+      'status': response.statusCode,
+      // base64 so binary payloads (agent-pack zips) survive the JSON
+      // envelope byte-verbatim — a UTF-8 string would corrupt them.
+      'body': base64Encode(bytes.toBytes()),
+      'headers': headers,
+    }))));
   } on TimeoutException {
-    responses.put(
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'status': 0,
-            'body': base64Encode(
-              utf8.encode(
-                'Request timed out after ${SyncHttpClient.maxTimeSeconds}s (--max-time)',
-              ),
-            ),
-          }),
-        ),
-      ),
-    );
+    responses.put(Uint8List.fromList(utf8.encode(jsonEncode({
+      'status': 0,
+      'body': base64Encode(utf8.encode(
+          'Request timed out after ${SyncHttpClient.maxTimeSeconds}s (--max-time)')),
+    }))));
   } catch (e) {
-    responses.put(
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({'status': 0, 'body': base64Encode(utf8.encode('$e'))}),
-        ),
-      ),
-    );
+    responses.put(Uint8List.fromList(utf8.encode(
+        jsonEncode({'status': 0, 'body': base64Encode(utf8.encode('$e'))}))));
   }
 }

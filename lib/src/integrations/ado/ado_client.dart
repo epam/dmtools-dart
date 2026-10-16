@@ -67,8 +67,7 @@ class AdoClient {
         jsonDecode(await _http.getOrg('projects'));
         return {
           'success': true,
-          'message':
-              'Azure DevOps connection successful '
+          'message': 'Azure DevOps connection successful '
               '(profile unreadable: ${e is DioException ? e.response?.statusCode : e})',
         };
       } on Object catch (fallbackError) {
@@ -137,10 +136,8 @@ class AdoClient {
   }
 
   /// `ado_get_work_items` — GET `wit/workitems?ids=1,2,...`.
-  Future<List<Map<String, dynamic>>> getWorkItems(
-    List<int> ids, {
-    List<String>? fields,
-  }) async {
+  Future<List<Map<String, dynamic>>> getWorkItems(List<int> ids,
+      {List<String>? fields}) async {
     final body = await _http.get(
       'wit/workitems',
       queryParams: {
@@ -161,10 +158,8 @@ class AdoClient {
   /// Mirrors Java `searchAndPerform`: the WIQL response carries only
   /// id/url stubs, so the ids are re-fetched via [getWorkItems] in
   /// batches of 200 (the ADO limit).
-  Future<List<Map<String, dynamic>>> listWorkItems(
-    String wiql, {
-    List<String>? fields,
-  }) async {
+  Future<List<Map<String, dynamic>>> listWorkItems(String wiql,
+      {List<String>? fields}) async {
     final body = await _http.post(
       'wit/wiql',
       body: jsonEncode({'query': expandWiql(wiql)}),
@@ -219,9 +214,8 @@ class AdoClient {
     String project, [
     List<int>? definitions,
   ]) async {
-    final queryParams = definitions == null
-        ? null
-        : {'definitions': definitions.join(',')};
+    final queryParams =
+        definitions == null ? null : {'definitions': definitions.join(',')};
     final body = await _http.get('build/builds', queryParams: queryParams);
     return _decodeList(body);
   }
@@ -231,7 +225,7 @@ class AdoClient {
     final body = await _http.post(
       'build/builds',
       body: jsonEncode({
-        'definition': {'id': definitionId},
+        'definition': {'id': definitionId}
       }),
     );
     return jsonDecode(body) as Map<String, dynamic>;
@@ -291,12 +285,10 @@ class AdoClient {
     if (searchCriteria == null) {
       return _decodeList(await _http.get('git/repositories/$repoId/commits'));
     }
-    return _decodeList(
-      await _http.post(
-        'git/repositories/$repoId/commitsbatch',
-        body: jsonEncode(searchCriteria),
-      ),
-    );
+    return _decodeList(await _http.post(
+      'git/repositories/$repoId/commitsbatch',
+      body: jsonEncode(searchCriteria),
+    ));
   }
 
   /// `ado_get_pull_request_reviewers` — GET
@@ -435,14 +427,15 @@ class AdoClient {
     String repoId,
     String path,
     String branch,
-  ) => _http.get(
-    'git/repositories/$repoId/items',
-    queryParams: {
-      'path': path,
-      'versionDescriptor.versionType': 'branch',
-      'versionDescriptor.version': branch,
-    },
-  );
+  ) =>
+      _http.get(
+        'git/repositories/$repoId/items',
+        queryParams: {
+          'path': path,
+          'versionDescriptor.versionType': 'branch',
+          'versionDescriptor.version': branch,
+        },
+      );
 
   /// `ado_create_work_item_link` — POST `wit/workitems/{sourceId}/links`.
   ///

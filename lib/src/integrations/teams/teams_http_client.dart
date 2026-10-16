@@ -35,7 +35,11 @@ class TeamsHttpClient extends BaseHttpClient {
   /// leaking the long-lived credential. Exchange it first via the OAuth
   /// refresh flow (`login.microsoftonline.com/…/oauth2/v2.0/token`,
   /// `grant_type=refresh_token`) as Java's `OAuth2AuthenticationFlow` does.
-  factory TeamsHttpClient(PropertyReader reader, {Dio? dio, String? token}) {
+  factory TeamsHttpClient(
+    PropertyReader reader, {
+    Dio? dio,
+    String? token,
+  }) {
     final basePath = reader.getTeamsBasePath();
     if (token == null || token.isEmpty) {
       throw StateError(

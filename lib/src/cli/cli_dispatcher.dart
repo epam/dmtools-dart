@@ -58,13 +58,13 @@ class CliDispatcher {
     PropertyReader? propertyReader,
     bool Function()? isTty,
     CliDispatcherPools pools = const CliDispatcherPools(),
-  }) : _writer = writer ?? print,
-       _errorWriter = errorWriter ?? stderr.writeln,
-       _reader = propertyReader ?? PropertyReader(),
-       _isTty = isTty ?? _stdoutIsTty,
-       _asyncPool = pools.asyncPool,
-       _confluencePool = pools.confluencePool,
-       _packResolver = pools.packResolver;
+  })  : _writer = writer ?? print,
+        _errorWriter = errorWriter ?? stderr.writeln,
+        _reader = propertyReader ?? PropertyReader(),
+        _isTty = isTty ?? _stdoutIsTty,
+        _asyncPool = pools.asyncPool,
+        _confluencePool = pools.confluencePool,
+        _packResolver = pools.packResolver;
 
   final AgentPackResolver? _packResolver;
 
@@ -102,19 +102,19 @@ class CliDispatcher {
 
   late final Map<String, FutureOr<int> Function(List<String> rest)> _handlers =
       {
-        '--version': (_) => _printVersion(),
-        '-v': (_) => _printVersion(),
-        '--help': (_) => _printHelp(),
-        '-h': (_) => _printHelp(),
-        'help': (_) => _printHelp(),
-        '--list-jobs': (_) => _printJobs(),
-        'doctor': (_) => _runDoctor(),
-        'run': _runJob,
-        'compile': _runCompile,
-        'list': _listTools,
-        'interactive': (_) => _interactiveStub(),
-        'i': (_) => _interactiveStub(),
-      };
+    '--version': (_) => _printVersion(),
+    '-v': (_) => _printVersion(),
+    '--help': (_) => _printHelp(),
+    '-h': (_) => _printHelp(),
+    'help': (_) => _printHelp(),
+    '--list-jobs': (_) => _printJobs(),
+    'doctor': (_) => _runDoctor(),
+    'run': _runJob,
+    'compile': _runCompile,
+    'list': _listTools,
+    'interactive': (_) => _interactiveStub(),
+    'i': (_) => _interactiveStub(),
+  };
 
   int _printVersion() {
     _writer('DMTools $dmtoolsVersion');
@@ -154,10 +154,8 @@ class CliDispatcher {
   ResolvedPack? _pinnedPackFor(List<String> rest, AgentPackResolver resolver) {
     if (rest.isEmpty || !resolver.isPack(rest.first)) return null;
     try {
-      return resolver.resolve(
-        rest.first,
-        githubToken: PropertyReader().getGithubToken(),
-      );
+      return resolver.resolve(rest.first,
+          githubToken: PropertyReader().getGithubToken());
     } on Object {
       return null;
     }
@@ -205,7 +203,11 @@ class CliDispatcher {
       final resolved = RunCommandProcessor(
         packResolver: pinned == null
             ? _packResolver
-            : _PinnedPackResolver(resolver, rest.first, pinned),
+            : _PinnedPackResolver(
+                resolver,
+                rest.first,
+                pinned,
+              ),
       ).process(['run', ...rest]);
       final config = jsonDecode(resolved) as Map<String, dynamic>;
       final name = (config['name'] as String?) ?? '<unnamed>';
@@ -225,8 +227,7 @@ class CliDispatcher {
       // leg logs give nothing actionable (live: dmtools-dart pr-301 review
       // 2026-09-29, "Error: Cannot open file" with zero context).
       _writer(
-        'Error: ${e.message} (path: ${e.path}, osError: ${e.osError?.message ?? 'n/a'})',
-      );
+          'Error: ${e.message} (path: ${e.path}, osError: ${e.osError?.message ?? 'n/a'})');
       return 1;
     } catch (e) {
       _writer('Error: $e');
@@ -293,17 +294,14 @@ class CliDispatcher {
   /// JS error on first use — the constrained-environment failure must not
   /// brick the whole run (gh-241).
   Future<AsyncJobPool?> _prepareAsyncPool(
-    Map<String, dynamic> jobParams,
-  ) async {
+      Map<String, dynamic> jobParams) async {
     if (!JsJobRunner.needsAsyncPool(jobParams)) return null;
     final pool = _asyncPool ?? AsyncJobPool.instance;
     try {
       await pool.boot();
     } catch (e) {
-      _errorWriter(
-        'dmtools: engine-worker pool boot failed '
-        '(runAsync will report an error on first use): $e',
-      );
+      _errorWriter('dmtools: engine-worker pool boot failed '
+          '(runAsync will report an error on first use): $e');
     }
     return pool;
   }
@@ -318,19 +316,14 @@ class CliDispatcher {
       // schema; candidates narrow to DMTOOLS_INTEGRATIONS so the fallback
       // picks a carrier the filtered list actually shows. Unknown text
       // keeps raw substring semantics.
-      final resolved = _resolveToolName(
-        rest.first,
-        registry: registry,
-        integrations: integrations,
-      );
+      final resolved = _resolveToolName(rest.first,
+          registry: registry, integrations: integrations);
       if (resolved != null) {
         // dm.ai #570: a resolved name's schema comes from the FULL
         // registry — usage hints keep working for tools whose
         // integration is not configured on this machine.
         response = registry.filterToolsList(
-          registry.generateToolsListResponse(),
-          resolved,
-        );
+            registry.generateToolsListResponse(), resolved);
       } else {
         response = registry.filterToolsList(response, rest.first);
       }
@@ -357,13 +350,14 @@ class CliDispatcher {
     String? keyHint,
     ToolRegistry? registry,
     Set<String>? integrations,
-  }) => (registry ?? createDefaultToolRegistry()).resolveToolAlias(
-    name,
-    keyHint: keyHint,
-    defaultTracker: _reader.getDefaultTracker(),
-    defaultSourceCode: _reader.getDefaultSourceCode(),
-    integrations: integrations,
-  );
+  }) =>
+      (registry ?? createDefaultToolRegistry()).resolveToolAlias(
+        name,
+        keyHint: keyHint,
+        defaultTracker: _reader.getDefaultTracker(),
+        defaultSourceCode: _reader.getDefaultSourceCode(),
+        integrations: integrations,
+      );
 
   /// Extracts a ticket/issue key hint from raw CLI arguments — Java
   /// `McpCliHandler.extractKeyHint` parity (dm.ai #577): the first
@@ -426,7 +420,7 @@ class CliDispatcher {
           'ticketKey',
           'ticket',
           'issueKey',
-          'id',
+          'id'
         ]) {
           final value = decoded[field];
           if (value != null) return value.toString();
@@ -495,11 +489,8 @@ class CliDispatcher {
     // key hint extracted from the raw arguments, so `gh-123` /
     // `owner/repo#123` keys route tracker_* aliases to GitHub regardless
     // of DEFAULT_TRACKER.
-    final resolvedTool = _resolveToolName(
-      toolName,
-      registry: registry,
-      keyHint: _extractKeyHint(cleaned),
-    );
+    final resolvedTool = _resolveToolName(toolName,
+        registry: registry, keyHint: _extractKeyHint(cleaned));
     if (resolvedTool == null) {
       _writer('Error: unknown tool: $toolName');
       _writer('Run "dmtools list" for available tools');
@@ -525,11 +516,8 @@ class CliDispatcher {
 
   /// Boots the Confluence pool for a command that can reach a Confluence
   /// sync tool; see [bootConfluenceSyncPool] for the discipline.
-  Future<void> _prepareConfluencePool() => bootConfluenceSyncPool(
-    _reader,
-    pool: _confluencePool,
-    onError: _errorWriter,
-  );
+  Future<void> _prepareConfluencePool() => bootConfluenceSyncPool(_reader,
+      pool: _confluencePool, onError: _errorWriter);
 
   /// Builds the tool arguments map, Java `parseToolArguments`-style:
   /// tokens are processed in order (`--data`/`--stdin-data` JSON merge
@@ -538,9 +526,7 @@ class CliDispatcher {
   /// positional arguments are mapped onto the tool's [params] LAST so
   /// they override same-named earlier keys.
   Map<String, dynamic> _buildToolArgs(
-    List<ToolParam> params,
-    List<String> tokens,
-  ) {
+      List<ToolParam> params, List<String> tokens) {
     final arguments = <String, dynamic>{};
     final positional = _parseToolArguments(tokens, arguments);
     if (positional.isNotEmpty) {
@@ -560,9 +546,7 @@ class CliDispatcher {
   /// Java has none), and a bare `key=value` token with a valid identifier
   /// before `=` names an argument too. Everything else is positional.
   static List<String> _parseToolArguments(
-    List<String> tokens,
-    Map<String, dynamic> arguments,
-  ) {
+      List<String> tokens, Map<String, dynamic> arguments) {
     final positional = <String>[];
     var i = 0;
     while (i < tokens.length) {
@@ -582,13 +566,8 @@ class CliDispatcher {
 
   /// Dispatches one non-value token: a generic `--key` flag, a bare
   /// `key=value` named token, or a positional. Returns the next [i].
-  static int _consumeFlagOrPositional(
-    String arg,
-    List<String> tokens,
-    int i,
-    Map<String, dynamic> arguments,
-    List<String> positional,
-  ) {
+  static int _consumeFlagOrPositional(String arg, List<String> tokens, int i,
+      Map<String, dynamic> arguments, List<String> positional) {
     if (arg.startsWith('--')) {
       return _consumeNamedFlag(arguments, arg, tokens, i);
     }
@@ -608,11 +587,7 @@ class CliDispatcher {
   /// flag ([i] already points past the flag token); a valueless trailing
   /// flag is ignored — the Java loop skips it the same way.
   static int _consumeValueFlag(
-    String arg,
-    List<String> tokens,
-    int i,
-    Map<String, dynamic> arguments,
-  ) {
+      String arg, List<String> tokens, int i, Map<String, dynamic> arguments) {
     if (i >= tokens.length) return i;
     final value = tokens[i++];
     if (arg == '--format') {
@@ -633,9 +608,7 @@ class CliDispatcher {
   /// not a JSON object (a parse failure included) stores the raw string
   /// under `data` (Java `parseJsonIntoArguments` — never an error).
   static void _parseJsonIntoArguments(
-    String json,
-    Map<String, dynamic> arguments,
-  ) {
+      String json, Map<String, dynamic> arguments) {
     try {
       final decoded = jsonDecode(json);
       if (decoded is Map<String, dynamic>) {
@@ -684,10 +657,7 @@ class CliDispatcher {
   /// params take one value each; extra positionals are ignored. Tools
   /// without params fall back to `arg0`, `arg1`, …
   static void _mapPositionalArguments(
-    Map<String, dynamic> args,
-    List<ToolParam> params,
-    List<String> pos,
-  ) {
+      Map<String, dynamic> args, List<ToolParam> params, List<String> pos) {
     if (params.isEmpty) {
       for (var i = 0; i < pos.length; i++) {
         args['arg$i'] = pos[i];
@@ -703,26 +673,16 @@ class CliDispatcher {
         args[param.name] = pos.sublist(argIndex); // trailing array: the rest
         return;
       } else {
-        argIndex = _assignMidArray(
-          args,
-          param,
-          params.length - i - 1,
-          pos,
-          argIndex,
-        );
+        argIndex =
+            _assignMidArray(args, param, params.length - i - 1, pos, argIndex);
       }
     }
   }
 
   /// Assigns a mid-list array [param], reserving one positional per
   /// [trailing] param; returns the next unmapped positional index.
-  static int _assignMidArray(
-    Map<String, dynamic> args,
-    ToolParam param,
-    int trailing,
-    List<String> pos,
-    int argIndex,
-  ) {
+  static int _assignMidArray(Map<String, dynamic> args, ToolParam param,
+      int trailing, List<String> pos, int argIndex) {
     var arrayEnd = pos.length - trailing;
     if (arrayEnd < argIndex) arrayEnd = argIndex;
     args[param.name] = pos.sublist(argIndex, arrayEnd);
@@ -734,11 +694,7 @@ class CliDispatcher {
   /// A trailing flag without a value is ignored. Returns the next
   /// unconsumed token index.
   static int _consumeNamedFlag(
-    Map<String, dynamic> arguments,
-    String arg,
-    List<String> tokens,
-    int i,
-  ) {
+      Map<String, dynamic> arguments, String arg, List<String> tokens, int i) {
     final key = arg.substring(2);
     final eq = key.indexOf('=');
     if (eq >= 0) {
@@ -775,11 +731,8 @@ class CliDispatcher {
 /// method_size param limit.
 class CliDispatcherPools {
   /// Creates the seams; every field defaults to production wiring.
-  const CliDispatcherPools({
-    this.asyncPool,
-    this.confluencePool,
-    this.packResolver,
-  });
+  const CliDispatcherPools(
+      {this.asyncPool, this.confluencePool, this.packResolver});
 
   /// Async JS job pool override (worker dispatch tests).
   final AsyncJobPool? asyncPool;
@@ -795,7 +748,7 @@ class CliDispatcherPools {
 /// forwarded to [_inner], so `dmtools run` runs the pack it reports provenance for.
 class _PinnedPackResolver extends AgentPackResolver {
   _PinnedPackResolver(this._inner, this._target, this._pinned)
-    : super(packsRoot: _inner.packsRootDir);
+      : super(packsRoot: _inner.packsRootDir);
 
   final AgentPackResolver _inner;
   final String _target;
@@ -804,8 +757,8 @@ class _PinnedPackResolver extends AgentPackResolver {
   @override
   ResolvedPack resolve(String runArg, {String? githubToken}) =>
       runArg == _target
-      ? _pinned
-      : _inner.resolve(runArg, githubToken: githubToken);
+          ? _pinned
+          : _inner.resolve(runArg, githubToken: githubToken);
 
   @override
   bool isPack(String? runArg) => _inner.isPack(runArg);
@@ -819,7 +772,6 @@ class _PinnedPackResolver extends AgentPackResolver {
 
   @override
   void rewritePathsToPackRoot(
-    Map<String, dynamic> config,
-    Directory packRoot,
-  ) => _inner.rewritePathsToPackRoot(config, packRoot);
+          Map<String, dynamic> config, Directory packRoot) =>
+      _inner.rewritePathsToPackRoot(config, packRoot);
 }

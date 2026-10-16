@@ -181,9 +181,8 @@ class GithubClient {
     String repository,
     String pullRequestId,
   ) async {
-    final body = await _http.get(
-      'repos/$workspace/$repository/pulls/$pullRequestId/reviews',
-    );
+    final body = await _http
+        .get('repos/$workspace/$repository/pulls/$pullRequestId/reviews');
     if (body.trim().isEmpty) return const [];
     final decoded = jsonDecode(body);
     return decoded is List
@@ -219,7 +218,11 @@ class GithubClient {
   ) async {
     final response = await _http.post(
       'repos/$owner/$repo/pulls',
-      body: jsonEncode({'title': title, 'head': head, 'base': base}),
+      body: jsonEncode({
+        'title': title,
+        'head': head,
+        'base': base,
+      }),
     );
     return jsonDecode(response) as Map<String, dynamic>;
   }
@@ -270,7 +273,11 @@ class GithubClient {
   /// requesting the `application/vnd.github.diff` media type.
   ///
   /// Returns the raw unified diff text (not JSON).
-  Future<String> getPrDiff(String owner, String repo, int number) async {
+  Future<String> getPrDiff(
+    String owner,
+    String repo,
+    int number,
+  ) async {
     return _http.get(
       'repos/$owner/$repo/pulls/$number',
       extra: {'Accept': 'application/vnd.github.diff'},
@@ -396,9 +403,12 @@ class GithubClient {
     String repo,
     String tagName, [
     String? body,
-  ]) => _postWithOptionalBody('repos/$owner/$repo/releases', {
-    'tag_name': tagName,
-  }, body);
+  ]) =>
+      _postWithOptionalBody(
+        'repos/$owner/$repo/releases',
+        {'tag_name': tagName},
+        body,
+      );
 
   /// `github_delete_branch` — DELETE
   /// `/repos/{owner}/{repo}/git/refs/heads/{branch}`.
@@ -459,7 +469,10 @@ class GithubClient {
     }
     final response = await _http.post(
       'repos/${resolved.$1}/${resolved.$2}/issues',
-      body: jsonEncode({'title': title, if (body != null) 'body': body}),
+      body: jsonEncode({
+        'title': title,
+        if (body != null) 'body': body,
+      }),
     );
     return jsonDecode(response) as Map<String, dynamic>;
   }
@@ -576,9 +589,7 @@ class GithubClient {
 
   /// `github_get_workflow_runs` — GET `/repos/{owner}/{repo}/actions/runs`.
   Future<Map<String, dynamic>> getWorkflowRuns(
-    String owner,
-    String repo,
-  ) async {
+      String owner, String repo) async {
     final body = await _http.get('repos/$owner/$repo/actions/runs');
     return jsonDecode(body) as Map<String, dynamic>;
   }
@@ -664,9 +675,8 @@ class GithubClient {
   /// `github_get_codeowners` — GET
   /// `/repos/{owner}/{repo}/contents/.github/CODEOWNERS`.
   Future<Map<String, dynamic>> getCodeowners(String owner, String repo) async {
-    final body = await _http.get(
-      'repos/$owner/$repo/contents/.github/CODEOWNERS',
-    );
+    final body =
+        await _http.get('repos/$owner/$repo/contents/.github/CODEOWNERS');
     return jsonDecode(body) as Map<String, dynamic>;
   }
 

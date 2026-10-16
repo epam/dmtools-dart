@@ -68,7 +68,8 @@ void _upgradeDryRunTests() {
 
 void _upgradeInstallerTests() {
   group('UpgradeCommand installer selection', () {
-    test('version selects tagged installer and passes DMTOOLS_VERSION', () async {
+    test('version selects tagged installer and passes DMTOOLS_VERSION',
+        () async {
       String? url;
       Map<String, String>? seenEnv;
       final code = await UpgradeCommand(

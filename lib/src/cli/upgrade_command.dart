@@ -25,10 +25,10 @@ class UpgradeCommand {
     Map<String, String>? environment,
     Future<String?> Function(String url)? fetchScript,
     Future<int> Function(String scriptPath, Map<String, String> env)? runScript,
-  }) : _writer = writer ?? print,
-       _env = environment ?? Platform.environment,
-       _fetch = fetchScript ?? _defaultFetch,
-       _run = runScript ?? _defaultRun;
+  })  : _writer = writer ?? print,
+        _env = environment ?? Platform.environment,
+        _fetch = fetchScript ?? _defaultFetch,
+        _run = runScript ?? _defaultRun;
 
   final void Function(String line) _writer;
   final Map<String, String> _env;

@@ -34,6 +34,7 @@ import 'sync_tools/gitlab_sync_tools.dart';
 import 'sync_tools/jenkins_sync_tools.dart';
 import 'sync_tools/jira_sync_tools.dart';
 import 'sync_tools/scm_ci_sync_tools.dart';
+import '../integrations/env/env_tools.dart';
 
 /// Executor for a non-HTTP (file/CLI) tool call: receives the raw [toolName]
 /// and [args], returns the JSON result string.
@@ -97,8 +98,12 @@ class SyncToolDispatcher {
     MapEntry('jenkins_', _jenkins.dispatch),
     MapEntry('figma_', _figma.dispatch),
     MapEntry('scm_', _viaHandlers('scm', _scmCi.handlers)),
+    MapEntry('env_', _viaHandlers('env', _envTools.handlers)),
     MapEntry('ci_', _viaHandlers('ci', _scmCi.handlers)),
   ];
+
+  /// Secret-aware configuration reads (`env_get` / `env_list`).
+  final EnvTools _envTools = EnvTools();
 
   /// GitHub executors, mirroring [GitHubSyncTools.handlers].
   late final _githubHandlers = const GitHubSyncTools().handlers;

@@ -20,7 +20,16 @@ const _scriptPath = 'agents/setup/install-source-git-credentials.sh';
 /// All YAML files that carry the credential machinery.
 // Live credential surface = the FACTORY file (agents submodule, pinned).
 // The legacy machine-kit template layer was retired (gh-146).
-final List<String> _credentialYamlFiles = [_workflowPath];
+// 2026-10-15: the factory workflow moved OUT of the agents submodule into
+// dmtools-agentic-workflows (.github/workflows/factory-teammate.yml, the
+// local ai-teammate.yml is a thin stub delegating to it). The content
+// invariants that read the workflow re-homed there (awf follow-up); they
+// still run here whenever a pinned submodule carries the file, and skip
+// otherwise — asserted structurally by the delegation test below.
+final bool _factoryWorkflowPresent = File(_workflowPath).existsSync();
+final List<String> _credentialYamlFiles = [
+  if (_factoryWorkflowPresent) _workflowPath,
+];
 
 String _read(String path) {
   final file = File(path);
@@ -38,6 +47,7 @@ void main() {
   _dryRunFallbackReachable();
   _deduplicationIntoScript();
   _artifactSeesFinalPush();
+  _factoryDelegation();
   _identityRegex();
   _purgeTargetsRealCredentialSources();
   _submodulePurgeGateYaml();
@@ -237,6 +247,12 @@ void _deduplicationIntoScript() {
     });
 
     test('both files call the shared script', () {
+      if (!_factoryWorkflowPresent) {
+        markTestSkipped(
+            '$_workflowPath moved to dmtools-agentic-workflows; the '
+            'invocation invariant is owned there now');
+        return;
+      }
       for (final path in _credentialYamlFiles) {
         expect(
           _read(path).split('\n').where((l) => l.contains(_scriptPath)),
@@ -258,6 +274,12 @@ void _deduplicationIntoScript() {
 /// push, or the durable copy of the run misses the final helper invocation.
 void _artifactSeesFinalPush() {
   test('artifact upload runs after the memory-persist step (gh-63)', () {
+    if (!_factoryWorkflowPresent) {
+      markTestSkipped(
+          '$_workflowPath moved to dmtools-agentic-workflows; the step-order '
+          'invariant is owned there now');
+      return;
+    }
     final source = _read(_workflowPath);
     final upload = source.indexOf('Upload the full fa session trace');
     final persist =
@@ -640,5 +662,30 @@ void _helperOperationGuard() {
             'store/erase invocation must not consume input or log anything',
       );
     });
+  });
+}
+
+/// 2026-10-15 factory move: the credential machinery's workflow half lives in
+/// dmtools-agentic-workflows now (kit/install-source-git-credentials.sh +
+/// .github/workflows/factory-teammate.yml). Pin the structural contract the
+/// dart tree still owns: the agents submodule does NOT re-vendor the factory
+/// workflow, and both delegation stubs point at the awf factory.
+void _factoryDelegation() {
+  test(
+      'factory workflow is delegated to dmtools-agentic-workflows, not '
+      're-vendored (2026-10-15 move)', () {
+    expect(
+      _factoryWorkflowPresent,
+      isFalse,
+      reason: 'agents/.github/workflows/factory-teammate.yml must stay '
+          'removed — a re-vendored copy drifts from the awf factory',
+    );
+    final stub = _read('agents/.github/workflows/ai-teammate.yml');
+    expect(
+      stub.contains('factory-teammate.yml'),
+      isTrue,
+      reason: 'the agents ai-teammate.yml stub must delegate to the awf '
+          'factory workflow',
+    );
   });
 }

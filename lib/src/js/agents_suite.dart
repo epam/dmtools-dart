@@ -708,18 +708,22 @@ void copyAgentTree(String source, String destination) {
 /// — either a real directory, or itself a gitfile whose `gitdir:` may
 /// be relative, e.g. a submodule's `../.git/modules/agents`).
 void _writeGitFileRef(FileSystemEntity gitEntity, String destination) {
-  var gitDir = gitEntity.path;
+  // Directory shape (git clone): the entity path IS the git dir — take it
+  // absolute directly. Joining it as a relative tail onto the absolute
+  // parent doubled the path (live 2026-10-15: gitdir .../agents/agents/.git
+  // → `fatal: not a git repository` in every agentDocsCoverage chunk).
+  var gitDir = gitEntity.absolute.path;
   if (gitEntity is File) {
     final raw = gitEntity.readAsStringSync().trim();
     const marker = 'gitdir:';
     if (!raw.startsWith(marker)) return;
     gitDir = raw.substring(marker.length).trim();
-  }
-  // Absolute always: a relative gitdir would dangle once the copy lives
-  // in the system temp dir (CI passes `agents` as a relative path).
-  if (!gitDir.startsWith('/')) {
-    final base = Directory(gitEntity.parent.path).absolute.path;
-    gitDir = '$base/$gitDir';
+    // Absolute always: a relative gitdir would dangle once the copy lives
+    // in the system temp dir (CI passes `agents` as a relative path).
+    if (!gitDir.startsWith('/')) {
+      final base = Directory(gitEntity.parent.path).absolute.path;
+      gitDir = '$base/$gitDir';
+    }
   }
   File(destination).writeAsStringSync('gitdir: $gitDir\n');
 }

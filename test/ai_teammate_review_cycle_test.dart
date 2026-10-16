@@ -17,8 +17,35 @@ import 'package:test/test.dart';
 /// reasoning lines) and flip a genuine APPROVE into a spurious
 /// agent:rework loop.
 void main() {
-  final workflow =
-      File('agents/.github/workflows/factory-teammate.yml').readAsStringSync();
+  // 2026-10-15: the factory teammate workflow moved OUT of the agents
+  // submodule into dmtools-agentic-workflows. On older pins the wiring
+  // invariants below still run against the vendored file; on the new tree
+  // they are re-homed to the awf repo and the dart tree pins the
+  // structural contract only (delegation, no re-vendoring).
+  final workflowFile = File('agents/.github/workflows/factory-teammate.yml');
+  if (!workflowFile.existsSync()) {
+    group('factory teammate.yml review cycle', () {
+      test(
+          'factory workflow is delegated to dmtools-agentic-workflows, not '
+          're-vendored (2026-10-15 move)', () {
+        final stub =
+            File('agents/.github/workflows/ai-teammate.yml').readAsStringSync();
+        expect(
+          stub.contains('factory-teammate.yml'),
+          isTrue,
+          reason: 'the agents ai-teammate.yml stub must delegate to the awf '
+              'factory workflow',
+        );
+        expect(
+          workflowFile.existsSync(),
+          isFalse,
+          reason: 'a re-vendored copy drifts from the awf factory',
+        );
+      });
+    });
+    return;
+  }
+  final workflow = workflowFile.readAsStringSync();
 
   _reviewCycleGroup(workflow);
   _verdictDelegationGroup(workflow);

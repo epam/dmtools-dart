@@ -143,14 +143,25 @@ void _plannerRealListTests() {
       return [for (final f in jobParams['testFiles'] as List) f as String];
     }
 
+<<<<<<< HEAD
     test('partitions exactly (all run_all.json entries, N=4)', () {
+=======
+    test('partitions exactly (the real run_all.json list, N=4)', () {
+>>>>>>> origin/main
       final testFiles = realFiles();
       if (testFiles == null) {
         return; // Submodule not checked out — synthetic cases cover the rest.
       }
+<<<<<<< HEAD
       expect(testFiles.length, greaterThan(100),
           reason:
               'real list grows with the agents submodule; no hardcoded count');
+=======
+      // The upstream suite evolves (was 92 entries at the 09-30 pin, 134 at
+      // the 10-15 pin) — derive the expectations from the list itself; the
+      // invariants that matter are exact partitioning and balanced shards.
+      expect(testFiles, isNotEmpty);
+>>>>>>> origin/main
       final shards = [
         for (var i = 0; i < 4; i++) ShardPlanner.split(testFiles, i, 4),
       ];
@@ -161,12 +172,23 @@ void _plannerRealListTests() {
       expect(union.length, testFiles.length,
           reason: 'no file may be lost or duplicated by the split');
       expect([...union]..sort(), [...testFiles]..sort());
+<<<<<<< HEAD
       final sizes = shards.map((s) => s.length).toList();
       expect(
           sizes.reduce((a, b) => a > b ? a : b) -
               sizes.reduce((a, b) => a < b ? a : b),
           lessThanOrEqualTo(1),
           reason: 'round-robin keeps shard sizes within 1 of each other');
+=======
+      final base = testFiles.length ~/ 4;
+      final remainder = testFiles.length % 4;
+      expect(
+        shards.map((s) => s.length),
+        everyElement(anyOf(base, base + 1)),
+        reason: 'shards stay balanced (remainder spread one each)',
+      );
+      expect(union.length, base * 4 + remainder);
+>>>>>>> origin/main
     });
 
     test('split accepts every N in {1..len+}', () {

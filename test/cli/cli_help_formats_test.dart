@@ -26,6 +26,23 @@ void _helpTextTests() {
     test('documents upgrade command', () {
       expect(cliHelpText, contains('dmtools upgrade [version]'));
     });
+
+    test('upgrade --help prints usage and exits 0 without downloading',
+        () async {
+      final lines = <String>[];
+      var fetched = false;
+      final code = await UpgradeCommand(
+        writer: lines.add,
+        environment: {},
+        fetchScript: (_) async {
+          fetched = true;
+          return null;
+        },
+      ).run(['--help']);
+      expect(code, 0);
+      expect(fetched, isFalse);
+      expect(lines.join('\n'), contains('Usage: dmtools upgrade [version]'));
+    });
   });
 }
 

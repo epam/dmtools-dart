@@ -1206,6 +1206,15 @@
       "total": 45834,
       "cacheRead": 141090,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-16T20:31:02Z",
+      "prompt": 31475,
+      "completion": 4165,
+      "total": 35640,
+      "cacheRead": 207957,
+      "model": "claude-haiku-5.5"
     }
   ],
   "issue-407": [

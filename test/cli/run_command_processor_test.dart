@@ -66,32 +66,28 @@ void _testJobNameMode() {
     });
 
     test('keeps non-JSON bracket values as strings', () {
-      final json =
-          jsonDecode(
-                _run([
-                  'run',
-                  'teammate',
-                  '--inputJql',
-                  '[System.Id] = 1839749',
-                ]),
-              )
-              as Map;
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--inputJql',
+          '[System.Id] = 1839749',
+        ]),
+      ) as Map;
       expect(json['params']['inputJql'], '[System.Id] = 1839749');
     });
 
     test('keeps values with trailing text after a valid JSON prefix', () {
-      final json =
-          jsonDecode(
-                _run([
-                  'run',
-                  'teammate',
-                  '--a',
-                  '["a"] trailing',
-                  '--b',
-                  '{"a":1} and more',
-                ]),
-              )
-              as Map;
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--a',
+          '["a"] trailing',
+          '--b',
+          '{"a":1} and more',
+        ]),
+      ) as Map;
       expect(json['params']['a'], '["a"] trailing');
       expect(json['params']['b'], '{"a":1} and more');
     });
@@ -101,20 +97,18 @@ void _testJobNameMode() {
 void _testJobNameOverrides() {
   group('job-name override parsing', () {
     test('still parses valid arrays, objects and empty containers', () {
-      final json =
-          jsonDecode(
-                _run([
-                  'run',
-                  'teammate',
-                  '--cmd',
-                  '["cursor-agent","x"]',
-                  '--obj',
-                  '{"a": 1}',
-                  '--empty',
-                  '[]',
-                ]),
-              )
-              as Map;
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--cmd',
+          '["cursor-agent","x"]',
+          '--obj',
+          '{"a": 1}',
+          '--empty',
+          '[]',
+        ]),
+      ) as Map;
       expect(json['params']['cmd'], ['cursor-agent', 'x']);
       expect(json['params']['obj'], {'a': 1});
       expect(json['params']['empty'], []);
@@ -320,13 +314,11 @@ void _testParentPackResolution() {
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
         "params":{"fromChild":"yes"}
       }''');
-      final json =
-          jsonDecode(
-                RunCommandProcessor(
-                  packResolver: resolver,
-                ).process(['run', '${_tmp.path}/child.json']),
-              )
-              as Map;
+      final json = jsonDecode(
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
       expect(json['params']['fromParent'], 'yes');
       expect(json['params']['fromChild'], 'yes');
       final jsPath = json['params']['jsPath'] as String;
@@ -375,13 +367,11 @@ void _testParentPackRegistryRef() {
           "parent":{"path":"parent_agent@latest"},
           "params":{"fromChild":"yes"}
         }''');
-        final json =
-            jsonDecode(
-                  RunCommandProcessor(
-                    packResolver: resolver,
-                  ).process(['run', '${_tmp.path}/child.json']),
-                )
-                as Map;
+        final json = jsonDecode(
+          RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', '${_tmp.path}/child.json']),
+        ) as Map;
         expect(json['params']['fromParent'], 'yes');
         expect(json['params']['fromChild'], 'yes');
         final jsPath = json['params']['jsPath'] as String;
@@ -410,13 +400,11 @@ void _testParentPackEntryOverride() {
         "name":"child",
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
       }''');
-      final json =
-          jsonDecode(
-                RunCommandProcessor(
-                  packResolver: resolver,
-                ).process(['run', '${_tmp.path}/child.json']),
-              )
-              as Map;
+      final json = jsonDecode(
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
       expect(json['params']['altEntry'], 'yes');
       expect(
         json['params']['fromParent'],
@@ -444,13 +432,11 @@ void _testChildPackRefs() {
           "customParams":{"rulesFile":"pack:/instructions/review_rules.md"}
         }
       }''');
-      final json =
-          jsonDecode(
-                RunCommandProcessor(
-                  packResolver: resolver,
-                ).process(['run', '${_tmp.path}/child.json']),
-              )
-              as Map;
+      final json = jsonDecode(
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
+      ) as Map;
       final prompts = (json['params']['cliPrompts'] as List).cast<String>();
       expect(prompts[1], 'literal prompt');
       expect(prompts[0], startsWith(packsRoot.path));

@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 void main() {
   _markdownToStorageTests();
   _storageToMarkdownTests();
+  _strikeStorageTests();
   _roundTripTests();
   _referenceTests();
   _javaConversionFixParityTests();
@@ -160,8 +161,10 @@ void _storageToMdInlineTests() {
 
   test('headings and paragraphs convert', () {
     expect(
-      confluenceStorageToMarkdown('<h1>T</h1><p>Hello <strong>b</strong>'
-          '</p>'),
+      confluenceStorageToMarkdown(
+        '<h1>T</h1><p>Hello <strong>b</strong>'
+        '</p>',
+      ),
       '# T\n\nHello **b**',
     );
   });
@@ -169,8 +172,9 @@ void _storageToMdInlineTests() {
   test('inline code, links, and emphasis convert', () {
     expect(
       confluenceStorageToMarkdown(
-          '<p><code>c</code> <a href="https://e.com">x</a> '
-          '<em>i</em> <del>s</del></p>'),
+        '<p><code>c</code> <a href="https://e.com">x</a> '
+        '<em>i</em> <del>s</del></p>',
+      ),
       '`c` [x](https://e.com) *i* ~~s~~',
     );
   });
@@ -257,10 +261,7 @@ void _storageToMdBlockTests() {
       ),
       '- a\n- b\n    - c',
     );
-    expect(
-      confluenceStorageToMarkdown('<ol><li><p>a</p></li></ol>'),
-      '1. a',
-    );
+    expect(confluenceStorageToMarkdown('<ol><li><p>a</p></li></ol>'), '1. a');
   });
 
   test('blockquotes prefix every line', () {
@@ -277,9 +278,7 @@ void _roundTripTests() {
       const md = '# TICKET-1 Summary\n\n'
           'Some **context** with a [link](https://e.com).\n\n'
           '- point one\n- point two\n';
-      final back = confluenceStorageToMarkdown(
-        markdownToConfluenceStorage(md),
-      );
+      final back = confluenceStorageToMarkdown(markdownToConfluenceStorage(md));
       expect(back, md.trim());
     });
   });
@@ -298,8 +297,10 @@ void _referenceTests() {
     });
 
     test('ignores non-attachment references', () {
-      expect(extractAttachmentReferences('[x](https://e.com) [a](#frag)'),
-          isEmpty);
+      expect(
+        extractAttachmentReferences('[x](https://e.com) [a](#frag)'),
+        isEmpty,
+      );
     });
   });
 
@@ -344,19 +345,18 @@ void _javaConversionFixParityTests() {
         '</ac:structured-macro>',
       );
       expect(md, contains('Whiteboard'));
-      expect(
-        md,
-        contains('https://example.com/wiki/spaces/SP/whiteboard/123'),
-      );
+      expect(md, contains('https://example.com/wiki/spaces/SP/whiteboard/123'));
       expect(md, isNot(contains('600')));
     });
 
     test('many tables stay in place (no placeholder prefix collisions)', () {
       final buf = StringBuffer();
       for (var i = 0; i < 13; i++) {
-        buf.write('<p>Section $i</p>'
-            '<table><tbody><tr><th>H</th></tr>'
-            '<tr><td>value-$i</td></tr></tbody></table>');
+        buf.write(
+          '<p>Section $i</p>'
+          '<table><tbody><tr><th>H</th></tr>'
+          '<tr><td>value-$i</td></tr></tbody></table>',
+        );
       }
       final md = confluenceStorageToMarkdown(buf.toString());
       for (var i = 0; i < 13; i++) {
@@ -377,6 +377,38 @@ void _javaConversionFixParityTests() {
       );
       expect(md, contains('a = b + c'));
       expect(md, isNot(contains('DMCODEIDX')));
+    });
+  });
+}
+
+void _strikeStorageTests() {
+  group('strikethrough storage -> markdown (gh-377)', () {
+    test('<s>, <strike>, <del> become ~~x~~', () {
+      expect(
+        confluenceStorageToMarkdown(
+          '<p><s>a</s> <strike>b</strike> <del>c</del></p>',
+        ),
+        contains('~~a~~ ~~b~~ ~~c~~'),
+      );
+    });
+    test('line-through span becomes ~~x~~', () {
+      expect(
+        confluenceStorageToMarkdown(
+          '<p><span style="text-decoration: line-through;">x</span></p>',
+        ),
+        contains('~~x~~'),
+      );
+    });
+    test('strike nested in bold', () {
+      expect(
+        confluenceStorageToMarkdown('<p><strong><s>x</s></strong></p>'),
+        contains('**~~x~~**'),
+      );
+    });
+    test('markdown strike round-trips through storage', () {
+      final storage = markdownToConfluenceStorage('a ~~x~~ b');
+      expect(storage, contains('<del>x</del>'));
+      expect(confluenceStorageToMarkdown(storage), contains('~~x~~'));
     });
   });
 }

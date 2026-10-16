@@ -12,6 +12,7 @@ import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
 import 'package:test/test.dart';
 
 void main() {
+  _strikeTests();
   edgeCaseTests();
   markdownBranchTests();
   markdownCodeBlockTests();
@@ -286,8 +287,9 @@ void preserverTests() {
       // text — the surrounding <code> element stays (it is stripped later
       // by the real conversion chain's tag pass, not by the preserver).
       final preserver = HtmlCodeBlockPreserver();
-      final preserved = preserver
-          .preserveCodeBlocks('<p>a <code class="java">x = 1;</code> b</p>');
+      final preserved = preserver.preserveCodeBlocks(
+        '<p>a <code class="java">x = 1;</code> b</p>',
+      );
       expect(preserved, contains(codeBlockPlaceholder));
       final restored = preserver.restoreCodeBlocks(preserved);
       expect(restored, '<p>a <code>{code:java}x = 1;{code}</code> b</p>');
@@ -295,22 +297,60 @@ void preserverTests() {
 
     test('inline code without class becomes {{monospace}}', () {
       final preserver = HtmlCodeBlockPreserver();
-      final preserved =
-          preserver.preserveCodeBlocks('<p>a <code>x</code> b</p>');
-      expect(preserver.restoreCodeBlocks(preserved),
-          '<p>a <code>{{x}}</code> b</p>');
+      final preserved = preserver.preserveCodeBlocks(
+        '<p>a <code>x</code> b</p>',
+      );
+      expect(
+        preserver.restoreCodeBlocks(preserved),
+        '<p>a <code>{{x}}</code> b</p>',
+      );
     });
 
     test('properties language maps to bash', () {
       final preserver = HtmlCodeBlockPreserver();
-      final preserved = preserver
-          .preserveCodeBlocks('<code class="properties">a=b\nc=d</code>');
-      expect(preserver.restoreCodeBlocks(preserved),
-          '<code>{code:bash}a=b\nc=d{code}</code>');
+      final preserved = preserver.preserveCodeBlocks(
+        '<code class="properties">a=b\nc=d</code>',
+      );
+      expect(
+        preserver.restoreCodeBlocks(preserved),
+        '<code>{code:bash}a=b\nc=d{code}</code>',
+      );
     });
 
     test('decodeHtmlEntities normalizes newlines and decodes basics', () {
       expect(decodeHtmlEntities('&lt;x&gt;&amp;\r\nnext'), '<x>&\nnext');
+    });
+  });
+}
+
+void _strikeTests() {
+  group('markdownToJiraMarkup: strikethrough (gh-377 / dm.ai#676)', () {
+    test('~~x~~ becomes Jira -x-', () {
+      expect(
+        markdownToJiraMarkup('this is ~~gone~~ now'),
+        'this is -gone- now',
+      );
+    });
+    test('space at either end keeps the markers', () {
+      expect(markdownToJiraMarkup('a ~~ b ~~ c'), 'a ~~ b ~~ c');
+    });
+    test('code span content is not converted', () {
+      expect(markdownToJiraMarkup('use `~~x~~` here'), 'use {{~~x~~}} here');
+    });
+    test('URL content is not converted', () {
+      expect(
+        markdownToJiraMarkup('see https://x.io/~~a~~ now'),
+        'see https://x.io/~~a~~ now',
+      );
+    });
+    test('strike wrapping a URL converts both markers', () {
+      expect(
+        markdownToJiraMarkup('~~https://x.io~~'),
+        '-https://x.io-',
+      );
+    });
+    test('hyphenated words and ranges are untouched', () {
+      expect(markdownToJiraMarkup('a-b-c and 1-2'), 'a-b-c and 1-2');
     });
   });
 }

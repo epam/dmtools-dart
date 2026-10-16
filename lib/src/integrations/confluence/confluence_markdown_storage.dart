@@ -208,23 +208,34 @@ String? _wrapAnchorOrImage(_XmlNode node) {
   return null;
 }
 
+/// Markers for inline emphasis/strike tags (`_wrapInlineStyle`).
+const _inlineStyleMarkers = <String, String>{
+  'strong': '**',
+  'b': '**',
+  'em': '*',
+  'i': '*',
+  'del': '~~',
+  'strike': '~~',
+  's': '~~',
+};
+
 /// Inline emphasis/code tags (and unknown tags: children verbatim).
 String _wrapInlineStyle(_XmlNode node, String inner) {
-  switch (node.name) {
-    case 'strong':
-    case 'b':
-      return '**$inner**';
-    case 'em':
-    case 'i':
-      return '*$inner*';
-    case 'del':
-    case 'strike':
-      return '~~$inner~~';
-    case 'code':
-      return '`${node.content}`';
-  }
+  final marker = _inlineStyleMarkers[node.name];
+  if (marker != null) return '$marker$inner$marker';
+  if (node.name == 'code') return '`${node.content}`';
+  return _wrapStyledSpan(node, inner);
+}
+
+/// `<span style="…line-through…">` becomes strikethrough; other spans pass through.
+String _wrapStyledSpan(_XmlNode node, String inner) {
+  if (node.name == 'span' && _isLineThrough(node)) return '~~$inner~~';
   return inner;
 }
+
+/// Whether a `<span style="…">` carries `text-decoration: line-through`.
+bool _isLineThrough(_XmlNode node) =>
+    (node.attrs['style'] ?? '').toLowerCase().contains('line-through');
 
 /// Prefixes every line of [inner] with `> `.
 String _quoteLines(String inner) => inner

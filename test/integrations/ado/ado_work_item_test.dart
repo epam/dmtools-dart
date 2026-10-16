@@ -124,7 +124,11 @@ void _wiqlLinkQueryTests() {
           return jsonEncode({
             'queryType': 'tree',
             'workItemRelations': [
-              {'rel': null, 'source': null, 'target': {'id': 7}},
+              {
+                'rel': null,
+                'source': null,
+                'target': {'id': 7}
+              },
               {
                 'rel': 'System.LinkTypes.Hierarchy-Forward',
                 'source': {'id': 7},
@@ -135,7 +139,9 @@ void _wiqlLinkQueryTests() {
         }
         final ids = (o.queryParameters['ids'] as String).split(',');
         return jsonEncode({
-          'value': [for (final id in ids) {'id': int.parse(id)}],
+          'value': [
+            for (final id in ids) {'id': int.parse(id)}
+          ],
         });
       });
       final items = await f.client.listWorkItems('FROM WorkItemLinks');

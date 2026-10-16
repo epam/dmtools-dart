@@ -192,9 +192,7 @@ class AdoClient {
       body: jsonEncode({'query': expandWiql(wiql)}),
     );
     final decoded = jsonDecode(body);
-    final ids = decoded is Map && decoded['workItems'] is List
-        ? wiqlStubIds(decoded['workItems'] as List)
-        : const <int>[];
+    final ids = decoded is Map ? wiqlResponseIds(decoded) : const <int>[];
     final results = <Map<String, dynamic>>[];
     for (final batch in batchIds(ids)) {
       results.addAll(await getWorkItems(batch, fields: fields));

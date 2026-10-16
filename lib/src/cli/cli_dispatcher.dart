@@ -149,13 +149,16 @@ class CliDispatcher {
     return 0;
   }
 
-  static bool _isUpgradeWord(String word) => word == 'upgrade' || word == 'update';
+  static bool _isUpgradeWord(String word) =>
+      word == 'upgrade' || word == 'update';
 
   /// Upgrades the runtime + launcher via the release installer (gh-395).
   Future<int> _runUpgrade(List<String> rest) => UpgradeCommand(
         writer: _writer,
         errorWriter: _errorWriter,
-        dryRun: _reader.getValue('DMTOOLS_UPGRADE_DRY_RUN')?.trim().toLowerCase() == 'true',
+        dryRun:
+            _reader.getValue('DMTOOLS_UPGRADE_DRY_RUN')?.trim().toLowerCase() ==
+                'true',
       ).run(rest);
 
   /// Builds a versioned agent pack (zip + manifest + sha256) — dm.ai #595.

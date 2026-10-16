@@ -3,6 +3,12 @@ import 'package:dmtools/src/cli/upgrade_command.dart';
 import 'package:test/test.dart';
 
 void main() {
+  _helpTextTests();
+  _upgradeDryRunTests();
+  _upgradeInstallerTests();
+}
+
+void _helpTextTests() {
   group('help output formats', () {
     test('every supported output format is documented', () {
       for (final f in ['json', 'toon', 'mini', 'short', 'table', 'mermaid']) {
@@ -21,8 +27,10 @@ void main() {
       expect(cliHelpText, contains('dmtools upgrade [version]'));
     });
   });
+}
 
-  group('UpgradeCommand', () {
+void _upgradeDryRunTests() {
+  group('UpgradeCommand dry-run and download failures', () {
     test('dry run makes no download or install', () async {
       final lines = <String>[];
       var fetched = false;
@@ -55,32 +63,33 @@ void main() {
       expect(ran, isFalse);
       expect(lines.join('\n'), contains('left untouched'));
     });
+  });
+}
 
-    test(
-      'version selects tagged installer and passes DMTOOLS_VERSION',
-      () async {
-        String? url;
-        Map<String, String>? seenEnv;
-        final code = await UpgradeCommand(
-          writer: (_) {},
-          environment: {},
-          fetchScript: (u) async {
-            url = u;
-            return '/tmp/x.sh';
-          },
-          runScript: (_, env) async {
-            seenEnv = env;
-            return 0;
-          },
-        ).run(['0.1.60']);
-        expect(code, 0);
-        expect(
-          url,
-          'https://github.com/epam/dmtools-dart/releases/download/v0.1.60/install.sh',
-        );
-        expect(seenEnv?['DMTOOLS_VERSION'], '0.1.60');
-      },
-    );
+void _upgradeInstallerTests() {
+  group('UpgradeCommand installer selection', () {
+    test('version selects tagged installer and passes DMTOOLS_VERSION', () async {
+      String? url;
+      Map<String, String>? seenEnv;
+      final code = await UpgradeCommand(
+        writer: (_) {},
+        environment: {},
+        fetchScript: (u) async {
+          url = u;
+          return '/tmp/x.sh';
+        },
+        runScript: (_, env) async {
+          seenEnv = env;
+          return 0;
+        },
+      ).run(['0.1.60']);
+      expect(code, 0);
+      expect(
+        url,
+        'https://github.com/epam/dmtools-dart/releases/download/v0.1.60/install.sh',
+      );
+      expect(seenEnv?['DMTOOLS_VERSION'], '0.1.60');
+    });
 
     test('installer override URL is honored', () async {
       String? url;

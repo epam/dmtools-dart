@@ -25,10 +25,10 @@ class UpgradeCommand {
     Map<String, String>? environment,
     Future<String?> Function(String url)? fetchScript,
     Future<int> Function(String scriptPath, Map<String, String> env)? runScript,
-  })  : _writer = writer ?? print,
-        _env = environment ?? Platform.environment,
-        _fetch = fetchScript ?? _defaultFetch,
-        _run = runScript ?? _defaultRun;
+  }) : _writer = writer ?? print,
+       _env = environment ?? Platform.environment,
+       _fetch = fetchScript ?? _defaultFetch,
+       _run = runScript ?? _defaultRun;
 
   final void Function(String line) _writer;
   final Map<String, String> _env;
@@ -38,12 +38,10 @@ class UpgradeCommand {
   /// Runs the upgrade. [args] holds the optional version (`upgrade 0.1.60`
   /// or `upgrade v0.1.60`). Returns the process exit code.
   Future<int> run(List<String> args) async {
+    final help = _helpExit(args);
+    if (help != null) return help;
     final positional = args.where((a) => !a.startsWith('-')).toList();
     final requested = positional.isEmpty ? null : positional.first.trim();
-    if (args.any((a) => a == '--help' || a == '-h')) {
-      _writer('Usage: dmtools upgrade [version]   (alias: update)');
-      return 0;
-    }
     final version = (requested == null || requested.isEmpty)
         ? (_env['DMTOOLS_VERSION'] ?? '')
         : requested;
@@ -63,30 +61,50 @@ class UpgradeCommand {
 
     final script = await _fetch(url);
     if (script == null) {
-      _writer(
-        'Upgrade failed: could not download $url. '
-        'The existing installation was left untouched.',
-      );
+      _downloadFailed(url);
       return 1;
     }
-
     final env = Map<String, String>.from(_env);
     if (version.isNotEmpty) env['DMTOOLS_VERSION'] = version;
     final code = await _run(script, env);
-    if (code != 0) {
-      _writer(
-        'Upgrade failed: installer exited with code $code. '
-        'The existing installation was left untouched.',
-      );
-      return code;
-    }
+    if (code != 0) return _installFailed(code);
     _writer(
-      'Upgraded: $before -> '
-      '${version.isEmpty ? 'latest' : version.replaceFirst(RegExp(r'^v'), '')}'
+      'Upgraded: $before -> ${_displayVersion(version)}'
       '. Run `dmtools --version` to confirm.',
     );
     return 0;
   }
+
+  /// Prints the usage line for `--help`/`-h`; null when args are real work.
+  int? _helpExit(List<String> args) {
+    if (args.any((a) => a == '--help' || a == '-h')) {
+      _writer('Usage: dmtools upgrade [version]   (alias: update)');
+      return 0;
+    }
+    return null;
+  }
+
+  /// Reports a failed download; the installation is left untouched.
+  int _downloadFailed(String url) {
+    _writer(
+      'Upgrade failed: could not download $url. '
+      'The existing installation was left untouched.',
+    );
+    return 1;
+  }
+
+  /// Reports a failed installer run; the installation is left untouched.
+  int _installFailed(int code) {
+    _writer(
+      'Upgrade failed: installer exited with code $code. '
+      'The existing installation was left untouched.',
+    );
+    return code;
+  }
+
+  /// The human-facing version label: `latest` or the requested one, `v`-less.
+  String _displayVersion(String version) =>
+      version.isEmpty ? 'latest' : version.replaceFirst(RegExp(r'^v'), '');
 
   /// Resolves the installer URL. `DMTOOLS_INSTALL_SCRIPT_URL` wins; a
   /// version selects the tagged release asset, otherwise the latest one.

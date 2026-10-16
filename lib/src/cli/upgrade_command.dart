@@ -65,13 +65,16 @@ class UpgradeCommand {
 
     final script = await _fetch(url);
     if (script == null) {
-      _downloadFailed(url);
+      _reportDownloadFailed(url);
       return 1;
     }
     final env = Map<String, String>.from(_env);
     if (version.isNotEmpty) env['DMTOOLS_VERSION'] = version;
     final code = await _run(script, env);
-    if (code != 0) return _installFailed(code);
+    if (code != 0) {
+      _reportInstallFailed(code);
+      return code;
+    }
     _writer(
       'Installer finished (requested: ${_displayVersion(version)}; '
       'was $before). Run `dmtools --version` to confirm the installed version.',
@@ -100,21 +103,19 @@ class UpgradeCommand {
   }
 
   /// Reports a failed download; the installation is left untouched.
-  int _downloadFailed(String url) {
+  void _reportDownloadFailed(String url) {
     _writer(
       'Upgrade failed: could not download $url. '
       'The existing installation was left untouched.',
     );
-    return 1;
   }
 
   /// Reports a failed installer run; the installation is left untouched.
-  int _installFailed(int code) {
+  void _reportInstallFailed(int code) {
     _writer(
       'Upgrade failed: installer exited with code $code. '
       'The existing installation was left untouched.',
     );
-    return code;
   }
 
   /// The human-facing version label: `latest` or the requested one, `v`-less.

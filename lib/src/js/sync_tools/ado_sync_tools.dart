@@ -200,7 +200,12 @@ String _listWorkItems(_AdoConfig config, Map<String, dynamic> args) {
     jsonEncode({'query': syncAsStr(args['wiql'])}),
   );
   final wiql = syncTryDecode(wiqlBody);
-  if (wiql is! Map) return wiqlBody;
+  // No result list (workItems / workItemRelations) means an error envelope:
+  // hand the raw body back so a failed WIQL is not read as an empty match.
+  if (wiql is! Map ||
+      (wiql['workItems'] is! List && wiql['workItemRelations'] is! List)) {
+    return wiqlBody;
+  }
   final ids = extractWorkItemIds(wiql);
   final fields = (args['fields'] as List?)?.cast<String>();
   final items = <Map<String, dynamic>>[];

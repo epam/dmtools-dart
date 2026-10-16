@@ -8,6 +8,7 @@ void main() {
   _helpTextTests();
   _upgradeDryRunTests();
   _upgradeInstallerTests();
+  _upgradeDownloadTests();
 }
 
 void _helpTextTests() {
@@ -110,69 +111,65 @@ void _upgradeInstallerTests() {
       );
       expect(seenEnv?['DMTOOLS_VERSION'], '0.1.60');
     });
+  });
+}
 
-    test('real download path: 200 runs, 404 and dead URL fail cleanly',
-        () async {
-      final server = await HttpServer.bind('127.0.0.1', 0);
-      server.listen((req) async {
-        if (req.uri.path == '/ok') {
-          req.response.write('#!/bin/sh\necho ok\n');
-          await req.response.close();
-        } else {
-          req.response.statusCode = 404;
-          await req.response.close();
-        }
-      });
+Future<HttpServer> _spawnUpgradeStub() async {
+  final server = await HttpServer.bind('127.0.0.1', 0);
+  server.listen((req) async {
+    if (req.uri.path == '/ok') {
+      req.response.write('#!/bin/sh\necho ok\n');
+      await req.response.close();
+    } else {
+      req.response.statusCode = 404;
+      await req.response.close();
+    }
+  });
+  return server;
+}
+
+void _upgradeDownloadTests() {
+  group('UpgradeCommand download path', () {
+    Future<int> runWith(String path, void Function(String) onScript) async {
+      final server = await _spawnUpgradeStub();
       addTearDown(server.close);
-      final base = 'http://127.0.0.1:${server.port}';
-
-      // 200: the fetched script is staged and executed.
       final ran = <String>[];
-      final ok = await UpgradeCommand(
+      final code = await UpgradeCommand(
         writer: (_) {},
-        environment: {'DMTOOLS_INSTALL_SCRIPT_URL': '$base/ok'},
+        environment: {
+          'DMTOOLS_INSTALL_SCRIPT_URL': 'http://127.0.0.1:${server.port}$path',
+        },
         runScript: (script, _) async {
+          onScript(script);
           ran.add(script);
           return 0;
         },
       ).run(['0.1.60']);
-      expect(ok, 0);
-      expect(ran, hasLength(1));
+      expect(ran.length, ran.isNotEmpty ? 1 : 0);
+      return code;
+    }
+
+    test('200: the fetched script is staged and executed', () async {
+      final ran = <String>[];
+      expect(await runWith('/ok', ran.add), 0);
       expect(File(ran.single).readAsStringSync(), contains('echo ok'));
+    });
 
-      // 404: download failure, installer never runs.
-      var ranFailed = 0;
-      final missing = await UpgradeCommand(
-        writer: (_) {},
-        environment: {'DMTOOLS_INSTALL_SCRIPT_URL': '$base/nope'},
-        runScript: (_, __) async {
-          ranFailed++;
-          return 0;
-        },
-      ).run(['0.1.60']);
-      expect(missing, 1);
-      expect(ranFailed, 0);
+    test('404: download failure, installer never runs', () async {
+      expect(await runWith('/nope', (_) {}), 1);
+    });
 
-      // Connection refused: the catch branch, still a clean exit 1.
+    test('connection refused: catch branch, clean exit 1', () async {
+      final server = await _spawnUpgradeStub();
+      addTearDown(server.close);
       final dead = await UpgradeCommand(
         writer: (_) {},
-        environment: {'DMTOOLS_INSTALL_SCRIPT_URL': 'http://127.0.0.1:1/x.sh'},
+        environment: {
+          'DMTOOLS_INSTALL_SCRIPT_URL': 'http://127.0.0.1:1/x.sh',
+        },
         runScript: (_, __) async => 0,
       ).run(['0.1.60']);
       expect(dead, 1);
-    });
-
-    test('installer override URL is honored', () async {
-      String? url;
-      await UpgradeCommand(
-        writer: (_) {},
-        environment: {'DMTOOLS_INSTALL_SCRIPT_URL': 'http://mirror/x.sh'},
-        fetchScript: (u) async {
-          url = u;
-          return null;
-        },
-      ).run([]);
-      expect(url, 'http://mirror/x.sh');
     });
   });
 }

@@ -982,5 +982,16 @@
       "cacheRead": 579703,
       "model": "claude-haiku-5.5"
     }
+  ],
+  "pr-415": [
+    {
+      "leg": "review",
+      "at": "2026-10-16T12:10:41Z",
+      "prompt": 76453,
+      "completion": 4934,
+      "total": 81387,
+      "cacheRead": 263704,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

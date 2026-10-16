@@ -15,6 +15,8 @@ void main() {
   getWorkItemsTests();
   listWorkItemsTests();
   _listWorkItemsQueryTests();
+  _wiqlLinkQueryTests();
+  _createWorkItemProjectTests();
   getWorkItemTypesTests();
   getWorkItemRevisionsTests();
   getWorkItemCommentsTests();
@@ -109,6 +111,60 @@ void listWorkItemsTests() {
       expect(calls.last.path, endsWith('/contoso/dmtools/_apis/wit/workitems'));
       expect(calls.last.queryParameters['ids'], '1,2');
       expect(calls.last.queryParameters[r'$expand'], 'relations');
+    });
+  });
+}
+
+void _wiqlLinkQueryTests() {
+  group('list work items WorkItemLinks handling', () {
+    test('reads target ids from workItemRelations (WorkItemLinks queries)',
+        () async {
+      final f = mockAdo((o) {
+        if (o.path.endsWith('/wiql')) {
+          return jsonEncode({
+            'queryType': 'tree',
+            'workItemRelations': [
+              {
+                'rel': null,
+                'source': null,
+                'target': {'id': 7}
+              },
+              {
+                'rel': 'System.LinkTypes.Hierarchy-Forward',
+                'source': {'id': 7},
+                'target': {'id': 8},
+              },
+            ],
+          });
+        }
+        final ids = (o.queryParameters['ids'] as String).split(',');
+        return jsonEncode({
+          'value': [
+            for (final id in ids) {'id': int.parse(id)}
+          ],
+        });
+      });
+      final items = await f.client.listWorkItems('FROM WorkItemLinks');
+      expect(items.map((i) => i['id']).toList(), [7, 8]);
+      expect(f.adapter.calls.last.queryParameters['ids'], '7,8');
+    });
+  });
+}
+
+void _createWorkItemProjectTests() {
+  group('AdoClient.workItemOps.createWorkItemWithParent project argument', () {
+    test('rejects a numeric project id with a clear error', () async {
+      final f = mockAdo((_) => '{}');
+      await expectLater(
+        f.client.workItemOps.createWorkItemWithParent(
+          project: '879',
+          workItemType: 'Task',
+          title: 't',
+        ),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message.toString(), 'message', contains('numeric id'))),
+      );
+      expect(f.adapter.calls, isEmpty);
     });
   });
 }

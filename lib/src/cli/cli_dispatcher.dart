@@ -33,6 +33,7 @@ import 'doctor_command.dart';
 import 'help_text.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
+import 'upgrade_command.dart';
 
 /// Parses CLI arguments, dispatches commands and reports exit codes.
 class CliDispatcher {
@@ -111,6 +112,12 @@ class CliDispatcher {
     'doctor': (_) => _runDoctor(),
     'run': _runJob,
     'compile': _runCompile,
+    'upgrade': _runUpgrade,
+    'update': _runUpgrade,
+    // gh-395: old launchers forward `upgrade` to the runtime as `mcp upgrade`.
+    'mcp': (rest) => rest.isNotEmpty && _isUpgradeWord(rest.first)
+        ? _runUpgrade(rest.skip(1).toList())
+        : _toolDispatch('mcp', rest),
     'list': _listTools,
     'interactive': (_) => _interactiveStub(),
     'i': (_) => _interactiveStub(),
@@ -141,6 +148,15 @@ class CliDispatcher {
     _writer(_doctor.run());
     return 0;
   }
+
+  static bool _isUpgradeWord(String word) => word == 'upgrade' || word == 'update';
+
+  /// Upgrades the runtime + launcher via the release installer (gh-395).
+  Future<int> _runUpgrade(List<String> rest) => UpgradeCommand(
+        writer: _writer,
+        errorWriter: _errorWriter,
+        dryRun: _reader.getValue('DMTOOLS_UPGRADE_DRY_RUN')?.trim().toLowerCase() == 'true',
+      ).run(rest);
 
   /// Builds a versioned agent pack (zip + manifest + sha256) — dm.ai #595.
   int _runCompile(List<String> rest) =>

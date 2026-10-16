@@ -200,8 +200,11 @@ String _listWorkItems(_AdoConfig config, Map<String, dynamic> args) {
     jsonEncode({'query': syncAsStr(args['wiql'])}),
   );
   final wiql = syncTryDecode(wiqlBody);
-  if (wiql is! Map || wiql['workItems'] is! List) return wiqlBody;
-  final ids = wiqlStubIds(wiql['workItems'] as List);
+  if (wiql is! Map) return wiqlBody;
+  if (wiql['workItems'] is! List && wiql['workItemRelations'] is! List) {
+    return wiqlBody;
+  }
+  final ids = wiqlResponseIds(wiql);
   final fields = (args['fields'] as List?)?.cast<String>();
   final items = <Map<String, dynamic>>[];
   for (final batch in batchIds(ids)) {

@@ -33,6 +33,26 @@ List<int> wiqlStubIds(List stubs) => [
         if (stub is Map && stub['id'] is int) stub['id'] as int,
     ];
 
+/// Collects work-item ids from a WIQL response. Flat queries return
+/// `workItems` stubs; `FROM WorkItemLinks` queries return
+/// `workItemRelations` (`{source, target}` nodes, `source` null for root
+/// items). Both are read; duplicates are removed, order kept (dm.ai#700).
+List<int> wiqlResponseIds(Map wiql) {
+  final ids = <int>[];
+  final stubs = wiql['workItems'];
+  if (stubs is List) ids.addAll(wiqlStubIds(stubs));
+  final relations = wiql['workItemRelations'];
+  if (relations is List) {
+    for (final rel in relations) {
+      if (rel is! Map) continue;
+      for (final node in [rel['source'], rel['target']]) {
+        if (node is Map && node['id'] is int) ids.add(node['id'] as int);
+      }
+    }
+  }
+  return ids.toSet().toList();
+}
+
 /// Splits [ids] into batches of [size] — ADO caps `wit/workitems` at 200
 /// ids per request (Java `searchAndPerform` batches the same way).
 Iterable<List<int>> batchIds(List<int> ids, {int size = 200}) sync* {

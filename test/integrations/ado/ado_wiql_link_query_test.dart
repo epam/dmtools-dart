@@ -28,7 +28,11 @@ void main() {
       expect(
         extractWorkItemIds({
           'workItemRelations': [
-            {'rel': null, 'source': null, 'target': {'id': 1}},
+            {
+              'rel': null,
+              'source': null,
+              'target': {'id': 1}
+            },
             {
               'rel': 'System.LinkTypes.Hierarchy-Forward',
               'source': {'id': 1},
@@ -49,8 +53,14 @@ void main() {
       expect(
         extractWorkItemIds({
           'workItemRelations': [
-            {'rel': 'x', 'target': {'id': 4}},
-            {'rel': 'x', 'target': {'id': 4}},
+            {
+              'rel': 'x',
+              'target': {'id': 4}
+            },
+            {
+              'rel': 'x',
+              'target': {'id': 4}
+            },
           ],
         }),
         [4],
@@ -78,8 +88,15 @@ void main() {
           return jsonEncode({
             'queryType': 'tree',
             'workItemRelations': [
-              {'rel': null, 'target': {'id': 10}},
-              {'rel': 'x', 'source': {'id': 10}, 'target': {'id': 11}},
+              {
+                'rel': null,
+                'target': {'id': 10}
+              },
+              {
+                'rel': 'x',
+                'source': {'id': 10},
+                'target': {'id': 11}
+              },
             ],
           });
         }

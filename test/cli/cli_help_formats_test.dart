@@ -130,7 +130,7 @@ Future<HttpServer> _spawnUpgradeStub() async {
 
 void _upgradeDownloadTests() {
   group('UpgradeCommand download path', () {
-    Future<int> runWith(String path, void Function(String) onScript) async {
+    Future<(int, List<String>)> runWith(String path) async {
       final server = await _spawnUpgradeStub();
       addTearDown(server.close);
       final ran = <String>[];
@@ -140,23 +140,53 @@ void _upgradeDownloadTests() {
           'DMTOOLS_INSTALL_SCRIPT_URL': 'http://127.0.0.1:${server.port}$path',
         },
         runScript: (script, _) async {
-          onScript(script);
           ran.add(script);
           return 0;
         },
       ).run(['0.1.60']);
-      expect(ran.length, ran.isNotEmpty ? 1 : 0);
-      return code;
+      return (code, ran);
     }
 
-    test('200: the fetched script is staged and executed', () async {
-      final ran = <String>[];
-      expect(await runWith('/ok', ran.add), 0);
+    test('200: the fetched script is staged and executed once', () async {
+      final (code, ran) = await runWith('/ok');
+      expect(code, 0);
+      expect(ran, hasLength(1));
       expect(File(ran.single).readAsStringSync(), contains('echo ok'));
     });
 
     test('404: download failure, installer never runs', () async {
-      expect(await runWith('/nope', (_) {}), 1);
+      final (code, ran) = await runWith('/nope');
+      expect(code, 1);
+      expect(ran, isEmpty);
+    });
+
+    test('rejects a version that would alter the installer URL', () async {
+      final lines = <String>[];
+      var fetched = false;
+      final code = await UpgradeCommand(
+        writer: lines.add,
+        environment: {},
+        fetchScript: (_) async {
+          fetched = true;
+          return null;
+        },
+      ).run(['0.1.60?x=']);
+      expect(code, 2);
+      expect(fetched, isFalse);
+      expect(lines.join('\n'), contains('Invalid version'));
+    });
+
+    test('success message does not claim a verified upgrade', () async {
+      final lines = <String>[];
+      await UpgradeCommand(
+        writer: lines.add,
+        environment: {},
+        fetchScript: (_) async => '/tmp/x.sh',
+        runScript: (_, __) async => 0,
+      ).run(['0.1.60']);
+      final out = lines.join('\n');
+      expect(out, isNot(contains('Upgraded:')));
+      expect(out, contains('Installer finished'));
     });
 
     test('connection refused: catch branch, clean exit 1', () async {

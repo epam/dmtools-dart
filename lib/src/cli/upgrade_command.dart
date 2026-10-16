@@ -17,6 +17,10 @@ import '../version.dart';
 const String _latestInstallUrl =
     'https://github.com/epam/dmtools-dart/releases/latest/download/install.sh';
 
+/// Accepted version shapes: `1.2.3`, optional `v`, optional pre-release tag.
+/// Anything else would change the installer URL or reach `install.sh` raw.
+final RegExp _versionPattern = RegExp(r'^v?\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$');
+
 /// Upgrade runner. All side effects are injectable for tests.
 class UpgradeCommand {
   /// Creates an upgrade runner.
@@ -41,6 +45,10 @@ class UpgradeCommand {
     final help = _helpExit(args);
     if (help != null) return help;
     final version = _resolveRequestedVersion(args);
+    if (version.isNotEmpty && !_versionPattern.hasMatch(version)) {
+      _writer('Invalid version "$version". Expected e.g. 0.1.60 or v0.1.60.');
+      return 2;
+    }
     final url = _resolveUrl(version);
     final before = dmtoolsVersion;
 
@@ -65,8 +73,8 @@ class UpgradeCommand {
     final code = await _run(script, env);
     if (code != 0) return _installFailed(code);
     _writer(
-      'Upgraded: $before -> ${_displayVersion(version)}'
-      '. Run `dmtools --version` to confirm.',
+      'Installer finished (requested: ${_displayVersion(version)}; '
+      'was $before). Run `dmtools --version` to confirm the installed version.',
     );
     return 0;
   }
@@ -133,10 +141,9 @@ class UpgradeCommand {
         return null;
       }
       final body = await res.transform(const SystemEncoding().decoder).join();
-      final file = await File(
-        '${Directory.systemTemp.path}/dmtools-install-${DateTime.now().microsecondsSinceEpoch}.sh',
-      ).create();
-      await file.writeAsString(body);
+      final dir = await Directory.systemTemp.createTemp('dmtools-install-');
+      final file = File('${dir.path}/install.sh');
+      await file.writeAsString(body, flush: true);
       return file.path;
     } catch (_) {
       return null;

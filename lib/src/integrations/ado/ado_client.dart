@@ -16,7 +16,6 @@ import 'ado_json.dart';
 import 'ado_work_item_client.dart';
 import 'ado_work_item_ops.dart';
 
-/// Azure DevOps API methods exposed to the MCP tool runtime.
 /// Matches a query that begins with the `SELECT` keyword (any case, leading
 /// whitespace allowed). The trailing `\b` keeps fields such as `selection`
 /// from matching.
@@ -31,6 +30,7 @@ String? expandWiql(String? wiql) {
   return 'SELECT [System.Id] FROM WorkItems WHERE $wiql';
 }
 
+/// Azure DevOps API methods exposed to the MCP tool runtime.
 class AdoClient {
   final AdoHttpClient _http;
 

@@ -40,11 +40,7 @@ class UpgradeCommand {
   Future<int> run(List<String> args) async {
     final help = _helpExit(args);
     if (help != null) return help;
-    final positional = args.where((a) => !a.startsWith('-')).toList();
-    final requested = positional.isEmpty ? null : positional.first.trim();
-    final version = (requested == null || requested.isEmpty)
-        ? (_env['DMTOOLS_VERSION'] ?? '')
-        : requested;
+    final version = _resolveRequestedVersion(args);
     final url = _resolveUrl(version);
     final before = dmtoolsVersion;
 
@@ -73,6 +69,17 @@ class UpgradeCommand {
       '. Run `dmtools --version` to confirm.',
     );
     return 0;
+  }
+
+  /// The version to upgrade to: the positional arg wins, else
+  /// `DMTOOLS_VERSION`, else latest (empty string).
+  String _resolveRequestedVersion(List<String> args) {
+    final positional = args.where((a) => !a.startsWith('-')).toList();
+    final requested = positional.isEmpty ? null : positional.first.trim();
+    if (requested == null || requested.isEmpty) {
+      return _env['DMTOOLS_VERSION'] ?? '';
+    }
+    return requested;
   }
 
   /// Prints the usage line for `--help`/`-h`; null when args are real work.

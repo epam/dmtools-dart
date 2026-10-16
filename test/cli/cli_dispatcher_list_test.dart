@@ -76,6 +76,20 @@ JENKINS_API_TOKEN=tok
           isTrue);
     });
 
+    test('config-detected list includes confluence for LOGIN_PASS_TOKEN only',
+        () async {
+      _writeEnv('''
+CONFLUENCE_BASE_PATH=https://test.atlassian.net/wiki
+CONFLUENCE_AUTH_TYPE=Basic
+CONFLUENCE_LOGIN_PASS_TOKEN=prebuilt
+''');
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final confluence = _decodedTools()
+          .where((t) => t['integration'] == 'confluence')
+          .toList();
+      expect(confluence, isNotEmpty);
+    });
+
     test('DMTOOLS_INTEGRATIONS still wins verbatim over config detection',
         () async {
       // Documented override: jenkins is fully configured, but an explicit

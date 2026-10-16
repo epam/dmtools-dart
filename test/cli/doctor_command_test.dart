@@ -115,6 +115,17 @@ JIRA_LOGIN_PASS_TOKEN=cHJlYnVpbHQ=
       expect(out, contains('    missing: JIRA_API_TOKEN'));
     });
 
+    test('blank JIRA_LOGIN_PASS_TOKEN is not configured', () {
+      _writeEnv('''
+JIRA_BASE_PATH=https://test.atlassian.net
+JIRA_LOGIN_PASS_TOKEN=   
+''');
+      final out = _command().run();
+      expect(out, contains('✗ jira - Jira authentication incomplete'));
+      expect(out, contains('    missing: JIRA_EMAIL'));
+      expect(out, contains('    missing: JIRA_API_TOKEN'));
+    });
+
     test('email without token reports only the token', () {
       _writeEnv('''
 JIRA_BASE_PATH=https://test.atlassian.net

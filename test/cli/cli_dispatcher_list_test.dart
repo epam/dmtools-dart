@@ -54,7 +54,8 @@ void _testConfigDetectedListing() {
       expect(tools, isNotEmpty);
       final integrations = tools.map((t) => t['integration'] as String).toSet();
       expect(
-        integrations.difference(const {'cli', 'env', 'file', 'other', 'teams_auth'}),
+        integrations
+            .difference(const {'cli', 'env', 'file', 'other', 'teams_auth'}),
         isEmpty,
       );
       expect(tools.map((t) => t['name'] as String),

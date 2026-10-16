@@ -72,8 +72,8 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// CLI full output log directory.
   /// Key: `DMTOOLS_CLI_LOG_DIR`, default: `.dmtools-logs/cli`.
-  String getCliFullOutputLogDir() =>
-      getValueWithDefault(PropertyNames.DMTOOLS_CLI_LOG_DIR, '.dmtools-logs/cli');
+  String getCliFullOutputLogDir() => getValueWithDefault(
+      PropertyNames.DMTOOLS_CLI_LOG_DIR, '.dmtools-logs/cli');
 
   /// Sleep time between requests in ms.
   /// Key: `SLEEP_TIME_REQUEST`, default: 300. THROWS on invalid.
@@ -97,8 +97,8 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// JPEG quality for image processing.
   /// Key: `IMAGE_JPEG_QUALITY`, default: 0.9. THROWS on invalid.
-  double getImageJpegQuality() =>
-      double.parse(getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'));
+  double getImageJpegQuality() => double.parse(
+      getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'));
 
   /// Default LLM type. Key: `DEFAULT_LLM`.
   String? getDefaultLLM() => getValue(PropertyNames.DEFAULT_LLM);
@@ -214,7 +214,8 @@ extension PropertyReaderGetters on PropertyReader {
   /// Auto-detects story point field names from `JIRA_EXTRA_FIELDS` when
   /// `DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES` is not set.
   List<String>? getDefaultTicketStoryPointsFieldHumanNames() {
-    final explicit = getValue(PropertyNames.DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES);
+    final explicit =
+        getValue(PropertyNames.DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES);
     if (explicit != null && explicit.isNotEmpty) {
       return explicit.split(',');
     }
@@ -297,7 +298,8 @@ extension PropertyReaderGetters on PropertyReader {
   // --- Confluence ---
 
   /// Confluence REST API base path. Key: `CONFLUENCE_BASE_PATH`.
-  String? getConfluenceBasePath() => getValue(PropertyNames.CONFLUENCE_BASE_PATH);
+  String? getConfluenceBasePath() =>
+      getValue(PropertyNames.CONFLUENCE_BASE_PATH);
 
   /// Confluence credentials.
   ///
@@ -325,7 +327,8 @@ extension PropertyReaderGetters on PropertyReader {
   String? getConfluenceEmail() => getValue(PropertyNames.CONFLUENCE_EMAIL);
 
   /// Confluence API token. Key: `CONFLUENCE_API_TOKEN`.
-  String? getConfluenceApiToken() => getValue(PropertyNames.CONFLUENCE_API_TOKEN);
+  String? getConfluenceApiToken() =>
+      getValue(PropertyNames.CONFLUENCE_API_TOKEN);
 
   /// Confluence auth type. Key: `CONFLUENCE_AUTH_TYPE`, default: `Basic`.
   String getConfluenceAuthType() {
@@ -334,10 +337,12 @@ extension PropertyReaderGetters on PropertyReader {
   }
 
   /// Confluence GraphQL endpoint path. Key: `CONFLUENCE_GRAPHQL_PATH`.
-  String? getConfluenceGraphQLPath() => getValue(PropertyNames.CONFLUENCE_GRAPHQL_PATH);
+  String? getConfluenceGraphQLPath() =>
+      getValue(PropertyNames.CONFLUENCE_GRAPHQL_PATH);
 
   /// Default Confluence space key. Key: `CONFLUENCE_DEFAULT_SPACE`.
-  String? getConfluenceDefaultSpace() => getValue(PropertyNames.CONFLUENCE_DEFAULT_SPACE);
+  String? getConfluenceDefaultSpace() =>
+      getValue(PropertyNames.CONFLUENCE_DEFAULT_SPACE);
 
   /// Confluence REST API version for content reads: `v1` (default) uses the
   /// classic `{basePath}/rest/api/...` endpoints; `v2` uses
@@ -389,10 +394,12 @@ extension PropertyReaderGetters on PropertyReader {
   String? getGithubToken() => getValue(PropertyNames.SOURCE_GITHUB_TOKEN);
 
   /// GitHub workspace path. Key: `SOURCE_GITHUB_WORKSPACE`.
-  String? getGithubWorkspace() => getValue(PropertyNames.SOURCE_GITHUB_WORKSPACE);
+  String? getGithubWorkspace() =>
+      getValue(PropertyNames.SOURCE_GITHUB_WORKSPACE);
 
   /// GitHub repository (`owner/repo`). Key: `SOURCE_GITHUB_REPOSITORY`.
-  String? getGithubRepository() => getValue(PropertyNames.SOURCE_GITHUB_REPOSITORY);
+  String? getGithubRepository() =>
+      getValue(PropertyNames.SOURCE_GITHUB_REPOSITORY);
 
   /// GitHub branch. Key: `SOURCE_GITHUB_BRANCH`.
   String? getGithubBranch() => getValue(PropertyNames.SOURCE_GITHUB_BRANCH);
@@ -428,13 +435,16 @@ extension PropertyReaderGetters on PropertyReader {
   String? getBitbucketToken() => getValue(PropertyNames.BITBUCKET_TOKEN);
 
   /// Bitbucket API version. Key: `BITBUCKET_API_VERSION`.
-  String? getBitbucketApiVersion() => getValue(PropertyNames.BITBUCKET_API_VERSION);
+  String? getBitbucketApiVersion() =>
+      getValue(PropertyNames.BITBUCKET_API_VERSION);
 
   /// Bitbucket workspace. Key: `BITBUCKET_WORKSPACE`.
-  String? getBitbucketWorkspace() => getValue(PropertyNames.BITBUCKET_WORKSPACE);
+  String? getBitbucketWorkspace() =>
+      getValue(PropertyNames.BITBUCKET_WORKSPACE);
 
   /// Bitbucket repository. Key: `BITBUCKET_REPOSITORY`.
-  String? getBitbucketRepository() => getValue(PropertyNames.BITBUCKET_REPOSITORY);
+  String? getBitbucketRepository() =>
+      getValue(PropertyNames.BITBUCKET_REPOSITORY);
 
   /// Bitbucket branch. Key: `BITBUCKET_BRANCH`.
   String? getBitbucketBranch() => getValue(PropertyNames.BITBUCKET_BRANCH);
@@ -465,10 +475,12 @@ extension PropertyReaderGetters on PropertyReader {
   String? getFigmaClientSecret() => getValue(PropertyNames.FIGMA_CLIENT_SECRET);
 
   /// Figma OAuth2 refresh token. Key: `FIGMA_OAUTH_REFRESH_TOKEN`.
-  String? getFigmaOAuth2RefreshToken() => getValue(PropertyNames.FIGMA_OAUTH_REFRESH_TOKEN);
+  String? getFigmaOAuth2RefreshToken() =>
+      getValue(PropertyNames.FIGMA_OAUTH_REFRESH_TOKEN);
 
   /// Figma OAuth2 access token. Key: `FIGMA_OAUTH_ACCESS_TOKEN`.
-  String? getFigmaOAuth2AccessToken() => getValue(PropertyNames.FIGMA_OAUTH_ACCESS_TOKEN);
+  String? getFigmaOAuth2AccessToken() =>
+      getValue(PropertyNames.FIGMA_OAUTH_ACCESS_TOKEN);
 
   /// Figma OAuth2 scopes.
   ///
@@ -488,14 +500,15 @@ extension PropertyReaderGetters on PropertyReader {
   String? getTeamsClientId() => getValue(PropertyNames.TEAMS_CLIENT_ID);
 
   /// Teams tenant ID. Key: `TEAMS_TENANT_ID`, default: `common`.
-  String getTeamsTenantId() => getValueWithDefault(PropertyNames.TEAMS_TENANT_ID, 'common');
+  String getTeamsTenantId() =>
+      getValueWithDefault(PropertyNames.TEAMS_TENANT_ID, 'common');
 
   /// Teams OAuth scopes. Key: `TEAMS_SCOPES`.
   String getTeamsScopes() => getValueWithDefault(
         PropertyNames.TEAMS_SCOPES,
         'User.Read Chat.Read ChatMessage.Read Mail.Read '
-            'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
-            'offline_access',
+        'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
+        'offline_access',
       );
 
   /// Teams auth method. Key: `TEAMS_AUTH_METHOD`, default: `device`.
@@ -511,8 +524,8 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// Teams token cache file path.
   /// Key: `TEAMS_TOKEN_CACHE_PATH`, default: `./teams.token`.
-  String getTeamsTokenCachePath() =>
-      getValueWithDefault(PropertyNames.TEAMS_TOKEN_CACHE_PATH, './teams.token');
+  String getTeamsTokenCachePath() => getValueWithDefault(
+      PropertyNames.TEAMS_TOKEN_CACHE_PATH, './teams.token');
 
   /// Teams refresh token. Key: `TEAMS_REFRESH_TOKEN`.
   String? getTeamsRefreshToken() => getValue(PropertyNames.TEAMS_REFRESH_TOKEN);
@@ -528,8 +541,8 @@ extension PropertyReaderGetters on PropertyReader {
   String getSharePointScopes() => getValueWithDefault(
         PropertyNames.SHAREPOINT_SCOPES,
         'User.Read Chat.Read ChatMessage.Read Mail.Read '
-            'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
-            'Sites.Read.All openid profile email offline_access',
+        'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
+        'Sites.Read.All openid profile email offline_access',
       );
 
   // --- TestRail ---

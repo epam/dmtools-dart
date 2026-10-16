@@ -75,10 +75,12 @@ extension PropertyReaderAIGetters on PropertyReader {
   }
 
   /// Gemini Vertex AI project ID. Key: `GEMINI_VERTEX_PROJECT_ID`.
-  String? getGeminiVertexProjectId() => getValue(PropertyNames.GEMINI_VERTEX_PROJECT_ID);
+  String? getGeminiVertexProjectId() =>
+      getValue(PropertyNames.GEMINI_VERTEX_PROJECT_ID);
 
   /// Gemini Vertex AI location. Key: `GEMINI_VERTEX_LOCATION`.
-  String? getGeminiVertexLocation() => getValue(PropertyNames.GEMINI_VERTEX_LOCATION);
+  String? getGeminiVertexLocation() =>
+      getValue(PropertyNames.GEMINI_VERTEX_LOCATION);
 
   /// Gemini Vertex AI service account credentials file path.
   /// Key: `GEMINI_VERTEX_CREDENTIALS_PATH`.
@@ -99,8 +101,8 @@ extension PropertyReaderAIGetters on PropertyReader {
 
   /// Ollama API base path.
   /// Key: `OLLAMA_BASE_PATH`, default: `http://localhost:11434`.
-  String getOllamaBasePath() =>
-      getValueWithDefault(PropertyNames.OLLAMA_BASE_PATH, 'http://localhost:11434');
+  String getOllamaBasePath() => getValueWithDefault(
+      PropertyNames.OLLAMA_BASE_PATH, 'http://localhost:11434');
 
   /// Ollama model name. Key: `OLLAMA_MODEL`.
   String? getOllamaModel() => getValue(PropertyNames.OLLAMA_MODEL);
@@ -202,13 +204,16 @@ extension PropertyReaderAIGetters on PropertyReader {
   }
 
   /// Bedrock IAM access key ID. Key: `BEDROCK_ACCESS_KEY_ID`.
-  String? getBedrockAccessKeyId() => getValue(PropertyNames.BEDROCK_ACCESS_KEY_ID);
+  String? getBedrockAccessKeyId() =>
+      getValue(PropertyNames.BEDROCK_ACCESS_KEY_ID);
 
   /// Bedrock IAM secret access key. Key: `BEDROCK_SECRET_ACCESS_KEY`.
-  String? getBedrockSecretAccessKey() => getValue(PropertyNames.BEDROCK_SECRET_ACCESS_KEY);
+  String? getBedrockSecretAccessKey() =>
+      getValue(PropertyNames.BEDROCK_SECRET_ACCESS_KEY);
 
   /// Bedrock IAM session token. Key: `BEDROCK_SESSION_TOKEN`.
-  String? getBedrockSessionToken() => getValue(PropertyNames.BEDROCK_SESSION_TOKEN);
+  String? getBedrockSessionToken() =>
+      getValue(PropertyNames.BEDROCK_SESSION_TOKEN);
 
   /// Bedrock max output tokens.
   /// Key: `BEDROCK_MAX_TOKENS`, default: 4096.

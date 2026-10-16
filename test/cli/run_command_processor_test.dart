@@ -25,6 +25,7 @@ void main() {
   });
 
   _testJobNameMode();
+  _testJobNameOverrides();
   _testJsFileMode();
   _testConfigFileResolution();
   _testPackTokenWiring();
@@ -62,6 +63,55 @@ void _testJobNameMode() {
       final json =
           jsonDecode(_run(['run', 'teammate', '--obj', '{"a":"b"}'])) as Map;
       expect(json['params']['obj'], {'a': 'b'});
+    });
+
+    test('keeps non-JSON bracket values as strings', () {
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--inputJql',
+          '[System.Id] = 1839749',
+        ]),
+      ) as Map;
+      expect(json['params']['inputJql'], '[System.Id] = 1839749');
+    });
+
+    test('keeps values with trailing text after a valid JSON prefix', () {
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--a',
+          '["a"] trailing',
+          '--b',
+          '{"a":1} and more',
+        ]),
+      ) as Map;
+      expect(json['params']['a'], '["a"] trailing');
+      expect(json['params']['b'], '{"a":1} and more');
+    });
+  });
+}
+
+void _testJobNameOverrides() {
+  group('job-name override parsing', () {
+    test('still parses valid arrays, objects and empty containers', () {
+      final json = jsonDecode(
+        _run([
+          'run',
+          'teammate',
+          '--cmd',
+          '["cursor-agent","x"]',
+          '--obj',
+          '{"a": 1}',
+          '--empty',
+          '[]',
+        ]),
+      ) as Map;
+      expect(json['params']['cmd'], ['cursor-agent', 'x']);
+      expect(json['params']['obj'], {'a': 1});
+      expect(json['params']['empty'], []);
     });
 
     test('applies base64-encoded override config', () {
@@ -219,8 +269,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': 'test-token-123'});
       try {
         expect(
-          () => RunCommandProcessor(packResolver: resolver)
-              .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, 'test-token-123');
@@ -236,8 +287,9 @@ void _testPackTokenWiring() {
       PropertyReader.setOverrides({'SOURCE_GITHUB_TOKEN': ''});
       try {
         expect(
-          () => RunCommandProcessor(packResolver: resolver)
-              .process(['run', 'pack.zip']),
+          () => RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', 'pack.zip']),
           throwsA(isA<AgentPackException>()),
         );
         expect(resolver.capturedToken, isNot('test-token-123'));
@@ -263,8 +315,9 @@ void _testParentPackResolution() {
         "params":{"fromChild":"yes"}
       }''');
       final json = jsonDecode(
-        RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
       ) as Map;
       expect(json['params']['fromParent'], 'yes');
       expect(json['params']['fromChild'], 'yes');
@@ -315,8 +368,9 @@ void _testParentPackRegistryRef() {
           "params":{"fromChild":"yes"}
         }''');
         final json = jsonDecode(
-          RunCommandProcessor(packResolver: resolver)
-              .process(['run', '${_tmp.path}/child.json']),
+          RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', '${_tmp.path}/child.json']),
         ) as Map;
         expect(json['params']['fromParent'], 'yes');
         expect(json['params']['fromChild'], 'yes');
@@ -347,8 +401,9 @@ void _testParentPackEntryOverride() {
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}#alt.json"}
       }''');
       final json = jsonDecode(
-        RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
       ) as Map;
       expect(json['params']['altEntry'], 'yes');
       expect(
@@ -378,8 +433,9 @@ void _testChildPackRefs() {
         }
       }''');
       final json = jsonDecode(
-        RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
+        RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
       ) as Map;
       final prompts = (json['params']['cliPrompts'] as List).cast<String>();
       expect(prompts[1], 'literal prompt');
@@ -405,8 +461,9 @@ void _testChildPackRefErrors() {
         "params":{"cliPrompts":["pack:../outside.md"]}
       }''');
       expect(
-        () => RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
+        () => RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
         throwsA(isA<AgentPackException>()),
       );
       expect(File('${_tmp.path}/outside.md').existsSync(), isFalse);
@@ -423,8 +480,9 @@ void _testChildPackRefErrors() {
         "params":{"cliPrompts":["pack:instructions/nope.md"]}
       }''');
       expect(
-        () => RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
+        () => RunCommandProcessor(
+          packResolver: resolver,
+        ).process(['run', '${_tmp.path}/child.json']),
         throwsA(isA<AgentPackException>()),
       );
     });
@@ -448,30 +506,35 @@ void _testChildPackRefErrors() {
 /// registry configured must error clearly instead of a bare file-not-found.
 void _testRegistryRefGuard() {
   group('registry ref parents (errors)', () {
-    test('<agent>@latest parent without a configured registry errors clearly',
-        () {
-      final resolver = AgentPackResolver(
-        packsRoot: Directory('${_tmp.path}/packs'),
-        registryBaseUrl: '', // hermetic: no registry
-      );
-      _writeFile('child.json', '''{
+    test(
+      '<agent>@latest parent without a configured registry errors clearly',
+      () {
+        final resolver = AgentPackResolver(
+          packsRoot: Directory('${_tmp.path}/packs'),
+          registryBaseUrl: '', // hermetic: no registry
+        );
+        _writeFile('child.json', '''{
         "name":"child",
         "parent":{"path":"pr_review@latest"},
         "params":{}
       }''');
-      expect(
-        () => RunCommandProcessor(packResolver: resolver)
-            .process(['run', '${_tmp.path}/child.json']),
-        throwsA(
-          isA<ArgumentError>().having(
-            (e) => e.toString(),
-            'toString',
-            allOf(contains('pr_review@latest'),
-                contains('DMTOOLS_PACK_REGISTRY')),
+        expect(
+          () => RunCommandProcessor(
+            packResolver: resolver,
+          ).process(['run', '${_tmp.path}/child.json']),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.toString(),
+              'toString',
+              allOf(
+                contains('pr_review@latest'),
+                contains('DMTOOLS_PACK_REGISTRY'),
+              ),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 }
 
@@ -489,19 +552,21 @@ File _buildPackWithInstructions() {
     ..createSync(recursive: true)
     ..writeAsStringSync('# review rules\n');
   final entry = File('${agentRoot.path}/parent_agent.json')
-    ..writeAsStringSync(jsonEncode({
-      'name': 'ParentAgent',
-      'params': {
-        'jsPath': 'agents/js/helper.js',
-        'fromParent': 'yes',
-        'cliPrompts': ['agents/instructions/review_rules.md'],
-      },
-    }));
+    ..writeAsStringSync(
+      jsonEncode({
+        'name': 'ParentAgent',
+        'params': {
+          'jsPath': 'agents/js/helper.js',
+          'fromParent': 'yes',
+          'cliPrompts': ['agents/instructions/review_rules.md'],
+        },
+      }),
+    );
   final dist = Directory('${_tmp.path}/parent_dist')
     ..createSync(recursive: true);
-  return AgentPackCompiler(agentRoot.path)
-      .compile(entry, '1.0.0', 'deadbeef', dist)
-      .zipFile;
+  return AgentPackCompiler(
+    agentRoot.path,
+  ).compile(entry, '1.0.0', 'deadbeef', dist).zipFile;
 }
 
 /// Builds a real parent pack zip with `js/helper.js` and an entry config.
@@ -535,7 +600,7 @@ File _buildParentPack({bool withAltEntry = false}) {
   }
   final dist = Directory('${_tmp.path}/parent_dist')
     ..createSync(recursive: true);
-  return AgentPackCompiler(agentRoot.path)
-      .compile(entry, '1.0.0', 'deadbeef', dist)
-      .zipFile;
+  return AgentPackCompiler(
+    agentRoot.path,
+  ).compile(entry, '1.0.0', 'deadbeef', dist).zipFile;
 }

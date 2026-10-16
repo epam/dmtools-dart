@@ -16,6 +16,20 @@ import 'ado_json.dart';
 import 'ado_work_item_client.dart';
 import 'ado_work_item_ops.dart';
 
+/// Matches a query that begins with the `SELECT` keyword (any case, leading
+/// whitespace allowed). The trailing `\b` keeps fields such as `selection`
+/// from matching.
+final RegExp _selectStatement = RegExp(r'^\s*select\b', caseSensitive: false);
+
+/// Expands a short WIQL fragment (e.g. `System.State = 'Active'`) into a full
+/// statement, matching Java `AzureDevOpsClient.expandWiql`. Full `SELECT`
+/// statements, and null/blank input, pass through unchanged.
+String? expandWiql(String? wiql) {
+  if (wiql == null || wiql.trim().isEmpty) return wiql;
+  if (_selectStatement.hasMatch(wiql)) return wiql;
+  return 'SELECT [System.Id] FROM WorkItems WHERE $wiql';
+}
+
 /// Azure DevOps API methods exposed to the MCP tool runtime.
 class AdoClient {
   final AdoHttpClient _http;
@@ -148,7 +162,7 @@ class AdoClient {
       {List<String>? fields}) async {
     final body = await _http.post(
       'wit/wiql',
-      body: jsonEncode({'query': wiql}),
+      body: jsonEncode({'query': expandWiql(wiql)}),
     );
     final decoded = jsonDecode(body);
     final ids = decoded is Map && decoded['workItems'] is List

@@ -112,9 +112,19 @@ class RunCommandProcessor {
   /// - Strings starting with `[` → JSON arrays.
   /// - Strings starting with `{` → JSON objects.
   /// - Other strings → left as strings.
+  ///
+  /// Structured JSON is applied only when the WHOLE trimmed string decodes to
+  /// an array or object (parity with Java dm.ai#688). Any decode failure or
+  /// trailing text keeps the original string.
   dynamic _parseOverrideValue(String value) {
-    if (value.startsWith('[') || value.startsWith('{')) {
-      return jsonDecode(value);
+    final trimmed = value.trim();
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List || decoded is Map) return decoded;
+      } on FormatException {
+        // Not valid JSON as a whole — keep the raw string.
+      }
     }
     return value;
   }

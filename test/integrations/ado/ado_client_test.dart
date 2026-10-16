@@ -137,6 +137,13 @@ void httpClientConfigErrorTests() {
 /// (`app.vssps.visualstudio.com/_apis/profile/profiles/me`).
 void testConnectionTests() {
   group('AdoClient.testConnection', () {
+    _profileAndFallbackTests();
+    _failureTests();
+  });
+}
+
+void _profileAndFallbackTests() {
+  group('AdoClient.testConnection profile and fallbacks', () {
     test('returns success with the profile name and email', () async {
       final f = mockAdo(
         (o) => routeByPath({
@@ -164,7 +171,11 @@ void testConnectionTests() {
       expect(result['success'], isTrue);
       expect(result['message'] as String, contains('profile unreadable'));
     });
+  });
+}
 
+void _failureTests() {
+  group('AdoClient.testConnection failures', () {
     test('reports failure on a non-JSON body', () async {
       final f = mockAdo((o) => 'not-json');
       final result = await f.client.testConnection();

@@ -171,8 +171,63 @@ void testConnectionTests() {
       expect(result['success'], isFalse);
       expect(result['error'], isNotNull);
     });
+
+    test('profile 401 + workitemtypes OK = success', () async {
+      final f = mockAdo((o) {
+        if (o.path.contains('profiles/me')) throw _unauthorized();
+        if (o.path.endsWith('/wit/workitemtypes')) {
+          return '{"value":[{"name":"Bug"}]}';
+        }
+        return '{}';
+      });
+      final result = await f.client.testConnection();
+      expect(result['success'], isTrue);
+      expect(result['message'] as String, contains('profile unreadable'));
+      expect(
+        f.adapter.calls.any((c) => c.path.endsWith('/_apis/projects')),
+        isFalse,
+      );
+    });
+
+    test('profile 401 + both fallbacks fail = failure with original error',
+        () async {
+      final f = mockAdo((o) => throw _unauthorized());
+      final result = await f.client.testConnection();
+      expect(result['success'], isFalse);
+      expect(result['message'], 'Azure DevOps connection failed');
+      expect(result['error'] as String, contains('DioException'));
+    });
+
+    test('an empty workitemtypes body is not a success', () async {
+      final f = mockAdo((o) {
+        if (o.path.contains('profiles/me')) throw _unauthorized();
+        if (o.path.endsWith('/wit/workitemtypes')) return '{"value":[]}';
+        if (o.path.endsWith('/projects')) throw _unauthorized();
+        return '{}';
+      });
+      final result = await f.client.testConnection();
+      expect(result['success'], isFalse);
+    });
+
+    test('a healthy profile makes no fallback request', () async {
+      final f = mockAdo(
+        (o) => '{"displayName":"Ada","emailAddress":"ada@contoso.com"}',
+      );
+      await f.client.testConnection();
+      expect(f.adapter.calls.length, 1);
+    });
   });
 }
+
+/// A 401 error as Dio throws it for a rejected PAT.
+DioException _unauthorized() => DioException(
+      requestOptions: RequestOptions(path: ''),
+      response: Response(
+        requestOptions: RequestOptions(path: ''),
+        statusCode: 401,
+      ),
+      type: DioExceptionType.badResponse,
+    );
 
 /// `ado_get_work_item` — GET `{org}/{project}/_apis/wit/workitems/{id}`.
 void getWorkItemTests() {

@@ -64,6 +64,55 @@ void _testJobNameMode() {
       expect(json['params']['obj'], {'a': 'b'});
     });
 
+    test('keeps non-JSON bracket values as strings', () {
+      final json = jsonDecode(
+              _run(['run', 'teammate', '--inputJql', '[System.Id] = 1839749']))
+          as Map;
+      expect(json['params']['inputJql'], '[System.Id] = 1839749');
+    });
+
+    test('keeps values with trailing text after a valid JSON prefix', () {
+      final json = jsonDecode(_run([
+        'run',
+        'teammate',
+        '--a',
+        '["a"] trailing',
+        '--b',
+        '{"a":1} and more',
+      ])) as Map;
+      expect(json['params']['a'], '["a"] trailing');
+      expect(json['params']['b'], '{"a":1} and more');
+    });
+
+    test('still parses valid arrays, objects and empty containers', () {
+      final json = jsonDecode(_run([
+        'run',
+        'teammate',
+        '--cmd',
+        '["cursor-agent","x"]',
+        '--obj',
+        '{"a": 1}',
+        '--empty',
+        '[]',
+      ])) as Map;
+      expect(json['params']['cmd'], ['cursor-agent', 'x']);
+      expect(json['params']['obj'], {'a': 1});
+      expect(json['params']['empty'], []);
+    });
+
+    test('leaves plain JQL and SELECT statements unchanged', () {
+      final json = jsonDecode(_run([
+        'run',
+        'teammate',
+        '--jql',
+        'project = X',
+        '--wiql',
+        'SELECT [System.Id] FROM WorkItems',
+      ])) as Map;
+      expect(json['params']['jql'], 'project = X');
+      expect(json['params']['wiql'], 'SELECT [System.Id] FROM WorkItems');
+    });
+
     test('applies base64-encoded override config', () {
       final encoded = base64.encode(utf8.encode('{"params":{"k":"v"}}'));
       final json = jsonDecode(_run(['run', 'codegenerator', encoded])) as Map;

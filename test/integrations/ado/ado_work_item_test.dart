@@ -119,6 +119,35 @@ void listWorkItemsTests() {
       expect(detail.queryParameters.containsKey(r'$expand'), isFalse);
     });
 
+    test('expands a bare WHERE fragment into a full WIQL statement', () async {
+      final f = mockAdo(_wiqlRouter);
+      await f.client.listWorkItems("[System.State] = 'Active'");
+      expect(jsonDecode(f.adapter.calls.first.data as String), {
+        'query':
+            "SELECT [System.Id] FROM WorkItems WHERE [System.State] = 'Active'"
+      });
+    });
+
+    test('sends SELECT statements byte for byte (any case, leading space)',
+        () async {
+      final f = mockAdo(_wiqlRouter);
+      await f.client.listWorkItems('  select [System.Id] FROM WorkItems');
+      expect(jsonDecode(f.adapter.calls.first.data as String),
+          {'query': '  select [System.Id] FROM WorkItems'});
+    });
+
+    test('treats a field starting with "select" as a WHERE fragment', () async {
+      final f = mockAdo(_wiqlRouter);
+      await f.client.listWorkItems('selection = 1');
+      expect(jsonDecode(f.adapter.calls.first.data as String),
+          {'query': 'SELECT [System.Id] FROM WorkItems WHERE selection = 1'});
+    });
+
+    test('expandWiql passes null and blank input through', () {
+      expect(expandWiql(null), isNull);
+      expect(expandWiql('   '), '   ');
+    });
+
     test('splits ids into batches of 200', () async {
       final f = mockAdo(_wiqlRouter);
       final items =

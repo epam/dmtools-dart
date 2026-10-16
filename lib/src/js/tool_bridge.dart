@@ -24,6 +24,7 @@ import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../integrations/cli/allowed_base.dart';
 import '../integrations/cli/cli_tools.dart';
+import '../integrations/env/env_tools.dart';
 import '../mcp/tool_registry.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
@@ -63,6 +64,9 @@ class ToolBridge {
     PropertyReader(),
     nonHttpHandler: _dispatchNonHttp,
   );
+
+  /// Read-only configuration access for `env_get` / `env_list`.
+  final EnvTools _envTools = EnvTools();
 
   /// CLI executor for the JS-bridge `cli_execute_command` path: supplies the
   /// base whitelist plus the `CLI_ALLOWED_COMMANDS` extension.
@@ -366,9 +370,17 @@ class ToolBridge {
         return _executeFileTool(toolName, args);
       case 'cli':
         return _executeCliTool(toolName, args);
+      case 'env':
+        return _executeEnvTool(toolName, args);
       default:
         return _err('Unsupported non-HTTP integration: ${tool.integration}');
     }
+  }
+
+  /// Serves `env_get` / `env_list` (secret-aware, see [EnvTools]).
+  String _executeEnvTool(String name, Map<String, dynamic> args) {
+    final fn = _envTools.handlers[name];
+    return fn != null ? fn(args) : _err('Unknown env tool: $name');
   }
 
   /// Dispatches a file tool synchronously by name.

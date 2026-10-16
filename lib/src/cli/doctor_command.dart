@@ -127,6 +127,7 @@ class DoctorCommand {
   /// unresolved provider simply leaves the family unregistered.
   static const Set<String> _alwaysAvailable = {
     'cli',
+    'env',
     'scm',
     'ci',
     'file',

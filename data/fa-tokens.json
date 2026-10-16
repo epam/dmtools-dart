@@ -1449,5 +1449,16 @@
       "cacheRead": 175042,
       "model": "claude-haiku-5.5"
     }
+  ],
+  "pr-420": [
+    {
+      "leg": "rework",
+      "at": "2026-10-16T22:14:19Z",
+      "prompt": 33189,
+      "completion": 4203,
+      "total": 37392,
+      "cacheRead": 326393,
+      "model": "claude-haiku-5.5"
+    }
   ]
 }

@@ -343,6 +343,12 @@ void _strikeTests() {
         'see https://x.io/~~a~~ now',
       );
     });
+    test('strike wrapping a URL converts both markers', () {
+      expect(
+        markdownToJiraMarkup('~~https://x.io~~'),
+        '-https://x.io-',
+      );
+    });
     test('hyphenated words and ranges are untouched', () {
       expect(markdownToJiraMarkup('a-b-c and 1-2'), 'a-b-c and 1-2');
     });

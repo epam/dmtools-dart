@@ -208,7 +208,7 @@ String? _wrapAnchorOrImage(_XmlNode node) {
   return null;
 }
 
-/// Inline emphasis/code tags (and unknown tags: children verbatim).
+/// Markers for inline emphasis/strike tags (`_wrapInlineStyle`).
 const _inlineStyleMarkers = <String, String>{
   'strong': '**',
   'b': '**',
@@ -219,6 +219,7 @@ const _inlineStyleMarkers = <String, String>{
   's': '~~',
 };
 
+/// Inline emphasis/code tags (and unknown tags: children verbatim).
 String _wrapInlineStyle(_XmlNode node, String inner) {
   final marker = _inlineStyleMarkers[node.name];
   if (marker != null) return '$marker$inner$marker';

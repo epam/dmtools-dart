@@ -196,22 +196,25 @@ String _processTextParagraph(String text) {
 }
 
 /// `~~gone~~` → Jira strike `-gone-` (dm.ai#676 parity). Only spans with a
-/// non-space character at both ends convert; code spans, `{{…}}`, `{code}`
-/// blocks and URLs are copied verbatim so their content is never rewritten.
+/// non-space character at both ends convert. Code spans, `{{…}}`, `{code}`
+/// blocks and URLs are masked with placeholders before the pass, so their
+/// content is never rewritten. A URL token stops before trailing `~~`, so a
+/// closing strike marker after a URL still pairs with its opener.
 String _convertStrike(String s) {
-  final out = StringBuffer();
-  var last = 0;
-  for (final m in _strikeProtected.allMatches(s)) {
-    out.write(_applyStrike(s.substring(last, m.start)));
-    out.write(m.group(0));
-    last = m.end;
-  }
-  out.write(_applyStrike(s.substring(last)));
-  return out.toString();
+  final saved = <String>[];
+  final masked = s.replaceAllMapped(_strikeProtected, (m) {
+    saved.add(m.group(0)!);
+    return '\u0000${saved.length - 1}\u0000';
+  });
+  final converted = _applyStrike(masked);
+  return converted.replaceAllMapped(
+    RegExp('\u0000(\\d+)\u0000'),
+    (m) => saved[int.parse(m.group(1)!)],
+  );
 }
 
 final RegExp _strikeProtected = RegExp(
-  r'`[^`]*`|\{\{.*?\}\}|\{code[^}]*\}.*?\{code\}|https?://\S+',
+  r'`[^`]*`|\{\{.*?\}\}|\{code[^}]*\}.*?\{code\}|https?://\S*?(?=(?:~~)*(?:\s|$))',
   dotAll: true,
 );
 

@@ -70,7 +70,8 @@ class AdoClient {
       if (await _probeWorkItemTypes()) {
         return {
           'success': true,
-          'message': 'Azure DevOps connection successful '
+          'message':
+              'Azure DevOps connection successful '
               '(profile unreadable: $profileStatus)',
         };
       }
@@ -79,7 +80,8 @@ class AdoClient {
         jsonDecode(await _http.getOrg('projects'));
         return {
           'success': true,
-          'message': 'Azure DevOps connection successful '
+          'message':
+              'Azure DevOps connection successful '
               '(profile unreadable: $profileStatus)',
         };
       } on Object {
@@ -239,8 +241,9 @@ class AdoClient {
     String project, [
     List<int>? definitions,
   ]) async {
-    final queryParams =
-        definitions == null ? null : {'definitions': definitions.join(',')};
+    final queryParams = definitions == null
+        ? null
+        : {'definitions': definitions.join(',')};
     final body = await _http.get('build/builds', queryParams: queryParams);
     return _decodeList(body);
   }
@@ -454,15 +457,14 @@ class AdoClient {
     String repoId,
     String path,
     String branch,
-  ) =>
-      _http.get(
-        'git/repositories/$repoId/items',
-        queryParams: {
-          'path': path,
-          'versionDescriptor.versionType': 'branch',
-          'versionDescriptor.version': branch,
-        },
-      );
+  ) => _http.get(
+    'git/repositories/$repoId/items',
+    queryParams: {
+      'path': path,
+      'versionDescriptor.versionType': 'branch',
+      'versionDescriptor.version': branch,
+    },
+  );
 
   /// `ado_create_work_item_link` — POST `wit/workitems/{sourceId}/links`.
   ///

@@ -153,20 +153,19 @@ jobs:
   factory:
     needs: [dedupe, pick]
     if: needs.dedupe.outputs.duplicate != 'true'
-    # TWO PINS, never conflated (see test/machine_kit/factory_stub_ref_test.dart):
-    #   uses:  — the FACTORY HOME pin (dmtools-agentic-workflows). Moves
-    #            only when the factory home changes; never bumped with
-    #            the agents submodule.
-    #   factory_ref: — the ENGINE pin (dmtools-agents, == the `agents`
-    #            submodule gitlink). Bumps in lockstep with the submodule.
-    # The uses: ref tracks awf main (always-latest, owner 2026-10-04 —
-    # review-gated); the engine pin (factory_ref = submodule gitlink)
-    # stays an immutable SHA.
+    # SINGLE PIN: uses: — the FACTORY HOME ref (dmtools-agentic-workflows
+    # main, always-latest per owner 2026-10-04). The old factory_ref
+    # engine-pin is gone: it was the agents-submodule lockstep relic,
+    # unread by anything since dart#412 (awf#39 deprecates the input).
     uses: IstiN/dmtools-agentic-workflows/.github/workflows/factory-teammate.yml@main
     with:
-      # The literal uses-ref: the factory requires it (it cannot derive its
-      # own ref — github.workflow_ref in a called workflow is the CALLER's).
-      factory_ref: 1a4feffb4ab47fbb567a312da1721a1e3afe9eb6
+      # Legs need a dart toolchain: rework legs must reproduce the repo's
+      # own gates locally (dart analyze/test/format, crap4dart check)
+      # before claiming success — without it they report success on
+      # unfixable violations (live: #408 CRAP 9.00, #413/#414 method_size,
+      # 2026-10-16). The factory installs it via subosito/flutter-action
+      # when this input is set (cache: true); stable carries dart >= 3.9.
+      flutter-version: stable
       # Bitrise Build Hub pool (epam-org visible; probe #229).
       runner: ${{ needs.pick.outputs.runner }}
       issue: ${{ github.event.issue.number || github.event.inputs.issue }}

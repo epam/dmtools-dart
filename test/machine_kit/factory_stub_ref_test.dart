@@ -195,17 +195,14 @@ void _teammateLockstepPin() {
       reason: 'the factory home must track main '
           '(got ${match.group(2)}) — always-latest (owner 2026-10-04)',
     );
-    final refLine = RegExp(r'factory_ref:\s*(\S+)').firstMatch(yml);
+    // factory_ref is GONE (awf#39 deprecated the input 2026-10-16): it was
+    // the agents-submodule lockstep relic, read by nothing since dart#412.
+    // The contract flips — the stub must NOT pass it anymore.
     expect(
-      refLine,
-      isNotNull,
-      reason: '$_teammateStub must pass factory_ref (the factory '
-          'declares it required)',
-    );
-    expect(
-      refLine!.group(1),
-      isNot(contains('${'{'}')),
-      reason: 'factory_ref must be a literal ref, not an expression',
+      RegExp(r'^\s*factory_ref:', multiLine: true).hasMatch(yml),
+      isFalse,
+      reason: '$_teammateStub must not pass factory_ref — deprecated '
+          'provenance relic (awf#39); the engine rides agents-rel releases',
     );
   });
 }

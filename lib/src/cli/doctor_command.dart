@@ -57,18 +57,18 @@ class DoctorCommand {
     'bitrise': ('Bitrise', ['BITRISE_TOKEN']),
     'xray': (
       'Xray',
-      ['XRAY_CLIENT_ID', 'XRAY_CLIENT_SECRET', 'XRAY_BASE_PATH']
+      ['XRAY_CLIENT_ID', 'XRAY_CLIENT_SECRET', 'XRAY_BASE_PATH'],
     ),
     // dm.ai #570: raw base-path check — the getter defaults to
     // localhost:8080 and would never report the variable as missing.
     'jenkins': (
       'Jenkins',
-      ['JENKINS_BASE_PATH', 'JENKINS_USER', 'JENKINS_API_TOKEN']
+      ['JENKINS_BASE_PATH', 'JENKINS_USER', 'JENKINS_API_TOKEN'],
     ),
     // SharePoint reuses the Teams (TEAMS_*) OAuth configuration.
     'sharepoint': (
       'SharePoint via Teams OAuth credentials',
-      ['TEAMS_CLIENT_ID', 'TEAMS_TENANT_ID']
+      ['TEAMS_CLIENT_ID', 'TEAMS_TENANT_ID'],
     ),
   };
 
@@ -107,8 +107,9 @@ class DoctorCommand {
     };
     final integrations = <String>{..._alwaysAvailable};
     for (final entry in _configuredMapping.entries) {
-      final ready =
-          entry.value.every((name) => checks[name]?.configured == true);
+      final ready = entry.value.every(
+        (name) => checks[name]?.configured == true,
+      );
       if (ready) integrations.addAll(entry.key);
     }
     return integrations;
@@ -127,6 +128,7 @@ class DoctorCommand {
   /// unresolved provider simply leaves the family unregistered.
   static const Set<String> _alwaysAvailable = {
     'cli',
+    'env',
     'scm',
     'ci',
     'file',
@@ -163,8 +165,10 @@ class DoctorCommand {
   void _writeCheck(StringBuffer buf, _IntegrationCheck check) {
     final state = check.configured ? 'configured' : 'incomplete';
     final mark = check.configured ? '✓' : '✗';
-    buf.writeln('$mark ${check.name} - ${check.displayName} authentication '
-        '$state');
+    buf.writeln(
+      '$mark ${check.name} - ${check.displayName} authentication '
+      '$state',
+    );
     for (final variable in check.missing) {
       buf.writeln('    missing: $variable');
     }

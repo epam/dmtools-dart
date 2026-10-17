@@ -124,6 +124,20 @@ void _testWorkItemTools() {
       );
     });
 
+    test('ado_list_work_items passes an ADO error body through unchanged', () {
+      final result = tools.handlers['ado_list_work_items']!({
+        'wiql': 'dt-wiql-error',
+      });
+      // An error envelope must not look like an empty query result.
+      expect(jsonDecode(result), {
+        'message': 'TF51005: query is invalid',
+        'method': 'POST',
+        'path': isA<String>(),
+        'headers': isA<Map<String, dynamic>>(),
+        'body': isA<String>(),
+      });
+    });
+
     test('ado_list_work_items re-fetches the WIQL stub ids', () {
       final result = tools.handlers['ado_list_work_items']!({
         'wiql': 'SELECT [System.Id] FROM WorkItems',

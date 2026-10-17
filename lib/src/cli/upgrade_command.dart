@@ -55,6 +55,16 @@ class UpgradeCommand {
     _writer('Installed version: $before');
     _writer('Installer: $url');
 
+    return _executeInstaller(version, url, before);
+  }
+
+  /// Runs the fetched installer (or reports the dry run) — extracted from
+  /// [run] to keep its cyclomatic complexity under the CRAP gate.
+  Future<int> _executeInstaller(
+    String version,
+    String url,
+    String before,
+  ) async {
     if (_env['DMTOOLS_UPGRADE_DRY_RUN'] == 'true') {
       _writer(
         'Dry run: would run the installer above'

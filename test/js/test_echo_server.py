@@ -684,7 +684,11 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         # ADO stub shapes for the WIQL two-step regression test: the WIQL
         # POST answers id/url stubs, the ids= detail GET answers full items
         # (mirrors the real dev.azure.com response envelopes).
-        if "/wit/wiql" in self.path:
+        if "/wit/wiql" in self.path and "dt-wiql-error" in body:
+            # ADO error envelope for a failed WIQL call (auth/bad query):
+            # must reach the caller as-is, not look like an empty result.
+            payload["message"] = "TF51005: query is invalid"
+        elif "/wit/wiql" in self.path:
             payload["workItems"] = [{"id": 7, "url": "stub://7"}]
         elif "/wit/workitems" in self.path and "ids=" in self.path:
             payload["count"] = 1

@@ -63,9 +63,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Gemini API base path.
   /// Key: `GEMINI_BASE_PATH`, default: generativelanguage endpoint.
   String getGeminiBasePath() => getValueWithDefault(
-        PropertyNames.GEMINI_BASE_PATH,
-        'https://generativelanguage.googleapis.com/v1beta/models',
-      );
+    PropertyNames.GEMINI_BASE_PATH,
+    'https://generativelanguage.googleapis.com/v1beta/models',
+  );
 
   /// Whether Gemini Vertex AI mode is enabled.
   /// Key: `GEMINI_VERTEX_ENABLED`, default: false.
@@ -102,9 +102,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Ollama API base path.
   /// Key: `OLLAMA_BASE_PATH`, default: `http://localhost:11434`.
   String getOllamaBasePath() => getValueWithDefault(
-        PropertyNames.OLLAMA_BASE_PATH,
-        'http://localhost:11434',
-      );
+    PropertyNames.OLLAMA_BASE_PATH,
+    'http://localhost:11434',
+  );
 
   /// Ollama model name. Key: `OLLAMA_MODEL`.
   String? getOllamaModel() => getValue(PropertyNames.OLLAMA_MODEL);
@@ -143,9 +143,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Anthropic API base path.
   /// Key: `ANTHROPIC_BASE_PATH`, default: messages endpoint.
   String getAnthropicBasePath() => getValueWithDefault(
-        PropertyNames.ANTHROPIC_BASE_PATH,
-        'https://api.anthropic.com/v1/messages',
-      );
+    PropertyNames.ANTHROPIC_BASE_PATH,
+    'https://api.anthropic.com/v1/messages',
+  );
 
   /// Anthropic model name. Key: `ANTHROPIC_MODEL`.
   String? getAnthropicModel() => getValue(PropertyNames.ANTHROPIC_MODEL);
@@ -248,9 +248,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// OpenAI API base path.
   /// Key: `OPENAI_BASE_PATH`, default: chat completions endpoint.
   String getOpenAIBasePath() => getValueWithDefault(
-        PropertyNames.OPENAI_BASE_PATH,
-        'https://api.openai.com/v1/chat/completions',
-      );
+    PropertyNames.OPENAI_BASE_PATH,
+    'https://api.openai.com/v1/chat/completions',
+  );
 
   /// OpenAI model name. Key: `OPENAI_MODEL`.
   String? getOpenAIModel() => getValue(PropertyNames.OPENAI_MODEL);
@@ -280,9 +280,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// OpenAI max-tokens request parameter name.
   /// Key: `OPENAI_MAX_TOKENS_PARAM_NAME`, default: `max_completion_tokens`.
   String getOpenAIMaxTokensParamName() => getValueWithDefault(
-        PropertyNames.OPENAI_MAX_TOKENS_PARAM_NAME,
-        'max_completion_tokens',
-      );
+    PropertyNames.OPENAI_MAX_TOKENS_PARAM_NAME,
+    'max_completion_tokens',
+  );
 
   // --- JSAI ---
 

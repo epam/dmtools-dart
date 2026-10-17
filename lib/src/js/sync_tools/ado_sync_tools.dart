@@ -533,10 +533,13 @@ String _getPipelineLogs(_AdoConfig config, Map<String, dynamic> args) {
   );
   final records = timeline is Map ? timeline['records'] : null;
   if (records is! List || records.isEmpty) {
-    return '(no timeline records found for build $buildId)';
+    return jsonEncode('(no timeline records found for build $buildId)');
   }
   final logs = _collectTaskLogs(config, records, buildId, args);
-  return logs.isEmpty ? '(no logs found for build $buildId)' : logs;
+  // Plain-string results (Java parity); JSON-encode for the FFI bridge —
+  // raw text fails the host-callback JSON parse (live: github_get_job_logs
+  // starved dart #414's rework legs, 2026-10-17).
+  return jsonEncode(logs.isEmpty ? '(no logs found for build $buildId)' : logs);
 }
 
 /// Fetches and concatenates the log of every matching timeline record.

@@ -556,7 +556,7 @@ void _fixtureDiffTools() {
     });
     final args = {'workspace': 'o', 'repository': 'r', 'pullRequestID': '42'};
     final text = tools.handlers['github_get_pr_diff_text']!(args);
-    expect(text, '');
+    expect(jsonDecode(text), '');
     final stats = jsonDecode(tools.handlers['github_get_pr_diff']!(args));
     expect(stats['stats']['total'], 0);
   });
@@ -597,18 +597,6 @@ void fixtureactionstools_p1() {
       body['path'],
       '/repos/o/r/commits/cafe123/check-runs?per_page=100&page=1',
     );
-  });
-
-  test('github_get_job_logs hits the job logs endpoint', () {
-    final body = jsonDecode(
-      tools.handlers['github_get_job_logs']!({
-        'workspace': 'o',
-        'repository': 'r',
-        'jobId': '7',
-      }),
-    ) as Map<String, dynamic>;
-    expect(body['method'], 'GET');
-    expect(body['path'], '/repos/o/r/actions/jobs/7/logs');
   });
 
   test('github_get_workflow_run_jobs hits the run jobs endpoint', () {

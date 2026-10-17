@@ -475,7 +475,7 @@ void testpipelinetools_p1() {
 
   test('ado_get_pipeline_logs reports missing timeline records', () {
     final result = tools.handlers['ado_get_pipeline_logs']!({'buildId': 8});
-    expect(result, '(no timeline records found for build 8)');
+    expect(jsonDecode(result), '(no timeline records found for build 8)');
   });
 }
 
@@ -485,27 +485,28 @@ void testpipelinetools_p2() {
         .handlers['ado_get_pipeline_logs']!({'buildId': 12, 'tailLines': 2});
     // The Stage record is skipped, the logless Test task is skipped, and
     // only the last 2 of the 3 stub log lines survive the tail.
-    expect(result, '=== Task: Build ===\nlog-line-2\nlog-line-3\n\n');
+    expect(
+        jsonDecode(result), '=== Task: Build ===\nlog-line-2\nlog-line-3\n\n');
   });
 
   test('ado_get_pipeline_logs accepts a string tailLines', () {
     final result = tools
         .handlers['ado_get_pipeline_logs']!({'buildId': 12, 'tailLines': '1'});
-    expect(result, '=== Task: Build ===\nlog-line-3\n\n');
+    expect(jsonDecode(result), '=== Task: Build ===\nlog-line-3\n\n');
   });
 
   test('ado_get_pipeline_logs keeps everything with tailLines 0', () {
     final result = tools
         .handlers['ado_get_pipeline_logs']!({'buildId': 12, 'tailLines': 0});
-    expect(
-        result, '=== Task: Build ===\nlog-line-1\nlog-line-2\nlog-line-3\n\n');
+    expect(jsonDecode(result),
+        '=== Task: Build ===\nlog-line-1\nlog-line-2\nlog-line-3\n\n');
   });
 
   test('ado_get_pipeline_logs filters records by taskName', () {
     final result = tools.handlers['ado_get_pipeline_logs']!(
         {'buildId': 12, 'taskName': 'Test'});
     // The only Test task carries no log id, so nothing is collected.
-    expect(result, '(no logs found for build 12)');
+    expect(jsonDecode(result), '(no logs found for build 12)');
   });
 
   test('ado_list_pipeline_runs coerces a numeric top', () {

@@ -53,7 +53,7 @@ const _jqlSearchParams = [
     name: 'jql',
     description: 'The JQL query string',
     required: true,
-    aliases: ['searchQueryJQL', 'query'],
+    aliases: ['wiql', 'query', 'searchQueryJQL'],
   ),
   _fieldsListParam,
 ];

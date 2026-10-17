@@ -136,7 +136,6 @@ List<ToolDefinition> _assignTools() => [
             description: 'The Jira account ID to assign to. If you know email'
                 ' use first jira_get_account_by_email tools to get account ID',
             required: true,
-            aliases: ['userEmail', 'assignee'],
           ),
         ],
       ),

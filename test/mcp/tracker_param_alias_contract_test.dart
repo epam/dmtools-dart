@@ -3,12 +3,11 @@ import 'package:test/test.dart';
 
 /// Parity contract for the `tracker_*` argument names (gh-389, dm.ai #695/#696).
 ///
-/// Each operation lists the neutral names every backend must accept, mapped
-/// to the canonical Dart parameter. A neutral name must normalize onto the
-/// canonical key through [ToolDefinition.applyParamAliases], so a rename of
-/// an alias cannot silently reopen the cross-backend gap.
-/// The parity contract, keyed by operation name — a top-level const so the
-/// [main] test body stays under the method_size gate.
+/// Maps each operation to the neutral names every backend must accept, keyed
+/// by the canonical Dart parameter. A neutral name must normalize onto the
+/// canonical key via [ToolDefinition.applyParamAliases]. Only aliases that keep
+/// the value's meaning belong here: an email must not map onto `accountId`
+/// (see jira_assign_email_alias_test.dart). Top-level so [main] stays small.
 const _contract = <String, Map<String, List<String>>>{
   'jira_move_to_status': {
     'statusName': ['statusName', 'state', 'status'],
@@ -24,7 +23,7 @@ const _contract = <String, Map<String, List<String>>>{
     'summary': ['summary', 'title'],
   },
   'jira_assign_ticket_to': {
-    'accountId': ['accountId', 'userEmail', 'assignee'],
+    'accountId': ['accountId'],
   },
   'jira_link_issues': {
     'sourceKey': ['sourceKey', 'sourceId'],
@@ -54,11 +53,9 @@ const _contract = <String, Map<String, List<String>>>{
 };
 
 void main() {
-  const contract = _contract;
-
   final registry = createDefaultToolRegistry();
 
-  for (final entry in contract.entries) {
+  for (final entry in _contract.entries) {
     group(entry.key, () {
       final tool = registry.getTool(entry.key);
 

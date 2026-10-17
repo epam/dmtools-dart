@@ -149,8 +149,9 @@ String _updateWorkItemTags(
   if (label.isEmpty) return syncErr('label is required');
   final url = '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
       '?api-version=$_adoApiVersion';
-  final fetched =
-      syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  final fetched = syncBodyOrError(
+    SyncHttpClient.get(url, headers: config.headers),
+  );
   final item = syncTryDecode(fetched);
   if (item is! Map) return fetched;
   final fields = item['fields'];
@@ -177,14 +178,16 @@ String _updateWorkItemTags(
       'value': tags.join('; '),
     },
   ]);
-  return syncBodyOrError(SyncHttpClient.patch(
-    url,
-    headers: {
-      ...config.headers,
-      'Content-Type': 'application/json-patch+json',
-    },
-    body: patch,
-  ));
+  return syncBodyOrError(
+    SyncHttpClient.patch(
+      url,
+      headers: {
+        ...config.headers,
+        'Content-Type': 'application/json-patch+json',
+      },
+      body: patch,
+    ),
+  );
 }
 
 /// `ado_list_work_items` — POST `wit/wiql`, then batch-fetch full items.
@@ -200,11 +203,13 @@ String _listWorkItems(_AdoConfig config, Map<String, dynamic> args) {
     jsonEncode({'query': syncAsStr(args['wiql'])}),
   );
   final wiql = syncTryDecode(wiqlBody);
+  // No result list (workItems / workItemRelations) means an error envelope:
+  // hand the raw body back so a failed WIQL is not read as an empty match.
   if (wiql is! Map) return wiqlBody;
   if (wiql['workItems'] is! List && wiql['workItemRelations'] is! List) {
     return wiqlBody;
   }
-  final ids = wiqlResponseIds(wiql);
+  final ids = extractWorkItemIds(wiql);
   final fields = (args['fields'] as List?)?.cast<String>();
   final items = <Map<String, dynamic>>[];
   for (final batch in batchIds(ids)) {
@@ -226,8 +231,9 @@ List<Map<String, dynamic>>? _adoDetailBatch(
       : r'$expand=relations';
   final url = '${config.baseUrl}/wit/workitems'
       '?ids=${ids.join(',')}&$extra&api-version=$_adoApiVersion';
-  final body =
-      syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+  final body = syncBodyOrError(
+    SyncHttpClient.get(url, headers: config.headers),
+  );
   final decoded = syncTryDecode(body);
   if (decoded is Map && decoded['error'] != null) return null;
   return unwrapAdoItems(decoded);
@@ -269,17 +275,20 @@ String _getPrComments(_AdoConfig config, Map<String, dynamic> args) {
 String _addPrComment(_AdoConfig config, Map<String, dynamic> args) {
   final url = '${_prIdPath(config, args)}/threads?api-version=$_adoApiVersion';
   return _postBody(
-      config,
-      url,
-      jsonEncode(_newThreadPayload(
+    config,
+    url,
+    jsonEncode(
+      _newThreadPayload(
         comments: [
           {
             'parentCommentId': 0,
             'content': syncAsStr(args['text']),
-            'commentType': 1
+            'commentType': 1,
           },
         ],
-      )));
+      ),
+    ),
+  );
 }
 
 /// `ado_reply_to_pr_thread` — POST `…/threads/{id}/comments` with
@@ -289,13 +298,14 @@ String _replyToPrThread(_AdoConfig config, Map<String, dynamic> args) {
       '/threads/${syncAsStr(args['threadId'])}/comments'
       '?api-version=$_adoApiVersion';
   return _postBody(
-      config,
-      url,
-      jsonEncode({
-        'content': syncAsStr(args['text']),
-        'parentCommentId': 1,
-        'commentType': 1,
-      }));
+    config,
+    url,
+    jsonEncode({
+      'content': syncAsStr(args['text']),
+      'parentCommentId': 1,
+      'commentType': 1,
+    }),
+  );
 }
 
 /// `ado_resolve_pr_thread` — PATCH `…/threads/{id}` with the numeric status.
@@ -321,8 +331,10 @@ String _resolvePrThread(_AdoConfig config, Map<String, dynamic> args) {
 String _addInlineComment(_AdoConfig config, Map<String, dynamic> args) {
   final line = int.tryParse(syncAsStr(args['line']));
   if (line == null) {
-    return syncErr("Invalid line: expected a numeric line number, but got: "
-        "'${syncAsStr(args['line'])}'");
+    return syncErr(
+      "Invalid line: expected a numeric line number, but got: "
+      "'${syncAsStr(args['line'])}'",
+    );
   }
   var filePath = syncAsStr(args['filePath']);
   if (filePath.isEmpty) filePath = syncAsStr(args['path']);
@@ -331,15 +343,16 @@ String _addInlineComment(_AdoConfig config, Map<String, dynamic> args) {
   final startLine = startLineRaw.isEmpty ? line : int.tryParse(startLineRaw);
   if (startLine == null) {
     return syncErr(
-        "Invalid startLine: expected a numeric line number, but got: "
-        "'$startLineRaw'");
+      "Invalid startLine: expected a numeric line number, but got: "
+      "'$startLineRaw'",
+    );
   }
   final body = _newThreadPayload(
     comments: [
       {
         'parentCommentId': 0,
         'content': syncAsStr(args['text']),
-        'commentType': 1
+        'commentType': 1,
       },
     ],
     threadContext: _threadContext(filePath, line, startLine, args),
@@ -374,15 +387,19 @@ Map<String, dynamic> _threadContext(
 /// defaults to `squash`, `deleteSourceBranch` defaults to true).
 String _mergePr(_AdoConfig config, Map<String, dynamic> args) {
   final pr = syncTryDecode(_getPr(config, args));
-  final body =
-      _mergePrBody(args, pr is Map ? pr['lastMergeSourceCommit'] : null);
+  final body = _mergePrBody(
+    args,
+    pr is Map ? pr['lastMergeSourceCommit'] : null,
+  );
   final url = '${_prIdPath(config, args)}?api-version=$_adoApiVersion';
   return _patchJson(config, url, jsonEncode(body));
 }
 
 /// Builds the PR completion body.
 Map<String, dynamic> _mergePrBody(
-    Map<String, dynamic> args, dynamic lastCommit) {
+  Map<String, dynamic> args,
+  dynamic lastCommit,
+) {
   final mergeStrategy = syncAsStr(args['mergeStrategy']);
   final deleteRaw = syncAsStr(args['deleteSourceBranch']);
   final commitMessage = syncAsStr(args['commitMessage']);
@@ -438,10 +455,12 @@ String _getPrDiff(_AdoConfig config, Map<String, dynamic> args) {
 
 /// `ado_list_pipelines` — GET `pipelines`.
 String _listPipelines(_AdoConfig config, Map<String, dynamic> args) =>
-    syncBodyOrError(SyncHttpClient.get(
-      '${config.baseUrl}/pipelines?api-version=$_adoApiVersion',
-      headers: config.headers,
-    ));
+    syncBodyOrError(
+      SyncHttpClient.get(
+        '${config.baseUrl}/pipelines?api-version=$_adoApiVersion',
+        headers: config.headers,
+      ),
+    );
 
 /// `ado_list_pipeline_runs` — GET `pipelines/{id}/runs?$top={n}`.
 ///
@@ -503,11 +522,15 @@ Map<String, dynamic>? _triggerBody(Map<String, dynamic> args) {
 /// [taskName] filters records by case-insensitive substring.
 String _getPipelineLogs(_AdoConfig config, Map<String, dynamic> args) {
   final buildId = syncAsInt(args['buildId']);
-  final timeline = syncTryDecode(syncBodyOrError(SyncHttpClient.get(
-    '${config.baseUrl}/build/builds/$buildId/timeline'
-    '?api-version=$_adoApiVersion',
-    headers: config.headers,
-  )));
+  final timeline = syncTryDecode(
+    syncBodyOrError(
+      SyncHttpClient.get(
+        '${config.baseUrl}/build/builds/$buildId/timeline'
+        '?api-version=$_adoApiVersion',
+        headers: config.headers,
+      ),
+    ),
+  );
   final records = timeline is Map ? timeline['records'] : null;
   if (records is! List || records.isEmpty) {
     return '(no timeline records found for build $buildId)';
@@ -554,12 +577,7 @@ int _recordLogId(dynamic record) {
 }
 
 /// Appends one task's log [section] ([type]/[name] header) to [buffer].
-void _appendTaskLog(
-  StringBuffer buffer,
-  Map record,
-  String content,
-  int tail,
-) {
+void _appendTaskLog(StringBuffer buffer, Map record, String content, int tail) {
   final type = syncAsStr(record['type']);
   final name = syncAsStr(record['name']);
   buffer
@@ -641,12 +659,14 @@ String _patchJson(_AdoConfig config, String url, String body) {
   try {
     final bodyFile = File('${dir.path}/body')
       ..writeAsStringSync(body, flush: true);
-    return syncBodyOrError(syncCurlStaged(
-      'PATCH',
-      url,
-      headers: config.headers,
-      dataBinaryFile: bodyFile.path,
-    ));
+    return syncBodyOrError(
+      syncCurlStaged(
+        'PATCH',
+        url,
+        headers: config.headers,
+        dataBinaryFile: bodyFile.path,
+      ),
+    );
   } finally {
     dir.deleteSync(recursive: true);
   }
@@ -654,7 +674,8 @@ String _patchJson(_AdoConfig config, String url, String body) {
 
 /// POSTs [body] to [url] and returns the result string.
 String _postBody(_AdoConfig config, String url, String body) => syncBodyOrError(
-    SyncHttpClient.post(url, headers: config.headers, body: body));
+      SyncHttpClient.post(url, headers: config.headers, body: body),
+    );
 
 /// Coerces a loosely-typed JS argument to an int, or `null` when absent.
 int? _asIntOrNull(dynamic value) {

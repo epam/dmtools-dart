@@ -15,10 +15,12 @@ void main() {
   setUp(() {
     values = {};
     lookups = [];
-    tools = EnvTools(lookup: (key) {
-      lookups.add(key);
-      return values[key];
-    });
+    tools = EnvTools(
+      lookup: (key) {
+        lookups.add(key);
+        return values[key];
+      },
+    );
   });
 
   Map<String, dynamic> get(String name) =>

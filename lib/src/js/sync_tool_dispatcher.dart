@@ -61,10 +61,8 @@ class SyncToolDispatcher {
   ///
   /// The optional [nonHttpHandler] receives `file_*` and `cli_*` tool calls
   /// so the dispatcher can serve as a single routing entry point.
-  SyncToolDispatcher(
-    this._reader, {
-    SyncNonHttpHandler? nonHttpHandler,
-  }) : _nonHttpHandler = nonHttpHandler;
+  SyncToolDispatcher(this._reader, {SyncNonHttpHandler? nonHttpHandler})
+      : _nonHttpHandler = nonHttpHandler;
 
   /// Confluence tools; built lazily on the first `confluence_*` dispatch.
   late final ConfluenceSyncTools _confluence = ConfluenceSyncTools(_reader);

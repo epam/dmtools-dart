@@ -26,10 +26,7 @@ List<ToolDefinition> envTools() => const [
         integration: 'env',
         category: 'configuration',
         params: [
-          ToolParam(
-            name: 'name',
-            description: 'Configuration variable name',
-          ),
+          ToolParam(name: 'name', description: 'Configuration variable name'),
         ],
       ),
       ToolDefinition(

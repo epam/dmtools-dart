@@ -73,7 +73,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// CLI full output log directory.
   /// Key: `DMTOOLS_CLI_LOG_DIR`, default: `.dmtools-logs/cli`.
   String getCliFullOutputLogDir() => getValueWithDefault(
-      PropertyNames.DMTOOLS_CLI_LOG_DIR, '.dmtools-logs/cli');
+        PropertyNames.DMTOOLS_CLI_LOG_DIR,
+        '.dmtools-logs/cli',
+      );
 
   /// Sleep time between requests in ms.
   /// Key: `SLEEP_TIME_REQUEST`, default: 300. THROWS on invalid.
@@ -98,7 +100,8 @@ extension PropertyReaderGetters on PropertyReader {
   /// JPEG quality for image processing.
   /// Key: `IMAGE_JPEG_QUALITY`, default: 0.9. THROWS on invalid.
   double getImageJpegQuality() => double.parse(
-      getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'));
+        getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'),
+      );
 
   /// Default LLM type. Key: `DEFAULT_LLM`.
   String? getDefaultLLM() => getValue(PropertyNames.DEFAULT_LLM);
@@ -214,8 +217,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// Auto-detects story point field names from `JIRA_EXTRA_FIELDS` when
   /// `DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES` is not set.
   List<String>? getDefaultTicketStoryPointsFieldHumanNames() {
-    final explicit =
-        getValue(PropertyNames.DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES);
+    final explicit = getValue(
+      PropertyNames.DEFAULT_TICKET_STORY_POINTS_FIELD_NAMES,
+    );
     if (explicit != null && explicit.isNotEmpty) {
       return explicit.split(',');
     }
@@ -525,7 +529,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// Teams token cache file path.
   /// Key: `TEAMS_TOKEN_CACHE_PATH`, default: `./teams.token`.
   String getTeamsTokenCachePath() => getValueWithDefault(
-      PropertyNames.TEAMS_TOKEN_CACHE_PATH, './teams.token');
+        PropertyNames.TEAMS_TOKEN_CACHE_PATH,
+        './teams.token',
+      );
 
   /// Teams refresh token. Key: `TEAMS_REFRESH_TOKEN`.
   String? getTeamsRefreshToken() => getValue(PropertyNames.TEAMS_REFRESH_TOKEN);

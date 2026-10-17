@@ -30,7 +30,10 @@ void main() {
         }
       }
     }
-    expect(offenders, isEmpty,
-        reason: 'use PropertyNames.* instead of string literals');
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'use PropertyNames.* instead of string literals',
+    );
   });
 }

@@ -102,7 +102,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Ollama API base path.
   /// Key: `OLLAMA_BASE_PATH`, default: `http://localhost:11434`.
   String getOllamaBasePath() => getValueWithDefault(
-      PropertyNames.OLLAMA_BASE_PATH, 'http://localhost:11434');
+        PropertyNames.OLLAMA_BASE_PATH,
+        'http://localhost:11434',
+      );
 
   /// Ollama model name. Key: `OLLAMA_MODEL`.
   String? getOllamaModel() => getValue(PropertyNames.OLLAMA_MODEL);
@@ -341,8 +343,9 @@ extension PropertyReaderAIGetters on PropertyReader {
   /// Dynamic key: `TICKET_FIELDS_CHANGED_DIVIDER_<FIELD>`, falls back to
   /// `TICKET_FIELDS_CHANGED_DIVIDER_DEFAULT`, then 1.0. THROWS on invalid.
   double getTicketFieldsChangedDivider(String fieldName) {
-    final v =
-        getValue('TICKET_FIELDS_CHANGED_DIVIDER_${fieldName.toUpperCase()}');
+    final v = getValue(
+      'TICKET_FIELDS_CHANGED_DIVIDER_${fieldName.toUpperCase()}',
+    );
     if (v != null) return double.parse(v);
     final def = getValue(PropertyNames.TICKET_FIELDS_CHANGED_DIVIDER_DEFAULT);
     if (def != null && def.isNotEmpty) return double.parse(def);

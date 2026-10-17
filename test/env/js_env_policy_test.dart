@@ -59,8 +59,10 @@ void main() {
     });
 
     test('readable configuration names are present', () {
-      expect(JsEnvPolicy.defaultAllowed,
-          containsAll(['ADO_PROJECT', 'DEFAULT_TRACKER', 'OPENAI_MAX_TOKENS']));
+      expect(
+        JsEnvPolicy.defaultAllowed,
+        containsAll(['ADO_PROJECT', 'DEFAULT_TRACKER', 'OPENAI_MAX_TOKENS']),
+      );
       expect(JsEnvPolicy.defaultAllowed, contains('JS_ENV_ALLOWLIST'));
     });
 
@@ -94,20 +96,28 @@ void main() {
     });
 
     test('secret wins over any allowlist', () {
-      expect(JsEnvPolicy.decide('JIRA_API_TOKEN', 'JIRA_API_TOKEN'),
-          EnvDecision.secret);
+      expect(
+        JsEnvPolicy.decide('JIRA_API_TOKEN', 'JIRA_API_TOKEN'),
+        EnvDecision.secret,
+      );
     });
 
-    test('default and project-allowlisted names are allowed, case-insensitive',
-        () {
-      expect(JsEnvPolicy.decide('ado_project', null), EnvDecision.allowed);
-      expect(
-          JsEnvPolicy.decide('custom_one', 'CUSTOM_ONE'), EnvDecision.allowed);
-    });
+    test(
+      'default and project-allowlisted names are allowed, case-insensitive',
+      () {
+        expect(JsEnvPolicy.decide('ado_project', null), EnvDecision.allowed);
+        expect(
+          JsEnvPolicy.decide('custom_one', 'CUSTOM_ONE'),
+          EnvDecision.allowed,
+        );
+      },
+    );
 
     test('unknown names are not allowlisted', () {
       expect(
-          JsEnvPolicy.decide('RANDOM_THING', null), EnvDecision.notAllowlisted);
+        JsEnvPolicy.decide('RANDOM_THING', null),
+        EnvDecision.notAllowlisted,
+      );
     });
   });
 }

@@ -281,7 +281,8 @@ Map<String, dynamic> _layerInfo(Map<String, dynamic> child) {
 Map<String, dynamic> figmaIconsResult(
   String fileId,
   List<Map<String, dynamic>> icons,
-) => {'fileId': fileId, 'totalIcons': icons.length, 'icons': icons};
+) =>
+    {'fileId': fileId, 'totalIcons': icons.length, 'icons': icons};
 
 /// Builds the `figma_get_text_content` result envelope — Java
 /// `FigmaTextContentResult.create` over the per-node extraction in
@@ -333,9 +334,9 @@ Map<String, dynamic> _textEntry(Map<String, dynamic> document) {
 /// The `figma_get_styles` envelope — Java returns empty token arrays (the
 /// styles endpoint carries metadata, not values).
 Map<String, dynamic> figmaStylesResult() => {
-  'colorStyles': <dynamic>[],
-  'textStyles': <dynamic>[],
-};
+      'colorStyles': <dynamic>[],
+      'textStyles': <dynamic>[],
+    };
 
 /// Builds the `figma_test` / `figma_me` result — Java `me()` parity.
 ///
@@ -431,11 +432,12 @@ Map<String, dynamic> _identityOf(
   Map<String, dynamic> node, {
   Object? idFallback = '',
   String typeFallback = '',
-}) => {
-  'id': node['id']?.toString() ?? idFallback,
-  'name': node['name']?.toString() ?? '',
-  'type': node['type']?.toString() ?? typeFallback,
-};
+}) =>
+    {
+      'id': node['id']?.toString() ?? idFallback,
+      'name': node['name']?.toString() ?? '',
+      'type': node['type']?.toString() ?? typeFallback,
+    };
 
 /// Width from `absoluteBoundingBox` (Java `getWidth`, default 0).
 double _widthOf(Map<String, dynamic> node) => _bboxDim(node, 'width');

@@ -172,9 +172,10 @@ jenkins_test:
 jira_add_label:key,label
 jira_assign_ticket_to:key,accountId
 jira_clear_field:key,field
-jira_create_ticket_basic:project,issueType,summary,description
+# gh-427: jira_create_ticket_basic and jira_create_ticket_with_parent moved
+# to java_mcp_param_drift.txt — the Dart side adds an optional `labels` param
+# the Java upstream does not declare.
 jira_create_ticket_with_json:project,fieldsJson
-jira_create_ticket_with_parent:project,issueType,summary,description,parentKey
 jira_delete_ticket:key
 jira_execute_request:url
 jira_get_account_by_email:email

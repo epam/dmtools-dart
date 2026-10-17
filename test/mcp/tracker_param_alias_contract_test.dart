@@ -7,50 +7,54 @@ import 'package:test/test.dart';
 /// to the canonical Dart parameter. A neutral name must normalize onto the
 /// canonical key through [ToolDefinition.applyParamAliases], so a rename of
 /// an alias cannot silently reopen the cross-backend gap.
+/// The parity contract, keyed by operation name — a top-level const so the
+/// [main] test body stays under the method_size gate.
+const _contract = <String, Map<String, List<String>>>{
+  'jira_move_to_status': {
+    'statusName': ['statusName', 'state', 'status'],
+  },
+  'jira_post_comment': {
+    'comment': ['comment', 'text', 'body'],
+  },
+  'jira_search_by_jql': {
+    'jql': ['jql', 'wiql', 'query', 'searchQueryJQL'],
+  },
+  'jira_create_ticket_basic': {
+    'issueType': ['issueType', 'workItemType'],
+    'summary': ['summary', 'title'],
+  },
+  'jira_assign_ticket_to': {
+    'accountId': ['accountId', 'userEmail', 'assignee'],
+  },
+  'jira_link_issues': {
+    'sourceKey': ['sourceKey', 'sourceId'],
+    'anotherKey': ['anotherKey', 'targetId'],
+  },
+  'jira_attach_file_to_ticket': {
+    'key': ['key', 'ticketKey', 'id'],
+  },
+  'ado_add_work_item_comment': {
+    'comment': ['comment', 'text', 'body'],
+  },
+  'ado_list_work_items': {
+    'wiql': ['wiql', 'jql', 'query', 'searchQueryJQL'],
+  },
+  'ado_move_to_state': {
+    'state': ['state', 'statusName', 'status'],
+  },
+  'ado_create_work_item': {
+    'workItemType': ['workItemType', 'issueType', 'type'],
+    'title': ['title', 'summary'],
+    'description': ['description', 'body'],
+  },
+  'github_create_comment': {
+    'body': ['body', 'text', 'comment'],
+    'pullRequestId': ['pullRequestId', 'number', 'issueNumber'],
+  },
+};
+
 void main() {
-  const contract = <String, Map<String, List<String>>>{
-    'jira_move_to_status': {
-      'statusName': ['statusName', 'state', 'status'],
-    },
-    'jira_post_comment': {
-      'comment': ['comment', 'text', 'body'],
-    },
-    'jira_search_by_jql': {
-      'jql': ['jql', 'wiql', 'query', 'searchQueryJQL'],
-    },
-    'jira_create_ticket_basic': {
-      'issueType': ['issueType', 'workItemType'],
-      'summary': ['summary', 'title'],
-    },
-    'jira_assign_ticket_to': {
-      'accountId': ['accountId', 'userEmail', 'assignee'],
-    },
-    'jira_link_issues': {
-      'sourceKey': ['sourceKey', 'sourceId'],
-      'anotherKey': ['anotherKey', 'targetId'],
-    },
-    'jira_attach_file_to_ticket': {
-      'key': ['key', 'ticketKey', 'id'],
-    },
-    'ado_add_work_item_comment': {
-      'comment': ['comment', 'text', 'body'],
-    },
-    'ado_list_work_items': {
-      'wiql': ['wiql', 'jql', 'query', 'searchQueryJQL'],
-    },
-    'ado_move_to_state': {
-      'state': ['state', 'statusName', 'status'],
-    },
-    'ado_create_work_item': {
-      'workItemType': ['workItemType', 'issueType', 'type'],
-      'title': ['title', 'summary'],
-      'description': ['description', 'body'],
-    },
-    'github_create_comment': {
-      'body': ['body', 'text', 'comment'],
-      'pullRequestId': ['pullRequestId', 'number', 'issueNumber'],
-    },
-  };
+  const contract = _contract;
 
   final registry = createDefaultToolRegistry();
 

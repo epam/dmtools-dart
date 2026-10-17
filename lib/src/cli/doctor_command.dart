@@ -193,7 +193,7 @@ class DoctorCommand {
   List<String> _jiraMissing() {
     final missing = <String>[];
     _addIfAbsent(missing, 'JIRA_BASE_PATH', _reader.getJiraBasePath());
-    if (_reader.getJiraLoginPassToken() == null) {
+    if (!_present(_reader.getJiraLoginPassToken())) {
       _addIfAbsent(missing, 'JIRA_EMAIL', _reader.getJiraEmail());
       _addIfAbsent(missing, 'JIRA_API_TOKEN', _reader.getJiraApiToken());
     }
@@ -207,7 +207,7 @@ class DoctorCommand {
       'CONFLUENCE_BASE_PATH',
       _reader.getConfluenceBasePath(),
     );
-    if (_reader.getConfluenceLoginPassToken() == null) {
+    if (!_present(_reader.getConfluenceLoginPassToken())) {
       _addIfAbsent(missing, 'CONFLUENCE_EMAIL', _reader.getConfluenceEmail());
       _addIfAbsent(
         missing,

@@ -37,9 +37,31 @@ void main() {
   });
 
   _testConfigDetectedListing();
+  _testConfluenceLoginPassTokenListing();
   _testScmCiVisibility();
   _testHelpSchema();
   _testListFilters();
+}
+
+void _testConfluenceLoginPassTokenListing() {
+  group('list confluence detection', () {
+    test('config-detected list includes confluence for LOGIN_PASS_TOKEN only',
+        () async {
+      _writeEnv('''
+  CONFLUENCE_BASE_PATH=https://test.atlassian.net/wiki
+  CONFLUENCE_AUTH_TYPE=Basic
+  CONFLUENCE_LOGIN_PASS_TOKEN=prebuilt
+  ''');
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final confluence = _decodedTools()
+          .where((t) => t['integration'] == 'confluence')
+          .toList();
+      expect(confluence, isNotEmpty);
+      final names = confluence.map((t) => t['name'] as String).toSet();
+      expect(names, contains('confluence_get_page'));
+      expect(names, contains('confluence_test'));
+    });
+  });
 }
 
 void _testConfigDetectedListing() {

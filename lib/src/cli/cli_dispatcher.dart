@@ -30,6 +30,7 @@ import '../pack/agent_pack_resolver.dart';
 import '../pack/pack_provenance.dart';
 import '../version.dart';
 import 'doctor_command.dart';
+import 'upgrade_command.dart';
 import 'help_text.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
@@ -109,6 +110,8 @@ class CliDispatcher {
     'help': (_) => _printHelp(),
     '--list-jobs': (_) => _printJobs(),
     'doctor': (_) => _runDoctor(),
+    'upgrade': (rest) => UpgradeCommand(writer: _writer).run(rest),
+    'update': (rest) => UpgradeCommand(writer: _writer).run(rest),
     'run': _runJob,
     'compile': _runCompile,
     'list': _listTools,

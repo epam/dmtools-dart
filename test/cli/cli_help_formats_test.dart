@@ -9,6 +9,7 @@ void main() {
   _upgradeDryRunTests();
   _upgradeInstallerTests();
   _upgradeDownloadTests();
+  _upgradeDownloadEdgeTests();
 }
 
 void _helpTextTests() {
@@ -159,7 +160,11 @@ void _upgradeDownloadTests() {
       expect(code, 1);
       expect(ran, isEmpty);
     });
+  });
+}
 
+void _upgradeDownloadEdgeTests() {
+  group('UpgradeCommand download edge cases', () {
     test('rejects a version that would alter the installer URL', () async {
       final lines = <String>[];
       var fetched = false;

@@ -1825,6 +1825,15 @@
       "total": 63716,
       "cacheRead": 78436,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "rework",
+      "at": "2026-10-17T02:22:20Z",
+      "prompt": 71922,
+      "completion": 869,
+      "total": 72791,
+      "cacheRead": 87540,
+      "model": "claude-haiku-5.5"
     }
   ],
   "pr-419": [

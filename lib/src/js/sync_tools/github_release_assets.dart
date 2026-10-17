@@ -61,8 +61,7 @@ String uploadReleaseAsset({
 /// The `repos/{workspace}/{repository}` + release id pair from [args].
 ({String repoSegment, String releaseId}) _releaseRef(
   Map<String, dynamic> args,
-) =>
-    (repoSegment: _repoSeg(args), releaseId: syncAsStr(args['releaseId']));
+) => (repoSegment: _repoSeg(args), releaseId: syncAsStr(args['releaseId']));
 
 /// Deletes the first asset named [assetName] on the release, if any.
 void _deleteExistingAssetByName({
@@ -103,7 +102,8 @@ String _uploadAssetBytes({
   final base = baseUrl == 'https://api.github.com'
       ? 'https://uploads.github.com'
       : '$baseUrl/uploads';
-  var url = '$base/${release.repoSegment}/releases/${release.releaseId}/assets'
+  var url =
+      '$base/${release.repoSegment}/releases/${release.releaseId}/assets'
       '?name=${Uri.encodeQueryComponent(asset.name)}';
   if (!syncIsBlank(asset.label)) {
     url += '&label=${Uri.encodeQueryComponent(asset.label.trim())}';
@@ -121,19 +121,22 @@ String _uploadAssetBytes({
 /// Content-type guess for common asset extensions.
 String _guessContentType(String name) {
   final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
-  return switch (ext) {
-    'png' => 'image/png',
-    'jpg' || 'jpeg' => 'image/jpeg',
-    'gif' => 'image/gif',
-    'svg' => 'image/svg+xml',
-    'txt' || 'log' => 'text/plain',
-    'md' => 'text/markdown',
-    'json' => 'application/json',
-    'pdf' => 'application/pdf',
-    'zip' => 'application/zip',
-    _ => 'application/octet-stream',
-  };
+  return _contentTypeByExt[ext] ?? 'application/octet-stream';
 }
+
+const _contentTypeByExt = <String, String>{
+  'png': 'image/png',
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'gif': 'image/gif',
+  'svg': 'image/svg+xml',
+  'txt': 'text/plain',
+  'log': 'text/plain',
+  'md': 'text/markdown',
+  'json': 'application/json',
+  'pdf': 'application/pdf',
+  'zip': 'application/zip',
+};
 
 /// `repos/{workspace}/{repository}` URL segment from Java param names.
 String _repoSeg(Map<String, dynamic> a) =>

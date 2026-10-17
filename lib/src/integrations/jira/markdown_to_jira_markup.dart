@@ -160,9 +160,9 @@ String _convertMarkdownToJiraMarkup(String markdown) {
 
 /// `![name|attrs]` → `!name|attrs!` (Java `processImages`).
 String _processImages(String text) => text.replaceAllMapped(
-      RegExp(r'!\[(.*?)\|([^\]]+)\]'),
-      (m) => '!${m.group(1)}|${m.group(2)}!',
-    );
+  RegExp(r'!\[(.*?)\|([^\]]+)\]'),
+  (m) => '!${m.group(1)}|${m.group(2)}!',
+);
 
 /// Per-paragraph Markdown inline conversion (Java `processTextParagraph`):
 /// `1. **bold opener**` → `*bold opener*` bullets, `#`-headings, inline code,
@@ -224,28 +224,28 @@ String _applyStrike(String segment) =>
     segment.replaceAllMapped(_strikeSpan, (m) => '-${m.group(1)}-');
 
 /// Whether [tag] starts a new block in the HTML walker (Java `isBlockLevel`).
-bool _isBlockLevel(String tag) => switch (tag) {
-      'ac:structured-macro' ||
-      'p' ||
-      'pre' ||
-      'ul' ||
-      'ol' ||
-      'table' ||
-      'h1' ||
-      'h2' ||
-      'h3' ||
-      'h4' ||
-      'h5' ||
-      'h6' ||
-      'code' ||
-      'strong' ||
-      'em' ||
-      'b' ||
-      'i' ||
-      'a' =>
-        true,
-      _ => false,
-    };
+bool _isBlockLevel(String tag) => _blockLevelTags.contains(tag);
+
+const _blockLevelTags = <String>{
+  'ac:structured-macro',
+  'p',
+  'pre',
+  'ul',
+  'ol',
+  'table',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'code',
+  'strong',
+  'em',
+  'b',
+  'i',
+  'a',
+};
 
 /// HTML branch: enumerates the body's top-level nodes, accumulating inline
 /// runs and flushing them as paragraphs between blocks (Java
@@ -276,18 +276,19 @@ String _convertHtmlToJiraMarkup(String html) {
         final special = _consecutiveInlineBlock(nodes, i, tag, node);
         if (special != null) {
           blocks.add(special.block);
-          i = special.nextIndex;
+          i = special.nextIndex + 1;
+        } else {
+          blocks.add(_handleBlockElement(node));
           i++;
-          continue;
         }
-        blocks.add(_handleBlockElement(node));
       } else {
         inlineBuffer.write(node.outerHtml);
+        i++;
       }
     } else {
       inlineBuffer.write(_escapeTextNode(node.text ?? ''));
+      i++;
     }
-    i++;
   }
   flushInline();
 
@@ -391,16 +392,18 @@ String _handleBlockElement(dom.Element el) {
   if (tag.startsWith('h') && tag.length == 2) {
     return 'h${tag[1]}. ${el.text}';
   }
-  return switch (tag) {
-    'p' => _processParagraph(el),
-    'pre' => _processPre(el),
-    'ul' => _processUnorderedList(el),
-    'ol' => _processOrderedList(el),
-    'table' => _processTable(el),
-    'code' || 'ac:structured-macro' => _processCodeElement(el),
-    _ => _processParagraph(el),
-  };
+  return (_blockElementHandlers[tag] ?? _processParagraph)(el);
 }
+
+/// Tag → Jira construct handler for [_handleBlockElement].
+final _blockElementHandlers = <String, String Function(dom.Element)>{
+  'pre': _processPre,
+  'ul': _processUnorderedList,
+  'ol': _processOrderedList,
+  'table': _processTable,
+  'code': _processCodeElement,
+  'ac:structured-macro': _processCodeElement,
+};
 
 /// Strips the placeholder-wrapping `<code>` tags before re-insertion
 /// (magic-constants gate: this literal recurs at every restoration site).
@@ -428,24 +431,23 @@ String _inlineChain(
   String html, {
   required Pattern brPattern,
   required String brReplacement,
-}) =>
-    html
-        .replaceAllMapped(_anchorTag, (m) => '[${m.group(2)}|${m.group(1)}]')
-        .replaceAllMapped(_strongTag, (m) => '*${m.group(1)}*')
-        .replaceAllMapped(_emTag, (m) => '_${m.group(1)}_')
-        .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
-        .replaceAll(brPattern, brReplacement)
-        .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
-        .replaceAllMapped(_inlineCodeTag, (m) => '{{${m.group(1)}}}')
-        .replaceAll(_anyTag, '');
+}) => html
+    .replaceAllMapped(_anchorTag, (m) => '[${m.group(2)}|${m.group(1)}]')
+    .replaceAllMapped(_strongTag, (m) => '*${m.group(1)}*')
+    .replaceAllMapped(_emTag, (m) => '_${m.group(1)}_')
+    .replaceAllMapped(_bTag, (m) => '*${m.group(1)}*')
+    .replaceAll(brPattern, brReplacement)
+    .replaceAllMapped(_iTag, (m) => '_${m.group(1)}_')
+    .replaceAllMapped(_inlineCodeTag, (m) => '{{${m.group(1)}}}')
+    .replaceAll(_anyTag, '');
 
 /// The shared inline replacement chain for paragraph/list/table cells
 /// (Java's repeated `pClone.html()` replacement chain).
 String _inlineMarkup(String html) => _inlineChain(
-      html,
-      brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
-      brReplacement: '\n',
-    );
+  html,
+  brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
+  brReplacement: '\n',
+);
 
 /// Paragraph conversion: inline replacement chain over the element's inner
 /// HTML, entity decode, trim (Java `processParagraph`).
@@ -549,10 +551,10 @@ String _listItemText(dom.Element li) {
 /// List-item inline chain — like [_inlineMarkup] but `<br>` also swallows
 /// trailing whitespace (Java list variant).
 String _listInlineMarkup(String html) => _inlineChain(
-      html,
-      brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
-      brReplacement: '\n',
-    );
+  html,
+  brPattern: RegExp(r'<br\s*/?>\s*', caseSensitive: false),
+  brReplacement: '\n',
+);
 
 /// Appends nested `<ul>`/`<ol>` children of [li] to [sb] (Java's recursion
 /// tail in both list processors).
@@ -627,10 +629,10 @@ void _writeBodyRow(StringBuffer sb, List<dom.Element> cells) {
 /// Table-cell inline chain — `<br>` becomes newline + two literal
 /// backslashes (the Jira table line break, Java `processTable` cell chain).
 String _tableCellMarkup(String html) => _inlineChain(
-      html,
-      brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
-      brReplacement: '\n\\\\',
-    );
+  html,
+  brPattern: RegExp(r'<br\s*/?>', caseSensitive: false),
+  brReplacement: '\n\\\\',
+);
 
 /// Numeric `colspan` attribute of [cell], `1` when absent or unparseable.
 int _colspan(dom.Element cell) =>
@@ -655,7 +657,7 @@ class HtmlCodeBlockPreserver {
   static final _classPattern = RegExp("class=[\"']([^\"']*)[\"']");
 
   final List<({String content, String language, bool isInline})>
-      _preservedCodeBlocks = [];
+  _preservedCodeBlocks = [];
 
   /// Swaps every `<code>` span for a placeholder element; spans already
   /// carrying a placeholder are left alone.

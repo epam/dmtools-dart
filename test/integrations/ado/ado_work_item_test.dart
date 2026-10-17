@@ -145,8 +145,9 @@ void _wiqlLinkQueryTests() {
         });
       });
       final items = await f.client.listWorkItems('FROM WorkItemLinks');
-      expect(items.map((i) => i['id']).toList(), [7, 8]);
-      expect(f.adapter.calls.last.queryParameters['ids'], '7,8');
+      // Target-only per the PR spec: the anchor row (rel null, id 7) is skipped.
+      expect(items.map((i) => i['id']).toList(), [8]);
+      expect(f.adapter.calls.last.queryParameters['ids'], '8');
     });
   });
 }

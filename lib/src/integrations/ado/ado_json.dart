@@ -33,24 +33,30 @@ List<int> wiqlStubIds(List stubs) => [
         if (stub is Map && stub['id'] is int) stub['id'] as int,
     ];
 
-/// Collects work-item ids from a WIQL response. Flat queries return
-/// `workItems` stubs; `FROM WorkItemLinks` queries return
-/// `workItemRelations` (`{source, target}` nodes, `source` null for root
-/// items). Both are read; duplicates are removed, order kept (dm.ai#700).
-List<int> wiqlResponseIds(Map wiql) {
+/// Extracts work-item ids from any WIQL response (Java `extractWorkItemIds`).
+///
+/// Flat queries answer with `workItems` stubs, returned in order. Link
+/// queries (`FROM WorkItemLinks`) answer with `workItemRelations`: each
+/// relation's **target** is a result, while the anchoring source row (no
+/// `rel`) is skipped. Duplicates are dropped, keeping first occurrence.
+List<int> extractWorkItemIds(Map decoded) {
   final ids = <int>[];
-  final stubs = wiql['workItems'];
-  if (stubs is List) ids.addAll(wiqlStubIds(stubs));
-  final relations = wiql['workItemRelations'];
+  final seen = <int>{};
+  void add(int id) {
+    if (seen.add(id)) ids.add(id);
+  }
+
+  final flat = decoded['workItems'];
+  if (flat is List) wiqlStubIds(flat).forEach(add);
+  final relations = decoded['workItemRelations'];
   if (relations is List) {
-    for (final rel in relations) {
-      if (rel is! Map) continue;
-      for (final node in [rel['source'], rel['target']]) {
-        if (node is Map && node['id'] is int) ids.add(node['id'] as int);
-      }
+    for (final relation in relations) {
+      if (relation is! Map || relation['rel'] == null) continue;
+      final target = relation['target'];
+      if (target is Map && target['id'] is int) add(target['id'] as int);
     }
   }
-  return ids.toSet().toList();
+  return ids;
 }
 
 /// Splits [ids] into batches of [size] — ADO caps `wit/workitems` at 200

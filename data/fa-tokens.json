@@ -2008,6 +2008,15 @@
       "total": 93418,
       "cacheRead": 108995,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "rework",
+      "at": "2026-10-17T15:53:39Z",
+      "prompt": 102021,
+      "completion": 588,
+      "total": 102609,
+      "cacheRead": 117709,
+      "model": "claude-haiku-5.5"
     }
   ],
   "pr-422": [

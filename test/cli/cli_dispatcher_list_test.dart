@@ -88,6 +88,9 @@ CONFLUENCE_LOGIN_PASS_TOKEN=prebuilt
           .where((t) => t['integration'] == 'confluence')
           .toList();
       expect(confluence, isNotEmpty);
+      final names = confluence.map((t) => t['name'] as String).toSet();
+      expect(names, contains('confluence_get_page'));
+      expect(names, contains('confluence_test'));
     });
 
     test('DMTOOLS_INTEGRATIONS still wins verbatim over config detection',

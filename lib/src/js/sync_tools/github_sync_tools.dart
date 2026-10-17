@@ -237,10 +237,11 @@ String _getPrDiff(GhSyncConfig c, Map<String, dynamic> a) {
   return jsonEncode(_parseDiffStats(diff));
 }
 
-/// `github_get_pr_diff_text` — raw unified diff text (Java parity).
+/// `github_get_pr_diff_text` — raw unified diff text (Java parity),
+/// JSON-encoded for the FFI bridge (plain text breaks the host callback).
 String _getPrDiffText(GhSyncConfig c, Map<String, dynamic> a) {
-  if (!PropertyReader().isReadPullRequestDiff()) return '';
-  return _fetchPrDiff(c, a) ?? '';
+  if (!PropertyReader().isReadPullRequestDiff()) return jsonEncode('');
+  return jsonEncode(_fetchPrDiff(c, a) ?? '');
 }
 
 /// GETs `pulls/{id}` with the `application/vnd.github.diff` accept header.
@@ -494,8 +495,22 @@ List<dynamic> _walkCheckRunPages(
 }
 
 /// `github_get_job_logs` — raw text logs from `actions/jobs/{id}/logs`.
-String _getJobLogs(GhSyncConfig c, Map<String, dynamic> a) =>
-    _getRepoPath(c, a, 'actions/jobs/${syncAsStr(a['jobId'])}/logs');
+///
+/// The endpoint answers plain text, not JSON; the FFI host callback
+/// marshals through JSON, so the body must be returned JSON-encoded
+/// (same contract as [_triggerWorkflow]'s plain-string success message).
+/// Live 2026-10-17: an unencoded log body broke the bridge with "host
+/// callback returned invalid JSON" and left rework legs blind (no
+/// ci_failures_full.log) — dart #414 burned its 3-round rework cap.
+String _getJobLogs(GhSyncConfig c, Map<String, dynamic> a) {
+  final body = syncBodyOrError(SyncHttpClient.get(
+    '${c.baseUrl}/${_repoSeg(a)}/actions/jobs/${syncAsStr(a['jobId'])}/logs',
+    headers: c.headers,
+  ));
+  // Always JSON-encode (Java parity: the raw string, even an error body);
+  // the JS side try-parses and falls back to the raw string.
+  return jsonEncode(body);
+}
 
 /// `github_get_workflow_run_jobs` — GET `actions/runs/{id}/jobs`.
 String _getWorkflowRunJobs(GhSyncConfig c, Map<String, dynamic> a) =>

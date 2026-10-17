@@ -56,39 +56,40 @@ class AdoSyncTools {
 /// is unconfigured) before the executor runs.
 Map<String, String Function(Map<String, dynamic>)> _wrapHandlers(
   Map<String, _AdoExecutor> fns,
-) => {
-  for (final entry in fns.entries)
-    entry.key: (args) {
-      final config = _adoConfig();
-      if (config == null) return syncErr('ADO not configured');
-      return entry.value(config, args);
-    },
-};
+) =>
+    {
+      for (final entry in fns.entries)
+        entry.key: (args) {
+          final config = _adoConfig();
+          if (config == null) return syncErr('ADO not configured');
+          return entry.value(config, args);
+        },
+    };
 
 /// All ADO sync executors (Java `AzureDevOpsClient` MCP tool surface).
 final Map<String, String Function(Map<String, dynamic> args)> _adoHandlers =
     _wrapHandlers({
-      'ado_get_work_item': _getWorkItem,
-      'ado_add_work_item_label': _addWorkItemLabel,
-      'ado_remove_work_item_label': _removeWorkItemLabel,
-      'ado_list_work_items': _listWorkItems,
-      'ado_list_prs': _listPrs,
-      'ado_get_pr': _getPr,
-      'ado_get_pr_comments': _getPrComments,
-      'ado_add_pr_comment': _addPrComment,
-      'ado_reply_to_pr_thread': _replyToPrThread,
-      'ado_resolve_pr_thread': _resolvePrThread,
-      'ado_add_inline_comment': _addInlineComment,
-      'ado_merge_pr': _mergePr,
-      'ado_add_pr_label': _addPrLabel,
-      'ado_remove_pr_label': _removePrLabel,
-      'ado_get_pr_diff': _getPrDiff,
-      'ado_list_pipelines': _listPipelines,
-      'ado_list_pipeline_runs': _listPipelineRuns,
-      'ado_trigger_pipeline': _triggerPipeline,
-      'ado_get_pipeline_logs': _getPipelineLogs,
-      ...adoWorkItemOpExecutors,
-    });
+  'ado_get_work_item': _getWorkItem,
+  'ado_add_work_item_label': _addWorkItemLabel,
+  'ado_remove_work_item_label': _removeWorkItemLabel,
+  'ado_list_work_items': _listWorkItems,
+  'ado_list_prs': _listPrs,
+  'ado_get_pr': _getPr,
+  'ado_get_pr_comments': _getPrComments,
+  'ado_add_pr_comment': _addPrComment,
+  'ado_reply_to_pr_thread': _replyToPrThread,
+  'ado_resolve_pr_thread': _resolvePrThread,
+  'ado_add_inline_comment': _addInlineComment,
+  'ado_merge_pr': _mergePr,
+  'ado_add_pr_label': _addPrLabel,
+  'ado_remove_pr_label': _removePrLabel,
+  'ado_get_pr_diff': _getPrDiff,
+  'ado_list_pipelines': _listPipelines,
+  'ado_list_pipeline_runs': _listPipelineRuns,
+  'ado_trigger_pipeline': _triggerPipeline,
+  'ado_get_pipeline_logs': _getPipelineLogs,
+  ...adoWorkItemOpExecutors,
+});
 
 /// Builds ADO config, or `null` when organization / project / PAT is
 /// missing. Base URL: `{ADO_BASE_PATH}/{org}/{project}/_apis`.
@@ -118,8 +119,7 @@ const _adoApiVersion = '7.0';
 
 /// `ado_get_work_item` — GET `wit/workitems/{id}?api-version=7.0`.
 String _getWorkItem(_AdoConfig config, Map<String, dynamic> args) {
-  final url =
-      '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
+  final url = '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
       '?api-version=$_adoApiVersion';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 }
@@ -147,8 +147,7 @@ String _updateWorkItemTags(
 }) {
   final label = syncAsStr(args['label']).trim();
   if (label.isEmpty) return syncErr('label is required');
-  final url =
-      '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
+  final url = '${config.baseUrl}/wit/workitems/${syncAsInt(args['id'])}'
       '?api-version=$_adoApiVersion';
   final fetched = syncBodyOrError(
     SyncHttpClient.get(url, headers: config.headers),
@@ -230,8 +229,7 @@ List<Map<String, dynamic>>? _adoDetailBatch(
   final extra = fields != null && fields.isNotEmpty
       ? 'fields=${Uri.encodeQueryComponent(fields.join(','))}'
       : r'$expand=relations';
-  final url =
-      '${config.baseUrl}/wit/workitems'
+  final url = '${config.baseUrl}/wit/workitems'
       '?ids=${ids.join(',')}&$extra&api-version=$_adoApiVersion';
   final body = syncBodyOrError(
     SyncHttpClient.get(url, headers: config.headers),
@@ -256,8 +254,7 @@ String _listPrs(_AdoConfig config, Map<String, dynamic> args) {
   } else if (lower == 'closed' || lower == 'merged' || lower == 'declined') {
     status = 'completed';
   }
-  final url =
-      '${_prPath(config, args)}'
+  final url = '${_prPath(config, args)}'
       '?searchCriteria.status=$status&api-version=$_adoApiVersion';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
 }
@@ -297,8 +294,7 @@ String _addPrComment(_AdoConfig config, Map<String, dynamic> args) {
 /// `ado_reply_to_pr_thread` — POST `…/threads/{id}/comments` with
 /// `parentCommentId: 1` (ports the Java `replyToPullRequestThread`).
 String _replyToPrThread(_AdoConfig config, Map<String, dynamic> args) {
-  final url =
-      '${_prIdPath(config, args)}'
+  final url = '${_prIdPath(config, args)}'
       '/threads/${syncAsStr(args['threadId'])}/comments'
       '?api-version=$_adoApiVersion';
   return _postBody(
@@ -318,8 +314,7 @@ String _replyToPrThread(_AdoConfig config, Map<String, dynamic> args) {
 /// names (ports the Java `resolveThread` + `mapThreadStatus`).
 String _resolvePrThread(_AdoConfig config, Map<String, dynamic> args) {
   final status = syncAsStr(args['status']);
-  final url =
-      '${_prIdPath(config, args)}'
+  final url = '${_prIdPath(config, args)}'
       '/threads/${syncAsStr(args['threadId'])}?api-version=$_adoApiVersion';
   return _patchJson(
     config,
@@ -413,9 +408,8 @@ Map<String, dynamic> _mergePrBody(
     if (lastCommit is Map) 'lastMergeSourceCommit': lastCommit,
     'completionOptions': {
       'mergeStrategy': mergeStrategy.trim().isEmpty ? 'squash' : mergeStrategy,
-      'deleteSourceBranch': deleteRaw.trim().isEmpty
-          ? true
-          : deleteRaw.toLowerCase() == 'true',
+      'deleteSourceBranch':
+          deleteRaw.trim().isEmpty ? true : deleteRaw.toLowerCase() == 'true',
       if (commitMessage.trim().isNotEmpty) 'mergeCommitMessage': commitMessage,
     },
   };
@@ -423,8 +417,7 @@ Map<String, dynamic> _mergePrBody(
 
 /// `ado_add_pr_label` — POST `…/labels` (`api-version=7.0-preview.1`).
 String _addPrLabel(_AdoConfig config, Map<String, dynamic> args) {
-  final url =
-      '${_prIdPath(config, args)}'
+  final url = '${_prIdPath(config, args)}'
       '/labels?api-version=$_adoApiVersion-preview.1';
   return _postBody(config, url, jsonEncode({'name': syncAsStr(args['label'])}));
 }
@@ -432,8 +425,7 @@ String _addPrLabel(_AdoConfig config, Map<String, dynamic> args) {
 /// `ado_remove_pr_label` — DELETE `…/labels/{labelId}`
 /// (`api-version=7.0-preview.1`).
 String _removePrLabel(_AdoConfig config, Map<String, dynamic> args) {
-  final url =
-      '${_prIdPath(config, args)}'
+  final url = '${_prIdPath(config, args)}'
       '/labels/${syncAsStr(args['labelId'])}'
       '?api-version=$_adoApiVersion-preview.1';
   return syncBodyOrError(SyncHttpClient.delete(url, headers: config.headers));
@@ -445,16 +437,14 @@ String _removePrLabel(_AdoConfig config, Map<String, dynamic> args) {
 /// (the latest is the page length), then that iteration's `changes` are
 /// fetched. No iterations → `{"changes": []}`.
 String _getPrDiff(_AdoConfig config, Map<String, dynamic> args) {
-  final iterationsUrl =
-      '${_prIdPath(config, args)}'
+  final iterationsUrl = '${_prIdPath(config, args)}'
       '/iterations?api-version=$_adoApiVersion';
   final iterations = syncTryDecode(
     syncBodyOrError(SyncHttpClient.get(iterationsUrl, headers: config.headers)),
   );
   final list = iterations is Map ? iterations['value'] : null;
   if (list is! List || list.isEmpty) return jsonEncode({'changes': []});
-  final changesUrl =
-      '${_prIdPath(config, args)}'
+  final changesUrl = '${_prIdPath(config, args)}'
       '/iterations/${list.length}/changes?api-version=$_adoApiVersion';
   return syncBodyOrError(
     SyncHttpClient.get(changesUrl, headers: config.headers),
@@ -652,11 +642,12 @@ String _prIdPath(_AdoConfig config, Map<String, dynamic> args) =>
 Map<String, dynamic> _newThreadPayload({
   required List<Map<String, dynamic>> comments,
   Map<String, dynamic>? threadContext,
-}) => {
-  'comments': comments,
-  if (threadContext != null) 'threadContext': threadContext,
-  'status': 1,
-};
+}) =>
+    {
+      'comments': comments,
+      if (threadContext != null) 'threadContext': threadContext,
+      'status': 1,
+    };
 
 /// PATCHes [body] to [url] with the plain-JSON content type (Java
 /// `patchJson` — ADO accepts regular JSON for PR PATCHes, unlike work-item
@@ -683,8 +674,8 @@ String _patchJson(_AdoConfig config, String url, String body) {
 
 /// POSTs [body] to [url] and returns the result string.
 String _postBody(_AdoConfig config, String url, String body) => syncBodyOrError(
-  SyncHttpClient.post(url, headers: config.headers, body: body),
-);
+      SyncHttpClient.post(url, headers: config.headers, body: body),
+    );
 
 /// Coerces a loosely-typed JS argument to an int, or `null` when absent.
 int? _asIntOrNull(dynamic value) {

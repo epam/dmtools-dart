@@ -1413,6 +1413,15 @@
       "total": 114975,
       "cacheRead": 2073133,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "rework",
+      "at": "2026-10-17T16:35:50Z",
+      "prompt": 119333,
+      "completion": 2980,
+      "total": 122313,
+      "cacheRead": 210871,
+      "model": "claude-haiku-5.5"
     }
   ],
   "issue-407": [

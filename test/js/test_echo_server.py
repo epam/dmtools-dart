@@ -216,6 +216,14 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         elif "/logs/" in self.path:
             self._send(b"log-line-1\nlog-line-2\nlog-line-3", "text/plain")
             return
+        # GitLab job trace: raw text (the real /jobs/{id}/trace endpoint
+        # answers plain text). The echo payload rides inside as text so
+        # tests can still assert method/path after one extra decode.
+        elif self.path.endswith("/trace"):
+            self._send(
+                json.dumps(payload).encode("utf-8"), "text/plain"
+            )
+            return
         # GitLab MR-list fixture: a state=all listing answers a JSON array
         # so the client-side closed/merged filter runs.
         elif self.command == "GET" and "/merge_requests?state=all" in self.path:

@@ -243,6 +243,19 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         base = path.split("?")[0]
         accept = self.headers.get("Accept", "")
 
+        # Job logs: plain-text body (the real endpoint answers raw logs,
+        # not JSON — the bridge must JSON-encode it, live: dmtools-dart
+        # rework legs starved on "host callback returned invalid JSON").
+        if base.endswith("/actions/jobs/7/logs"):
+            self._record(body)
+            self._respond(
+                200,
+                "2026-10-17T08:00:00Z ##[error]method_size: 1 violations\n"
+                "plain text, not JSON <<< >>>",
+                "text/plain",
+            )
+            return
+
         # Workflow run logs: 302 redirect to the ZIP archive.
         if base.endswith("/actions/runs/55/logs"):
             self._record(body)

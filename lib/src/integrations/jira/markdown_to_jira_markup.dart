@@ -277,16 +277,18 @@ String _convertHtmlToJiraMarkup(String html) {
         if (special != null) {
           blocks.add(special.block);
           i = special.nextIndex + 1;
-          continue;
+        } else {
+          blocks.add(_handleBlockElement(node));
+          i++;
         }
-        blocks.add(_handleBlockElement(node));
       } else {
         inlineBuffer.write(node.outerHtml);
+        i++;
       }
     } else {
       inlineBuffer.write(_escapeTextNode(node.text ?? ''));
+      i++;
     }
-    i++;
   }
   flushInline();
 

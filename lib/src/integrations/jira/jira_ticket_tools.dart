@@ -194,6 +194,7 @@ List<ToolDefinition> _createTools() => [
             description: 'The ticket description',
             required: false,
           ),
+          _labelsParam,
         ],
       ),
       _jiraTool(
@@ -329,6 +330,7 @@ List<ToolDefinition> _createWithParentTools() => [
             description: 'The key of the parent ticket',
             required: true,
           ),
+          _labelsParam,
         ],
       ),
     ];
@@ -508,6 +510,17 @@ const _fieldUpdateParam = ToolParam(
   name: 'field',
   description: 'The field name to update',
   required: true,
+);
+
+/// Reusable parameter: optional label list on the create tools (gh-427).
+///
+/// Deliberate Dart-side divergence: the Java upstream create tools declare
+/// no `labels` param (see `test/fixtures/java_mcp_param_drift.txt`).
+const _labelsParam = ToolParam(
+  name: 'labels',
+  description: 'Optional list of Jira labels to set on the created ticket',
+  type: 'array',
+  required: false,
 );
 
 /// Reusable parameter: issue type for ticket creation.

@@ -61,8 +61,7 @@ String uploadReleaseAsset({
 /// The `repos/{workspace}/{repository}` + release id pair from [args].
 ({String repoSegment, String releaseId}) _releaseRef(
   Map<String, dynamic> args,
-) =>
-    (repoSegment: _repoSeg(args), releaseId: syncAsStr(args['releaseId']));
+) => (repoSegment: _repoSeg(args), releaseId: syncAsStr(args['releaseId']));
 
 /// Deletes the first asset named [assetName] on the release, if any.
 void _deleteExistingAssetByName({
@@ -103,7 +102,8 @@ String _uploadAssetBytes({
   final base = baseUrl == 'https://api.github.com'
       ? 'https://uploads.github.com'
       : '$baseUrl/uploads';
-  var url = '$base/${release.repoSegment}/releases/${release.releaseId}/assets'
+  var url =
+      '$base/${release.repoSegment}/releases/${release.releaseId}/assets'
       '?name=${Uri.encodeQueryComponent(asset.name)}';
   if (!syncIsBlank(asset.label)) {
     url += '&label=${Uri.encodeQueryComponent(asset.label.trim())}';

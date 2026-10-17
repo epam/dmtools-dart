@@ -20,6 +20,7 @@ export 'src/agents/suite_sharding.dart';
 export 'src/cli/cli_args.dart';
 export 'src/cli/cli_dispatcher.dart';
 export 'src/cli/config_merger.dart';
+export 'src/cli/upgrade_command.dart';
 export 'src/cli/doctor_command.dart';
 export 'src/cli/encoding_detector.dart';
 export 'src/cli/job_registry.dart';

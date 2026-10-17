@@ -38,26 +38,26 @@ import 'tool_registry.dart';
 /// concrete `github_*`/`gitlab_*` tools stay bit-identical either way
 /// (AC4).
 List<ToolDefinition> defaultToolCatalog() => [
-  ...jiraTools(),
-  ...githubTools(),
-  ...gitlabTools(),
-  ...confluenceTools(),
-  ...aiTools(),
-  ...fileTools(),
-  ...cliTools(),
-  ...envTools(),
-  ...adoTools(),
-  ...testrailTools(),
-  ...bitriseTools(),
-  ...jenkinsTools(),
-  ...figmaTools(),
-  ...teamsTools(),
-  ...sharepointTools(),
-  ...xrayTools(),
-  ...kbTools(),
-  ...mermaidTools(),
-  ...scmCiAliasCatalog(),
-];
+      ...jiraTools(),
+      ...githubTools(),
+      ...gitlabTools(),
+      ...confluenceTools(),
+      ...aiTools(),
+      ...fileTools(),
+      ...cliTools(),
+      ...envTools(),
+      ...adoTools(),
+      ...testrailTools(),
+      ...bitriseTools(),
+      ...jenkinsTools(),
+      ...figmaTools(),
+      ...teamsTools(),
+      ...sharepointTools(),
+      ...xrayTools(),
+      ...kbTools(),
+      ...mermaidTools(),
+      ...scmCiAliasCatalog(),
+    ];
 
 /// Creates a [ToolRegistry] with every integration catalog registered.
 ///

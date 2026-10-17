@@ -73,9 +73,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// CLI full output log directory.
   /// Key: `DMTOOLS_CLI_LOG_DIR`, default: `.dmtools-logs/cli`.
   String getCliFullOutputLogDir() => getValueWithDefault(
-    PropertyNames.DMTOOLS_CLI_LOG_DIR,
-    '.dmtools-logs/cli',
-  );
+        PropertyNames.DMTOOLS_CLI_LOG_DIR,
+        '.dmtools-logs/cli',
+      );
 
   /// Sleep time between requests in ms.
   /// Key: `SLEEP_TIME_REQUEST`, default: 300. THROWS on invalid.
@@ -100,8 +100,8 @@ extension PropertyReaderGetters on PropertyReader {
   /// JPEG quality for image processing.
   /// Key: `IMAGE_JPEG_QUALITY`, default: 0.9. THROWS on invalid.
   double getImageJpegQuality() => double.parse(
-    getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'),
-  );
+        getValueWithDefault(PropertyNames.IMAGE_JPEG_QUALITY, '0.9'),
+      );
 
   /// Default LLM type. Key: `DEFAULT_LLM`.
   String? getDefaultLLM() => getValue(PropertyNames.DEFAULT_LLM);
@@ -509,11 +509,11 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// Teams OAuth scopes. Key: `TEAMS_SCOPES`.
   String getTeamsScopes() => getValueWithDefault(
-    PropertyNames.TEAMS_SCOPES,
-    'User.Read Chat.Read ChatMessage.Read Mail.Read '
-    'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
-    'offline_access',
-  );
+        PropertyNames.TEAMS_SCOPES,
+        'User.Read Chat.Read ChatMessage.Read Mail.Read '
+        'Team.ReadBasic.All Channel.ReadBasic.All openid profile email '
+        'offline_access',
+      );
 
   /// Teams auth method. Key: `TEAMS_AUTH_METHOD`, default: `device`.
   String getTeamsAuthMethod() =>
@@ -529,9 +529,9 @@ extension PropertyReaderGetters on PropertyReader {
   /// Teams token cache file path.
   /// Key: `TEAMS_TOKEN_CACHE_PATH`, default: `./teams.token`.
   String getTeamsTokenCachePath() => getValueWithDefault(
-    PropertyNames.TEAMS_TOKEN_CACHE_PATH,
-    './teams.token',
-  );
+        PropertyNames.TEAMS_TOKEN_CACHE_PATH,
+        './teams.token',
+      );
 
   /// Teams refresh token. Key: `TEAMS_REFRESH_TOKEN`.
   String? getTeamsRefreshToken() => getValue(PropertyNames.TEAMS_REFRESH_TOKEN);
@@ -539,17 +539,17 @@ extension PropertyReaderGetters on PropertyReader {
   /// Microsoft Graph API base path.
   /// Key: `TEAMS_BASE_PATH`, default: `https://graph.microsoft.com/v1.0`.
   String getTeamsBasePath() => getValueWithDefault(
-    PropertyNames.TEAMS_BASE_PATH,
-    'https://graph.microsoft.com/v1.0',
-  );
+        PropertyNames.TEAMS_BASE_PATH,
+        'https://graph.microsoft.com/v1.0',
+      );
 
   /// SharePoint OAuth scopes. Key: `SHAREPOINT_SCOPES`.
   String getSharePointScopes() => getValueWithDefault(
-    PropertyNames.SHAREPOINT_SCOPES,
-    'User.Read Chat.Read ChatMessage.Read Mail.Read '
-    'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
-    'Sites.Read.All openid profile email offline_access',
-  );
+        PropertyNames.SHAREPOINT_SCOPES,
+        'User.Read Chat.Read ChatMessage.Read Mail.Read '
+        'Team.ReadBasic.All Channel.ReadBasic.All Files.Read.All '
+        'Sites.Read.All openid profile email offline_access',
+      );
 
   // --- TestRail ---
 

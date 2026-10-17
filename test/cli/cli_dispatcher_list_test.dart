@@ -44,7 +44,8 @@ void main() {
 
 void _testConfigDetectedListing() {
   group('list integration detection', () {
-    test('falls back to config-detected integrations when '
+    test(
+        'falls back to config-detected integrations when '
         'DMTOOLS_INTEGRATIONS is unset', () async {
       // With no override the list reflects what this machine can run —
       // token-less integrations only in a tokenless env.
@@ -111,7 +112,8 @@ JENKINS_API_TOKEN=tok
 
 void _testScmCiVisibility() {
   group('list gh-339 scm_/ci_ visibility', () {
-    test('alias families stay visible under config detection when '
+    test(
+        'alias families stay visible under config detection when '
         'DEFAULT_SCM/DEFAULT_CI resolve', () async {
       // Regression: 'scm'/'ci' are registry integration tags of the
       // env-gated gh-339 alias families, not doctor-checkable
@@ -129,7 +131,8 @@ void _testScmCiVisibility() {
       expect(names, contains('ci_get_merge_state'));
     });
 
-    test('families stay absent when their default provider does not '
+    test(
+        'families stay absent when their default provider does not '
         'resolve', () async {
       // gh-339 semantics intact: no DEFAULT_SCM/DEFAULT_CI → the
       // families are not registered → absent from the list.
@@ -143,15 +146,16 @@ void _testScmCiVisibility() {
 
 void _testHelpSchema() {
   group('list help schema', () {
-    test('a canonical tool schema is shown even when its integration is '
+    test(
+        'a canonical tool schema is shown even when its integration is '
         'not configured', () async {
       // dm.ai #570: getToolSchema reads the FULL registry, so usage hints
       // keep working for tools outside the config-detected list.
       expect(await _dispatcher.dispatch(['jira_get_ticket', '--help']), 0);
       final result = jsonDecode(_lines.last) as Map<String, dynamic>;
       final names = (result['tools'] as List).cast<Map<String, dynamic>>().map(
-        (t) => t['name'] as String,
-      );
+            (t) => t['name'] as String,
+          );
       expect(names, contains('jira_get_ticket'));
     });
   });
@@ -169,7 +173,7 @@ void _testListFilters() {
       for (final t in tools) {
         final matches =
             (t['name'] as String).toLowerCase().contains('contents') ||
-            (t['description'] as String).toLowerCase().contains('contents');
+                (t['description'] as String).toLowerCase().contains('contents');
         expect(matches, isTrue);
       }
     });

@@ -14,31 +14,31 @@ import '../../mcp/tool_param.dart';
 
 /// Returns the `env` integration tool definitions.
 List<ToolDefinition> envTools() => const [
-  ToolDefinition(
-    name: 'env_get',
-    description:
-        'Read one non-secret configuration value (for example ADO_PROJECT, '
-        'DEFAULT_TRACKER, JIRA_BASE_PATH). Credentials (names containing '
-        'TOKEN, KEY, SECRET, PASSWORD, PAT, AUTH, ...) are never returned. '
-        'Names outside the built-in list can be allowed with '
-        'JS_ENV_ALLOWLIST=NAME1,NAME2. Returns {"name":..,"value":..} or '
-        '{"name":..,"error":..}; value is null when the variable is unset.',
-    integration: 'env',
-    category: 'configuration',
-    params: [
-      ToolParam(name: 'name', description: 'Configuration variable name'),
-    ],
-  ),
-  ToolDefinition(
-    name: 'env_list',
-    description:
-        'List the configuration names env_get will answer for: the built-in '
-        'non-secret names plus those added through JS_ENV_ALLOWLIST. Names '
-        'only, never values.',
-    integration: 'env',
-    category: 'configuration',
-  ),
-];
+      ToolDefinition(
+        name: 'env_get',
+        description:
+            'Read one non-secret configuration value (for example ADO_PROJECT, '
+            'DEFAULT_TRACKER, JIRA_BASE_PATH). Credentials (names containing '
+            'TOKEN, KEY, SECRET, PASSWORD, PAT, AUTH, ...) are never returned. '
+            'Names outside the built-in list can be allowed with '
+            'JS_ENV_ALLOWLIST=NAME1,NAME2. Returns {"name":..,"value":..} or '
+            '{"name":..,"error":..}; value is null when the variable is unset.',
+        integration: 'env',
+        category: 'configuration',
+        params: [
+          ToolParam(name: 'name', description: 'Configuration variable name'),
+        ],
+      ),
+      ToolDefinition(
+        name: 'env_list',
+        description:
+            'List the configuration names env_get will answer for: the built-in '
+            'non-secret names plus those added through JS_ENV_ALLOWLIST. Names '
+            'only, never values.',
+        integration: 'env',
+        category: 'configuration',
+      ),
+    ];
 
 /// Reads configuration values for the `env_*` tools.
 ///
@@ -51,13 +51,13 @@ class EnvTools {
 
   /// Creates the tools over [lookup].
   EnvTools({String? Function(String key)? lookup})
-    : lookup = lookup ?? ((key) => PropertyReader().getValue(key));
+      : lookup = lookup ?? ((key) => PropertyReader().getValue(key));
 
   /// Sync handlers keyed by tool name, JSON-string results.
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
-    'env_get': (args) => envGet(args['name']?.toString()),
-    'env_list': (_) => envList(),
-  };
+        'env_get': (args) => envGet(args['name']?.toString()),
+        'env_list': (_) => envList(),
+      };
 
   /// `env_get {name}` — see the tool description for the contract.
   String envGet(String? name) {
@@ -85,7 +85,8 @@ class EnvTools {
     final all = {
       ...JsEnvPolicy.defaultAllowed,
       ...JsEnvPolicy.projectAllowed(raw),
-    }.toList()..sort();
+    }.toList()
+      ..sort();
     final out = <String, dynamic>{'names': all};
     final rejected = JsEnvPolicy.rejectedFromAllowlist(raw).toList()..sort();
     if (rejected.isNotEmpty) out['ignoredSecretLikeNames'] = rejected;

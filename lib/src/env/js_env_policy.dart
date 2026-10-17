@@ -86,15 +86,15 @@ class JsEnvPolicy {
   /// Names added through `JS_ENV_ALLOWLIST` (comma/space separated), upper
   /// cased, secrets dropped.
   static Set<String> projectAllowed(String? rawAllowlist) => {
-    for (final name in _tokens(rawAllowlist))
-      if (_upperName.hasMatch(name) && !looksSecret(name)) name,
-  };
+        for (final name in _tokens(rawAllowlist))
+          if (_upperName.hasMatch(name) && !looksSecret(name)) name,
+      };
 
   /// Names from `JS_ENV_ALLOWLIST` rejected because they look like secrets.
   static Set<String> rejectedFromAllowlist(String? rawAllowlist) => {
-    for (final name in _tokens(rawAllowlist))
-      if (_upperName.hasMatch(name) && looksSecret(name)) name,
-  };
+        for (final name in _tokens(rawAllowlist))
+          if (_upperName.hasMatch(name) && looksSecret(name)) name,
+      };
 
   /// Decision for one [name] given the raw `JS_ENV_ALLOWLIST` value.
   static EnvDecision decide(String? name, String? rawProjectAllowlist) {

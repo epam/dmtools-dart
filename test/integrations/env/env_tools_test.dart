@@ -74,7 +74,8 @@ void main() {
     expect(get('JIRA_API_TOKEN').containsKey('error'), isTrue);
   });
 
-  test('worst case: every declared credential is never answered, '
+  test(
+      'worst case: every declared credential is never answered, '
       'even when allowlisted', () {
     final secrets = PropertyNames.all.where(JsEnvPolicy.looksSecret).toList();
     expect(secrets, isNotEmpty);

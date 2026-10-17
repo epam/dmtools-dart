@@ -33,7 +33,7 @@ class DoctorCommand {
   /// [reader] backs every lookup; production code omits it so values load
   /// from the current working directory resolution chain.
   DoctorCommand({PropertyReader? reader})
-    : _reader = reader ?? PropertyReader();
+      : _reader = reader ?? PropertyReader();
 
   final PropertyReader _reader;
 
@@ -175,18 +175,18 @@ class DoctorCommand {
   }
 
   List<_IntegrationCheck> _runChecks() => [
-    _IntegrationCheck('jira', 'Jira', _jiraMissing()),
-    _IntegrationCheck('confluence', 'Confluence', _confluenceMissing()),
-    _IntegrationCheck('figma', 'Figma', _figmaMissing()),
-    for (final entry in _simpleChecks.entries)
-      _IntegrationCheck(
-        entry.key,
-        entry.value.$1,
-        _missingRequired(entry.value.$2),
-      ),
-    _IntegrationCheck('ai', 'AI', _aiMissing()),
-    _IntegrationCheck('teams', 'Teams', _teamsMissing()),
-  ];
+        _IntegrationCheck('jira', 'Jira', _jiraMissing()),
+        _IntegrationCheck('confluence', 'Confluence', _confluenceMissing()),
+        _IntegrationCheck('figma', 'Figma', _figmaMissing()),
+        for (final entry in _simpleChecks.entries)
+          _IntegrationCheck(
+            entry.key,
+            entry.value.$1,
+            _missingRequired(entry.value.$2),
+          ),
+        _IntegrationCheck('ai', 'AI', _aiMissing()),
+        _IntegrationCheck('teams', 'Teams', _teamsMissing()),
+      ];
 
   // --- Auth-chain integrations ---
 

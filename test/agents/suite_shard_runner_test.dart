@@ -635,6 +635,11 @@ class FixtureTree {
       // carry everything the preload reads.
       'js/common/machineNotice.js',
       'js/configLoader.js',
+      // Preload inventory window: agents main briefly required this as a
+      // base module (fbf6b35, pre-#968); loadModule reads from the fixture
+      // tree's cwd, so every preload candidate must be copied. Harmless
+      // when the current runner no longer preloads it.
+      'js/common/reviewThreadInventory.js',
     ]) {
       final src = File('$agentsPath/$rel');
       final dst = File('${root.path}/$rel');

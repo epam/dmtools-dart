@@ -9,6 +9,7 @@ import '../integrations/ado/ado_tools.dart';
 import '../integrations/ai/ai_tools.dart';
 import '../integrations/bitrise/bitrise_tools.dart';
 import '../integrations/cli/cli_tools.dart';
+import '../integrations/env/env_tools.dart';
 import '../integrations/confluence/confluence_tools.dart';
 import '../integrations/figma/figma_tools.dart';
 import '../integrations/file/file_tools.dart';
@@ -44,6 +45,7 @@ List<ToolDefinition> defaultToolCatalog() => [
       ...aiTools(),
       ...fileTools(),
       ...cliTools(),
+      ...envTools(),
       ...adoTools(),
       ...testrailTools(),
       ...bitriseTools(),

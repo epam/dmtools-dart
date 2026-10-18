@@ -39,6 +39,14 @@ void _defineLooksSecretTests() {
       expect(JsEnvPolicy.looksSecret('ANTHROPIC_MAX_TOKENS'), isFalse);
     });
 
+    test('token-shaped credentials are never exempted as limits', () {
+      expect(JsEnvPolicy.looksSecret('MAX_AUTH_TOKEN'), isTrue);
+      expect(JsEnvPolicy.looksSecret('MAX_PAT_TOKEN'), isTrue);
+      expect(JsEnvPolicy.looksSecret('GITHUB_TOKEN_MAX'), isTrue);
+      expect(JsEnvPolicy.looksSecret('ADO_PAT_TOKEN_LIMIT'), isFalse);
+      expect(JsEnvPolicy.looksSecret('AUTH_TOKEN_COUNT'), isTrue);
+    });
+
     test('matching is whole-word, not substring', () {
       expect(JsEnvPolicy.looksSecret('KEYBOARD_LAYOUT'), isFalse);
       expect(JsEnvPolicy.looksSecret('AUTHOR'), isFalse);

@@ -56,14 +56,15 @@ class JsEnvPolicy {
     return words.any(_isSecretWord);
   }
 
-  /// Limits and counters that merely contain TOKEN(S) are configuration.
+  /// Only the exact limit shapes are configuration: `*_MAX_TOKENS` (last
+  /// word `TOKENS`, preceded by `MAX`) and `*_TOKEN_LIMIT` (last two words
+  /// `TOKEN LIMIT`). Any other name containing TOKEN stays a secret.
   static bool _isTokenLimitOrCount(List<String> words) {
-    final isMaxTokens = words.contains('MAX') &&
-        (words.contains('TOKENS') || words.contains('TOKEN'));
-    final isTokenLimit = words.contains('TOKEN') &&
-        (words.contains('LIMIT') ||
-            words.contains('LIMITS') ||
-            words.contains('COUNT'));
+    final n = words.length;
+    final isMaxTokens =
+        n >= 2 && words[n - 1] == 'TOKENS' && words[n - 2] == 'MAX';
+    final isTokenLimit =
+        n >= 2 && words[n - 2] == 'TOKEN' && words[n - 1] == 'LIMIT';
     return isMaxTokens || isTokenLimit;
   }
 

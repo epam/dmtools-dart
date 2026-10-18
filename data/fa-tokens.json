@@ -1812,6 +1812,15 @@
       "total": 238201,
       "cacheRead": 2003426,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "review",
+      "at": "2026-10-18T16:42:00Z",
+      "prompt": 78708,
+      "completion": 2595,
+      "total": 81303,
+      "cacheRead": 121897,
+      "model": "claude-haiku-5.5"
     }
   ],
   "issue-386": [

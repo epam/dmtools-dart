@@ -1,0 +1,1 @@
+{"ts":"2026-10-16T19:53:54.710202Z","event":"scheduled","id":"1792180434709625_0000_1ki6lne","dueMs":1792181034709,"to":"main","text":"gh-393 rework: collect the full `dart test` result from background job sh-11-hn9wagyb5d1s2ujvc (log .fah/bash_jobs/sh-11-hn9wagyb5d1s2ujvc.log). If it passed, leave outputs/response.md as is; if it fa"}

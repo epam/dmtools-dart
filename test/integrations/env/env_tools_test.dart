@@ -7,71 +7,80 @@ import 'package:test/test.dart';
 
 /// Java `EnvToolsTest` parity. Values come from an in-memory map; a lookup
 /// counter proves refused and invalid names never reach the value source.
+Map<String, String> _values = {};
+List<String> _lookups = [];
+late EnvTools _tools;
+
+Map<String, dynamic> _get(String name) =>
+    jsonDecode(_tools.envGet(name)) as Map<String, dynamic>;
+
+void _resetHarness() {
+  _values = {};
+  _lookups = [];
+  _tools = EnvTools(
+    lookup: (key) {
+      _lookups.add(key);
+      return _values[key];
+    },
+  );
+}
+
 void main() {
-  late Map<String, String> values;
-  late List<String> lookups;
-  late EnvTools tools;
+  setUp(_resetHarness);
+  _defineEnvGetTests();
+  _defineEnvListAndCatalogTests();
+  _defineCatalogTests();
+}
 
-  setUp(() {
-    values = {};
-    lookups = [];
-    tools = EnvTools(
-      lookup: (key) {
-        lookups.add(key);
-        return values[key];
-      },
-    );
-  });
-
-  Map<String, dynamic> get(String name) =>
-      jsonDecode(tools.envGet(name)) as Map<String, dynamic>;
-
+void _defineEnvGetTests() {
   test('allowed name returns its value', () {
-    values['ADO_PROJECT'] = 'PROJ';
-    expect(get('ADO_PROJECT'), {'name': 'ADO_PROJECT', 'value': 'PROJ'});
+    _values['ADO_PROJECT'] = 'PROJ';
+    expect(_get('ADO_PROJECT'), {'name': 'ADO_PROJECT', 'value': 'PROJ'});
   });
 
   test('lookup is case-insensitive', () {
-    values['ADO_PROJECT'] = 'PROJ';
-    expect(get('ado_project')['value'], 'PROJ');
+    _values['ADO_PROJECT'] = 'PROJ';
+    expect(_get('ado_project')['value'], 'PROJ');
   });
 
   test('unset allowed name answers value null', () {
-    expect(get('ADO_PROJECT'), {'name': 'ADO_PROJECT', 'value': null});
+    expect(_get('ADO_PROJECT'), {'name': 'ADO_PROJECT', 'value': null});
   });
 
   test('secret is refused without its value and without a secret lookup', () {
-    values['JIRA_API_TOKEN'] = 'REAL-SECRET';
-    final out = tools.envGet('JIRA_API_TOKEN');
+    _values['JIRA_API_TOKEN'] = 'REAL-SECRET';
+    final out = _tools.envGet('JIRA_API_TOKEN');
     expect(out, isNot(contains('REAL-SECRET')));
-    expect(get('JIRA_API_TOKEN').containsKey('error'), isTrue);
-    expect(lookups, isNot(contains('JIRA_API_TOKEN')));
+    expect(_get('JIRA_API_TOKEN').containsKey('error'), isTrue);
+    expect(_lookups, isNot(contains('JIRA_API_TOKEN')));
   });
 
   test('invalid names are rejected without a lookup', () {
     for (final bad in [null, '', '1X', 'A-B', 'A.B']) {
-      final out = jsonDecode(tools.envGet(bad)) as Map<String, dynamic>;
+      final out = jsonDecode(_tools.envGet(bad)) as Map<String, dynamic>;
       expect(out['error'], contains('invalid name'), reason: '$bad');
     }
     // Only the allowlist key may be read for an invalid name, never the name.
-    expect(lookups.every((k) => k == JsEnvPolicy.allowlistKey), isTrue);
+    expect(_lookups.every((k) => k == JsEnvPolicy.allowlistKey), isTrue);
   });
 
   test('not-allowlisted name is refused', () {
-    expect(get('RANDOM_THING')['error'], contains('JS_ENV_ALLOWLIST'));
+    expect(_get('RANDOM_THING')['error'], contains('JS_ENV_ALLOWLIST'));
   });
+}
 
+void _defineEnvListAndCatalogTests() {
   test('JS_ENV_ALLOWLIST makes a custom name readable', () {
-    values[JsEnvPolicy.allowlistKey] = 'MY_CUSTOM';
-    values['MY_CUSTOM'] = 'hello';
-    expect(get('MY_CUSTOM')['value'], 'hello');
+    _values[JsEnvPolicy.allowlistKey] = 'MY_CUSTOM';
+    _values['MY_CUSTOM'] = 'hello';
+    expect(_get('MY_CUSTOM')['value'], 'hello');
   });
 
   test('allowlisted secret-looking name stays refused', () {
-    values[JsEnvPolicy.allowlistKey] = 'JIRA_API_TOKEN';
-    values['JIRA_API_TOKEN'] = 'REAL-SECRET';
-    expect(tools.envGet('JIRA_API_TOKEN'), isNot(contains('REAL-SECRET')));
-    expect(get('JIRA_API_TOKEN').containsKey('error'), isTrue);
+    _values[JsEnvPolicy.allowlistKey] = 'JIRA_API_TOKEN';
+    _values['JIRA_API_TOKEN'] = 'REAL-SECRET';
+    expect(_tools.envGet('JIRA_API_TOKEN'), isNot(contains('REAL-SECRET')));
+    expect(_get('JIRA_API_TOKEN').containsKey('error'), isTrue);
   });
 
   test(
@@ -80,23 +89,23 @@ void main() {
     final secrets = PropertyNames.all.where(JsEnvPolicy.looksSecret).toList();
     expect(secrets, isNotEmpty);
     final secretValues = {for (final s in secrets) s: 'SECRET-$s-VALUE'};
-    values.addAll(secretValues);
-    values[JsEnvPolicy.allowlistKey] = secrets.join(',');
+    _values.addAll(secretValues);
+    _values[JsEnvPolicy.allowlistKey] = secrets.join(',');
     final sweep = StringBuffer();
     for (final s in secrets) {
-      sweep.write(tools.envGet(s));
+      sweep.write(_tools.envGet(s));
     }
-    sweep.write(tools.envList());
+    sweep.write(_tools.envList());
     for (final value in secretValues.values) {
       expect(sweep.toString(), isNot(contains(value)));
     }
   });
 
-  test('env_list returns names only, never values', () {
-    values['ADO_PROJECT'] = 'VALUE-SHOULD-NOT-LEAK';
-    values['JIRA_API_TOKEN'] = 'TOKEN-SHOULD-NOT-LEAK';
-    values[JsEnvPolicy.allowlistKey] = 'MY_CUSTOM,JIRA_API_TOKEN';
-    final out = tools.envList();
+  test('env_list returns names only, never _values', () {
+    _values['ADO_PROJECT'] = 'VALUE-SHOULD-NOT-LEAK';
+    _values['JIRA_API_TOKEN'] = 'TOKEN-SHOULD-NOT-LEAK';
+    _values[JsEnvPolicy.allowlistKey] = 'MY_CUSTOM,JIRA_API_TOKEN';
+    final out = _tools.envList();
     expect(out, isNot(contains('VALUE-SHOULD-NOT-LEAK')));
     expect(out, isNot(contains('TOKEN-SHOULD-NOT-LEAK')));
     final json = jsonDecode(out) as Map<String, dynamic>;
@@ -108,21 +117,23 @@ void main() {
   });
 
   test('env_list omits ignoredSecretLikeNames when nothing was rejected', () {
-    final json = jsonDecode(tools.envList()) as Map<String, dynamic>;
+    final json = jsonDecode(_tools.envList()) as Map<String, dynamic>;
     expect(json.containsKey('ignoredSecretLikeNames'), isFalse);
   });
+}
 
+void _defineCatalogTests() {
   test('catalog exposes env_get and env_list in the env integration', () {
     final defs = envTools();
     expect(defs.map((d) => d.name), ['env_get', 'env_list']);
     expect(defs.every((d) => d.integration == 'env'), isTrue);
-    expect(tools.handlers.keys, ['env_get', 'env_list']);
+    expect(_tools.handlers.keys, ['env_get', 'env_list']);
   });
 
   test('handlers dispatch through the same contract', () {
-    values['ADO_PROJECT'] = 'PROJ';
-    final out = tools.handlers['env_get']!({'name': 'ADO_PROJECT'});
+    _values['ADO_PROJECT'] = 'PROJ';
+    final out = _tools.handlers['env_get']!({'name': 'ADO_PROJECT'});
     expect(jsonDecode(out)['value'], 'PROJ');
-    expect(jsonDecode(tools.handlers['env_list']!({}))['names'], isNotEmpty);
+    expect(jsonDecode(_tools.handlers['env_list']!({}))['names'], isNotEmpty);
   });
 }

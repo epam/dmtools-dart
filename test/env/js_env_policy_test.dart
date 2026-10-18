@@ -4,6 +4,12 @@ import 'package:test/test.dart';
 
 /// Java `JsEnvPolicyTest` parity: one secret-aware policy for env_get/env_list.
 void main() {
+  _defineLooksSecretTests();
+  _defineDefaultAllowedTests();
+  _defineAllowlistTests();
+}
+
+void _defineLooksSecretTests() {
   group('looksSecret', () {
     test('credential names are secret', () {
       for (final name in [
@@ -46,7 +52,9 @@ void main() {
       expect(JsEnvPolicy.looksSecret('   '), isTrue);
     });
   });
+}
 
+void _defineDefaultAllowedTests() {
   group('defaultAllowed', () {
     test('contains every declared non-secret name', () {
       for (final name in PropertyNames.all) {
@@ -72,7 +80,9 @@ void main() {
       }
     });
   });
+}
 
+void _defineAllowlistTests() {
   group('projectAllowed / rejectedFromAllowlist', () {
     test('accepts names, drops secret-looking ones', () {
       const raw = 'MY_SETTING, jira_api_token ,OTHER_VAR';

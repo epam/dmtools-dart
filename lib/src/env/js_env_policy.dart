@@ -52,28 +52,28 @@ class JsEnvPolicy {
   static bool looksSecret(String? name) {
     if (name == null || name.trim().isEmpty) return true;
     final words = name.trim().toUpperCase().split('_');
-    // Limits and counters that merely contain TOKEN(S) are configuration.
-    if (words.contains('MAX') &&
-        (words.contains('TOKENS') || words.contains('TOKEN'))) {
-      return false;
-    }
-    if (words.contains('TOKEN') &&
+    if (_isTokenLimitOrCount(words)) return false;
+    return words.any(_isSecretWord);
+  }
+
+  /// Limits and counters that merely contain TOKEN(S) are configuration.
+  static bool _isTokenLimitOrCount(List<String> words) {
+    final isMaxTokens = words.contains('MAX') &&
+        (words.contains('TOKENS') || words.contains('TOKEN'));
+    final isTokenLimit = words.contains('TOKEN') &&
         (words.contains('LIMIT') ||
             words.contains('LIMITS') ||
-            words.contains('COUNT'))) {
-      return false;
-    }
-    for (final word in words) {
-      if (_secretWords.contains(word)) return true;
-      if (word.endsWith('TOKEN') ||
-          word.endsWith('SECRET') ||
-          word.endsWith('PASSWORD') ||
-          word.endsWith('APIKEY')) {
-        return true;
-      }
-    }
-    return false;
+            words.contains('COUNT'));
+    return isMaxTokens || isTokenLimit;
   }
+
+  /// True when a single `_`-separated word marks the name as a credential.
+  static bool _isSecretWord(String word) =>
+      _secretWords.contains(word) ||
+      word.endsWith('TOKEN') ||
+      word.endsWith('SECRET') ||
+      word.endsWith('PASSWORD') ||
+      word.endsWith('APIKEY');
 
   /// Built-in allowlist: every declared [PropertyNames] constant minus the
   /// secrets, plus [allowlistKey].

@@ -91,25 +91,7 @@ void _testConfigDetectedListing() {
       );
     });
 
-    test(
-      'config-detected list includes jenkins once JENKINS_* is set',
-      () async {
-        _writeEnv('''
-JENKINS_BASE_PATH=https://jenkins.example.com
-JENKINS_USER=ci
-JENKINS_API_TOKEN=tok
-''');
-        expect(await _dispatcher.dispatch(['list']), 0);
-        final jenkins = _decodedTools()
-            .where((t) => t['integration'] == 'jenkins')
-            .toList();
-        expect(jenkins, isNotEmpty);
-        expect(
-          jenkins.every((t) => (t['name'] as String).startsWith('jenkins_')),
-          isTrue,
-        );
-      },
-    );
+    _testJenkinsConfigDetection();
 
     test(
       'DMTOOLS_INTEGRATIONS still wins verbatim over config detection',
@@ -225,4 +207,25 @@ List<Map<String, dynamic>> _decodedTools({bool lastLineOnly = false}) {
     lastLineOnly ? _lines.last : _lines.join('\n'),
   ) as Map<String, dynamic>;
   return (decoded['tools'] as List).cast<Map<String, dynamic>>();
+}
+
+void _testJenkinsConfigDetection() {
+  test(
+    'config-detected list includes jenkins once JENKINS_* is set',
+    () async {
+      _writeEnv('''
+JENKINS_BASE_PATH=https://jenkins.example.com
+JENKINS_USER=ci
+JENKINS_API_TOKEN=tok
+''');
+      expect(await _dispatcher.dispatch(['list']), 0);
+      final jenkins =
+          _decodedTools().where((t) => t['integration'] == 'jenkins').toList();
+      expect(jenkins, isNotEmpty);
+      expect(
+        jenkins.every((t) => (t['name'] as String).startsWith('jenkins_')),
+        isTrue,
+      );
+    },
+  );
 }

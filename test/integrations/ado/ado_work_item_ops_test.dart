@@ -208,19 +208,7 @@ void _attachTests() {
 void _resolveFieldNameTests() {
   group('resolveAdoFieldName', () {
     test('maps Jira-style names (dm.ai #707 parity)', () {
-      const expected = {
-        'key': 'System.Id',
-        'status': 'System.State',
-        'labels': 'System.Tags',
-        'parent': 'System.Parent',
-        'updated': 'System.ChangedDate',
-        'created': 'System.CreatedDate',
-        'issuetype': 'System.WorkItemType',
-        'assignee': 'System.AssignedTo',
-        'reporter': 'System.CreatedBy',
-        'project': 'System.TeamProject',
-      };
-      expected.forEach((name, ref) {
+      _jiraStyleNames.forEach((name, ref) {
         expect(resolveAdoFieldName(name), ref, reason: name);
       });
     });
@@ -266,3 +254,16 @@ void _resolveFieldNameTests() {
     });
   });
 }
+
+const _jiraStyleNames = {
+  'key': 'System.Id',
+  'status': 'System.State',
+  'labels': 'System.Tags',
+  'parent': 'System.Parent',
+  'updated': 'System.ChangedDate',
+  'created': 'System.CreatedDate',
+  'issuetype': 'System.WorkItemType',
+  'assignee': 'System.AssignedTo',
+  'reporter': 'System.CreatedBy',
+  'project': 'System.TeamProject',
+};

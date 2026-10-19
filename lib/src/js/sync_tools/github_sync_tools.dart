@@ -432,6 +432,10 @@ String _getJobLogs(GhSyncConfig c, Map<String, dynamic> a) {
   final body = syncBodyOrError(SyncHttpClient.get(
     '${c.baseUrl}/${_repoSeg(a)}/actions/jobs/${syncAsStr(a['jobId'])}/logs',
     headers: c.headers,
+    // The endpoint 302s to a signed blob URL; without following it the
+    // body is empty ("job log came back empty", rework legs blind).
+    // curl -L and Dart HttpClient both drop Authorization cross-origin.
+    followRedirects: true,
   ));
   // Always JSON-encode (Java parity: the raw string, even an error body);
   // the JS side try-parses and falls back to the raw string.

@@ -256,6 +256,26 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             )
             return
 
+        # Job logs for job 302: like the real API, 302 to a signed blob
+        # URL — the client must follow it (live: empty job logs).
+        if base.endswith("/actions/jobs/302/logs"):
+            self._record(body)
+            self.send_response(302)
+            self.send_header(
+                "Location",
+                "http://127.0.0.1:%d/blob/job-302.txt"
+                % self.server.server_address[1],
+            )
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if base == "/blob/job-302.txt":
+            self._record(body)
+            self._respond(
+                200, "##[error]redirected blob log body\n", "text/plain"
+            )
+            return
+
         # Workflow run logs: 302 redirect to the ZIP archive.
         if base.endswith("/actions/runs/55/logs"):
             self._record(body)

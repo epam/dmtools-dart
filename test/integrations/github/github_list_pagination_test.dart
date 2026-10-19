@@ -50,7 +50,13 @@ void main() {
       );
       expect(f.adapter.calls, hasLength(2));
     });
+  });
+  _edgeTests();
+}
 
+/// Failures, short pages, and empty/non-list bodies.
+void _edgeTests() {
+  group('GithubClient pagination edges (gh-388)', () {
     test('a later-page failure keeps the pages already collected', () async {
       final f = mockGithub(_paged(failLater: true));
       expect(await f.client.listBranches('o', 'r'), hasLength(100));

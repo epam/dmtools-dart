@@ -46,9 +46,9 @@ String? _resolveRedirect(String url, Map<String, String> headers) {
   final dir = Directory.systemTemp.createTempSync('dmtools_gh_redir_');
   try {
     final dump = File('${dir.path}/headers');
-    final headerFile = File(
-      '${dir.path}/request_headers',
-    )..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers), flush: true);
+    final headerFile = File('${dir.path}/request_headers')
+      ..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers),
+          flush: true);
     final result = Process.runSync('curl', [
       '-s',
       '-D',
@@ -100,24 +100,24 @@ String? _headerValue(String dump, String name) {
 /// trailing bytes after the last newline.
 List<int>? _downloadBytes(String url) {
   final result = Process.runSync(
-      'curl',
-      [
-        '-s',
-        '-w',
-        '\n%{http_code}',
-        '--connect-timeout',
-        '10',
-        '--max-time',
-        '60',
-        url,
-      ],
-      stdoutEncoding: null);
+    'curl',
+    [
+      '-s',
+      '-w',
+      '\n%{http_code}',
+      '--connect-timeout',
+      '10',
+      '--max-time',
+      '60',
+      url,
+    ],
+    stdoutEncoding: null,
+  );
   final bytes = (result.stdout as List<dynamic>).cast<int>();
   final lastNewline = bytes.lastIndexOf(10);
   if (lastNewline < 0) return null;
-  final status = int.tryParse(
-    String.fromCharCodes(bytes.sublist(lastNewline + 1)),
-  );
+  final status =
+      int.tryParse(String.fromCharCodes(bytes.sublist(lastNewline + 1)));
   if (status == null || status < 200 || status >= 300) return null;
   return bytes.sublist(0, lastNewline);
 }

@@ -11,7 +11,7 @@ import 'sync_request_helpers.dart';
 /// Both comment listings of one PR.
 typedef PrCommentPages = ({
   List<Map<String, dynamic>> inline,
-  List<Map<String, dynamic>> issue,
+  List<Map<String, dynamic>> issue
 });
 
 /// Fetches all pages of a comment listing endpoint (100 per page).
@@ -43,16 +43,12 @@ List<Map<String, dynamic>> fetchCommentPages({
 }) {
   final out = <Map<String, dynamic>>[];
   for (var page = 1;; page++) {
-    final resp = SyncHttpClient.get(
-      '$urlBase?per_page=100&page=$page',
-      headers: headers,
-    );
+    final resp = SyncHttpClient.get('$urlBase?per_page=100&page=$page',
+        headers: headers);
     if (!resp.isOk) {
       if (tolerateNotFound && resp.statusCode == 404) break;
-      throw StateError(
-        'HTTP ${resp.statusCode} fetching comments '
-        '(page $page): ${resp.body}',
-      );
+      throw StateError('HTTP ${resp.statusCode} fetching comments '
+          '(page $page): ${resp.body}');
     }
     final decoded = syncTryDecode(resp.body);
     if (decoded is! List) break;
@@ -77,10 +73,7 @@ PrCommentPages prCommentPages({
 }) =>
     (
       inline: fetchCommentPages(
-        headers: headers,
-        urlBase: inlineUrl,
-        tolerateNotFound: true,
-      ),
+          headers: headers, urlBase: inlineUrl, tolerateNotFound: true),
       issue: fetchCommentPages(headers: headers, urlBase: issueUrl),
     );
 
@@ -97,10 +90,7 @@ PrCommentPages prCommentPages({
     return (
       error: null,
       pages: prCommentPages(
-        headers: headers,
-        inlineUrl: inlineUrl,
-        issueUrl: issueUrl,
-      ),
+          headers: headers, inlineUrl: inlineUrl, issueUrl: issueUrl),
     );
   } on StateError catch (e) {
     return (error: syncErr(e.message), pages: null);

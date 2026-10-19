@@ -20,9 +20,7 @@ import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/jira/jira_utils.dart';
 import '../sync_http_client.dart';
-
 import 'package:dmtools/src/integrations/jira/markdown_to_jira_markup.dart';
-
 import 'tracker_github_router.dart';
 
 part 'jira_sync_http_helpers.dart';
@@ -106,9 +104,9 @@ class JiraSyncTools {
   /// `TrackerClient.TextType == MARKDOWN` (gh-191, P6-JSY-09), and
   /// `BasicJiraClient.getTextType()` always returns MARKDOWN for Jira.
   String _postComment(Map<String, dynamic> args) => _run((config) {
-        final body = jsonEncode({
-          'body': markdownToJiraMarkup(_asStr(args['comment'])),
-        });
+        final body = jsonEncode(
+          {'body': markdownToJiraMarkup(_asStr(args['comment']))},
+        );
         return _postBody(
           config,
           '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
@@ -138,10 +136,8 @@ class JiraSyncTools {
   /// error-carrying first page surfaces as an error before the walk; the
   /// walk itself then follows Java's break order per page.
   String _cloudSearchPages(_JiraSyncConfig config, String jql, String fields) {
-    final page = _fetchSearchPage(
-      config,
-      _searchJqlUrl(config, jql, fields, ''),
-    );
+    final page =
+        _fetchSearchPage(config, _searchJqlUrl(config, jql, fields, ''));
     if (page is String) return page;
     final firstError = _firstPageError(page);
     if (firstError != null) return firstError;
@@ -188,10 +184,8 @@ class JiraSyncTools {
   /// first page surfaces as an error, `total == 0` returns early, and the
   /// walk follows Java's loop conditions with per-page counter refresh.
   String _serverSearchPages(_JiraSyncConfig config, String jql, String fields) {
-    final page = _fetchSearchPage(
-      config,
-      _legacySearchUrl(config, jql, fields, 0),
-    );
+    final page =
+        _fetchSearchPage(config, _legacySearchUrl(config, jql, fields, 0));
     if (page is String) return page;
     final firstError = _firstPageError(page);
     if (firstError != null) return firstError;
@@ -260,9 +254,8 @@ class JiraSyncTools {
   /// [_bodyOrError] (curl error, non-2xx status, or a non-JSON body) so
   /// callers can map it to the Java exception paths.
   dynamic _fetchSearchPage(_JiraSyncConfig config, String url) {
-    final result = _bodyOrError(
-      SyncHttpClient.get(url, headers: config.headers),
-    );
+    final result =
+        _bodyOrError(SyncHttpClient.get(url, headers: config.headers));
     final decoded = _tryDecode(result);
     if (decoded == null) return null;
     return decoded is Map<String, dynamic> && !decoded.containsKey('error')
@@ -343,10 +336,8 @@ class JiraSyncTools {
   String _moveToStatus(Map<String, dynamic> args) => _run((config) {
         final key = _asStr(args['key']);
         final status = _asStr(args['statusName']);
-        final result = _getJsonOrError(
-          '${config.baseUrl}/issue/$key/transitions',
-          config,
-        );
+        final result =
+            _getJsonOrError('${config.baseUrl}/issue/$key/transitions', config);
         if (result is String) return _err(result);
         final list =
             (result as Map<String, dynamic>)['transitions'] as List? ?? [];
@@ -374,8 +365,10 @@ class JiraSyncTools {
       _run((config) => _updateFieldFor(config, args));
 
   /// `jira_update_description` — PUT `issue/{key}` with the description.
-  String _updateDescription(Map<String, dynamic> args) =>
-      _putIssueFields(args, {'description': _asStr(args['description'])});
+  String _updateDescription(Map<String, dynamic> args) => _putIssueFields(
+        args,
+        {'description': _asStr(args['description'])},
+      );
 
   /// `jira_get_transitions` — GET `issue/{key}/transitions`.
   String _getTransitions(Map<String, dynamic> args) => _run((config) {
@@ -433,9 +426,12 @@ class JiraSyncTools {
       });
 
   /// `jira_set_priority` — PUT `issue/{key}` with `priority:{name}`.
-  String _setPriority(Map<String, dynamic> args) => _putIssueFields(args, {
-        'priority': {'name': _asStr(args['priority'])},
-      });
+  String _setPriority(Map<String, dynamic> args) => _putIssueFields(
+        args,
+        {
+          'priority': {'name': _asStr(args['priority'])},
+        },
+      );
 
   /// `jira_create_ticket_with_parent` — POST `issue` with a parent key.
   ///
@@ -460,7 +456,10 @@ class JiraSyncTools {
           if (parent == null) {
             return _err('Failed to fetch parent ticket $parentKey');
           }
-          return _postIssueCreate({...base, 'parent': parent});
+          return _postIssueCreate({
+            ...base,
+            'parent': parent,
+          });
         });
       });
 
@@ -511,7 +510,10 @@ class JiraSyncTools {
                 'outwardIssue': another,
               };
         return _postBody(
-            config, '${config.baseUrl}/issueLink', jsonEncode(body));
+          config,
+          '${config.baseUrl}/issueLink',
+          jsonEncode(body),
+        );
       });
 
   /// `jira_get_field_custom_code` — resolve a display name to a field id.
@@ -569,10 +571,7 @@ class JiraSyncTools {
 
   /// Whether [ticketKey] already has an attachment named [name].
   bool _attachmentExists(
-    _JiraSyncConfig config,
-    String ticketKey,
-    String name,
-  ) {
+      _JiraSyncConfig config, String ticketKey, String name) {
     final decoded = _getJson(
       config,
       '${config.baseUrl}/issue/$ticketKey?fields=attachment,summary',
@@ -616,10 +615,8 @@ class JiraSyncTools {
     final dir = Directory.systemTemp.createTempSync('dmtools_attach_');
     try {
       final headerFile = File('${dir.path}/headers')
-        ..writeAsStringSync(
-          SyncHttpClient.renderHeaderFile(headers),
-          flush: true,
-        );
+        ..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers),
+            flush: true);
       final result = Process.runSync(
           'curl',
           [
@@ -671,10 +668,8 @@ class JiraSyncTools {
   /// (non-2xx, malformed JSON, curl error). Callers must abort rather than
   /// PUT an empty set — the failure path is what protects existing labels.
   List<String>? _fetchLabels(_JiraSyncConfig config, String key) {
-    final decoded = _getJson(
-      config,
-      '${config.baseUrl}/issue/$key?fields=labels',
-    );
+    final decoded =
+        _getJson(config, '${config.baseUrl}/issue/$key?fields=labels');
     if (decoded == null) return null;
     final fields = decoded['fields'] as Map<String, dynamic>? ?? {};
     return List<String>.from(fields['labels'] as List? ?? []);
@@ -720,25 +715,20 @@ class JiraSyncTools {
 
   /// PUTs `issue/{key}` with a `fields` update payload.
   String _putIssueFields(
-    Map<String, dynamic> args,
-    Map<String, dynamic> fields,
-  ) =>
-      _run(
-        (config) => _putBody(
-          config,
-          '${config.baseUrl}/issue/${_asStr(args['key'])}',
-          jsonEncode({'fields': fields}),
-        ),
-      );
+          Map<String, dynamic> args, Map<String, dynamic> fields) =>
+      _run((config) => _putBody(
+            config,
+            '${config.baseUrl}/issue/${_asStr(args['key'])}',
+            jsonEncode({'fields': fields}),
+          ));
 
   /// POSTs a create payload (`{fields: …}`) to `issue`.
-  String _postIssueCreate(Map<String, dynamic> fields) => _run(
-        (config) => _postBody(
-          config,
-          '${config.baseUrl}/issue',
-          jsonEncode({'fields': fields}),
-        ),
-      );
+  String _postIssueCreate(Map<String, dynamic> fields) =>
+      _run((config) => _postBody(
+            config,
+            '${config.baseUrl}/issue',
+            jsonEncode({'fields': fields}),
+          ));
 
   /// The shared create fields (project/issuetype/summary, plus description
   /// when given, plus the gh-427 `labels` extension when given) — the Java

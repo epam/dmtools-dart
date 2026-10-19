@@ -161,10 +161,8 @@ class _Converter {
     if (panel == null) return false;
     final title = panel.group(1)?.trim();
     final rest = _convertText(line.substring(panel.end).trim());
-    _out.add(
-      '> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
-          .trimRight(),
-    );
+    _out.add('> ${title == null || title.isEmpty ? '' : '**$title** '}$rest'
+        .trimRight());
     _inPanel = true;
     return true;
   }

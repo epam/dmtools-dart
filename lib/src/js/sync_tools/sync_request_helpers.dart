@@ -67,9 +67,9 @@ SyncHttpResponse syncCurlStaged(
 }) {
   final dir = Directory.systemTemp.createTempSync('dmtools_sync_curl_');
   try {
-    final headerFile = File(
-      '${dir.path}/headers',
-    )..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers), flush: true);
+    final headerFile = File('${dir.path}/headers')
+      ..writeAsStringSync(SyncHttpClient.renderHeaderFile(headers),
+          flush: true);
     final args = [
       '-s',
       '-X',

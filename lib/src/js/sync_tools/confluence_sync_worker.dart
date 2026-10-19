@@ -101,10 +101,8 @@ Future<void> bootConfluenceSyncPool(
   try {
     await (pool ?? confluenceSyncWorkerPool).boot();
   } catch (e) {
-    onError(
-      'dmtools: Confluence worker pool boot failed '
-      '(confluence tools run sequentially): $e',
-    );
+    onError('dmtools: Confluence worker pool boot failed '
+        '(confluence tools run sequentially): $e');
   }
 }
 
@@ -117,22 +115,18 @@ Map<String, dynamic>? _runConfluenceJob(
 ) {
   switch (kind) {
     case _kJobHttpGet:
-      return _httpJobEnvelope(
-        SyncHttpClient.get(
-          args['url'] as String,
-          headers: _argsHeaders(args),
-          followRedirects: args['followRedirects'] == true,
-        ),
-      );
+      return _httpJobEnvelope(SyncHttpClient.get(
+        args['url'] as String,
+        headers: _argsHeaders(args),
+        followRedirects: args['followRedirects'] == true,
+      ));
     case _kJobAttachmentGet:
-      return _httpJobEnvelope(
-        fetchConfluenceAttachmentWithRetry(
-          args['url'] as String,
-          _argsHeaders(args),
-          baseDelayMs: args['baseDelayMs'] as int? ??
-              confluenceAttachmentRetryBaseDelayMs,
-        ),
-      );
+      return _httpJobEnvelope(fetchConfluenceAttachmentWithRetry(
+        args['url'] as String,
+        _argsHeaders(args),
+        baseDelayMs:
+            args['baseDelayMs'] as int? ?? confluenceAttachmentRetryBaseDelayMs,
+      ));
     case _kJobResolve:
       return _resolveContentJob(args);
     default:
@@ -205,7 +199,9 @@ SyncHttpResponse? _httpJobResponse(Map<String, dynamic>? envelope) {
 
 /// Runs [jobs] on the Confluence pool, or inline — in input order, one
 /// at a time on the calling isolate — when the pool is not booted.
-List<Map<String, dynamic>?> _runConfluenceParallel(List<SyncParallelJob> jobs) {
+List<Map<String, dynamic>?> _runConfluenceParallel(
+  List<SyncParallelJob> jobs,
+) {
   final pool = confluenceSyncWorkerPool;
   if (pool.ready) return pool.run(jobs);
   return <Map<String, dynamic>?>[for (final job in jobs) _runJobInline(job)];

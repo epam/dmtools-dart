@@ -153,9 +153,11 @@ String _postIssueComment(
   Map<String, dynamic> a,
   dynamic text,
 ) =>
-    _postJson(c, '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments', {
-      'body': syncAsStr(text),
-    });
+    _postJson(
+      c,
+      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
+      {'body': syncAsStr(text)},
+    );
 
 /// `github_add_pr_label` — POST `repos/{w}/{r}/issues/{id}/labels`.
 String _addPrLabel(GhSyncConfig c, Map<String, dynamic> a) => _postJson(
@@ -266,9 +268,7 @@ String _getPrConversations(GhSyncConfig c, Map<String, dynamic> a) {
 /// Both PR comment listings for [a]'s pull request, or a sync tool error
 /// JSON on a non-OK page.
 ({String? error, PrCommentPages? pages}) _prCommentPagesOrError(
-  GhSyncConfig c,
-  Map<String, dynamic> a,
-) =>
+        GhSyncConfig c, Map<String, dynamic> a) =>
     prCommentPagesOrError(
       headers: c.headers,
       inlineUrl: '${c.baseUrl}/${_prSeg(a)}/comments',
@@ -408,7 +408,11 @@ void _submitPendingReview(GhSyncConfig c, Map<String, dynamic> a) {
 }
 
 /// POSTs a GraphQL `query` (+ optional [variables]) to `{base}/graphql`.
-String _graphQl(GhSyncConfig c, String query, Map<String, dynamic>? variables) {
+String _graphQl(
+  GhSyncConfig c,
+  String query,
+  Map<String, dynamic>? variables,
+) {
   final body = <String, dynamic>{'query': query};
   if (variables != null) body['variables'] = variables;
   return _postJson(c, '${c.baseUrl}/graphql', body);
@@ -425,12 +429,10 @@ String _graphQl(GhSyncConfig c, String query, Map<String, dynamic>? variables) {
 /// callback returned invalid JSON" and left rework legs blind (no
 /// ci_failures_full.log) — dart #414 burned its 3-round rework cap.
 String _getJobLogs(GhSyncConfig c, Map<String, dynamic> a) {
-  final body = syncBodyOrError(
-    SyncHttpClient.get(
-      '${c.baseUrl}/${_repoSeg(a)}/actions/jobs/${syncAsStr(a['jobId'])}/logs',
-      headers: c.headers,
-    ),
-  );
+  final body = syncBodyOrError(SyncHttpClient.get(
+    '${c.baseUrl}/${_repoSeg(a)}/actions/jobs/${syncAsStr(a['jobId'])}/logs',
+    headers: c.headers,
+  ));
   // Always JSON-encode (Java parity: the raw string, even an error body);
   // the JS side try-parses and falls back to the raw string.
   return jsonEncode(body);
@@ -451,7 +453,10 @@ String _listWorkflowRuns(GhSyncConfig c, Map<String, dynamic> a) {
   addIf('status', syncAsStr(a['status']).trim());
   addIf('per_page', syncAsStr(a['perPage']).trim());
   addIf('page', syncAsStr(a['page']).trim());
-  addIf('created', Uri.encodeQueryComponent(syncAsStr(a['created']).trim()));
+  addIf(
+    'created',
+    Uri.encodeQueryComponent(syncAsStr(a['created']).trim()),
+  );
   final suffix = query.isEmpty ? '' : '?${query.join('&')}';
   return syncBodyOrError(
     SyncHttpClient.get('${c.baseUrl}/$base$suffix', headers: c.headers),
@@ -464,7 +469,9 @@ String _listWorkflowRuns(GhSyncConfig c, Map<String, dynamic> a) {
 /// plain String, not JSON).
 String _triggerWorkflow(GhSyncConfig c, Map<String, dynamic> a) {
   final workflowId = syncAsStr(a['workflowId']);
-  final body = <String, dynamic>{'ref': _orDefault(a['ref'], 'main')};
+  final body = <String, dynamic>{
+    'ref': _orDefault(a['ref'], 'main'),
+  };
   final inputs = syncAsStr(a['inputs']).trim();
   final decodedInputs = inputs.isEmpty ? null : syncTryDecode(inputs);
   if (decodedInputs is Map) body['inputs'] = decodedInputs;
@@ -483,10 +490,8 @@ String _triggerWorkflow(GhSyncConfig c, Map<String, dynamic> a) {
   // success message (Java parity) is returned JSON-encoded and surfaces
   // to JS as an unquoted string — raw text here breaks the QuickJS bridge
   // with "host callback returned invalid JSON" (live: #687 SM dispatch).
-  return jsonEncode(
-    "Workflow '$workflowId' triggered successfully on "
-    '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}',
-  );
+  return jsonEncode("Workflow '$workflowId' triggered successfully on "
+      '${syncAsStr(a['workspace'])}/${syncAsStr(a['repository'])}');
 }
 
 /// `github_get_workflow_run_logs` — download + extract the run's log ZIP.
@@ -585,7 +590,11 @@ String _createDraftRelease(
 /// `github_upload_release_asset` — validates then binary-uploads the file
 /// (see `github_release_assets.dart`).
 String _uploadReleaseAsset(GhSyncConfig c, Map<String, dynamic> a) =>
-    uploadReleaseAsset(baseUrl: c.baseUrl, headers: c.headers, args: a);
+    uploadReleaseAsset(
+      baseUrl: c.baseUrl,
+      headers: c.headers,
+      args: a,
+    );
 
 // ── Shared helpers ─────────────────────────────────────────────────────
 
@@ -635,25 +644,21 @@ String _submitPrReview(GhSyncConfig c, Map<String, dynamic> a) {
 /// `repos/{w}/{r}/pulls/{id}/reviews/{reviewId}/dismissals` (Java #495).
 /// Always sends `event: DISMISS` alongside the message.
 String _dismissPrReview(GhSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(
-      SyncHttpClient.put(
-        '${_prUrl(c, a)}/reviews/${syncAsStr(a['reviewId'])}/dismissals',
-        headers: c.headers,
-        body: jsonEncode({
-          'message': syncAsStr(a['message']),
-          'event': 'DISMISS',
-        }),
-      ),
-    );
+    syncBodyOrError(SyncHttpClient.put(
+      '${_prUrl(c, a)}/reviews/${syncAsStr(a['reviewId'])}/dismissals',
+      headers: c.headers,
+      body: jsonEncode({
+        'message': syncAsStr(a['message']),
+        'event': 'DISMISS',
+      }),
+    ));
 
 /// GETs `{base}/{repoSeg}/{suffix}` and returns the response body.
 String _getRepoPath(GhSyncConfig c, Map<String, dynamic> a, String suffix) =>
-    syncBodyOrError(
-      SyncHttpClient.get(
-        '${c.baseUrl}/${_repoSeg(a)}/$suffix',
-        headers: c.headers,
-      ),
-    );
+    syncBodyOrError(SyncHttpClient.get(
+      '${c.baseUrl}/${_repoSeg(a)}/$suffix',
+      headers: c.headers,
+    ));
 
 /// `repos/{workspace}/{repository}/pulls/{pullRequestId}` segment.
 String _prSeg(Map<String, dynamic> a) => '${_repoSeg(a)}/pulls/${_prId(a)}';

@@ -67,12 +67,10 @@ class BitriseSyncTools {
   String _listBuilds(Map<String, dynamic> args) => syncWithConfig(
         _config(),
         _notConfiguredError,
-        (config) => syncBodyOrError(
-          SyncHttpClient.get(
-            '${_buildsPath(config, args)}${_buildListQuery(args)}',
-            headers: config.headers,
-          ),
-        ),
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          '${_buildsPath(config, args)}${_buildListQuery(args)}',
+          headers: config.headers,
+        )),
       );
 
   /// `bitrise_trigger_build` — POST `apps/{appSlug}/builds` with
@@ -81,16 +79,14 @@ class BitriseSyncTools {
       syncWithConfig(_config(), _notConfiguredError, (config) {
         final guardError = _writesAllowed('bitrise_trigger_build');
         if (guardError != null) return guardError;
-        return syncBodyOrError(
-          SyncHttpClient.post(
-            _buildsPath(config, args),
-            headers: config.headers,
-            body: jsonEncode({
-              'build_params': _buildParams(args),
-              'hook_info': {'type': 'bitrise'},
-            }),
-          ),
-        );
+        return syncBodyOrError(SyncHttpClient.post(
+          _buildsPath(config, args),
+          headers: config.headers,
+          body: jsonEncode({
+            'build_params': _buildParams(args),
+            'hook_info': {'type': 'bitrise'},
+          }),
+        ));
       });
 
   /// `bitrise_abort_build` — POST `apps/{appSlug}/builds/{buildSlug}/abort`
@@ -99,13 +95,11 @@ class BitriseSyncTools {
       syncWithConfig(_config(), _notConfiguredError, (config) {
         final guardError = _writesAllowed('bitrise_abort_build');
         if (guardError != null) return guardError;
-        return syncBodyOrError(
-          SyncHttpClient.post(
-            '${_buildsPath(config, args)}/${_slug(args['buildSlug'])}/abort',
-            headers: config.headers,
-            body: jsonEncode(_abortBody(args)),
-          ),
-        );
+        return syncBodyOrError(SyncHttpClient.post(
+          '${_buildsPath(config, args)}/${_slug(args['buildSlug'])}/abort',
+          headers: config.headers,
+          body: jsonEncode(_abortBody(args)),
+        ));
       });
 
   /// `bitrise_list_build_artifacts` — GET
@@ -113,10 +107,10 @@ class BitriseSyncTools {
   String _listBuildArtifacts(Map<String, dynamic> args) => syncWithConfig(
         _config(),
         _notConfiguredError,
-        (config) => syncBodyOrError(
-          SyncHttpClient.get(_artifactsPath(config, args),
-              headers: config.headers),
-        ),
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          _artifactsPath(config, args),
+          headers: config.headers,
+        )),
       );
 
   /// `bitrise_get_build_artifact` — GET
@@ -124,12 +118,10 @@ class BitriseSyncTools {
   String _getBuildArtifact(Map<String, dynamic> args) => syncWithConfig(
         _config(),
         _notConfiguredError,
-        (config) => syncBodyOrError(
-          SyncHttpClient.get(
-            '${_artifactsPath(config, args)}/${_slug(args['artifactSlug'])}',
-            headers: config.headers,
-          ),
-        ),
+        (config) => syncBodyOrError(SyncHttpClient.get(
+          '${_artifactsPath(config, args)}/${_slug(args['artifactSlug'])}',
+          headers: config.headers,
+        )),
       );
 
   /// Builds the `list_builds` query string from optional filters.

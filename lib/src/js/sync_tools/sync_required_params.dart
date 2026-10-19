@@ -49,7 +49,11 @@ const Map<String, List<String>> kGithubRequiredParams = {
     'branchNameRegex',
   ],
   'github_get_job_logs': ['workspace', 'repository', 'jobId'],
-  'github_get_or_create_draft_release': ['workspace', 'repository', 'tagName'],
+  'github_get_or_create_draft_release': [
+    'workspace',
+    'repository',
+    'tagName',
+  ],
   'github_get_pr': ['workspace', 'repository', 'pullRequestId'],
   'github_get_pr_activities': ['workspace', 'repository', 'pullRequestId'],
   'github_get_pr_conversations': ['workspace', 'repository', 'pullRequestId'],
@@ -98,7 +102,12 @@ const Map<String, List<String>> kGithubRequiredParams = {
     'checkRunId',
     'status',
   ],
-  'github_update_pr_comment': ['workspace', 'repository', 'commentId', 'text'],
+  'github_update_pr_comment': [
+    'workspace',
+    'repository',
+    'commentId',
+    'text',
+  ],
   'github_upload_release_asset': [
     'workspace',
     'repository',

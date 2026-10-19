@@ -125,13 +125,11 @@ class ConfluenceSyncTools {
   String _createPage(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       if (_isApiV2(config)) return _createPageV2(config, args);
-      return syncBodyOrError(
-        SyncHttpClient.post(
-          '${config.baseUrl}/content',
-          headers: config.headers,
-          body: jsonEncode(_pagePayload(args)),
-        ),
-      );
+      return syncBodyOrError(SyncHttpClient.post(
+        '${config.baseUrl}/content',
+        headers: config.headers,
+        body: jsonEncode(_pagePayload(args)),
+      ));
     });
   }
 
@@ -141,20 +139,16 @@ class ConfluenceSyncTools {
     final space = syncAsStr(args['space']);
     final spaceId = _spaceIdFromKey(config, space);
     if (spaceId == null) return syncErr(_spaceNotFound(space));
-    return syncBodyOrError(
-      SyncHttpClient.post(
-        '${_baseUrlV2(config)}/pages',
-        headers: config.headers,
-        body: jsonEncode(
-          _pagePayloadV2(
-            spaceId,
-            syncAsStr(args['title']),
-            syncAsStr(args['parentId'] ?? args['parentPageId']),
-            syncAsStr(args['body']),
-          ),
-        ),
-      ),
-    );
+    return syncBodyOrError(SyncHttpClient.post(
+      '${_baseUrlV2(config)}/pages',
+      headers: config.headers,
+      body: jsonEncode(_pagePayloadV2(
+        spaceId,
+        syncAsStr(args['title']),
+        syncAsStr(args['parentId'] ?? args['parentPageId']),
+        syncAsStr(args['body']),
+      )),
+    ));
   }
 
   /// `confluence_update_page` — PUT `content/{contentId}` with a bumped
@@ -198,9 +192,8 @@ class ConfluenceSyncTools {
     final format = syncAsStr(args['format']);
     // v2: GET /wiki/api/v2/pages?parent-id={id} (granular/scoped tokens).
     // The v2 list response carries the same `results` array shape.
-    final results = _childrenResults(
-      syncBodyOrError(_childrenResponse(config, id)),
-    );
+    final results =
+        _childrenResults(syncBodyOrError(_childrenResponse(config, id)));
     if (results == null) {
       return syncErr('Unexpected children response for $id');
     }
@@ -285,13 +278,11 @@ class ConfluenceSyncTools {
       if (existing.isNotEmpty) return jsonEncode(existing.first);
       if (_isApiV2(config))
         return _createPageV2(config, {...args, 'space': space});
-      return syncBodyOrError(
-        SyncHttpClient.post(
-          '${config.baseUrl}/content',
-          headers: config.headers,
-          body: jsonEncode(_pagePayload(args)..['space'] = {'key': space}),
-        ),
-      );
+      return syncBodyOrError(SyncHttpClient.post(
+        '${config.baseUrl}/content',
+        headers: config.headers,
+        body: jsonEncode(_pagePayload(args)..['space'] = {'key': space}),
+      ));
     });
   }
 
@@ -299,21 +290,16 @@ class ConfluenceSyncTools {
   /// title in [spaceKey] (Java `getChildrenOfContentByName`).
   String _getChildrenByName(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final found = _contentList(
-        _titleAndSpaceResponse(
-          config,
-          syncAsStr(args['contentName']),
-          syncAsStr(args['spaceKey']),
-        ),
-      );
+      final found = _contentList(_titleAndSpaceResponse(
+        config,
+        syncAsStr(args['contentName']),
+        syncAsStr(args['spaceKey']),
+      ));
       if (found.isEmpty) {
         return syncErr('Content not found: ${syncAsStr(args['contentName'])}');
       }
       return _childrenPayload(
-        config,
-        found.first['id']?.toString() ?? '',
-        args,
-      );
+          config, found.first['id']?.toString() ?? '', args);
     });
   }
 
@@ -324,9 +310,8 @@ class ConfluenceSyncTools {
   String _getContentAttachments(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
       final id = syncAsStr(args['contentId']);
-      final results = _childrenResults(
-        syncBodyOrError(_attachmentsResponse(config, id)),
-      );
+      final results =
+          _childrenResults(syncBodyOrError(_attachmentsResponse(config, id)));
       if (results == null) {
         return syncErr('Unexpected attachments response for $id');
       }
@@ -344,13 +329,11 @@ class ConfluenceSyncTools {
   /// `confluence_get_user_profile_by_id` — GET `user?accountId={userId}`.
   String _getUserProfileById(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      return syncBodyOrError(
-        SyncHttpClient.get(
-          '${config.baseUrl}/user?accountId='
-          '${Uri.encodeQueryComponent(syncAsStr(args['userId']))}',
-          headers: config.headers,
-        ),
-      );
+      return syncBodyOrError(SyncHttpClient.get(
+        '${config.baseUrl}/user?accountId='
+        '${Uri.encodeQueryComponent(syncAsStr(args['userId']))}',
+        headers: config.headers,
+      ));
     });
   }
 
@@ -431,36 +414,26 @@ class ConfluenceSyncTools {
       return syncErr('Failed to fetch version for $contentId');
     }
     if (_isApiV2(config)) {
-      return syncBodyOrError(
-        SyncHttpClient.put(
-          '${_baseUrlV2(config)}/pages/$contentId',
-          headers: config.headers,
-          body: jsonEncode(
-            _updatePayloadV2(
-              contentId,
-              syncAsStr(args['title']),
-              syncAsStr(args['body']),
-              version + 1,
-              historyComment,
-            ),
-          ),
-        ),
-      );
-    }
-    return syncBodyOrError(
-      SyncHttpClient.put(
-        '${config.baseUrl}/content/$contentId',
+      return syncBodyOrError(SyncHttpClient.put(
+        '${_baseUrlV2(config)}/pages/$contentId',
         headers: config.headers,
-        body: jsonEncode(
-          _updatePayload(
-            args,
-            contentId,
-            version + 1,
-            historyComment: historyComment,
-          ),
-        ),
+        body: jsonEncode(_updatePayloadV2(
+          contentId,
+          syncAsStr(args['title']),
+          syncAsStr(args['body']),
+          version + 1,
+          historyComment,
+        )),
+      ));
+    }
+    return syncBodyOrError(SyncHttpClient.put(
+      '${config.baseUrl}/content/$contentId',
+      headers: config.headers,
+      body: jsonEncode(
+        _updatePayload(args, contentId, version + 1,
+            historyComment: historyComment),
       ),
-    );
+    ));
   }
 
   /// `confluence_upload_attachment` — multipart upload of one file with the
@@ -555,7 +528,7 @@ class ConfluenceSyncTools {
       'body': {
         'storage': {
           'value': syncAsStr(args['body']),
-          'representation': 'storage',
+          'representation': 'storage'
         },
       },
     };
@@ -647,10 +620,8 @@ SyncHttpResponse _titleAndSpaceResponse(
   String space,
 ) {
   if (_isApiV2(config)) {
-    final url = StringBuffer(
-      '${_baseUrlV2(config)}/pages?title='
-      '${Uri.encodeQueryComponent(title)}',
-    );
+    final url = StringBuffer('${_baseUrlV2(config)}/pages?title='
+        '${Uri.encodeQueryComponent(title)}');
     if (space.isNotEmpty) {
       final spaceId = _spaceIdFromKey(config, space);
       if (spaceId == null) throw StateError(_spaceNotFound(space));
@@ -687,10 +658,7 @@ List<Map<String, dynamic>> _contentList(SyncHttpResponse resp) {
 /// `ContentResult` JSONModel verbatim, and the async/MCP surface must stay
 /// shape-identical with this sync port.
 String _titleAndSpaceContent(
-  _Conf config,
-  Map<String, dynamic> args,
-  String space,
-) {
+    _Conf config, Map<String, dynamic> args, String space) {
   final resp = _titleAndSpaceResponse(config, syncAsStr(args['title']), space);
   final decoded = syncTryDecode(syncBodyOrError(resp));
   if (decoded is! Map<String, dynamic>) {
@@ -707,7 +675,11 @@ String _titleAndSpaceContent(
 }
 
 /// The first content of a title/space listing, JSON `null` when none.
-String _firstContent(_Conf config, Map<String, dynamic> args, String space) {
+String _firstContent(
+  _Conf config,
+  Map<String, dynamic> args,
+  String space,
+) {
   final list = _applyFormatToList(
     _contentList(
       _titleAndSpaceResponse(config, syncAsStr(args['title']), space),
@@ -752,9 +724,8 @@ Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
   if (resolved == null) return null;
   final (:ref, url: _) = resolved;
   if (ref is ConfluencePageIdRef) {
-    final decoded = syncTryDecode(
-      syncBodyOrError(_pageByIdResponse(config, ref.id)),
-    );
+    final decoded =
+        syncTryDecode(syncBodyOrError(_pageByIdResponse(config, ref.id)));
     return decoded is Map<String, dynamic> ? decoded : null;
   }
   if (ref is ConfluenceDisplayRef) {

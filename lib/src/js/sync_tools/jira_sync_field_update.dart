@@ -18,12 +18,11 @@ String _updateFieldFor(_JiraSyncConfig config, Map<String, dynamic> args) {
   final value = args['value'];
   if (value is String && value.isEmpty) {
     return _putBody(
-      config,
-      '${config.baseUrl}/issue/$key',
-      jsonEncode({
-        'fields': {field: null},
-      }),
-    );
+        config,
+        '${config.baseUrl}/issue/$key',
+        jsonEncode({
+          'fields': {field: null},
+        }));
   }
   final coerced = coerceJiraFieldValue(value);
   if (field.startsWith('customfield_') ||
@@ -88,12 +87,7 @@ String _updateFieldsByName(
   }
   if (fieldIds.length == 1) {
     return _singleFieldUpdateResult(
-      config,
-      key,
-      field,
-      fieldIds.single,
-      coerced,
-    );
+        config, key, field, fieldIds.single, coerced);
   }
   return _multiFieldUpdateResult(config, key, field, fieldIds, coerced);
 }
@@ -150,10 +144,8 @@ String _multiFieldUpdateResult(
       results.write('❌ Failed $fieldId: $failure\n');
     }
   }
-  results.write(
-    '\nUpdated $successCount of ${fieldIds.length} fields '
-    "with name '$field' for ticket $key",
-  );
+  results.write('\nUpdated $successCount of ${fieldIds.length} fields '
+      "with name '$field' for ticket $key");
   final failureCount = fieldIds.length - successCount;
   if (failureCount > 0) results.write(' ($failureCount failed)');
   return jsonEncode(results.toString());

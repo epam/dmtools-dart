@@ -97,12 +97,8 @@ String gitlabDownloadReleaseAsset({
       '/${_encodePathSegment(syncAsStr(args['assetName']))}';
   final target = File(syncAsStr(args['targetFilePath']));
   target.parent.createSync(recursive: true);
-  final resp = syncCurlStaged(
-    'GET',
-    url,
-    headers: headers,
-    outputFile: target.path,
-  );
+  final resp =
+      syncCurlStaged('GET', url, headers: headers, outputFile: target.path);
   if (resp.statusCode == 0) return syncErr('HTTP request failed: ${resp.body}');
   return target.path;
 }
@@ -154,8 +150,7 @@ String _resolveDefaultBranch({
 }) {
   final url = '${conn.baseUrl}/projects/${gitlabEncodedProjectArg(args)}';
   final decoded = syncTryDecode(
-    syncBodyOrError(SyncHttpClient.get(url, headers: conn.headers)),
-  );
+      syncBodyOrError(SyncHttpClient.get(url, headers: conn.headers)));
   if (decoded is Map) {
     final branch = syncAsStr(decoded['default_branch']);
     if (branch.isNotEmpty) return branch;

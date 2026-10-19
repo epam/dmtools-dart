@@ -43,7 +43,12 @@ void main() {
   });
 
   if (!hasPython3()) return;
+  _fullWalkTests();
+  _edgeTests();
+}
 
+/// Every list tool walks past a full first page.
+void _fullWalkTests() {
   test('github_list_branches walks every page', () {
     expect(jsonDecode(_call('github_list_branches', 'pg')), hasLength(102));
     expect(_hits('/branches?per_page=100&page='), hasLength(2));
@@ -79,7 +84,10 @@ void main() {
     expect(body['total_count'], 102);
     expect(_hits('/actions/runs/9/jobs?per_page=100&page='), hasLength(2));
   });
+}
 
+/// Short pages, failures, and pass-through bodies.
+void _edgeTests() {
   test('a later-page failure returns the pages already collected', () {
     expect(jsonDecode(_call('github_list_branches', 'pgfail')), hasLength(100));
     final jobs = jsonDecode(

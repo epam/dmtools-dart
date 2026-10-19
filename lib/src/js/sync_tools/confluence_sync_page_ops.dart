@@ -29,11 +29,7 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
         headers: _config.headers,
         body: jsonEncode(
           _contentPayload(
-            title: title,
-            parentId: parentId,
-            body: body,
-            space: space,
-          ),
+              title: title, parentId: parentId, body: body, space: space),
         ),
       );
     }
@@ -64,16 +60,14 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
       resp = SyncHttpClient.put(
         '${_config.baseUrl}/content/$contentId',
         headers: _config.headers,
-        body: jsonEncode(
-          _contentPayload(
-            id: contentId,
-            title: title,
-            parentId: parentId,
-            body: body,
-            space: space,
-            version: {'number': version + 1, 'message': historyComment},
-          ),
-        ),
+        body: jsonEncode(_contentPayload(
+          id: contentId,
+          title: title,
+          parentId: parentId,
+          body: body,
+          space: space,
+          version: {'number': version + 1, 'message': historyComment},
+        )),
       );
     }
     return _decodeOrThrow(resp, 'updatePage');
@@ -89,12 +83,10 @@ class _SyncConfluencePageOps implements ConfluencePageOperations {
   }
 
   @override
-  String deletePage(String contentId) => syncBodyOrError(
-        SyncHttpClient.delete(
-          '${_config.baseUrl}/content/$contentId',
-          headers: _config.headers,
-        ),
-      );
+  String deletePage(String contentId) => syncBodyOrError(SyncHttpClient.delete(
+        '${_config.baseUrl}/content/$contentId',
+        headers: _config.headers,
+      ));
 
   @override
   Map<String, dynamic> getContent(String contentId) {
@@ -217,8 +209,10 @@ class _SyncConfluenceAttachments implements SyncAttachmentHelper {
   SyncHttpResponse _multipartPost(String url, File file) => syncCurlStaged(
         'POST',
         url,
-        headers: {..._config.headers, 'X-Atlassian-Token': 'nocheck'}
-          ..remove('Content-Type'),
+        headers: {
+          ..._config.headers,
+          'X-Atlassian-Token': 'nocheck',
+        }..remove('Content-Type'),
         multipartFile: file.path,
       );
 }

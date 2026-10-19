@@ -110,7 +110,9 @@ class ScmCiSyncTools {
 
   Map<String, Handler> _scmGithub() => {
         'scm_list_prs': (a) => _stateValidated(
-            a, (state) => _ghCall('github_list_prs', {'state': state}, a)),
+              a,
+              (state) => _ghCall('github_list_prs', {'state': state}, a),
+            ),
         'scm_get_pr': (a) =>
             _ghCall('github_get_pr', {'pullRequestId': a['pr']}, a),
         'scm_merge_pr': (a) => _ghCall(
@@ -126,15 +128,35 @@ class ScmCiSyncTools {
         'scm_get_diff': (a) =>
             _ghCall('github_get_pr_diff_text', {'pullRequestId': a['pr']}, a),
         'scm_add_labels': (a) => _ghCall(
-            'github_add_labels', {'number': a['pr'], 'labels': a['labels']}, a),
+            'github_add_labels',
+            {
+              'number': a['pr'],
+              'labels': a['labels'],
+            },
+            a),
         'scm_remove_label': (a) => _ghCall(
-            'github_remove_label', {'number': a['pr'], 'label': a['label']}, a),
-        'scm_add_pr_comment': (a) => _ghCall('github_add_pr_comment',
-            {'pullRequestId': a['pr'], 'text': a['text']}, a),
+            'github_remove_label',
+            {
+              'number': a['pr'],
+              'label': a['label'],
+            },
+            a),
+        'scm_add_pr_comment': (a) => _ghCall(
+            'github_add_pr_comment',
+            {
+              'pullRequestId': a['pr'],
+              'text': a['text'],
+            },
+            a),
         'scm_get_pr_comments': (a) =>
             _ghCall('github_get_pr_comments', {'pullRequestId': a['pr']}, a),
-        'scm_create_comment': (a) => _ghCall('github_create_comment',
-            {'number': a['issue'], 'body': a['body']}, a),
+        'scm_create_comment': (a) => _ghCall(
+            'github_create_comment',
+            {
+              'number': a['issue'],
+              'body': a['body'],
+            },
+            a),
         'scm_get_issue': (a) =>
             _ghCall('github_get_issue', {'issueNumber': a['issue']}, a),
         'scm_search_issues': (a) =>
@@ -159,9 +181,10 @@ class ScmCiSyncTools {
 
   Map<String, Handler> _scmGitlab() => {
         'scm_list_prs': (a) => _stateValidated(
-            a,
-            (state) =>
-                _glCall('gitlab_list_mrs', {'state': _glState(state)}, a)),
+              a,
+              (state) =>
+                  _glCall('gitlab_list_mrs', {'state': _glState(state)}, a),
+            ),
         'scm_get_pr': (a) =>
             _glCall('gitlab_get_mr', {'pullRequestId': '${a['pr']}'}, a),
         'scm_merge_pr': (a) =>
@@ -169,16 +192,31 @@ class ScmCiSyncTools {
         'scm_get_diff': (a) => _glCall(
             'gitlab_get_mr_diff_text', {'pullRequestId': '${a['pr']}'}, a),
         'scm_add_labels': (a) => _glAddLabels(a),
-        'scm_remove_label': (a) => _glCall('gitlab_remove_mr_label',
-            {'pullRequestId': '${a['pr']}', 'label': a['label']}, a),
-        'scm_add_pr_comment': (a) => _glCall('gitlab_add_mr_comment',
-            {'pullRequestId': '${a['pr']}', 'text': a['text']}, a),
+        'scm_remove_label': (a) => _glCall(
+            'gitlab_remove_mr_label',
+            {
+              'pullRequestId': '${a['pr']}',
+              'label': a['label'],
+            },
+            a),
+        'scm_add_pr_comment': (a) => _glCall(
+            'gitlab_add_mr_comment',
+            {
+              'pullRequestId': '${a['pr']}',
+              'text': a['text'],
+            },
+            a),
         'scm_get_pr_comments': (a) => _glCall(
             'gitlab_get_mr_comments', {'pullRequestId': '${a['pr']}'}, a),
         // Issue notes ride the MR-note shape (smProvider twin precedent:
         // projects using MRs as the state carrier get exact behavior).
-        'scm_create_comment': (a) => _glCall('gitlab_create_mr_note',
-            {'pullRequestId': '${a['issue']}', 'text': a['body']}, a),
+        'scm_create_comment': (a) => _glCall(
+            'gitlab_create_mr_note',
+            {
+              'pullRequestId': '${a['issue']}',
+              'text': a['body'],
+            },
+            a),
         'scm_get_issue': (a) => _glGap('scm_get_issue'),
         'scm_search_issues': (a) => _glGap('scm_search_issues'),
         'scm_list_branches': (a) => _glGap('scm_list_branches'),
@@ -197,8 +235,13 @@ class ScmCiSyncTools {
     }
     var last = '';
     for (final label in labels) {
-      last = _glCall('gitlab_add_mr_label',
-          {'pullRequestId': '${a['pr']}', 'label': '$label'}, a);
+      last = _glCall(
+          'gitlab_add_mr_label',
+          {
+            'pullRequestId': '${a['pr']}',
+            'label': '$label',
+          },
+          a);
       if (_isErr(last)) return last;
     }
     return last;
@@ -236,8 +279,11 @@ class ScmCiSyncTools {
         },
         a);
     if (_isErr(raw)) return raw;
-    return _triggerResult(providerGithub,
-        _ghRunIdLookup(a, a['ref'] ?? 'main', dispatchedAt), raw);
+    return _triggerResult(
+      providerGithub,
+      _ghRunIdLookup(a, a['ref'] ?? 'main', dispatchedAt),
+      raw,
+    );
   }
 
   /// Best-effort run handle after a GitHub dispatch (the API returns no
@@ -258,8 +304,13 @@ class ScmCiSyncTools {
   ) {
     final cutoff = dispatchedAt.subtract(_runLookupSkew);
     try {
-      final raw = _ghCall('github_list_workflow_runs',
-          {'workflowId': a['workflow'], 'perPage': '5'}, a);
+      final raw = _ghCall(
+          'github_list_workflow_runs',
+          {
+            'workflowId': a['workflow'],
+            'perPage': '5',
+          },
+          a);
       final runs = (_decode(raw)['workflow_runs'] as List? ?? const [])
           .whereType<Map>()
           .where((r) => r['head_branch'] == ref)
@@ -303,7 +354,9 @@ class ScmCiSyncTools {
             'runId': r['id'],
             'status': r['status'],
             'verdict': ghRunVerdict(
-                r['status'] as String?, r['conclusion'] as String?),
+              r['status'] as String?,
+              r['conclusion'] as String?,
+            ),
             'sha': r['head_sha'],
             'url': r['html_url'],
             'startedAt': r['created_at'],
@@ -326,12 +379,16 @@ class ScmCiSyncTools {
       return jsonEncode({
         'provider': providerGithub,
         'verdict': ghRunVerdict(
-            body['status'] as String?, body['conclusion'] as String?),
+          body['status'] as String?,
+          body['conclusion'] as String?,
+        ),
       });
     }
     if (sha != null) return _ghShaVerdict(a, sha);
-    return _err('ci_get_verdict requires runId, or sha (+ optional '
-        'workflow) for the head probe');
+    return _err(
+      'ci_get_verdict requires runId, or sha (+ optional '
+      'workflow) for the head probe',
+    );
   }
 
   /// The `(sha[, workflow])` probe: check-run rollup first; when the
@@ -340,20 +397,31 @@ class ScmCiSyncTools {
   /// error envelopes pass through (E1) — they never read as "no check
   /// runs" / `none`.
   String _ghShaVerdict(Map<String, dynamic> a, String sha) {
-    final crRaw =
-        _ghCall('github_get_commit_check_runs', {'commitSha': sha}, a);
+    final crRaw = _ghCall(
+        'github_get_commit_check_runs',
+        {
+          'commitSha': sha,
+        },
+        a);
     if (_isErr(crRaw)) return crRaw;
     final runs = _decode(crRaw)['check_runs'] as List? ?? const [];
     if (runs.isNotEmpty) {
-      return jsonEncode(
-          {'provider': providerGithub, 'verdict': ghCheckRunsVerdict(runs)});
+      return jsonEncode({
+        'provider': providerGithub,
+        'verdict': ghCheckRunsVerdict(runs),
+      });
     }
     final wf = a['workflow'];
     if (wf == null) {
       return jsonEncode({'provider': providerGithub, 'verdict': verdictNone});
     }
     final raw = _ghCall(
-        'github_list_workflow_runs', {'workflowId': wf, 'perPage': '30'}, a);
+        'github_list_workflow_runs',
+        {
+          'workflowId': wf,
+          'perPage': '30',
+        },
+        a);
     if (_isErr(raw)) return raw;
     final mine = (_decode(raw)['workflow_runs'] as List? ?? const [])
         .whereType<Map>()
@@ -364,8 +432,10 @@ class ScmCiSyncTools {
     final top = mine.first;
     return jsonEncode({
       'provider': providerGithub,
-      'verdict':
-          ghRunVerdict(top['status'] as String?, top['conclusion'] as String?),
+      'verdict': ghRunVerdict(
+        top['status'] as String?,
+        top['conclusion'] as String?,
+      ),
     });
   }
 
@@ -439,10 +509,12 @@ class ScmCiSyncTools {
         // still in the Java-parity gap list) — an honest gap error beats
         // a null-check crash on the primary runId form. The pr/sha
         // probes below are fully served.
-        return _err('ci_get_verdict by runId is not available on the '
-            'GitLab route in v1 — the concrete gitlab_get_pipeline_jobs '
-            'tool has no GitLab sync surface yet; poll via the pr or sha '
-            'probe form instead');
+        return _err(
+          'ci_get_verdict by runId is not available on the '
+          'GitLab route in v1 — the concrete gitlab_get_pipeline_jobs '
+          'tool has no GitLab sync surface yet; poll via the pr or sha '
+          'probe form instead',
+        );
       }
       final raw = jobsHandler(_withRepo({'pipelineId': runId}, a));
       final body = _decode(raw);
@@ -459,7 +531,11 @@ class ScmCiSyncTools {
     }
     if (a['pr'] != null) {
       final raw = _glCall(
-          'gitlab_get_mr_pipelines', {'pullRequestId': '${a['pr']}'}, a);
+          'gitlab_get_mr_pipelines',
+          {
+            'pullRequestId': '${a['pr']}',
+          },
+          a);
       // E1 + the List type-cast guard (see ci_list_runs).
       if (_isErr(raw)) return raw;
       return jsonEncode({
@@ -468,16 +544,22 @@ class ScmCiSyncTools {
       });
     }
     if (a['sha'] != null) {
-      final raw =
-          _glCall('gitlab_get_commit_statuses', {'commitSha': a['sha']}, a);
+      final raw = _glCall(
+          'gitlab_get_commit_statuses',
+          {
+            'commitSha': a['sha'],
+          },
+          a);
       if (_isErr(raw)) return raw;
       return jsonEncode({
         'provider': providerGitlab,
         'verdict': gitlabStatusListVerdict(_decode(raw) as List? ?? const []),
       });
     }
-    return _err('ci_get_verdict requires runId, pr, or sha (+ optional '
-        'workflow) for the head probe');
+    return _err(
+      'ci_get_verdict requires runId, pr, or sha (+ optional '
+      'workflow) for the head probe',
+    );
   }
 
   // ── shared helpers ────────────────────────────────────────────────────
@@ -516,8 +598,10 @@ class ScmCiSyncTools {
     if (raw.isEmpty) return call('open');
     const allowed = {'open', 'closed', 'merged', 'all'};
     if (!allowed.contains(raw)) {
-      return _err('scm_list_prs: state must be one of: $kScmStateEnum '
-          "(got '$raw') — the normalized enum is the only accepted shape");
+      return _err(
+        'scm_list_prs: state must be one of: $kScmStateEnum '
+        "(got '$raw') — the normalized enum is the only accepted shape",
+      );
     }
     return call(raw);
   }
@@ -573,8 +657,10 @@ class ScmCiSyncTools {
   String _runMismatch(String raw, String provider, dynamic runId) {
     final body = _decode(raw);
     if (body['error'] == null) return raw;
-    return _err('${body['error']} (runId $runId not found on '
-        '$provider — was it created by a different provider?)');
+    return _err(
+      '${body['error']} (runId $runId not found on '
+      '$provider — was it created by a different provider?)',
+    );
   }
 
   /// Normalizes a provider body through [map] and merges [extra]. An
@@ -592,9 +678,10 @@ class ScmCiSyncTools {
   }
 
   /// The honest v1 gap error for a tool without a GitLab sync surface.
-  String _glGap(String tool) =>
-      _err('$tool is not available on the GitLab route in v1 (no GitLab sync '
-          'surface for it yet) — see the gh-339 tiering notes');
+  String _glGap(String tool) => _err(
+        '$tool is not available on the GitLab route in v1 (no GitLab sync '
+        'surface for it yet) — see the gh-339 tiering notes',
+      );
 
   String _err(String message) => '{"error":${jsonEncode(message)}}';
 }

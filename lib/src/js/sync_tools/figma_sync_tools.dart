@@ -89,13 +89,14 @@ class FigmaSyncTools {
   /// `figma_test` / `figma_me` — GET `me`, Java `me()` result JSON.
   String _me(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final resp =
-          SyncHttpClient.get('${config.baseUrl}/me', headers: config.headers);
+      final resp = SyncHttpClient.get(
+        '${config.baseUrl}/me',
+        headers: config.headers,
+      );
       if (resp.statusCode == 0) {
-        return jsonEncode(figmaMeResult(
-          error: resp.body,
-          errorClass: 'IOException',
-        ));
+        return jsonEncode(
+          figmaMeResult(error: resp.body, errorClass: 'IOException'),
+        );
       }
       return jsonEncode(figmaMeResult(body: resp.body));
     });
@@ -157,8 +158,9 @@ class FigmaSyncTools {
   String _getFileStructure(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       return _guarded(() {
-        final request =
-            figmaStructureRequest(figmaCleanHref(syncAsStr(args['href'])));
+        final request = figmaStructureRequest(
+          figmaCleanHref(syncAsStr(args['href'])),
+        );
         final response = _getJson(config, request.path, request.params);
         return response == null ? figmaJsonNull : jsonEncode(response);
       });
@@ -193,10 +195,12 @@ class FigmaSyncTools {
   /// surface as an error envelope (Java rethrows).
   String _getImageFills(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      return syncBodyOrError(SyncHttpClient.get(
-        '${config.baseUrl}/files/${_fileIdOf(args)}/images',
-        headers: config.headers,
-      ));
+      return syncBodyOrError(
+        SyncHttpClient.get(
+          '${config.baseUrl}/files/${_fileIdOf(args)}/images',
+          headers: config.headers,
+        ),
+      );
     });
   }
 
@@ -271,7 +275,9 @@ class FigmaSyncTools {
     return syncWithConfig(_config(), _notConfigured, (config) {
       return _guarded(() {
         final ids = figmaCappedTrimmedIds(
-            syncAsStr(args['nodeIds']), figmaMaxDetailIds);
+          syncAsStr(args['nodeIds']),
+          figmaMaxDetailIds,
+        );
         final response = _nodesJson(config, _fileIdOf(args), ids);
         final document =
             response == null ? null : figmaNodeDocument(response, ids.first);
@@ -285,8 +291,10 @@ class FigmaSyncTools {
   String _getTextContent(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       return _guarded(() {
-        final ids =
-            figmaCappedTrimmedIds(syncAsStr(args['nodeIds']), figmaMaxTextIds);
+        final ids = figmaCappedTrimmedIds(
+          syncAsStr(args['nodeIds']),
+          figmaMaxTextIds,
+        );
         final response = _nodesJson(config, _fileIdOf(args), ids);
         return response == null
             ? figmaJsonNull
@@ -318,16 +326,20 @@ class FigmaSyncTools {
         // JSON null like every other failure, not escape as an error.
         final target = _urlNodeId(args);
         final response = _nodesJson(config, target.fileId, [target.nodeId]);
-        final document =
-            figmaNodeDocument(response, figmaColonNodeId(target.nodeId));
+        final document = figmaNodeDocument(
+          response,
+          figmaColonNodeId(target.nodeId),
+        );
         final children = document == null
             ? const <Map<String, dynamic>>[]
             : figmaLayerSummaries(document);
         if (children.isEmpty) {
           return figmaJsonNull;
         }
-        return jsonEncode(
-            {'parentNodeId': target.nodeId, 'children': children});
+        return jsonEncode({
+          'parentNodeId': target.nodeId,
+          'children': children,
+        });
       });
     });
   }
@@ -344,8 +356,10 @@ class FigmaSyncTools {
         final response = _nodesJson(config, _fileIdOf(args), ids);
         final results = <String, Map<String, dynamic>>{};
         for (final rawId in ids) {
-          final document =
-              figmaNodeDocument(response, figmaColonNodeId(rawId.trim()));
+          final document = figmaNodeDocument(
+            response,
+            figmaColonNodeId(rawId.trim()),
+          );
           if (document == null) {
             continue;
           }
@@ -366,8 +380,13 @@ class FigmaSyncTools {
   String _getNodeChildren(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
       final target = _urlNodeId(args);
-      final response =
-          _nodesJson(config, target.fileId, [target.nodeId], depth: '1');
+      final response = _nodesJson(
+          config,
+          target.fileId,
+          [
+            target.nodeId,
+          ],
+          depth: '1');
       final document = figmaNodeDocument(response, target.nodeId);
       if (document == null) {
         return figmaJsonNull;
@@ -391,8 +410,9 @@ class FigmaSyncTools {
   /// `figma_list_project_files` — files array JSON.
   String _listProjectFiles(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfigured, (config) {
-      final projectId =
-          figmaExtractProjectId(syncAsStr(args['projectIdOrUrl']));
+      final projectId = figmaExtractProjectId(
+        syncAsStr(args['projectIdOrUrl']),
+      );
       final response = _getJson(config, 'projects/$projectId/files', const {});
       return jsonEncode(response?['files'] ?? const []);
     });
@@ -544,9 +564,8 @@ class FigmaSyncTools {
     String path, [
     Map<String, String> queryParams = const {},
   ]) {
-    final uri = Uri.parse('${config.baseUrl}/$path').replace(
-      queryParameters: queryParams.isEmpty ? null : queryParams,
-    );
+    final uri = Uri.parse('${config.baseUrl}/$path')
+        .replace(queryParameters: queryParams.isEmpty ? null : queryParams);
     final resp = SyncHttpClient.get(uri.toString(), headers: config.headers);
     if (!resp.isOk) {
       return null;
@@ -564,18 +583,15 @@ class FigmaSyncTools {
 
   /// Export URL of a node in a format — Java `getImageById`; `null` on
   /// failure.
-  String? _imageById(
-    _Conf config,
-    String href,
-    String nodeId,
-    String format,
-  ) {
+  String? _imageById(_Conf config, String href, String nodeId, String format) {
     try {
-      return figmaImagesOf(_getJson(
-        config,
-        'images/${figmaParseFileId(figmaCleanHref(href))}',
-        figmaIconRenderParams(nodeId, format),
-      ))?[figmaColonNodeId(nodeId)]
+      return figmaImagesOf(
+        _getJson(
+          config,
+          'images/${figmaParseFileId(figmaCleanHref(href))}',
+          figmaIconRenderParams(nodeId, format),
+        ),
+      )?[figmaColonNodeId(nodeId)]
           ?.toString();
     } on Object {
       return null;

@@ -141,9 +141,11 @@ class TrackerGitHubRouter {
     }
     final reader = PropertyReader();
     if (_jiraConfigured(reader)) return null;
-    _log(number != null
-        ? 'tracker: gh-$number → github issues'
-        : 'tracker: $toolName → github issues');
+    _log(
+      number != null
+          ? 'tracker: gh-$number → github issues'
+          : 'tracker: $toolName → github issues',
+    );
     final config = _githubConfig(reader);
     if (config is String) {
       return syncErr('GitHub tracker routing unavailable: $config');
@@ -231,13 +233,22 @@ class TrackerGitHubRouter {
     final labelTool = _routeLabelTool(toolName, c, number, args);
     if (labelTool != null) return labelTool;
     return switch (toolName) {
-      'jira_get_ticket' =>
-        _withIssue(c, number, (i) => jsonEncode(_ticketFromIssue(i))),
+      'jira_get_ticket' => _withIssue(
+          c,
+          number,
+          (i) => jsonEncode(_ticketFromIssue(i)),
+        ),
       'jira_get_comments' => _getComments(c, number),
-      'jira_post_comment' =>
-        _postComment(c, number, syncAsStr(args['comment'])),
-      'jira_move_to_status' =>
-        _moveToStatus(c, number, syncAsStr(args['statusName'])),
+      'jira_post_comment' => _postComment(
+          c,
+          number,
+          syncAsStr(args['comment']),
+        ),
+      'jira_move_to_status' => _moveToStatus(
+          c,
+          number,
+          syncAsStr(args['statusName']),
+        ),
       _ => syncErr('Unsupported tracker tool: $toolName'),
     };
   }
@@ -269,8 +280,9 @@ class TrackerGitHubRouter {
   /// on GitHub. The Jira path never sees this code — bodies pass through
   /// unchanged there (Java parity).
   String _postComment(_GhRouteConfig c, String number, String body) {
-    final resp = _postJson(c, '${_issueUrl(c, number)}/comments',
-        {'body': jiraMarkupToMarkdown(body)});
+    final resp = _postJson(c, '${_issueUrl(c, number)}/comments', {
+      'body': jiraMarkupToMarkdown(body),
+    });
     if (!resp.isOk) return _respError(resp);
     final created = _tryDecode(resp.body);
     if (created is! Map<String, dynamic>) {
@@ -298,11 +310,7 @@ class TrackerGitHubRouter {
   /// `jira_move_to_status` — swap the `status:*` label, then close/reopen
   /// the issue for Done-ish/Open-ish names (see the library doc).
   String _moveToStatus(_GhRouteConfig c, String number, String status) =>
-      _withIssue(
-        c,
-        number,
-        (issue) => _moveIssue(c, number, status, issue),
-      );
+      _withIssue(c, number, (issue) => _moveIssue(c, number, status, issue));
 
   /// Label swap + state sync for [_moveToStatus] once the issue is loaded.
   String _moveIssue(
@@ -464,15 +472,18 @@ class TrackerGitHubRouter {
   /// filters would be silently dropped — so they return `null` and go
   /// through [_parseJqlFilters] (filters applied client-side).
   static List<String>? _keyNumbers(String jql) {
-    final single =
-        RegExp(r'^key\s*=\s*(\S+)\s*$', caseSensitive: false).firstMatch(jql);
+    final single = RegExp(
+      r'^key\s*=\s*(\S+)\s*$',
+      caseSensitive: false,
+    ).firstMatch(jql);
     if (single != null) {
       final number = _ghKeyNumber(single.group(1)!);
       return number == null ? null : [number];
     }
-    final inClause =
-        RegExp(r'^key\s+in\s*\(([^)]*)\)\s*$', caseSensitive: false)
-            .firstMatch(jql);
+    final inClause = RegExp(
+      r'^key\s+in\s*\(([^)]*)\)\s*$',
+      caseSensitive: false,
+    ).firstMatch(jql);
     if (inClause == null) return null;
     final numbers = <String>[];
     for (final value in _clauseValues(inClause.group(1)!)) {
@@ -495,8 +506,9 @@ class TrackerGitHubRouter {
   static Object _parseJqlFilters(String jql) {
     final filters = _JqlFilters();
     if (jql.isEmpty) return filters;
-    for (final clause
-        in jql.split(RegExp(r'\s+and\s+', caseSensitive: false))) {
+    for (final clause in jql.split(
+      RegExp(r'\s+and\s+', caseSensitive: false),
+    )) {
       final m = RegExp('^\\s*([A-Za-z]+)\\s*(=|in)\\s*(.+?)\\s*\$')
           .firstMatch(clause);
       if (m == null) return _unsupportedJql(jql);
@@ -663,7 +675,10 @@ class TrackerGitHubRouter {
 
   /// DELETEs one label from the issue.
   SyncHttpResponse _deleteLabel(
-          _GhRouteConfig c, String number, String label) =>
+    _GhRouteConfig c,
+    String number,
+    String label,
+  ) =>
       SyncHttpClient.delete(
         '${_issueUrl(c, number)}/labels/${Uri.encodeComponent(label)}',
         headers: c.headers,
@@ -705,9 +720,7 @@ class TrackerGitHubRouter {
   static Map<String, dynamic> _commentFromJson(Map<String, dynamic> c) => {
         'id': c['id']?.toString(),
         'body': c['body'] ?? '',
-        'author': {
-          'displayName': (c['user'] as Map?)?['login'] ?? '',
-        },
+        'author': {'displayName': (c['user'] as Map?)?['login'] ?? ''},
         'created': c['created_at'],
         'updated': c['updated_at'],
       };

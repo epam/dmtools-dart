@@ -272,6 +272,21 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self._respond(200, build_zip(), "application/zip")
             return
 
+        # gh-388 list pagination: o/pg serves full page 1 + 2-item page
+        # 2; o/pgfail fails page 2 (walk keeps page 1).
+        if base.startswith("/repos/o/pg/") or base.startswith("/repos/o/pgfail/"):
+            self._record(body)
+            page = _query_param(path, "page") or "1"
+            if page != "1" and base.startswith("/repos/o/pgfail/"):
+                self._respond(500, '{"message": "page boom"}')
+                return
+            items = [{"id": int(page) * 1000 + i, "page": int(page)}
+                     for i in range(100 if page == "1" else 2)]
+            if base.endswith("/jobs"):
+                self._respond(200, {"total_count": 102, "jobs": items})
+            else:
+                self._respond(200, items)
+            return
         if base == "/repos/o/r/commits/pagedsha/check-runs":
             self._record(body)
             if _query_param(path, "page") == "2":

@@ -80,7 +80,8 @@ class _PageDownloader {
       // dropped (gh-191 review). The v2 children listing always carries
       // bodies (body-format=storage is part of the request).
       for (final child in _childrenResults(
-              syncBodyOrError(_childrenResponse(_config, id))) ??
+            syncBodyOrError(_childrenResponse(_config, id)),
+          ) ??
           const <Map<String, dynamic>>[]) {
         _downloadPage(child, depth - 1);
       }
@@ -108,7 +109,11 @@ class _PageDownloader {
     final targets = <_AttachmentTarget>[];
     for (var i = 0; i < listings.length; i++) {
       _collectAttachmentJobs(
-          listings[i], _attachmentPages[i], downloads, targets);
+        listings[i],
+        _attachmentPages[i],
+        downloads,
+        targets,
+      );
     }
     final responses = _runConfluenceParallel(downloads);
     for (var i = 0; i < responses.length; i++) {
@@ -146,15 +151,17 @@ class _PageDownloader {
     for (final attachment in results) {
       final downloadPath = _attachmentDownloadPath(attachment);
       if (downloadPath == null) continue;
-      downloads.add(SyncParallelJob(
-        index: downloads.length,
-        kind: _kJobAttachmentGet,
-        args: <String, dynamic>{
-          ..._jobArgsOf(_config),
-          'url': _attachmentUrl(downloadPath, _config.rootUrl),
-          'headers': _attachmentHeaders(downloadPath, baseHost),
-        },
-      ));
+      downloads.add(
+        SyncParallelJob(
+          index: downloads.length,
+          kind: _kJobAttachmentGet,
+          args: <String, dynamic>{
+            ..._jobArgsOf(_config),
+            'url': _attachmentUrl(downloadPath, _config.rootUrl),
+            'headers': _attachmentHeaders(downloadPath, baseHost),
+          },
+        ),
+      );
       targets.add((
         pageFolder: page.pageFolder,
         title: _sanitize(attachment['title']?.toString() ?? 'file'),

@@ -35,10 +35,18 @@ final Map<String, AdoSyncExecutor> adoWorkItemOpExecutors = {
   'ado_move_to_state': (c, a) =>
       _setField(c, a, 'System.State', adoArg(a, ['state', 'statusName'])),
   'ado_assign_work_item': (c, a) => _setField(
-      c, a, 'System.AssignedTo', adoArg(a, ['userEmail', 'accountId'])),
+        c,
+        a,
+        'System.AssignedTo',
+        adoArg(a, ['userEmail', 'accountId']),
+      ),
   'ado_update_description': (c, a) => _setField(
-      c, a, 'System.Description', adoArg(a, ['description']),
-      markdown: _isMarkdown(a)),
+        c,
+        a,
+        'System.Description',
+        adoArg(a, ['description']),
+        markdown: _isMarkdown(a),
+      ),
   'ado_update_tags': (c, a) =>
       _setField(c, a, 'System.Tags', adoArg(a, ['tags'])),
   'ado_update_field': _updateField,
@@ -52,8 +60,10 @@ final Map<String, AdoSyncExecutor> adoWorkItemOpExecutors = {
 String _itemUrl(AdoSyncConfig c, String id) =>
     '${c.baseUrl}/wit/workitems/$id?api-version=$_apiVersion';
 
-Map<String, String> _patchHeaders(AdoSyncConfig c) =>
-    {...c.headers, 'Content-Type': _patchType};
+Map<String, String> _patchHeaders(AdoSyncConfig c) => {
+      ...c.headers,
+      'Content-Type': _patchType,
+    };
 
 /// The organization root (`{base}/{org}`) derived from the project base URL.
 String _orgUrl(AdoSyncConfig c) {
@@ -63,12 +73,13 @@ String _orgUrl(AdoSyncConfig c) {
 
 String _idOf(Map<String, dynamic> a) => adoArg(a, ['id', 'key']);
 
-String _patch(AdoSyncConfig c, String id, String patchBody) =>
-    syncBodyOrError(SyncHttpClient.patch(
-      _itemUrl(c, id),
-      headers: _patchHeaders(c),
-      body: patchBody,
-    ));
+String _patch(AdoSyncConfig c, String id, String patchBody) => syncBodyOrError(
+      SyncHttpClient.patch(
+        _itemUrl(c, id),
+        headers: _patchHeaders(c),
+        body: patchBody,
+      ),
+    );
 
 String _setField(
   AdoSyncConfig c,
@@ -88,19 +99,21 @@ String _commentsUrl(AdoSyncConfig c, String id) =>
 
 /// `ado_add_work_item_comment` — POST `{"text": comment}` (`text` alias);
 /// `format=markdown` query param when requested.
-String _addComment(AdoSyncConfig c, Map<String, dynamic> a) =>
-    syncBodyOrError(SyncHttpClient.post(
-      _commentsUrl(c, _idOf(a)) + (_isMarkdown(a) ? '&format=markdown' : ''),
-      headers: c.headers,
-      body: jsonEncode({
-        'text': adoArg(a, ['comment', 'text'])
-      }),
-    ));
+String _addComment(AdoSyncConfig c, Map<String, dynamic> a) => syncBodyOrError(
+      SyncHttpClient.post(
+        _commentsUrl(c, _idOf(a)) + (_isMarkdown(a) ? '&format=markdown' : ''),
+        headers: c.headers,
+        body: jsonEncode({
+          'text': adoArg(a, ['comment', 'text']),
+        }),
+      ),
+    );
 
 /// `ado_get_work_item_comments` — GET comments, returning the bare array.
 String _getComments(AdoSyncConfig c, Map<String, dynamic> a) {
   final body = syncBodyOrError(
-      SyncHttpClient.get(_commentsUrl(c, _idOf(a)), headers: c.headers));
+    SyncHttpClient.get(_commentsUrl(c, _idOf(a)), headers: c.headers),
+  );
   final decoded = syncTryDecode(body);
   if (decoded is Map && decoded['comments'] is List) {
     return jsonEncode(decoded['comments']);
@@ -110,8 +123,12 @@ String _getComments(AdoSyncConfig c, Map<String, dynamic> a) {
 
 /// `ado_update_field` — PATCH the field resolved via [resolveAdoFieldName].
 String _updateField(AdoSyncConfig c, Map<String, dynamic> a) => _setField(
-    c, a, resolveAdoFieldName(adoArg(a, ['field'])), adoArg(a, ['value']),
-    markdown: _isMarkdown(a));
+      c,
+      a,
+      resolveAdoFieldName(adoArg(a, ['field'])),
+      adoArg(a, ['value']),
+      markdown: _isMarkdown(a),
+    );
 
 /// `ado_set_priority` — PATCH `Microsoft.VSTS.Common.Priority` with a number.
 String _setPriority(AdoSyncConfig c, Map<String, dynamic> a) {
@@ -122,7 +139,10 @@ String _setPriority(AdoSyncConfig c, Map<String, dynamic> a) {
     return syncErr('${e.message}');
   }
   return _patch(
-      c, _idOf(a), adoFieldsPatch({'Microsoft.VSTS.Common.Priority': number}));
+    c,
+    _idOf(a),
+    adoFieldsPatch({'Microsoft.VSTS.Common.Priority': number}),
+  );
 }
 
 /// `ado_link_work_items` — PATCH an `/relations/-` add on the source item.
@@ -134,13 +154,14 @@ String _linkWorkItems(AdoSyncConfig c, Map<String, dynamic> a) {
 
 String _link(AdoSyncConfig c, String source, String target, String rel) =>
     _patch(
-        c,
-        source,
-        adoRelationPatch(
-          mapAdoRelationship(rel),
-          // Java: basePath + "/_apis/wit/workItems/" + targetId (org-scoped).
-          '${_orgUrl(c)}/_apis/wit/workItems/$target',
-        ));
+      c,
+      source,
+      adoRelationPatch(
+        mapAdoRelationship(rel),
+        // Java: basePath + "/_apis/wit/workItems/" + targetId (org-scoped).
+        '${_orgUrl(c)}/_apis/wit/workItems/$target',
+      ),
+    );
 
 /// `ado_create_work_item` — JSON-Patch POST, then an optional parent link.
 String _createWorkItem(AdoSyncConfig c, Map<String, dynamic> a) {
@@ -152,22 +173,29 @@ String _createWorkItem(AdoSyncConfig c, Map<String, dynamic> a) {
       ? c.baseUrl
       : '${_orgUrl(c)}/${Uri.encodeComponent(project)}/_apis';
   final description = adoArg(a, ['description']);
-  final response = syncBodyOrError(SyncHttpClient.post(
-    // The type goes into the PATH: 'User Story' has a space, which curl rejects (exit 3) —
-    // Java's OkHttp encoded it implicitly.
-    '$base/wit/workitems/\$${Uri.encodeComponent(type)}?api-version=$_apiVersion',
-    headers: _patchHeaders(c),
-    body: adoCreatePatch(adoArg(a, ['title', 'summary']), description,
+  final response = syncBodyOrError(
+    SyncHttpClient.post(
+      // The type goes into the PATH: 'User Story' has a space, which curl rejects (exit 3) —
+      // Java's OkHttp encoded it implicitly.
+      '$base/wit/workitems/\$${Uri.encodeComponent(type)}?api-version=$_apiVersion',
+      headers: _patchHeaders(c),
+      body: adoCreatePatch(
+        adoArg(a, ['title', 'summary']),
+        description,
         fieldsJson as Map<String, dynamic>?,
-        markdown: _isMarkdown(a)),
-  ));
+        markdown: _isMarkdown(a),
+      ),
+    ),
+  );
   final parent = adoArg(a, ['parentId', 'parentKey']).trim();
   if (parent.isEmpty) return response;
   final created = syncTryDecode(response);
   final id = created is Map ? created['id'] : null;
   if (id == null) {
-    return syncErr('Work item was created but the response carries no id, '
-        'cannot link parent $parent');
+    return syncErr(
+      'Work item was created but the response carries no id, '
+      'cannot link parent $parent',
+    );
   }
   // source = parent, target = child -> Hierarchy-Forward on the parent.
   final linked = _link(c, parent, '$id', 'child');
@@ -196,10 +224,12 @@ String _getFieldCode(AdoSyncConfig c, Map<String, dynamic> a) {
   final base = project.isEmpty
       ? c.baseUrl
       : '${_orgUrl(c)}/${Uri.encodeComponent(project)}/_apis';
-  final body = syncBodyOrError(SyncHttpClient.get(
-    '$base/wit/fields?api-version=$_apiVersion',
-    headers: c.headers,
-  ));
+  final body = syncBodyOrError(
+    SyncHttpClient.get(
+      '$base/wit/fields?api-version=$_apiVersion',
+      headers: c.headers,
+    ),
+  );
   if (syncTryDecode(body) is! Map) return 'null';
   return jsonEncode(findAdoFieldCode(body, wanted));
 }
@@ -211,17 +241,25 @@ String _attachFile(AdoSyncConfig c, Map<String, dynamic> a) {
   final filePath = adoArg(a, ['filePath']);
   final file = File(filePath);
   if (!file.existsSync()) return syncErr('File does not exist: $filePath');
-  final existing = syncTryDecode(syncBodyOrError(SyncHttpClient.get(
-      '${c.baseUrl}/wit/workitems/$id?\$expand=relations'
-      '&api-version=$_apiVersion',
-      headers: c.headers)));
+  final existing = syncTryDecode(
+    syncBodyOrError(
+      SyncHttpClient.get(
+        '${c.baseUrl}/wit/workitems/$id?\$expand=relations'
+        '&api-version=$_apiVersion',
+        headers: c.headers,
+      ),
+    ),
+  );
   if (!adoHasAttachment(existing, name)) {
     final url = _upload(c, name, file);
     if (url == null) {
       return syncErr('ADO attachment upload returned no url for $name');
     }
-    final linked = _patch(c, id,
-        adoRelationPatch('AttachedFile', url, attributes: {'name': name}));
+    final linked = _patch(
+      c,
+      id,
+      adoRelationPatch('AttachedFile', url, attributes: {'name': name}),
+    );
     if (_isError(linked)) return linked;
   }
   return jsonEncode({'status': 'success', 'id': id, 'name': name});

@@ -42,8 +42,11 @@ final RegExp _syncGhKey = RegExp(r'^gh-(\d+)$', caseSensitive: false);
 Object _resolveSyncIssueRef(Map<String, dynamic> args) {
   var owner = _firstStr(args, const ['owner', 'workspace']);
   var repo = _firstStr(args, const ['repo', 'repository']);
-  var number =
-      _firstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
+  var number = _firstInt(args, const [
+    'number',
+    'issueNumber',
+    'pullRequestId',
+  ]);
   final key = syncAsStr(args['key']).trim();
   if (key.isNotEmpty) {
     final fromKey = _applyIssueKey(key, owner, repo, number);
@@ -163,11 +166,12 @@ class GitHubIssueSyncTools {
 
   /// `github_get_issue` — GET `repos/{o}/{r}/issues/{n}`.
   String _getIssue(GhSyncConfig c, Map<String, dynamic> a) => _withIssueRef(
-      a,
-      (c, ref) => syncBodyOrError(SyncHttpClient.get(
-            '${c.baseUrl}/${ref.issueSeg}',
-            headers: c.headers,
-          )));
+        a,
+        (c, ref) => syncBodyOrError(
+          SyncHttpClient.get('${c.baseUrl}/${ref.issueSeg}',
+              headers: c.headers),
+        ),
+      );
 
   /// `github_search_issues` — GET `search/issues?q=...&per_page=100`.
   ///
@@ -186,11 +190,13 @@ class GitHubIssueSyncTools {
     if (!query.contains('repo:') && ws.isNotEmpty && rp.isNotEmpty) {
       query = 'repo:$ws/$rp $query';
     }
-    return syncBodyOrError(SyncHttpClient.get(
-      '${c.baseUrl}/search/issues'
-      '?q=${Uri.encodeQueryComponent(query)}&per_page=100',
-      headers: c.headers,
-    ));
+    return syncBodyOrError(
+      SyncHttpClient.get(
+        '${c.baseUrl}/search/issues'
+        '?q=${Uri.encodeQueryComponent(query)}&per_page=100',
+        headers: c.headers,
+      ),
+    );
   }
 
   /// `github_create_issue` — POST `repos/{o}/{r}/issues`.
@@ -224,11 +230,13 @@ class GitHubIssueSyncTools {
     if (body != null && syncAsStr(body).trim().isNotEmpty) {
       payload['body'] = body;
     }
-    return syncBodyOrError(SyncHttpClient.post(
-      '${c.baseUrl}/repos/$owner/$repo/issues',
-      headers: c.headers,
-      body: jsonEncode(payload),
-    ));
+    return syncBodyOrError(
+      SyncHttpClient.post(
+        '${c.baseUrl}/repos/$owner/$repo/issues',
+        headers: c.headers,
+        body: jsonEncode(payload),
+      ),
+    );
   }
 
   /// `github_close_issue` — PATCH `repos/{o}/{r}/issues/{n}` state closed.
@@ -257,14 +265,17 @@ class GitHubIssueSyncTools {
 
   /// `github_assign_issue` — POST `repos/{o}/{r}/issues/{n}/assignees`.
   String _assignIssue(GhSyncConfig c, Map<String, dynamic> a) => _withIssueRef(
-      a,
-      (c, ref) => syncBodyOrError(SyncHttpClient.post(
+        a,
+        (c, ref) => syncBodyOrError(
+          SyncHttpClient.post(
             '${c.baseUrl}/${ref.issueSeg}/assignees',
             headers: c.headers,
             body: jsonEncode({
               'assignees': [syncAsStr(a['user'])],
             }),
-          )));
+          ),
+        ),
+      );
 
   /// `github_add_labels` — POST `repos/{o}/{r}/issues/{n}/labels`.
   String _addIssueLabels(GhSyncConfig c, Map<String, dynamic> a) =>
@@ -278,20 +289,26 @@ class GitHubIssueSyncTools {
   String _removeIssueLabel(GhSyncConfig c, Map<String, dynamic> a) =>
       _withIssueRef(
         a,
-        (c, ref) => syncBodyOrError(SyncHttpClient.delete(
-          '${c.baseUrl}/${ref.issueSeg}'
-          '/labels/${Uri.encodeComponent(syncAsStr(a['label']))}',
-          headers: c.headers,
-        )),
+        (c, ref) => syncBodyOrError(
+          SyncHttpClient.delete(
+            '${c.baseUrl}/${ref.issueSeg}'
+            '/labels/${Uri.encodeComponent(syncAsStr(a['label']))}',
+            headers: c.headers,
+          ),
+        ),
       );
 
   /// `github_create_comment` — POST
   /// `repos/{o}/{r}/issues/{n}/comments` with the comment body.
   String _createComment(GhSyncConfig c, Map<String, dynamic> a) =>
       _withIssueRef(
-          a,
-          (c, ref) => _syncPostIssueComment(
-              c, ref, syncAsStr(a['body'] ?? a['text'] ?? a['comment'])));
+        a,
+        (c, ref) => _syncPostIssueComment(
+          c,
+          ref,
+          syncAsStr(a['body'] ?? a['text'] ?? a['comment']),
+        ),
+      );
 
   /// `github_get_pr_comments` — inline + discussion comments, sorted.
   ///
@@ -310,8 +327,9 @@ class GitHubIssueSyncTools {
         if (r.error != null) return r.error!;
         final pages = r.pages!;
         final all = [...pages.inline, ...pages.issue];
-        all.sort((x, y) =>
-            syncAsStr(x['created']).compareTo(syncAsStr(y['created'])));
+        all.sort(
+          (x, y) => syncAsStr(x['created']).compareTo(syncAsStr(y['created'])),
+        );
         return jsonEncode(all);
       });
 }
@@ -331,24 +349,30 @@ const _syncOpenStatuses = {
 
 /// PATCHes the issue state (shared by close/reopen).
 String _syncSetIssueState(GhSyncConfig c, _SyncIssueRef ref, String state) =>
-    syncBodyOrError(SyncHttpClient.patch(
-      '${c.baseUrl}/${ref.issueSeg}',
-      headers: c.headers,
-      body: jsonEncode({'state': state}),
-    ));
+    syncBodyOrError(
+      SyncHttpClient.patch(
+        '${c.baseUrl}/${ref.issueSeg}',
+        headers: c.headers,
+        body: jsonEncode({'state': state}),
+      ),
+    );
 
 /// POSTs the label array (shared by add-labels and move-to-status).
 String _syncAddLabels(GhSyncConfig c, _SyncIssueRef ref, List labels) =>
-    syncBodyOrError(SyncHttpClient.post(
-      '${c.baseUrl}/${ref.issueSeg}/labels',
-      headers: c.headers,
-      body: jsonEncode({'labels': labels}),
-    ));
+    syncBodyOrError(
+      SyncHttpClient.post(
+        '${c.baseUrl}/${ref.issueSeg}/labels',
+        headers: c.headers,
+        body: jsonEncode({'labels': labels}),
+      ),
+    );
 
 /// POSTs `{"body": text}` to the issue-style comments endpoint.
 String _syncPostIssueComment(GhSyncConfig c, _SyncIssueRef ref, String text) =>
-    syncBodyOrError(SyncHttpClient.post(
-      '${c.baseUrl}/${ref.issueSeg}/comments',
-      headers: c.headers,
-      body: jsonEncode({'body': text}),
-    ));
+    syncBodyOrError(
+      SyncHttpClient.post(
+        '${c.baseUrl}/${ref.issueSeg}/comments',
+        headers: c.headers,
+        body: jsonEncode({'body': text}),
+      ),
+    );

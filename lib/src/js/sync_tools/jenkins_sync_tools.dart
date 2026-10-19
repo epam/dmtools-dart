@@ -76,10 +76,12 @@ class JenkinsSyncTools {
     if (config == null) return syncErr('Jenkins not configured');
     final jobPath = apiJobPath(syncAsStr(args['jobPath']));
     final buildNumber = syncAsInt(args['buildNumber']);
-    return syncBodyOrError(SyncHttpClient.get(
-      '${config.baseUrl}$jobPath$buildNumber/$suffix',
-      headers: config.headers,
-    ));
+    return syncBodyOrError(
+      SyncHttpClient.get(
+        '${config.baseUrl}$jobPath$buildNumber/$suffix',
+        headers: config.headers,
+      ),
+    );
   }
 }
 

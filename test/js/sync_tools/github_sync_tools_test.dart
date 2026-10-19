@@ -208,7 +208,10 @@ void fixtureprtools_p2() {
       'workspace': 'o',
       'repository': 'r',
     });
-    expect(fx.requests.single, 'GET /repos/o/r/branches?per_page=100&page=1');
+    expect(fx.requests, [
+      'GET /repos/o/r/branches?per_page=100&page=1',
+      'GET /repos/o/r/branches?per_page=100&page=2',
+    ]);
   });
 }
 
@@ -607,7 +610,7 @@ void fixtureactionstools_p1() {
         'runId': '5',
       }),
     ) as Map<String, dynamic>;
-    expect(body['path'], '/repos/o/r/actions/runs/5/jobs');
+    expect(body['path'], '/repos/o/r/actions/runs/5/jobs?per_page=100&page=1');
   });
 
   test('github_list_workflow_runs supports workflow + status filters', () {

@@ -49,11 +49,7 @@ class GitHubCiSyncTools {
         if (!syncIsBlank(a[_textField])) _textField: syncAsStr(a[_textField]),
       };
     }
-    return _postJson(
-      c,
-      '${c.baseUrl}/${_repoSeg(a)}/check-runs',
-      body,
-    );
+    return _postJson(c, '${c.baseUrl}/${_repoSeg(a)}/check-runs', body);
   }
 
   /// `github_update_check_run` — PATCH `repos/{w}/{r}/check-runs/{id}`.
@@ -69,12 +65,14 @@ class GitHubCiSyncTools {
         if (!syncIsBlank(a[_textField])) _textField: syncAsStr(a[_textField]),
       };
     }
-    return syncBodyOrError(SyncHttpClient.patch(
-      '${c.baseUrl}/${_repoSeg(a)}'
-      '/check-runs/${syncAsStr(a['checkRunId'])}',
-      headers: c.headers,
-      body: jsonEncode(body),
-    ));
+    return syncBodyOrError(
+      SyncHttpClient.patch(
+        '${c.baseUrl}/${_repoSeg(a)}'
+        '/check-runs/${syncAsStr(a['checkRunId'])}',
+        headers: c.headers,
+        body: jsonEncode(body),
+      ),
+    );
   }
 
   /// `github_create_commit_status` — POST
@@ -116,21 +114,25 @@ class GitHubCiSyncTools {
   /// `github_update_pr_comment` — PATCH
   /// `repos/{w}/{r}/issues/comments/{id}` with `{"body": text}`.
   String _updatePrComment(GhSyncConfig c, Map<String, dynamic> a) =>
-      syncBodyOrError(SyncHttpClient.patch(
-        '${c.baseUrl}/${_repoSeg(a)}'
-        '/issues/comments/${syncAsStr(a['commentId'])}',
-        headers: c.headers,
-        body: jsonEncode({'body': syncAsStr(a[_textField])}),
-      ));
+      syncBodyOrError(
+        SyncHttpClient.patch(
+          '${c.baseUrl}/${_repoSeg(a)}'
+          '/issues/comments/${syncAsStr(a['commentId'])}',
+          headers: c.headers,
+          body: jsonEncode({'body': syncAsStr(a[_textField])}),
+        ),
+      );
 
   /// `github_delete_pr_comment` — DELETE
   /// `repos/{w}/{r}/issues/comments/{id}` (Java: void).
   String _deletePrComment(GhSyncConfig c, Map<String, dynamic> a) =>
-      syncBodyOrError(SyncHttpClient.delete(
-        '${c.baseUrl}/${_repoSeg(a)}'
-        '/issues/comments/${syncAsStr(a['commentId'])}',
-        headers: c.headers,
-      ));
+      syncBodyOrError(
+        SyncHttpClient.delete(
+          '${c.baseUrl}/${_repoSeg(a)}'
+          '/issues/comments/${syncAsStr(a['commentId'])}',
+          headers: c.headers,
+        ),
+      );
 
   /// `github_get_pr_activities` — reviews + inline comments + discussion
   /// comments in Java's aggregation order; comments wrapped as
@@ -144,14 +146,13 @@ class GitHubCiSyncTools {
     } on StateError catch (e) {
       return syncErr(e.message);
     }
-    activities.addAll(_bestEffortComments(
-      c,
-      '${_prUrl(c, a)}/comments',
-    ));
-    activities.addAll(_bestEffortComments(
-      c,
-      '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
-    ));
+    activities.addAll(_bestEffortComments(c, '${_prUrl(c, a)}/comments'));
+    activities.addAll(
+      _bestEffortComments(
+        c,
+        '${c.baseUrl}/${_repoSeg(a)}/issues/${_prId(a)}/comments',
+      ),
+    );
     return jsonEncode(activities);
   }
 
@@ -203,8 +204,10 @@ class GitHubCiSyncTools {
     final resp = SyncHttpClient.get(url, headers: c.headers);
     if (!resp.isOk) {
       return (
-        error: syncErr('HTTP ${resp.statusCode} listing pull requests '
-            '(page $page): ${resp.body}'),
+        error: syncErr(
+          'HTTP ${resp.statusCode} listing pull requests '
+          '(page $page): ${resp.body}',
+        ),
         page: null,
       );
     }
@@ -240,11 +243,13 @@ class GitHubCiSyncTools {
   /// `github_delete_release_asset` — DELETE
   /// `repos/{w}/{r}/releases/assets/{assetId}` (Java: void).
   String _deleteReleaseAsset(GhSyncConfig c, Map<String, dynamic> a) =>
-      syncBodyOrError(SyncHttpClient.delete(
-        '${c.baseUrl}/${_repoSeg(a)}'
-        '/releases/assets/${syncAsStr(a['assetId'])}',
-        headers: c.headers,
-      ));
+      syncBodyOrError(
+        SyncHttpClient.delete(
+          '${c.baseUrl}/${_repoSeg(a)}'
+          '/releases/assets/${syncAsStr(a['assetId'])}',
+          headers: c.headers,
+        ),
+      );
 
   /// `github_get_commits_from_branches` — commits from every branch whose
   /// name matches `branchNameRegex`, de-duplicated by SHA.
@@ -254,10 +259,13 @@ class GitHubCiSyncTools {
     final seenShas = <String>{};
     final out = <dynamic>[];
     try {
-      for (final branch
-          in _fetchPages(c, '${c.baseUrl}/${_repoSeg(a)}/branches')) {
+      for (final branch in _fetchPages(
+        c,
+        '${c.baseUrl}/${_repoSeg(a)}/branches',
+      )) {
         out.addAll(
-            _matchedBranchCommits(c, a, branch, pattern, since, seenShas));
+          _matchedBranchCommits(c, a, branch, pattern, since, seenShas),
+        );
       }
     } on StateError catch (e) {
       return syncErr(e.message);

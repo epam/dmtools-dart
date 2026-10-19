@@ -221,20 +221,19 @@ class AiSyncTools {
     final url = '${_reader.getGeminiBasePath()}/$model:generateContent'
         '?key=${Uri.encodeQueryComponent(apiKey)}';
     return _postChat(
-      url,
-      jsonHeaders(),
-      {
-        'contents': [
-          {
-            'role': 'user',
-            'parts': [
-              {'text': _message(args)},
-            ],
-          },
-        ],
-      },
-      extractGeminiText,
-    );
+        url,
+        jsonHeaders(),
+        {
+          'contents': [
+            {
+              'role': 'user',
+              'parts': [
+                {'text': _message(args)},
+              ],
+            },
+          ],
+        },
+        extractGeminiText);
   }
 
   /// `openai_ai_chat` — POST to the configured chat-completions endpoint.
@@ -288,15 +287,14 @@ class AiSyncTools {
   /// base path defaults to `http://localhost:11434`.
   String _ollamaAiChat(Map<String, dynamic> args) {
     return _postChat(
-      '${_reader.getOllamaBasePath()}/api/chat',
-      jsonHeaders(),
-      {
-        'model': _reader.getOllamaModel() ?? _defaultModel('ollama'),
-        'messages': [_userMessage(_message(args))],
-        'stream': false,
-      },
-      extractMessageContent,
-    );
+        '${_reader.getOllamaBasePath()}/api/chat',
+        jsonHeaders(),
+        {
+          'model': _reader.getOllamaModel() ?? _defaultModel('ollama'),
+          'messages': [_userMessage(_message(args))],
+          'stream': false,
+        },
+        extractMessageContent);
   }
 
   /// `dial_ai_chat` — POST to the configured DIAL endpoint.
@@ -313,14 +311,13 @@ class AiSyncTools {
       return _jsError('Dial is not configured (DIAL_API_KEY)');
     }
     return _postChat(
-      basePath,
-      bearerHeaders(apiKey),
-      {
-        'model': _reader.getDialModel() ?? _defaultModel('dial'),
-        'messages': [_userMessage(_message(args))],
-      },
-      extractChoiceContent,
-    );
+        basePath,
+        bearerHeaders(apiKey),
+        {
+          'model': _reader.getDialModel() ?? _defaultModel('dial'),
+          'messages': [_userMessage(_message(args))],
+        },
+        extractChoiceContent);
   }
 
   /// `bedrock_ai_chat` — POST `{base}/model/{id}/invoke` with the model
@@ -406,8 +403,10 @@ class AiSyncTools {
   }
 
   /// Wraps [message] as an OpenAI-style `{role, content}` user message.
-  static Map<String, String> _userMessage(String message) =>
-      {'role': 'user', 'content': message};
+  static Map<String, String> _userMessage(String message) => {
+        'role': 'user',
+        'content': message,
+      };
 
   /// Reads the `message` tool argument.
   static String _message(Map<String, dynamic> args) =>

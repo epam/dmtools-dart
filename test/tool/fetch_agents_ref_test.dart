@@ -31,10 +31,8 @@ void main() {
   }
 
   Future<String> head(String dir) async {
-    final r = await Process.run('git', [
-      'rev-parse',
-      'HEAD',
-    ], workingDirectory: dir);
+    const args = ['rev-parse', 'HEAD'];
+    final r = await Process.run('git', args, workingDirectory: dir);
     return (r.stdout as String).trim();
   }
 

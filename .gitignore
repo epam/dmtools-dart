@@ -37,6 +37,8 @@ native/quickjs/*.dylib
 !.dmtools/runners/
 .dmtools/runners/**/
 !.dmtools/runners/*.json
+!.dmtools/instructions/
+!.dmtools/instructions/*.md
 !.dmtools/copilot-sessions/
 .dmtools/copilot-sessions/**
 .dmtools-logs/

@@ -83,6 +83,36 @@ function action(params) { return d.run(params); }
     }
   });
 
+  test(
+      'AC1 async: runAsync.all-aggregated dispatch resolves declaring module dir',
+      () async {
+    _write('${tmp.path}/a/js/dispatchAll.js', """
+module.exports.run = function (params) {
+  var job = runAsync(function (x) {
+    var inner = require('./common/t.js');
+    return inner.value + ':' + x;
+  }, 7);
+  return runAsync.all([job]).wait()[0];
+};
+""");
+    _write('${tmp.path}/b/js/asyncEntryAll.js', """
+var d = require('../../a/js/dispatchAll.js');
+function action(params) { return d.run(params); }
+""");
+    final pool = AsyncJobPool(workers: 2);
+    await pool.boot();
+    try {
+      final out = const JsJobRunner().runScript(
+        scriptPath: '${tmp.path}/b/js/asyncEntryAll.js',
+        jobParams: const {'parallelWorkers': 2},
+        config: JsRunConfig(pool: pool),
+      );
+      expect(jsonDecode(out!), 'trackers-ok:7');
+    } finally {
+      pool.dispose();
+    }
+  });
+
   group('AC3 config action paths', () {
     test('rebased to the config directory and runs from another CWD', () {
       final cfgDir = Directory('${tmp.path}/cfg')..createSync();

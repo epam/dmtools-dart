@@ -274,7 +274,10 @@ class AsyncJobPool {
       if (raw == null || raw.isEmpty) return null;
       final decoded = jsonDecode(raw);
       return decoded is String && decoded.isNotEmpty ? decoded : null;
-    } catch (_) {
+    } catch (e) {
+      // Fall back to the entry directory, but do not hide the failure
+      // silently: the regression would otherwise be invisible (gh-409).
+      stderr.writeln('[async_job_pool] live script directory unavailable: $e');
       return null;
     }
   }

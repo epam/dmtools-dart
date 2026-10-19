@@ -18,7 +18,8 @@
       "formalGithubReview": true
     },
     "cliPrompts": [
-      "pack:instructions/pr_review/review_verdict_rules.md"
+      "pack:instructions/pr_review/review_verdict_rules.md",
+      ".dmtools/instructions/java_parity.md"
     ]
   }
 }

@@ -13,7 +13,8 @@
     "inputJql": "",
     "cliPromptsByTracker": {
       "github": [
-        "pack:instructions/common/github_comment_format.md"
+        "pack:instructions/common/github_comment_format.md",
+        ".dmtools/instructions/java_parity.md"
       ]
     },
     "customParams": {

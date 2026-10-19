@@ -15,20 +15,28 @@ void main() {
   late String secondSha;
 
   Future<void> git(List<String> args, {String? dir}) async {
-    final r = await Process.run('git', args,
-        workingDirectory: dir,
-        environment: {
-          ...Platform.environment,
-          'GIT_AUTHOR_NAME': 't',
-          'GIT_AUTHOR_EMAIL': 't@t',
-          'GIT_COMMITTER_NAME': 't',
-          'GIT_COMMITTER_EMAIL': 't@t',
-        });
+    final r = await Process.run(
+      'git',
+      args,
+      workingDirectory: dir,
+      environment: {
+        ...Platform.environment,
+        'GIT_AUTHOR_NAME': 't',
+        'GIT_AUTHOR_EMAIL': 't@t',
+        'GIT_COMMITTER_NAME': 't',
+        'GIT_COMMITTER_EMAIL': 't@t',
+      },
+    );
     expect(r.exitCode, 0, reason: 'git ${args.join(' ')}: ${r.stderr}');
   }
 
   Future<String> head(String dir) async {
-    final r = await Process.run('git', ['rev-parse', 'HEAD'],
+    final r = await Process.run(
+        'git',
+        [
+          'rev-parse',
+          'HEAD',
+        ],
         workingDirectory: dir);
     return (r.stdout as String).trim();
   }
@@ -36,9 +44,7 @@ void main() {
   Future<ProcessResult> fetch(String ref, String target) {
     return Process.run(
       'bash',
-      [
-        '${Directory.current.path}/tool/fetch_agents.sh',
-      ],
+      ['${Directory.current.path}/tool/fetch_agents.sh'],
       environment: {
         ...Platform.environment,
         'AGENTS_FETCH_URL': 'file://$srcPath',

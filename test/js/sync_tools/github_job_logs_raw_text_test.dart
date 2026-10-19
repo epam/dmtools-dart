@@ -65,14 +65,21 @@ void main() {
       expect(decoded as String, contains('##[error]method_size'));
     });
 
-    test('github_get_job_logs follows the 302 to the blob log', () {
-      final result = tools.handlers['github_get_job_logs']!({
-        'workspace': 'o',
-        'repository': 'r',
-        'jobId': '302',
-      });
-      expect(jsonDecode(result), contains('redirected blob log body'));
-      expect(fx.requests.last, contains('/blob/job-302.txt'));
+    _redirectTest(() => fx, () => tools);
+  });
+}
+
+void _redirectTest(
+  GithubFixtureServer Function() fx,
+  GitHubSyncTools Function() tools,
+) {
+  test('github_get_job_logs follows the 302 to the blob log', () {
+    final result = tools().handlers['github_get_job_logs']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'jobId': '302',
     });
+    expect(jsonDecode(result), contains('redirected blob log body'));
+    expect(fx().requests.last, contains('/blob/job-302.txt'));
   });
 }

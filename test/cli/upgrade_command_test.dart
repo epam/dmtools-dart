@@ -8,16 +8,11 @@ library;
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
-void main() {
-  late List<String> out;
-  late List<String> downloads;
-  late List<Map<String, String>> installs;
-
-  setUp(() {
-    out = [];
-    downloads = [];
-    installs = [];
-  });
+/// Shared fakes: captured output + download/install call log.
+class _Harness {
+  final out = <String>[];
+  final downloads = <String>[];
+  final installs = <Map<String, String>>[];
 
   UpgradeCommand cmd({
     bool dryRun = false,
@@ -38,61 +33,74 @@ void main() {
           return installerCode;
         },
       );
+}
 
-  group('version validation', () {
-    test('rejects invalid version before any download or install', () async {
-      expect(await cmd().run(['1.2']), 2);
-      expect(await cmd().run(['1.2.3;echo']), 2);
-      expect(downloads, isEmpty);
-      expect(installs, isEmpty);
-      expect(
-        out.where((l) => l.contains('Invalid version')).length,
-        2,
-      );
-    });
+void main() {
+  group('version validation', _versionValidation);
+  group('install flow', _installFlow);
+  group('dispatcher', _dispatcherRouting);
+}
 
-    test('accepts 1.2.3 and v1.2.3 and pins the tag', () async {
-      expect(await cmd().run(['1.2.3']), 0);
-      expect(await cmd().run(['v1.2.3']), 0);
-      expect(installs, [
-        containsPair('DMTOOLS_VERSION', '1.2.3'),
-        containsPair('DMTOOLS_VERSION', 'v1.2.3'),
-      ]);
-      expect(
-        downloads.first,
-        'https://github.com/epam/dmtools-dart/releases/download/v1.2.3/install.sh',
-      );
-    });
+void _versionValidation() {
+  late _Harness h;
+  setUp(() => h = _Harness());
 
-    test('no version uses latest release installer', () async {
-      expect(await cmd().run([]), 0);
-      expect(
-        downloads.single,
-        'https://github.com/epam/dmtools-dart/releases/latest/download/install.sh',
-      );
-      expect(installs.single, isNot(contains('DMTOOLS_VERSION')));
-    });
+  test('rejects invalid version before any download or install', () async {
+    expect(await h.cmd().run(['1.2']), 2);
+    expect(await h.cmd().run(['1.2.3;echo']), 2);
+    expect(h.downloads, isEmpty);
+    expect(h.installs, isEmpty);
+    expect(h.out.where((l) => l.contains('Invalid version')).length, 2);
   });
 
+  test('accepts 1.2.3 and v1.2.3 and pins the tag', () async {
+    expect(await h.cmd().run(['1.2.3']), 0);
+    expect(await h.cmd().run(['v1.2.3']), 0);
+    expect(h.installs, [
+      containsPair('DMTOOLS_VERSION', '1.2.3'),
+      containsPair('DMTOOLS_VERSION', 'v1.2.3'),
+    ]);
+    expect(
+      h.downloads.first,
+      'https://github.com/epam/dmtools-dart/releases/download/v1.2.3/install.sh',
+    );
+  });
+
+  test('no version uses latest release installer', () async {
+    expect(await h.cmd().run([]), 0);
+    expect(
+      h.downloads.single,
+      'https://github.com/epam/dmtools-dart/releases/latest/download/install.sh',
+    );
+    expect(h.installs.single, isNot(contains('DMTOOLS_VERSION')));
+  });
+}
+
+void _installFlow() {
+  late _Harness h;
+  setUp(() => h = _Harness());
+
   test('dry run changes nothing', () async {
-    expect(await cmd(dryRun: true).run(['1.2.3']), 0);
-    expect(downloads, isEmpty);
-    expect(installs, isEmpty);
-    expect(out, anyElement(contains('Dry run')));
+    expect(await h.cmd(dryRun: true).run(['1.2.3']), 0);
+    expect(h.downloads, isEmpty);
+    expect(h.installs, isEmpty);
+    expect(h.out, anyElement(contains('Dry run')));
   });
 
   test('failed download runs nothing and returns 1', () async {
-    final code = await cmd(fetch: (_) async => null).run(['1.2.3']);
+    final code = await h.cmd(fetch: (_) async => null).run(['1.2.3']);
     expect(code, 1);
-    expect(installs, isEmpty);
-    expect(out, anyElement(contains('could not download')));
+    expect(h.installs, isEmpty);
+    expect(h.out, anyElement(contains('could not download')));
   });
 
   test('failing installer returns its exit code', () async {
-    expect(await cmd(installerCode: 7).run(['1.2.3']), 7);
-    expect(out, anyElement(contains('code 7')));
+    expect(await h.cmd(installerCode: 7).run(['1.2.3']), 7);
+    expect(h.out, anyElement(contains('code 7')));
   });
+}
 
+void _dispatcherRouting() {
   test(
     'dispatcher routes upgrade, update and mcp upgrade to the same command',
     () async {

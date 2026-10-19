@@ -34,7 +34,6 @@ import 'upgrade_command.dart';
 import 'help_text.dart';
 import 'run_command_processor.dart';
 import 'job_registry.dart';
-import 'upgrade_command.dart';
 
 /// Parses CLI arguments, dispatches commands and reports exit codes.
 class CliDispatcher {
@@ -111,8 +110,6 @@ class CliDispatcher {
     'help': (_) => _printHelp(),
     '--list-jobs': (_) => _printJobs(),
     'doctor': (_) => _runDoctor(),
-    'upgrade': (rest) => UpgradeCommand(writer: _writer).run(rest),
-    'update': (rest) => UpgradeCommand(writer: _writer).run(rest),
     'run': _runJob,
     'compile': _runCompile,
     'upgrade': _runUpgrade,
@@ -156,13 +153,8 @@ class CliDispatcher {
       word == 'upgrade' || word == 'update';
 
   /// Upgrades the runtime + launcher via the release installer (gh-395).
-  Future<int> _runUpgrade(List<String> rest) => UpgradeCommand(
-        writer: _writer,
-        errorWriter: _errorWriter,
-        dryRun:
-            _reader.getValue('DMTOOLS_UPGRADE_DRY_RUN')?.trim().toLowerCase() ==
-                'true',
-      ).run(rest);
+  Future<int> _runUpgrade(List<String> rest) =>
+      UpgradeCommand(writer: _writer).run(rest);
 
   /// Builds a versioned agent pack (zip + manifest + sha256) — dm.ai #595.
   int _runCompile(List<String> rest) =>

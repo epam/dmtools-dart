@@ -118,4 +118,16 @@ void _dispatcherRouting() {
       expect(lines.where((l) => l.contains('Invalid version')).length, 4);
     },
   );
+
+  test('old launcher sends mcp upgrade and still reaches the command',
+      () async {
+    final lines = <String>[];
+    final dispatcher = CliDispatcher(
+      writer: lines.add,
+      errorWriter: lines.add,
+      isTty: () => false,
+    );
+    expect(await dispatcher.dispatch(['mcp', 'upgrade', 'not-a-version']), 2);
+    expect(lines.any((l) => l.contains('Invalid version')), isTrue);
+  });
 }

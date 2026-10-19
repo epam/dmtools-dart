@@ -170,6 +170,12 @@ String _listPrs(GhSyncConfig c, Map<String, dynamic> a) {
   final resp = SyncHttpClient.get(url, headers: c.headers);
   final body = syncBodyOrError(resp);
   if (requested != 'merged' || !resp.isOk) return body;
+  return _filterMergedPrs(body);
+}
+
+/// Filters the decoded PR list to entries with a non-null `merged_at`
+/// (the `state=merged` emulation for GitHub's REST pulls endpoint).
+String _filterMergedPrs(String body) {
   final decoded = syncTryDecode(body);
   final prs = decoded is List ? decoded : const [];
   final merged =

@@ -252,10 +252,10 @@ jobs:
           echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
       - name: Install crap4dart
         if: needs.static.result == 'success' && needs.test.result == 'success'
-        # 0.9.5: fixed the test_assertions parser limitation with trailing
-        # named `skip:` args, so the two config excludes are gone. Keep this
-        # pin aligned with the version the pre-commit hook runs locally.
-        run: dart pub global activate crap4dart 0.9.5
+        # Fixed in 0.9.5: the test_assertions parser for trailing named `skip:` args,
+        # so the two config excludes stay gone. Keep this pin aligned with the
+        # version the pre-commit hook runs locally.
+        run: dart pub global activate crap4dart 0.14.2
       - run: crap4dart check --all
         if: needs.static.result == 'success' && needs.test.result == 'success'
       - run: crap4dart analyze

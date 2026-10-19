@@ -273,7 +273,12 @@ class _ParentConfigResolver {
   ///
   /// [configDir] is the directory of the file that [child] was loaded from;
   /// parent paths are resolved relative to it.
-  Map<String, dynamic> resolve(Map<String, dynamic> child, String configDir) {
+  Map<String, dynamic> resolve(
+    Map<String, dynamic> child,
+    String configDir, {
+    bool rebaseActions = true,
+  }) {
+    if (rebaseActions) _rebaseActionPaths(child, configDir);
     final parentBlock = child['parent'];
     if (parentBlock is! Map<String, dynamic>) {
       return _stripMeta(child);
@@ -305,6 +310,36 @@ class _ParentConfigResolver {
     );
   }
 
+  /// Rebases the JS/script action fields of [config] to [configDir] (gh-409).
+  ///
+  /// A relative action path is resolved against the config file's directory
+  /// when that file exists there; otherwise it is left untouched so the
+  /// legacy CWD-relative resolution still applies (Java-compatible
+  /// fallback). Absolute paths and `pack:` refs are never rewritten.
+  void _rebaseActionPaths(Map<String, dynamic> config, String configDir) {
+    for (final key in _actionPathKeys) {
+      final value = config[key];
+      if (value is! String) continue;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty ||
+          p.isAbsolute(trimmed) ||
+          trimmed.startsWith(_packScheme)) {
+        continue;
+      }
+      final candidate = p.join(configDir, trimmed);
+      if (File(candidate).existsSync()) config[key] = candidate;
+    }
+  }
+
+  /// Config keys holding a script/action path resolved relative to the
+  /// config file (gh-409 AC3).
+  static const List<String> _actionPathKeys = [
+    'thenAction',
+    'preJSAction',
+    'postJSAction',
+    'preCliJSAction',
+  ];
+
   /// Loads the parent config (filesystem path or agent pack ref) and
   /// recursively resolves it. Returns the resolved config plus the pack
   /// root when the parent came from an agent pack, so the caller can
@@ -325,7 +360,12 @@ class _ParentConfigResolver {
       );
       final json =
           jsonDecode(pack.entryFile.readAsStringSync()) as Map<String, dynamic>;
-      final config = resolve(json, pack.entryFile.parent.path);
+      // Pack entries keep their pack-root rewriting (no config-dir rebase).
+      final config = resolve(
+        json,
+        pack.entryFile.parent.path,
+        rebaseActions: false,
+      );
       _packResolver.rewritePathsToPackRoot(config, pack.packRoot);
       // `pack:` references inside the entry config resolve against this
       // same pack.

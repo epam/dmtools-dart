@@ -38,6 +38,7 @@
 /// an error envelope).
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:quickjs_runtime/quickjs_runtime.dart';
@@ -221,12 +222,61 @@ class AsyncJobPool {
     _pool.attachMainRuntime(
       runtime,
       dispatchContext: () => {
-        'scriptDirectory': scriptDirectory,
+        // gh-409: the require base of the module that actually dispatches
+        // (not the entry script), so dispatched functions resolve their
+        // relative requires against their declaring module's directory.
+        'scriptDirectory': _liveScriptDirectory(runtime) ?? scriptDirectory,
         'workingDirectory': workingDirectory,
         'params': params,
         'overrides': PropertyReader.getOverrides(),
       },
     );
+    _wrapRunAsyncForDeclaringModule(runtime);
+  }
+
+  /// Wraps `runAsync` so each dispatch records the require base of the
+  /// module that declared the dispatched function (gh-409): the provider
+  /// reads `__jsrPendingDispatchDir`, set only for the duration of the
+  /// call. The original prelude `runAsync` (and its `.all`) is preserved.
+  static void _wrapRunAsyncForDeclaringModule(QuickjsRuntime runtime) {
+    runtime.eval(
+      '''(function() {
+        var orig = globalThis.runAsync;
+        if (typeof orig !== 'function') return;
+        var wrapped = function(fn, args) {
+          globalThis.__jsrPendingDispatchDir =
+              (typeof fn === 'function' && __jsrDirForSource)
+                  ? __jsrDirForSource(String(fn)) : null;
+          try {
+            return orig(fn, args);
+          } finally {
+            globalThis.__jsrPendingDispatchDir = null;
+          }
+        };
+        wrapped.all = orig.all;
+        globalThis.runAsync = wrapped;
+      })();''',
+      filename: '<async_wrap>',
+    );
+  }
+
+  /// The require base of the module currently evaluating on [runtime], or
+  /// null when the loader is not installed / reports nothing usable.
+  static String? _liveScriptDirectory(QuickjsRuntime runtime) {
+    try {
+      final raw = runtime.eval(
+        '(typeof __jsrPendingDispatchDir === "string" && '
+        '__jsrPendingDispatchDir) || '
+        '(typeof __jsrScriptDirectory === "function" '
+        '? __jsrScriptDirectory() : null)',
+        filename: '<dispatch_script_dir>',
+      );
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      return decoded is String && decoded.isNotEmpty ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Asks every worker to exit (in-flight jobs finish first) and resets

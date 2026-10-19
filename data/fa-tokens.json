@@ -3127,6 +3127,15 @@
       "total": 65603,
       "cacheRead": 507495,
       "model": "claude-haiku-5.5"
+    },
+    {
+      "leg": "dev",
+      "at": "2026-10-19T19:27:12Z",
+      "prompt": 47875,
+      "completion": 2409,
+      "total": 50284,
+      "cacheRead": 116561,
+      "model": "claude-haiku-5.5"
     }
   ]
 }

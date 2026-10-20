@@ -639,6 +639,40 @@ void ticketHydrationTests() {
         await tmp.delete(recursive: true);
       }
     });
+
+    test(
+      'hydrates params.ticket and inputFolderPath for composite GitHub contextId',
+      () async {
+        final tmp = await _createTempDir();
+        final log = '${tmp.path}/ticket_key.log';
+        final js = File(
+          '${tmp.path}/post_cb.js',
+        )..writeAsStringSync(
+            'function action(params) { '
+            'file_write({path: "$log", content: params.ticket.key + "|" + params.jobParams.inputFolderPath}); }',
+          );
+        try {
+          Directory('${tmp.path}/input/gh-81').createSync(recursive: true);
+          File('${tmp.path}/input/gh-81/ticket.json').writeAsStringSync(
+            '{"key":"acme/widgets#81","number":81,"title":"Composite"}',
+          );
+          await (CliAgent(
+            params: CliAgentParams()
+              ..cliCommands = ['echo done']
+              ..metadata = {'contextId': 'acme/widgets#81'}
+              ..postJSAction = js.path
+              ..cleanupInputFolder = false,
+            workingDirectory: tmp.path,
+          )).run();
+          expect(
+            (await File(log).readAsString()).trim(),
+            'acme/widgets#81|${tmp.path}/input/gh-81',
+          );
+        } finally {
+          await tmp.delete(recursive: true);
+        }
+      },
+    );
   });
 }
 

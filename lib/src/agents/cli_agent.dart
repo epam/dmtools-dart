@@ -531,7 +531,7 @@ class CliAgent {
     try {
       return jsRunner.runScript(
         scriptPath: actionPath,
-        jobParams: _buildJobParams(null, null),
+        jobParams: _buildJobParams(null, _inputContextPath),
         ticket: _resolvedTicketData ?? ticketData,
         workingDirectory: workDir,
         config: JsRunConfig(
@@ -562,7 +562,10 @@ class CliAgent {
     Map<String, dynamic> context,
     String workDir,
   ) {
-    return {..._buildExtraGlobals(null, null, workDir), ...context};
+    return {
+      ..._buildExtraGlobals(null, _inputContextPath, workDir),
+      ...context
+    };
   }
 
   /// Whether the strict-mode guard applies: `requireCliOutputFile=true` and
@@ -699,14 +702,25 @@ class CliAgent {
   Map<String, dynamic>? _resolveTicketData(String workDir) {
     if (ticketData != null) return ticketData;
     if (params.contextId.isEmpty) return null;
-    final file = File('$workDir/input/${params.contextId}/ticket.json');
-    if (!file.existsSync()) return null;
-    try {
-      final decoded = jsonDecode(file.readAsStringSync());
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
+    final folderName = TicketInputContextBuilder.toInputFolderName(
+      params.contextId,
+    );
+    final candidates = <String>[
+      '$workDir/input/$folderName/ticket.json',
+      if (folderName != params.contextId)
+        '$workDir/input/${params.contextId}/ticket.json',
+    ];
+    for (final path in candidates) {
+      final file = File(path);
+      if (!file.existsSync()) continue;
+      try {
+        final decoded = jsonDecode(file.readAsStringSync());
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {
+        // Ignore malformed ticket.json and continue.
+      }
     }
+    return null;
   }
 
   /// Ensures the `outputs/` folder exists before CLI commands run.

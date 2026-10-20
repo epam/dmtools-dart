@@ -321,6 +321,41 @@ void contextPathTests() {
         tmp.deleteSync(recursive: true);
       }
     });
+
+    test('maps GitHub composite key owner/repo#N to input/gh-N', () {
+      final tmp = _createTempDir();
+      try {
+        final builder = TicketInputContextBuilder(tmp.path);
+        final path =
+            builder.build('acme/widgets#42', ticketData: _fullTicket());
+        expect(path, '${tmp.path}/input/gh-42');
+        expect(File('$path/ticket.md').existsSync(), isTrue);
+        expect(File('$path/ticket.json').existsSync(), isTrue);
+      } finally {
+        tmp.deleteSync(recursive: true);
+      }
+    });
+
+    test(
+        'toInputFolderName maps composite and bare GitHub keys and preserves others',
+        () {
+      expect(
+        TicketInputContextBuilder.toInputFolderName('acme/widgets#42'),
+        'gh-42',
+      );
+      expect(
+        TicketInputContextBuilder.toInputFolderName('#7'),
+        'gh-7',
+      );
+      expect(
+        TicketInputContextBuilder.toInputFolderName('PROJ-123'),
+        'PROJ-123',
+      );
+      expect(
+        TicketInputContextBuilder.toInputFolderName('batch/run-42'),
+        'batch/run-42',
+      );
+    });
   });
 }
 

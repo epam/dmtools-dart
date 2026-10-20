@@ -25,12 +25,31 @@ class TicketInputContextBuilder {
   /// Base directory for the `input/` folder.
   final String workingDirectory;
 
+  static final RegExp _githubCompositeKey = RegExp(r'^[\w.-]+/[\w.-]+#(\d+)$');
+  static final RegExp _githubBareKey = RegExp(r'^#(\d+)$');
+
+  /// Maps a ticket/context key to the `input/` subfolder name.
+  ///
+  /// Mirrors Java `CliExecutionHelper.toInputFolderName`: a GitHub composite
+  /// key (`owner/repo#12` or `#12`) becomes the router key `gh-12` so JS
+  /// agents and CLI prompts read a single flat `input/gh-12/` folder instead
+  /// of a nested `input/owner/repo#12/` path. Other keys are preserved as-is
+  /// for backward compatibility.
+  static String toInputFolderName(String contextId) {
+    final composite = _githubCompositeKey.firstMatch(contextId);
+    if (composite != null) return 'gh-${composite.group(1)}';
+    final bare = _githubBareKey.firstMatch(contextId);
+    if (bare != null) return 'gh-${bare.group(1)}';
+    return contextId;
+  }
+
   /// Builds the input context for [contextId] from [ticketData].
   ///
   /// If [ticketData] is null (no tracker configured), creates an empty
-  /// `input/<contextId>/` folder. Returns the path to the context folder.
+  /// `input/<folderName>/` folder. Returns the path to the context folder.
   String build(String contextId, {Map<String, dynamic>? ticketData}) {
-    final contextPath = '$workingDirectory/input/$contextId';
+    final folderName = toInputFolderName(contextId);
+    final contextPath = '$workingDirectory/input/$folderName';
     Directory(contextPath).createSync(recursive: true);
     if (ticketData == null) return contextPath;
     _writeTicketFiles(contextPath, ticketData);

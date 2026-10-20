@@ -106,6 +106,9 @@ jobs:
     runs-on: ${{ needs.pick.outputs.runner }}
     # gh-440: a synchronously-wedged test isolate never trips dart test's
     # per-test timeout; bound the whole shard so it dies in minutes.
+    # Scope: the WHOLE job (checkout, apt, QuickJS build, dart test,
+    # coverage) — not just the test step. Normal shards finish in 8-20 min,
+    # so 45 leaves ample headroom.
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -170,9 +173,10 @@ jobs:
           COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+' || true)
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
       - name: Stall evidence (failed or timed-out shard)
-        # gh-440: runs only when the test step did not succeed (red test,
-        # or job timeout cancelling it). Green path adds nothing.
-        if: always() && steps.test.outcome != 'success'
+        # gh-440: runs only when the test step itself FAILED or was
+        # CANCELLED (job timeout). A skipped test step (earlier step red,
+        # e.g. apt/QuickJS) has no /tmp/test_run.log to show — skip.
+        if: always() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled')
         run: |
           {
             echo "### test shard ${{ matrix.shard }} — last 100 reporter lines"
@@ -181,7 +185,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: always() && steps.test.outcome != 'success'
+        if: always() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled')
         with:
           name: test-shard-${{ matrix.shard }}-log
           path: /tmp/test_run.log

@@ -21,21 +21,28 @@ void main() {
   tearDown(() => tmp.deleteSync(recursive: true));
 
   test('AC1 sync: module require resolves against its own directory', () {
-    _expectSyncResolves(tmp.path);
+    expect(_runSync(tmp.path), {'value': 'trackers-ok'});
   });
 
   test('AC1 negative: genuinely missing target still fails cleanly', () {
-    _expectMissingFails(tmp.path);
+    expect(
+      () => _runMissing(tmp.path),
+      throwsA(
+        predicate(
+          (e) => e.toString().contains(
+                'Failed to require module: ./nope/missing.js',
+              ),
+        ),
+      ),
+    );
   });
 
   test(
     'AC1/AC2 async: dispatched fn resolves its declaring module dir',
     () async {
-      await _expectAsyncResolves(
-        tmp.path,
-        'dispatch',
-        'asyncEntry',
-        runAll: false,
+      expect(
+        await _runAsync(tmp.path, 'dispatch', 'asyncEntry', runAll: false),
+        'trackers-ok:7',
       );
     },
   );
@@ -43,22 +50,22 @@ void main() {
   test(
     'AC1 async: runAsync.all-aggregated dispatch resolves declaring module dir',
     () async {
-      await _expectAsyncResolves(
-        tmp.path,
-        'dispatchAll',
-        'asyncEntryAll',
-        runAll: true,
+      expect(
+        await _runAsync(tmp.path, 'dispatchAll', 'asyncEntryAll', runAll: true),
+        'trackers-ok:7',
       );
     },
   );
 
   group('AC3 config action paths', () {
     test('rebased to the config directory and runs from another CWD', () {
-      _expectConfigRebased(tmp.path);
+      final out = _runConfigRebase(tmp.path);
+      expect(out['preJSAction'], p.join(tmp.path, 'cfg', 'hooks/pre.js'));
+      expect(out['thenAction'], p.join(tmp.path, 'cfg', 'hooks/pre.js'));
     });
 
     test('falls back to CWD-relative path when absent from config dir', () {
-      _expectConfigFallback(tmp.path);
+      expect(_runConfigFallback(tmp.path)['postJSAction'], 'only-in-cwd.js');
     });
   });
 }
@@ -80,36 +87,27 @@ function action(params) { return m.run(params); }
 """);
 }
 
-void _expectSyncResolves(String root) {
+dynamic _runSync(String root) {
   final out = const JsJobRunner().runScript(
     scriptPath: '$root/b/js/entry.js',
     jobParams: const {},
   );
-  expect(jsonDecode(out!), {'value': 'trackers-ok'});
+  return jsonDecode(out!);
 }
 
-void _expectMissingFails(String root) {
+void _runMissing(String root) {
   _write('$root/a/js/bad.js', """
 function action(params) { require('./nope/missing.js'); return 1; }
 """);
-  expect(
-    () => const JsJobRunner().runScript(
-      scriptPath: '$root/a/js/bad.js',
-      jobParams: const {},
-    ),
-    throwsA(
-      predicate(
-        (e) => e.toString().contains(
-              'Failed to require module: ./nope/missing.js',
-            ),
-      ),
-    ),
+  const JsJobRunner().runScript(
+    scriptPath: '$root/a/js/bad.js',
+    jobParams: const {},
   );
 }
 
 /// Dispatches a function declared in `a/js/<dispatchName>.js` through the
 /// async pool, aggregating via `runAsync.all` when [runAll] is set.
-Future<void> _expectAsyncResolves(
+Future<dynamic> _runAsync(
   String root,
   String dispatchName,
   String entryName, {
@@ -138,34 +136,29 @@ function action(params) { return d.run(params); }
       jobParams: const {'parallelWorkers': 2},
       config: JsRunConfig(pool: pool),
     );
-    expect(jsonDecode(out!), 'trackers-ok:7');
+    return jsonDecode(out!);
   } finally {
     pool.dispose();
   }
 }
 
-void _expectConfigRebased(String root) {
+Map<String, dynamic> _runConfigRebase(String root) {
   final cfgDir = Directory('$root/cfg')..createSync();
   _write('${cfgDir.path}/hooks/pre.js', 'function action(p){return 1;}');
   final cfgFile = File('${cfgDir.path}/agent.json')
     ..writeAsStringSync(
       jsonEncode({'preJSAction': 'hooks/pre.js', 'thenAction': 'hooks/pre.js'}),
     );
-  final out = jsonDecode(
-    const RunCommandProcessor().process(['run', cfgFile.path]),
-  ) as Map<String, dynamic>;
-  expect(out['preJSAction'], p.join(cfgDir.path, 'hooks/pre.js'));
-  expect(out['thenAction'], p.join(cfgDir.path, 'hooks/pre.js'));
+  return jsonDecode(const RunCommandProcessor().process(['run', cfgFile.path]))
+      as Map<String, dynamic>;
 }
 
-void _expectConfigFallback(String root) {
+Map<String, dynamic> _runConfigFallback(String root) {
   final cfgDir = Directory('$root/cfg2')..createSync();
   final cfgFile = File('${cfgDir.path}/agent.json')
     ..writeAsStringSync(jsonEncode({'postJSAction': 'only-in-cwd.js'}));
-  final out = jsonDecode(
-    const RunCommandProcessor().process(['run', cfgFile.path]),
-  ) as Map<String, dynamic>;
-  expect(out['postJSAction'], 'only-in-cwd.js');
+  return jsonDecode(const RunCommandProcessor().process(['run', cfgFile.path]))
+      as Map<String, dynamic>;
 }
 
 void _write(String path, String content) {

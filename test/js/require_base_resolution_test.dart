@@ -100,8 +100,8 @@ function action(params) { require('./nope/missing.js'); return 1; }
     throwsA(
       predicate(
         (e) => e.toString().contains(
-          'Failed to require module: ./nope/missing.js',
-        ),
+              'Failed to require module: ./nope/missing.js',
+            ),
       ),
     ),
   );
@@ -115,9 +115,8 @@ Future<void> _expectAsyncResolves(
   String entryName, {
   required bool runAll,
 }) async {
-  final call = runAll
-      ? 'return runAsync.all([job]).wait()[0];'
-      : 'return job.wait();';
+  final call =
+      runAll ? 'return runAsync.all([job]).wait()[0];' : 'return job.wait();';
   _write('$root/a/js/$dispatchName.js', """
 module.exports.run = function (params) {
   var job = runAsync(function (x) {

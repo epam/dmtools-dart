@@ -59,3 +59,6 @@ outputs/
 .codegraph/
 agents/
 agents/
+
+# Playwright CLI session artifacts (console logs, page snapshots) — local run output.
+.playwright-cli/

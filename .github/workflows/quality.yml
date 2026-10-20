@@ -104,6 +104,12 @@ jobs:
     # agents-suite below; falls back to ubuntu-24.04 when the pool is down.
     needs: pick
     runs-on: ${{ needs.pick.outputs.runner }}
+    # gh-440: a synchronously-wedged test isolate never trips dart test's
+    # per-test timeout; bound the whole shard so it dies in minutes.
+    # Scope: the WHOLE job (checkout, apt, QuickJS build, dart test,
+    # coverage) — not just the test step. Normal shards finish in 8-20 min,
+    # so 45 leaves ample headroom.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -161,11 +167,44 @@ jobs:
         # (grep exits 1, bash -e kills the step).
         run: |
           set -o pipefail
-          dart test --coverage=coverage --reporter compact \
+          # gh-445: the watchdog kills a wedged run after STALL_MINUTES of
+          # no progress and writes stall_diagnosis.txt naming the REAL
+          # wedged suite/test (the compact line on screen is just the last
+          # event of any concurrent suite) + per-isolate VM-service state.
+          sudo apt-get install -y -qq gdb >/dev/null 2>&1 || true
+          STALL_MINUTES=8 WATCHDOG_DIR=/tmp/test_watchdog \
+            bash tool/ci_test_watchdog.sh --coverage=coverage --reporter compact \
             --total-shards "$TOTAL_SHARDS" --shard-index "${{ matrix.shard }}" \
             2>&1 | tee /tmp/test_run.log
           COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+' || true)
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
+      - name: Stall evidence (failed or timed-out shard)
+        # gh-440: runs only when the test step itself FAILED or was
+        # CANCELLED (job timeout). A skipped test step (earlier step red,
+        # e.g. apt/QuickJS) has no /tmp/test_run.log to show — skip.
+        if: always() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled')
+        run: |
+          {
+            echo "### test shard ${{ matrix.shard }} — last 100 reporter lines"
+            echo '```'
+            tail -n 100 /tmp/test_run.log 2>/dev/null || echo '(no log captured)'
+            echo '```'
+            if [ -s /tmp/test_watchdog/stall_diagnosis.txt ]; then
+              echo "### stall diagnosis (gh-445)"
+              echo '```'
+              head -c 60000 /tmp/test_watchdog/stall_diagnosis.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && (steps.test.outcome == 'failure' || steps.test.outcome == 'cancelled')
+        with:
+          name: test-shard-${{ matrix.shard }}-log
+          path: |
+            /tmp/test_run.log
+            /tmp/test_watchdog/
+          if-no-files-found: warn
+          retention-days: 7
       - run: dart pub global activate coverage
       - name: Format coverage (shard)
         # Prune non-report vm.json stubs: a tag-excluded (skipped) test
@@ -346,6 +385,7 @@ jobs:
     # gate. The workflow comment below already anticipated pool hosting.
     needs: pick
     runs-on: ${{ needs.pick.outputs.runner }}
+    timeout-minutes: 45  # gh-440: bounded wedge, see test job
     strategy:
       fail-fast: false
       matrix:

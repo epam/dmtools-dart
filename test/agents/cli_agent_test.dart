@@ -23,6 +23,7 @@ void main() {
   lifecycleEnvTests();
   lifecycleTicketDataTests();
   ticketHydrationTests();
+  ticketCompositeHydrationTests();
   ticketTimerHydrationTests();
   ticketHydrationEdgeTests();
   ticketHydrationPrecedenceTests();
@@ -639,7 +640,11 @@ void ticketHydrationTests() {
         await tmp.delete(recursive: true);
       }
     });
+  });
+}
 
+void ticketCompositeHydrationTests() {
+  group('CliAgent composite ticket hydration', () {
     test(
       'hydrates params.ticket and inputFolderPath for composite GitHub contextId',
       () async {

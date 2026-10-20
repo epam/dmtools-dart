@@ -15,6 +15,7 @@ void main() {
   missingFieldsTests();
   subtaskEdgeCaseTests();
   contextPathTests();
+  inputFolderNameTests();
 }
 
 // ======================================================================
@@ -335,10 +336,12 @@ void contextPathTests() {
         tmp.deleteSync(recursive: true);
       }
     });
+  });
+}
 
-    test(
-        'toInputFolderName maps composite and bare GitHub keys and preserves others',
-        () {
+void inputFolderNameTests() {
+  group('TicketInputContextBuilder.toInputFolderName', () {
+    test('maps composite and bare GitHub keys and preserves others', () {
       expect(
         TicketInputContextBuilder.toInputFolderName('acme/widgets#42'),
         'gh-42',

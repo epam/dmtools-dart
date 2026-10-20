@@ -260,10 +260,14 @@ void resolutionPackRefTests() {
       final parentPrompts = (_runnerJson('agents/pr_review.json')['params']
           as Map)['cliPrompts'] as List;
       final prompts = (params['cliPrompts'] as List).cast<String>();
-      expect(prompts, hasLength(parentPrompts.length + 1),
+      // Runner appends: the pack verdict rules + the repo-local Java
+      // parity instruction (gh-430).
+      expect(prompts, hasLength(parentPrompts.length + 2),
           reason: 'a missing/typoed "merge": ["params.cliPrompts"] would '
               'replace the parent prompts instead of appending');
-      final verdictRules = prompts.last;
+      expect(prompts.last, '.dmtools/instructions/java_parity.md',
+          reason: 'repo-local prompt passes through unrewritten');
+      final verdictRules = prompts[prompts.length - 2];
       expect(verdictRules, startsWith(fixture.packsRoot.path),
           reason: 'the pack: ref must resolve into the pack cache');
       expect(verdictRules,

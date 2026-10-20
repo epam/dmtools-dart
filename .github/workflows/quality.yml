@@ -30,10 +30,23 @@ jobs:
     runs-on: ubuntu-slim
     outputs:
       runner: ${{ steps.pick.outputs.runner }}
+      agents_sha: ${{ steps.agents.outputs.sha }}
     permissions:
       contents: read
       actions: write
     steps:
+      - name: Resolve dmtools-agents SHA once per run (gh-437)
+        # Every job of this run fetches agents at THIS commit, so the
+        # agents-gate partition check cannot race with a commit landing
+        # on agents main mid-run. Outputs persist across attempts, so a
+        # rerun of a failed job reuses the same SHA.
+        id: agents
+        run: |
+          SHA=$(git ls-remote https://github.com/IstiN/dmtools-agents.git refs/heads/main | cut -f1)
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve dmtools-agents main"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "### dmtools-agents SHA: \`${SHA:0:12}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "[quality] dmtools-agents pinned for this run: $SHA"
       - name: Canary the Bitrise pool, else fall back to GitHub-hosted
         id: pick
         env:
@@ -111,7 +124,9 @@ jobs:
           find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
           df -h / || true
       - uses: actions/checkout@v4
-      - name: Fetch dmtools-agents@main (no submodule pin)
+      - name: Fetch dmtools-agents (run SHA, no submodule pin)
+        env:
+          AGENTS_FETCH_REF: ${{ needs.pick.outputs.agents_sha }}
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1
         with:
@@ -351,7 +366,9 @@ jobs:
           find "$WS_PARENT/_temp" -mindepth 1 -mtime +1 -delete 2>/dev/null || true
           df -h / || true
       - uses: actions/checkout@v4
-      - name: Fetch dmtools-agents@main (no submodule pin — L4 suite)
+      - name: Fetch dmtools-agents (run SHA — L4 suite)
+        env:
+          AGENTS_FETCH_REF: ${{ needs.pick.outputs.agents_sha }}
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1
         with:
@@ -413,7 +430,7 @@ jobs:
     # + the result guard below make a red/cancelled shard produce a red
     # required check, so the shape stays safe if a `pull_request` trigger
     # is ever added.
-    needs: [agents-suite]
+    needs: [pick, agents-suite]
     if: always()
     runs-on: ubuntu-slim
     steps:
@@ -433,7 +450,9 @@ jobs:
           df -h / || true
       - uses: actions/checkout@v4
         if: needs.agents-suite.result == 'success'
-      - name: Fetch dmtools-agents@main (no submodule pin)
+      - name: Fetch dmtools-agents (run SHA, no submodule pin)
+        env:
+          AGENTS_FETCH_REF: ${{ needs.pick.outputs.agents_sha }}
         run: bash tool/fetch_agents.sh
       - uses: dart-lang/setup-dart@v1
         if: needs.agents-suite.result == 'success'

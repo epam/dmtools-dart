@@ -104,6 +104,9 @@ jobs:
     # agents-suite below; falls back to ubuntu-24.04 when the pool is down.
     needs: pick
     runs-on: ${{ needs.pick.outputs.runner }}
+    # gh-440: a synchronously-wedged test isolate never trips dart test's
+    # per-test timeout; bound the whole shard so it dies in minutes.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -166,6 +169,24 @@ jobs:
             2>&1 | tee /tmp/test_run.log
           COUNT=$(grep -oE '\+[0-9]+' /tmp/test_run.log | tail -1 | tr -d '+' || true)
           echo "test_count=${COUNT:-0}" >> "$GITHUB_OUTPUT"
+      - name: Stall evidence (failed or timed-out shard)
+        # gh-440: runs only when the test step did not succeed (red test,
+        # or job timeout cancelling it). Green path adds nothing.
+        if: always() && steps.test.outcome != 'success'
+        run: |
+          {
+            echo "### test shard ${{ matrix.shard }} — last 100 reporter lines"
+            echo '```'
+            tail -n 100 /tmp/test_run.log 2>/dev/null || echo '(no log captured)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.test.outcome != 'success'
+        with:
+          name: test-shard-${{ matrix.shard }}-log
+          path: /tmp/test_run.log
+          if-no-files-found: warn
+          retention-days: 7
       - run: dart pub global activate coverage
       - name: Format coverage (shard)
         # Prune non-report vm.json stubs: a tag-excluded (skipped) test
@@ -346,6 +367,7 @@ jobs:
     # gate. The workflow comment below already anticipated pool hosting.
     needs: pick
     runs-on: ${{ needs.pick.outputs.runner }}
+    timeout-minutes: 45  # gh-440: bounded wedge, see test job
     strategy:
       fail-fast: false
       matrix:

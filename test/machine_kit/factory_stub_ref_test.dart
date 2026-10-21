@@ -50,6 +50,7 @@ void main() {
     _frozenPinUsesSha();
     _frozenNoFactoryRef();
     _frozenSecretsMapped();
+    _frozenStatePublishBranch();
   });
   group('merge-trigger stub (factory home: dmtools-agentic-workflows)', () {
     _mergeTriggerPin();
@@ -144,6 +145,30 @@ void _frozenSecretsMapped() {
             'frozen loop declares {${entry.value.join(', ')}}',
       );
     }
+  });
+}
+
+/// machine-sm.yml must publish state to the `factory-data` branch (never
+/// `factory-state`, which PR #321 accidentally reverted after PR #322).
+void _frozenStatePublishBranch() {
+  test(
+      'machine-sm state-publish targets factory-data branch with dart-state.json',
+      () {
+    final yml = File('.github/workflows/machine-sm.yml').readAsStringSync();
+    expect(
+      yml,
+      contains(
+        'state-publish: \'{"channel":"release","tag":"factory-data","asset":"dart-state.json"}\'',
+      ),
+      reason: 'machine-sm.yml must publish dart-state.json to factory-data '
+          '(where fa-tokens.json and the board read from)',
+    );
+    expect(
+      yml.contains('"factory-state"'),
+      isFalse,
+      reason:
+          'machine-sm.yml must never revert state-publish tag to factory-state',
+    );
   });
 }
 

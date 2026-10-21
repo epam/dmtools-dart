@@ -59,6 +59,17 @@ void _agentsGateTests(String quality) {
             'explicit guard',
       );
     });
+
+    test('agents-suite step sets CLI_ALLOWED_COMMANDS: bash for bash ITs', () {
+      final block = _jobBlock(quality, 'agents-suite');
+      expect(
+        block,
+        contains('CLI_ALLOWED_COMMANDS: bash'),
+        reason: 'dmtools-agents bash integration tests (test_sessionDelta.js, '
+            'test_reviewVerdict.js, test_smAgent.js) execute bash via '
+            'cli_execute_command when CLI_ALLOWED_COMMANDS=bash is set',
+      );
+    });
   });
 }
 

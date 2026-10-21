@@ -438,6 +438,8 @@ jobs:
       # suite state is reproducible per commit. The suite hard-gates: the
       # runner requires a well-formed, fully-passing result per shard.
       - name: Run agents test suite (shard ${{ matrix.shard }}/${{ env.TOTAL_SHARDS }})
+        env:
+          CLI_ALLOWED_COMMANDS: bash
         run: |
           dart run bin/run_agents_suite.dart agents \
             --shard-index "${{ matrix.shard }}" \

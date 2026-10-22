@@ -136,6 +136,8 @@ class PropertyReader {
     return readerProvider()._getValueWithoutOverrides(varName);
   }
 
+  /// Sets the static environment overrides, resolving any `$VAR` / `${VAR}`
+  /// references before storing.
   static void setOverrides(Map<String, String> overrides) {
     _overrides = resolveEnvVariables(overrides);
   }

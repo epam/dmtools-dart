@@ -557,11 +557,9 @@ class CliAgent {
     return md == null ? null : {'metadata': md};
   }
 
-  /// Merges the standard JS action globals with action-specific [context].
+  ///Merges the standard JS action globals with action-specific [context].
   Map<String, dynamic> _mergeContextGlobals(
-    Map<String, dynamic> context,
-    String workDir,
-  ) {
+      Map<String, dynamic> context, String workDir) {
     return {
       ..._buildExtraGlobals(null, _inputContextPath, workDir),
       ...context
@@ -761,9 +759,7 @@ class CliAgent {
 
   /// Builds the job-params map passed as `params.jobParams` to JS actions.
   Map<String, dynamic> _buildJobParams(
-    String? response,
-    String? inputFolderPath,
-  ) {
+      String? response, String? inputFolderPath) {
     return {
       'cliCommands': params.cliCommands,
       if (params.cliPrompt != null) 'cliPrompt': params.cliPrompt,
@@ -774,13 +770,8 @@ class CliAgent {
   }
 
   /// Builds the extra top-level JS globals for JS actions.
-  ///
-  /// Mirrors Java `prepareJsExecutor` `.with()` bindings.
   Map<String, dynamic> _buildExtraGlobals(
-    String? response,
-    String? inputFolderPath,
-    String workDir,
-  ) {
+      String? response, String? inputFolderPath, String workDir) {
     return {
       if (response != null) 'response': response,
       if (inputFolderPath != null) 'inputFolderPath': inputFolderPath,

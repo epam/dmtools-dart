@@ -281,5 +281,11 @@ Set<String> _mappedSecrets(String yml) {
 /// in ai-teammate.yml — otherwise the workflow call fails at startup
 /// ("required secret not mapped") while this test keeps passing stale.
 Set<String> _declaredTeammateSecrets() {
-  return {'SOURCE_GITHUB_TOKEN', 'ZAI_CODE_KEY', 'KIMI_REVIEW_KEY'};
+  return {
+    'SOURCE_GITHUB_TOKEN',
+    'ZAI_CODE_KEY',
+    'KIMI_REVIEW_KEY',
+    'ENV_VAR_DEV_QUEUE',
+    'ENV_VAR_REVIEW_QUEUE',
+  };
 }

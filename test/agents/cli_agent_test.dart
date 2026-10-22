@@ -530,6 +530,30 @@ void lifecycleEnvTests() {
         await tmp.delete(recursive: true);
       }
     });
+
+    test('interpolates \$VAR in envVariables from workDir dmtools.env',
+        () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/interpolated.log';
+      try {
+        await File('${tmp.path}/dmtools.env').writeAsString(
+          'ENV_VAR_DEV_QUEUE=[{"provider_type":"copilot"}]\n',
+        );
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['printf "%s" "\$FA_PROVIDERS_QUEUE" > "$log"']
+            ..envVariables = {'FA_PROVIDERS_QUEUE': r'$ENV_VAR_DEV_QUEUE'}
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect(
+          (await File(log).readAsString()).trim(),
+          '[{"provider_type":"copilot"}]',
+        );
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
   });
 }
 

@@ -634,8 +634,14 @@ class CliAgent {
   ) {
     var env = <String, String>{}
       ..addAll(Platform.environment)
-      ..addAll(parseEnvFile('$workDir/dmtools.env'))
-      ..addAll(PropertyReader.getOverrides());
+      ..addAll(parseEnvFile('$workDir/dmtools.env'));
+    env.addAll(
+      PropertyReader.resolveEnvVariables(
+        PropertyReader.getOverrides(),
+        extraEnv: env,
+        basePath: workDir,
+      ),
+    );
     if (applyEnvFilters) {
       env = CliExecutionHelper.filterEnvVariables(
         env,

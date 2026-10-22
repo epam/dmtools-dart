@@ -10,8 +10,9 @@
 #
 # Secrets (explicit mapping): SOURCE_GITHUB_TOKEN (required by the factory),
 # Vars: FA_VERSION_MACHINE || FA_VERSION || latest, DMTOOLS_VERSION,
-# ZAI_CODE_KEY, KIMI_REVIEW_KEY (optional provider keys).
+# ENV_VAR_DEV_QUEUE, ENV_VAR_REVIEW_QUEUE (runner provider queues),
 # MAX_AUTO_REWORK_ROUNDS.
+# Optional provider secrets: ZAI_CODE_KEY, KIMI_REVIEW_KEY, COPILOT_EPAM_KEY.
 
 name: 'AI Teammate'
 
@@ -175,8 +176,8 @@ jobs:
       machine-author: ${{ vars.MACHINE_AUTHOR || '' }}
       # Provider-key slots (generic, awf 75c72a6): slot -> key mapping is
       # documented HERE, next to the secret reference. Slot 1 carries the
-      # copilot enterprise token (copilot provider, first in the queue —
-      # see .dmtools/runners/*.json apiKeyEnv). Slots 2-3 free.
+      # copilot enterprise token referenced by apiKeyEnv in
+      # ENV_VAR_DEV_QUEUE / ENV_VAR_REVIEW_QUEUE. Slots 2-3 free.
       CUSTOM_PROVIDER_KEY1_NAME: COPILOT_EPAM_KEY
     # Explicit mapping — the factory DECLARES SOURCE_GITHUB_TOKEN as a
     # required named secret (plus optional ZAI_CODE_KEY / KIMI_REVIEW_KEY),

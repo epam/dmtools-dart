@@ -10,8 +10,9 @@
 #
 # Secrets (explicit mapping): SOURCE_GITHUB_TOKEN (required by the factory),
 # Vars: FA_VERSION_MACHINE || FA_VERSION || latest, DMTOOLS_VERSION,
-# ZAI_CODE_KEY, KIMI_REVIEW_KEY (optional provider keys).
+# ENV_VAR_DEV_QUEUE, ENV_VAR_REVIEW_QUEUE (runner provider queues),
 # MAX_AUTO_REWORK_ROUNDS.
+# Optional provider secrets: ZAI_CODE_KEY, KIMI_REVIEW_KEY, COPILOT_EPAM_KEY.
 
 name: 'AI Teammate'
 
@@ -175,8 +176,8 @@ jobs:
       machine-author: ${{ vars.MACHINE_AUTHOR || '' }}
       # Provider-key slots (generic, awf 75c72a6): slot -> key mapping is
       # documented HERE, next to the secret reference. Slot 1 carries the
-      # copilot enterprise token (copilot provider, first in the queue —
-      # see .dmtools/runners/*.json apiKeyEnv). Slots 2-3 free.
+      # copilot enterprise token referenced by apiKeyEnv in
+      # ENV_VAR_DEV_QUEUE / ENV_VAR_REVIEW_QUEUE. Slots 2-3 free.
       CUSTOM_PROVIDER_KEY1_NAME: COPILOT_EPAM_KEY
     # Explicit mapping — the factory DECLARES SOURCE_GITHUB_TOKEN as a
     # required named secret (plus optional ZAI_CODE_KEY / KIMI_REVIEW_KEY),
@@ -190,5 +191,11 @@ jobs:
       # natively; the factory exports it into the agent job env under the
       # name given in with.CUSTOM_PROVIDER_KEY1_NAME above.
       CUSTOM_PROVIDER_KEY1: ${{ secrets.COPILOT_EPAM_KEY }}
+      # Runner provider queues (awf#60): passed into factory-teammate.yml
+      # which exports ENV_VAR_DEV_QUEUE and ENV_VAR_REVIEW_QUEUE to the agent
+      # job environment so PropertyReader.resolveEnvVariables resolves
+      # FA_PROVIDERS_QUEUE in .dmtools/runners/*.json.
+      ENV_VAR_DEV_QUEUE: ${{ vars.ENV_VAR_DEV_QUEUE }}
+      ENV_VAR_REVIEW_QUEUE: ${{ vars.ENV_VAR_REVIEW_QUEUE }}
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

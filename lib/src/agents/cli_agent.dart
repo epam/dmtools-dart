@@ -134,6 +134,8 @@ class CliAgent {
     return PropertyReader.runWithOverrides(
       params.envVariables ?? {},
       _runGuarded,
+      extraEnv: parseEnvFile('${_resolveWorkingDirectory()}/dmtools.env'),
+      basePath: _resolveWorkingDirectory(),
     );
   }
 
@@ -559,14 +561,8 @@ class CliAgent {
 
   /// Merges the standard JS action globals with action-specific [context].
   Map<String, dynamic> _mergeContextGlobals(
-    Map<String, dynamic> context,
-    String workDir,
-  ) {
-    return {
-      ..._buildExtraGlobals(null, _inputContextPath, workDir),
-      ...context
-    };
-  }
+          Map<String, dynamic> context, String workDir) =>
+      {..._buildExtraGlobals(null, _inputContextPath, workDir), ...context};
 
   /// Whether the strict-mode guard applies: `requireCliOutputFile=true` and
   /// the CLI produced no output response — the same condition that makes
@@ -632,16 +628,16 @@ class CliAgent {
     String workDir,
     bool applyEnvFilters,
   ) {
-    var env = <String, String>{}
-      ..addAll(Platform.environment)
-      ..addAll(parseEnvFile('$workDir/dmtools.env'))
-      ..addAll(PropertyReader.getOverrides());
+    final workDirEnv = parseEnvFile('$workDir/dmtools.env');
+    var env = {
+      ...Platform.environment,
+      ...workDirEnv,
+      ...PropertyReader.resolveEnvVariables(PropertyReader.getOverrides(),
+          extraEnv: workDirEnv, basePath: workDir)
+    };
     if (applyEnvFilters) {
       env = CliExecutionHelper.filterEnvVariables(
-        env,
-        params.excludedEnvVariables,
-        params.excludeEnvVariablesByRegex,
-      );
+          env, params.excludedEnvVariables, params.excludeEnvVariablesByRegex);
     }
     return env;
   }

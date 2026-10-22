@@ -134,6 +134,7 @@ class CliAgent {
     return PropertyReader.runWithOverrides(
       params.envVariables ?? {},
       _runGuarded,
+      extraEnv: parseEnvFile('${_resolveWorkingDirectory()}/dmtools.env'),
       basePath: _resolveWorkingDirectory(),
     );
   }
@@ -633,13 +634,14 @@ class CliAgent {
     String workDir,
     bool applyEnvFilters,
   ) {
+    final workDirEnv = parseEnvFile('$workDir/dmtools.env');
     var env = <String, String>{}
       ..addAll(Platform.environment)
-      ..addAll(parseEnvFile('$workDir/dmtools.env'));
+      ..addAll(workDirEnv);
     env.addAll(
       PropertyReader.resolveEnvVariables(
         PropertyReader.getOverrides(),
-        extraEnv: env,
+        extraEnv: workDirEnv,
         basePath: workDir,
       ),
     );

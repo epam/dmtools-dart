@@ -191,5 +191,11 @@ jobs:
       # natively; the factory exports it into the agent job env under the
       # name given in with.CUSTOM_PROVIDER_KEY1_NAME above.
       CUSTOM_PROVIDER_KEY1: ${{ secrets.COPILOT_EPAM_KEY }}
+      # Runner provider queues (awf#60): passed into factory-teammate.yml
+      # which exports ENV_VAR_DEV_QUEUE and ENV_VAR_REVIEW_QUEUE to the agent
+      # job environment so PropertyReader.resolveEnvVariables resolves
+      # FA_PROVIDERS_QUEUE in .dmtools/runners/*.json.
+      ENV_VAR_DEV_QUEUE: ${{ vars.ENV_VAR_DEV_QUEUE }}
+      ENV_VAR_REVIEW_QUEUE: ${{ vars.ENV_VAR_REVIEW_QUEUE }}
 # DMTOOLS_PACK_REGISTRY (pack registry base) is read by the factory from
 # this repo's VARIABLE of the same name — see dmtools-agents#574.

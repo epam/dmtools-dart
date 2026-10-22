@@ -757,6 +757,12 @@ void _testResolveEnvVariables() {
         PropertyReader.getOverrides()['URL'],
         r'https://example.com/api/$UNSET_TOKEN',
       );
+      expect(
+        PropertyReader.lastUnresolvedWarnings,
+        contains(
+          'Warning: unresolved environment variable \$UNSET_TOKEN in URL',
+        ),
+      );
       expect(PropertyReader.getOverrides()['LITERAL'], 'github');
     });
 

@@ -72,6 +72,10 @@ class PropertyReader {
     r'\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))',
   );
 
+  /// Collected unresolved-variable warnings from the most recent
+  /// [resolveEnvVariables] call (for testing).
+  static final List<String> lastUnresolvedWarnings = [];
+
   /// Interpolates `$VAR` and `${VAR}` tokens in [overrides] values.
   ///
   /// Resolution order for each referenced variable name:
@@ -79,12 +83,14 @@ class PropertyReader {
   /// 2. Another entry in [overrides] whose value does not start with `$`.
   /// 3. Underlying [PropertyReader] lookup (`config.properties`, `dmtools.env`,
   ///    and OS/test environment) bypassing active overrides.
-  /// 4. Unchanged `$VAR` / `${VAR}` token when unset (`null`).
+  /// 4. Unchanged `$VAR` / `${VAR}` token when unset (`null`), logging a
+  ///    warning to `stderr` and recording it in [lastUnresolvedWarnings].
   static Map<String, String> resolveEnvVariables(
     Map<String, String> overrides, {
     Map<String, String>? extraEnv,
     String? basePath,
   }) {
+    lastUnresolvedWarnings.clear();
     if (overrides.isEmpty) return const <String, String>{};
     PropertyReader? reader;
     return {
@@ -117,9 +123,10 @@ class PropertyReader {
         readerProvider,
       );
       if (resolved == null) {
-        stderr.writeln(
-          'Warning: unresolved environment variable \$$varName in $currentKey',
-        );
+        final msg =
+            'Warning: unresolved environment variable \$$varName in $currentKey';
+        lastUnresolvedWarnings.add(msg);
+        stderr.writeln(msg);
         return match.group(0)!;
       }
       return resolved;
@@ -175,12 +182,17 @@ class PropertyReader {
   static Future<T> runWithOverrides<T>(
     Map<String, String> overrides,
     Future<T> Function() body, {
+    Map<String, String>? extraEnv,
     String? basePath,
   }) {
     return runZoned(
       body,
       zoneValues: {
-        _overridesZoneKey: resolveEnvVariables(overrides, basePath: basePath),
+        _overridesZoneKey: resolveEnvVariables(
+          overrides,
+          extraEnv: extraEnv,
+          basePath: basePath,
+        ),
       },
     );
   }

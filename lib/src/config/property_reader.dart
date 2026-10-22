@@ -116,7 +116,13 @@ class PropertyReader {
         extraEnv,
         readerProvider,
       );
-      return resolved ?? match.group(0)!;
+      if (resolved == null) {
+        stderr.writeln(
+          'Warning: unresolved environment variable \$$varName in $currentKey',
+        );
+        return match.group(0)!;
+      }
+      return resolved;
     });
   }
 
@@ -168,11 +174,14 @@ class PropertyReader {
   /// gets the same isolation from `ThreadLocal`).
   static Future<T> runWithOverrides<T>(
     Map<String, String> overrides,
-    Future<T> Function() body,
-  ) {
+    Future<T> Function() body, {
+    String? basePath,
+  }) {
     return runZoned(
       body,
-      zoneValues: {_overridesZoneKey: resolveEnvVariables(overrides)},
+      zoneValues: {
+        _overridesZoneKey: resolveEnvVariables(overrides, basePath: basePath),
+      },
     );
   }
 

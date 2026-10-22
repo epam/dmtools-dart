@@ -394,11 +394,15 @@ void _devQueueFallbackPreconfigTests() {
 void _queueEnvInterpolationTests() {
   test(
       'PropertyReader.runWithOverrides resolves \$ENV_VAR_DEV_QUEUE and '
-      '\$ENV_VAR_REVIEW_QUEUE from environment', () async {
-    const devQueueJson =
-        '[{"provider_type":"copilot","provider_config":{"model":"claude-haiku-5.5"}}]';
-    const reviewQueueJson =
-        '[{"provider_type":"copilot","provider_config":{"model":"claude-sonnet-5.5"}}]';
+      '\$ENV_VAR_REVIEW_QUEUE failover queues from environment', () async {
+    const devQueueJson = '[{"provider_type":"copilot","provider_config":'
+        '{"model":"claude-haiku-5.5","apiKeyEnv":"COPILOT_EPAM_KEY"}},'
+        '{"provider_type":"kimi","provider_config":{"apiKeyEnv":"KIMI_REVIEW_KEY"}},'
+        '{"provider_type":"zai","provider_config":{"apiKeyEnv":"ZAI_CODE_KEY"}}]';
+    const reviewQueueJson = '[{"provider_type":"copilot","provider_config":'
+        '{"model":"claude-sonnet-5.5","apiKeyEnv":"COPILOT_EPAM_KEY"}},'
+        '{"provider_type":"kimi","provider_config":{"apiKeyEnv":"KIMI_REVIEW_KEY"}},'
+        '{"provider_type":"zai","provider_config":{"apiKeyEnv":"ZAI_CODE_KEY"}}]';
     final prevIsolation = PropertyReader.testIsolation;
     PropertyReader.testIsolation = true;
     PropertyReader.testEnvironment['ENV_VAR_DEV_QUEUE'] = devQueueJson;
@@ -408,9 +412,11 @@ void _queueEnvInterpolationTests() {
               ['envVariables'] as Map)
           .cast<String, String>();
       await PropertyReader.runWithOverrides(devEnv, () async {
+        final resolved = PropertyReader.getOverrides()['FA_PROVIDERS_QUEUE']!;
+        final queue = (jsonDecode(resolved) as List).cast<Map>();
         expect(
-          PropertyReader.getOverrides()['FA_PROVIDERS_QUEUE'],
-          devQueueJson,
+          queue.map((e) => e['provider_type']).toList(),
+          ['copilot', 'kimi', 'zai'],
         );
       });
       final reviewEnv =
@@ -418,9 +424,11 @@ void _queueEnvInterpolationTests() {
                   ['envVariables'] as Map)
               .cast<String, String>();
       await PropertyReader.runWithOverrides(reviewEnv, () async {
+        final resolved = PropertyReader.getOverrides()['FA_PROVIDERS_QUEUE']!;
+        final queue = (jsonDecode(resolved) as List).cast<Map>();
         expect(
-          PropertyReader.getOverrides()['FA_PROVIDERS_QUEUE'],
-          reviewQueueJson,
+          queue.map((e) => e['provider_type']).toList(),
+          ['copilot', 'kimi', 'zai'],
         );
       });
     } finally {

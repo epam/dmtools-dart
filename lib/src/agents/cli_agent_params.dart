@@ -258,14 +258,23 @@ List<String> _flattenCliPromptItem(
 }) {
   if (item is String) return [item];
   if (item is! Map) return const [];
-  final condition = item['condition'];
-  if (condition is String &&
-      condition.trim().isNotEmpty &&
-      conditionEvaluator != null) {
-    if (!conditionEvaluator(condition.trim())) {
-      return const [];
-    }
+  if (!_shouldIncludePromptSection(item, conditionEvaluator)) {
+    return const [];
   }
+  return _extractSectionStrings(item);
+}
+
+bool _shouldIncludePromptSection(
+  Map<dynamic, dynamic> item,
+  bool Function(String condition)? conditionEvaluator,
+) {
+  final condition = item['condition'];
+  if (condition is! String || conditionEvaluator == null) return true;
+  final trimmed = condition.trim();
+  return trimmed.isEmpty || conditionEvaluator(trimmed);
+}
+
+List<String> _extractSectionStrings(Map<dynamic, dynamic> item) {
   final result = <String>[];
   final singlePrompt = item['prompt'];
   if (singlePrompt is String && singlePrompt.isNotEmpty) {
@@ -288,21 +297,18 @@ bool isCliPromptConditionMet(dynamic rawResult) {
 
 bool _isConditionMetFromMap(Map<dynamic, dynamic> map) {
   if (map['uncaughtException'] == true) return false;
-  if (map.containsKey('result')) {
-    return isCliPromptConditionMet(map['result']);
-  }
-  return false;
+  return isCliPromptConditionMet(map['result']);
 }
 
 bool _isConditionMetFromString(String str) {
   final lower = str.toLowerCase();
   if (lower == 'true' || str == '"true"') return true;
-  if (lower == 'false' || !str.startsWith('{')) return false;
-  final resultMatch =
+  if (!str.startsWith('{')) return false;
+  final hasTrueResult =
       RegExp(r'"result"\s*:\s*(true|"true")', caseSensitive: false)
           .hasMatch(str);
-  final uncaughtMatch =
+  final hasException =
       RegExp(r'"uncaughtException"\s*:\s*true', caseSensitive: false)
           .hasMatch(str);
-  return resultMatch && !uncaughtMatch;
+  return hasTrueResult && !hasException;
 }

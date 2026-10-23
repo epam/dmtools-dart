@@ -18,6 +18,7 @@ void main() {
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
   cliPromptsConditionTests();
+  cliPromptsConditionParserTests();
 }
 
 // ======================================================================
@@ -410,6 +411,55 @@ void cliPromptsConditionTests() {
       } finally {
         await tmp.delete(recursive: true);
       }
+    });
+  });
+}
+
+void cliPromptsConditionParserTests() {
+  group('isCliPromptConditionMet & flattenCliPrompts', () {
+    test('isCliPromptConditionMet parses map, bool, and JSON string payloads',
+        () {
+      expect(isCliPromptConditionMet(null), isFalse);
+      expect(isCliPromptConditionMet(true), isTrue);
+      expect(isCliPromptConditionMet(false), isFalse);
+      expect(
+        isCliPromptConditionMet({'result': true, 'uncaughtException': false}),
+        isTrue,
+      );
+      expect(
+        isCliPromptConditionMet({'result': true, 'uncaughtException': true}),
+        isFalse,
+      );
+      expect(isCliPromptConditionMet('true'), isTrue);
+      expect(isCliPromptConditionMet('"true"'), isTrue);
+      expect(isCliPromptConditionMet('false'), isFalse);
+      expect(
+        isCliPromptConditionMet('{"result":true,"uncaughtException":false}'),
+        isTrue,
+      );
+      expect(
+        isCliPromptConditionMet('{"result":true,"uncaughtException":true}'),
+        isFalse,
+      );
+    });
+
+    test('flattenCliPrompts evaluates condition callback and non-map elements',
+        () {
+      final params = CliAgentParams()
+        ..cliPrompts = [
+          'p1',
+          42,
+          {'id': 's1', 'prompt': 'p2', 'condition': '  '},
+          {'id': 's2', 'prompt': 'p3', 'condition': 'yes'},
+          {'id': 's3', 'prompt': 'p4', 'condition': 'no'},
+        ];
+      expect(
+        params.flattenCliPrompts(
+          params.cliPrompts,
+          conditionEvaluator: (c) => c == 'yes',
+        ),
+        ['p1', 'p2', 'p3'],
+      );
     });
   });
 }

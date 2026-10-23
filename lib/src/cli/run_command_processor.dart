@@ -547,89 +547,10 @@ class _ParentConfigResolver {
   List<dynamic> _mergeStructuredCliPrompts(
     List<dynamic> baseList,
     List<dynamic> overrideList,
-  ) {
-    final merged = <dynamic>[];
-    for (final baseItem in baseList) {
-      if (baseItem is! Map) {
-        merged.add(baseItem);
-        continue;
-      }
-      final id = baseItem['id']?.toString();
-      final overrideMatch = _findSectionById(overrideList, id);
-      if (overrideMatch == null) {
-        merged.add(baseItem);
-      } else {
-        merged.add(_mergeSectionMaps(baseItem, overrideMatch));
-      }
-    }
-    for (final overrideItem in overrideList) {
-      if (overrideItem is! Map) {
-        merged.add(overrideItem);
-        continue;
-      }
-      final id = overrideItem['id']?.toString();
-      if (_findSectionById(baseList, id) == null) {
-        merged.add(overrideItem);
-      }
-    }
-    return merged;
-  }
+  ) =>
+      _mergeCliPromptSections(baseList, overrideList);
 
-  Map<dynamic, dynamic>? _findSectionById(List<dynamic> list, String? id) {
-    if (id == null || id.isEmpty) return null;
-    for (final item in list) {
-      if (item is Map && item['id']?.toString() == id) {
-        return item;
-      }
-    }
-    return null;
-  }
-
-  Map<String, dynamic> _mergeSectionMaps(
-    Map<dynamic, dynamic> base,
-    Map<dynamic, dynamic> over,
-  ) {
-    final basePrompts = _extractSectionPrompts(base);
-    final overPrompts = _extractSectionPrompts(over);
-    final strategy =
-        (over['mergeStrategy']?.toString() ?? 'append').toLowerCase();
-    List<String> mergedPrompts;
-    if (strategy == 'prepend') {
-      mergedPrompts = [...overPrompts, ...basePrompts];
-    } else if (strategy == 'replace') {
-      mergedPrompts = [...overPrompts];
-    } else {
-      mergedPrompts = [...basePrompts, ...overPrompts];
-    }
-    final out = <String, dynamic>{
-      'id': base['id'].toString(),
-      'prompts': mergedPrompts,
-    };
-    final baseStrategy = base['mergeStrategy']?.toString();
-    if (baseStrategy != null &&
-        baseStrategy.isNotEmpty &&
-        baseStrategy != 'append') {
-      out['mergeStrategy'] = baseStrategy;
-    }
-    final overCond = over['condition']?.toString().trim();
-    final baseCond = base['condition']?.toString().trim();
-    final cond =
-        (overCond != null && overCond.isNotEmpty) ? overCond : baseCond;
-    if (cond != null && cond.isNotEmpty) {
-      out['condition'] = cond;
-    }
-    return out;
-  }
-
-  List<String> _extractSectionPrompts(Map<dynamic, dynamic> section) {
-    final out = <String>[];
-    final single = section['prompt'];
-    if (single is String && single.isNotEmpty) out.add(single);
-    final list = section['prompts'];
-    if (list is List) out.addAll(list.whereType<String>());
-    return out;
-  }
-
+  /// Reads a top-level string-list key from [config] (empty when absent).
   /// Reads a top-level string-list key from [config] (empty when absent).
   List<String> _readStringList(Map<String, dynamic> config, String key) {
     final value = config[key];
@@ -662,4 +583,97 @@ class _ParentConfigResolver {
     }
     current[parts.last] = value;
   }
+}
+
+List<dynamic> _mergeCliPromptSections(
+  List<dynamic> baseList,
+  List<dynamic> overrideList,
+) {
+  final merged = <dynamic>[];
+  for (final baseItem in baseList) {
+    if (baseItem is! Map) {
+      merged.add(baseItem);
+      continue;
+    }
+    final overrideMatch = _findSectionById(
+      overrideList,
+      baseItem['id']?.toString(),
+    );
+    merged.add(
+      overrideMatch == null
+          ? baseItem
+          : _mergeSectionMaps(baseItem, overrideMatch),
+    );
+  }
+  for (final overrideItem in overrideList) {
+    if (overrideItem is! Map ||
+        _findSectionById(baseList, overrideItem['id']?.toString()) == null) {
+      merged.add(overrideItem);
+    }
+  }
+  return merged;
+}
+
+Map<dynamic, dynamic>? _findSectionById(List<dynamic> list, String? id) {
+  if (id == null || id.isEmpty) return null;
+  for (final item in list) {
+    if (item is Map && item['id']?.toString() == id) return item;
+  }
+  return null;
+}
+
+Map<String, dynamic> _mergeSectionMaps(
+  Map<dynamic, dynamic> base,
+  Map<dynamic, dynamic> over,
+) {
+  final strategy =
+      (over['mergeStrategy']?.toString() ?? 'append').toLowerCase();
+  final out = <String, dynamic>{
+    'id': base['id'].toString(),
+    'prompts': _combineSectionPrompts(
+      _extractSectionPrompts(base),
+      _extractSectionPrompts(over),
+      strategy,
+    ),
+  };
+  _copyOptionalSectionMetadata(base, over, out);
+  return out;
+}
+
+List<String> _combineSectionPrompts(
+  List<String> basePrompts,
+  List<String> overPrompts,
+  String strategy,
+) {
+  if (strategy == 'prepend') return [...overPrompts, ...basePrompts];
+  if (strategy == 'replace') return [...overPrompts];
+  return [...basePrompts, ...overPrompts];
+}
+
+void _copyOptionalSectionMetadata(
+  Map<dynamic, dynamic> base,
+  Map<dynamic, dynamic> over,
+  Map<String, dynamic> out,
+) {
+  final baseStrategy = base['mergeStrategy']?.toString();
+  if (baseStrategy != null &&
+      baseStrategy.isNotEmpty &&
+      baseStrategy != 'append') {
+    out['mergeStrategy'] = baseStrategy;
+  }
+  final overCond = over['condition']?.toString().trim();
+  final baseCond = base['condition']?.toString().trim();
+  final cond = (overCond != null && overCond.isNotEmpty) ? overCond : baseCond;
+  if (cond != null && cond.isNotEmpty) {
+    out['condition'] = cond;
+  }
+}
+
+List<String> _extractSectionPrompts(Map<dynamic, dynamic> section) {
+  final out = <String>[];
+  final single = section['prompt'];
+  if (single is String && single.isNotEmpty) out.add(single);
+  final list = section['prompts'];
+  if (list is List) out.addAll(list.whereType<String>());
+  return out;
 }

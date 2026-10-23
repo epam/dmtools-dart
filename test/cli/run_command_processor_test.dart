@@ -180,6 +180,7 @@ void _testConfigFileResolution() {
 
   _testParentResolution();
   _testParentStructuredCliPromptsMerge();
+  _testParentStructuredCliPromptsStrategies();
   _testParentPackResolution();
   _testParentPackRegistryRef();
   _testParentPackEntryOverride();
@@ -288,6 +289,76 @@ void _testParentStructuredCliPromptsMerge() {
       });
       expect(cliPrompts[2], 'base2');
       expect(cliPrompts[3], 'child1');
+    });
+  });
+}
+
+void _testParentStructuredCliPromptsStrategies() {
+  group('parent-config structured cliPrompts strategies', () {
+    test(
+        'supports prepend and replace mergeStrategy and preserves base strategy',
+        () {
+      _writeFile(
+          'parent.json',
+          jsonEncode({
+            'params': {
+              'cliPrompts': [
+                {
+                  'id': 's1',
+                  'prompts': ['p1'],
+                  'mergeStrategy': 'prepend',
+                },
+                {
+                  'id': 's2',
+                  'prompts': ['p2'],
+                },
+              ],
+            },
+          }));
+      _writeFile(
+          'child.json',
+          jsonEncode({
+            'name': 'child',
+            'parent': {'path': 'parent.json'},
+            'merge': ['params.cliPrompts'],
+            'params': {
+              'cliPrompts': [
+                {
+                  'id': 's1',
+                  'prompt': 'c1',
+                  'mergeStrategy': 'prepend',
+                  'condition': 'cond.js',
+                },
+                {
+                  'id': 's2',
+                  'prompt': 'c2',
+                  'mergeStrategy': 'replace',
+                },
+                {
+                  'id': 's3',
+                  'prompt': 'c3',
+                },
+              ],
+            },
+          }));
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      final cliPrompts = json['params']['cliPrompts'] as List;
+      expect(cliPrompts, [
+        {
+          'id': 's1',
+          'prompts': ['c1', 'p1'],
+          'mergeStrategy': 'prepend',
+          'condition': 'cond.js',
+        },
+        {
+          'id': 's2',
+          'prompts': ['c2'],
+        },
+        {
+          'id': 's3',
+          'prompt': 'c3',
+        },
+      ]);
     });
   });
 }

@@ -295,55 +295,23 @@ void _testParentStructuredCliPromptsMerge() {
 
 void _testParentStructuredCliPromptsStrategies() {
   group('parent-config structured cliPrompts strategies', () {
-    test(
-        'supports prepend and replace mergeStrategy and preserves base strategy',
-        () {
+    test('supports prepend and replace mergeStrategy', () {
       _writeFile(
-          'parent.json',
-          jsonEncode({
-            'params': {
-              'cliPrompts': [
-                {
-                  'id': 's1',
-                  'prompts': ['p1'],
-                  'mergeStrategy': 'prepend',
-                },
-                {
-                  'id': 's2',
-                  'prompts': ['p2'],
-                },
-              ],
-            },
-          }));
+        'parent.json',
+        '{"params":{"cliPrompts":['
+            '{"id":"s1","prompts":["p1"],"mergeStrategy":"prepend"},'
+            '{"id":"s2","prompts":["p2"]}]}}',
+      );
       _writeFile(
-          'child.json',
-          jsonEncode({
-            'name': 'child',
-            'parent': {'path': 'parent.json'},
-            'merge': ['params.cliPrompts'],
-            'params': {
-              'cliPrompts': [
-                {
-                  'id': 's1',
-                  'prompt': 'c1',
-                  'mergeStrategy': 'prepend',
-                  'condition': 'cond.js',
-                },
-                {
-                  'id': 's2',
-                  'prompt': 'c2',
-                  'mergeStrategy': 'replace',
-                },
-                {
-                  'id': 's3',
-                  'prompt': 'c3',
-                },
-              ],
-            },
-          }));
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},'
+            '"merge":["params.cliPrompts"],"params":{"cliPrompts":['
+            '{"id":"s1","prompt":"c1","mergeStrategy":"prepend","condition":"cond.js"},'
+            '{"id":"s2","prompt":"c2","mergeStrategy":"replace"},'
+            '{"id":"s3","prompt":"c3"}]}}',
+      );
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
-      final cliPrompts = json['params']['cliPrompts'] as List;
-      expect(cliPrompts, [
+      expect(json['params']['cliPrompts'], [
         {
           'id': 's1',
           'prompts': ['c1', 'p1'],
@@ -354,10 +322,7 @@ void _testParentStructuredCliPromptsStrategies() {
           'id': 's2',
           'prompts': ['c2'],
         },
-        {
-          'id': 's3',
-          'prompt': 'c3',
-        },
+        {'id': 's3', 'prompt': 'c3'},
       ]);
     });
   });

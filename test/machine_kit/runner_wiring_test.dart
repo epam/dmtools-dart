@@ -260,7 +260,7 @@ void resolutionPackRefTests() {
       final params = fixture.resolved('fa-review.json')['params'] as Map;
       final parentPrompts = (_runnerJson('agents/pr_review.json')['params']
           as Map)['cliPrompts'] as List;
-      final prompts = (params['cliPrompts'] as List).cast<String>();
+      final prompts = params['cliPrompts'] as List;
       // Runner appends: the pack verdict rules + the repo-local Java
       // parity instruction (gh-430).
       expect(prompts, hasLength(parentPrompts.length + 2),
@@ -268,7 +268,7 @@ void resolutionPackRefTests() {
               'replace the parent prompts instead of appending');
       expect(prompts.last, '.dmtools/instructions/java_parity.md',
           reason: 'repo-local prompt passes through unrewritten');
-      final verdictRules = prompts[prompts.length - 2];
+      final verdictRules = prompts[prompts.length - 2] as String;
       expect(verdictRules, startsWith(fixture.packsRoot.path),
           reason: 'the pack: ref must resolve into the pack cache');
       expect(verdictRules,
@@ -276,9 +276,19 @@ void resolutionPackRefTests() {
       expect(File(verdictRules).existsSync(), isTrue);
       // The parent's own prompts are rewritten into the cache as well;
       // literal prompt text (no file behind it) passes through untouched.
-      for (final prompt in prompts.take(parentPrompts.length)) {
-        if (prompt.startsWith(fixture.packsRoot.path)) {
-          expect(File(prompt).existsSync(), isTrue, reason: prompt);
+      for (final item in prompts.take(parentPrompts.length)) {
+        if (item is String && item.startsWith(fixture.packsRoot.path)) {
+          expect(File(item).existsSync(), isTrue, reason: item);
+        } else if (item is Map) {
+          final secPrompt = item['prompt'] as String?;
+          if (secPrompt != null &&
+              secPrompt.startsWith(fixture.packsRoot.path)) {
+            expect(File(secPrompt).existsSync(), isTrue, reason: secPrompt);
+          }
+          final cond = item['condition'] as String?;
+          if (cond != null && cond.startsWith(fixture.packsRoot.path)) {
+            expect(File(cond).existsSync(), isTrue, reason: cond);
+          }
         }
       }
     });

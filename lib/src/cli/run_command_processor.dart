@@ -20,6 +20,8 @@ import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../pack/agent_pack_resolver.dart';
 
+const _kParamsCliPrompts = 'params.cliPrompts';
+
 /// Processes `dmtools run` command arguments into resolved config JSON.
 class RunCommandProcessor {
   /// Creates a run-command processor. [packResolver] is a test seam for the
@@ -485,8 +487,8 @@ class _ParentConfigResolver {
     for (final path in mergePaths) {
       _applyMergeDirective(result, parent, child, path);
     }
-    if (!overridePaths.contains('params.cliPrompts') &&
-        !mergePaths.contains('params.cliPrompts')) {
+    if (!overridePaths.contains(_kParamsCliPrompts) &&
+        !mergePaths.contains(_kParamsCliPrompts)) {
       _applyStructuredCliPromptsMerge(result, parent, child);
     }
     return result;
@@ -504,7 +506,7 @@ class _ParentConfigResolver {
     final parentValue = _getByPath(parent, path);
     final childValue = _getByPath(child, path);
     if (parentValue is List && childValue is List) {
-      if (path == 'params.cliPrompts' &&
+      if (path == _kParamsCliPrompts &&
           (_containsStructuredPrompts(parentValue) ||
               _containsStructuredPrompts(childValue))) {
         _setByPath(
@@ -525,8 +527,8 @@ class _ParentConfigResolver {
     Map<String, dynamic> parent,
     Map<String, dynamic> child,
   ) {
-    final parentValue = _getByPath(parent, 'params.cliPrompts');
-    final childValue = _getByPath(child, 'params.cliPrompts');
+    final parentValue = _getByPath(parent, _kParamsCliPrompts);
+    final childValue = _getByPath(child, _kParamsCliPrompts);
     if (parentValue is! List || childValue is! List) return;
     if (!_containsStructuredPrompts(parentValue) &&
         !_containsStructuredPrompts(childValue)) {
@@ -534,7 +536,7 @@ class _ParentConfigResolver {
     }
     _setByPath(
       result,
-      'params.cliPrompts',
+      _kParamsCliPrompts,
       _mergeStructuredCliPrompts(parentValue, childValue),
     );
   }

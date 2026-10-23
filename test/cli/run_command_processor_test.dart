@@ -179,6 +179,7 @@ void _testConfigFileResolution() {
   });
 
   _testParentResolution();
+  _testParentStructuredCliPromptsMerge();
   _testParentPackResolution();
   _testParentPackRegistryRef();
   _testParentPackEntryOverride();
@@ -214,6 +215,39 @@ void _testParentResolution() {
       expect(json['items'], ['a', 'b', 'c']);
     });
 
+    test('applies override directive', () {
+      _writeFile('parent.json', '{"params":{"k":"parent"}}');
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":"parent.json"},
+        "override":["params.k"],
+        "params":{"k":"child"}
+      }''');
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['k'], 'child');
+    });
+
+    test('handles parent block with non-string path', () {
+      _writeFile('child.json', '''{
+        "name":"child",
+        "parent":{"path":123}
+      }''');
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['name'], 'child');
+      expect(json.containsKey('parent'), isFalse);
+    });
+
+    test('handles non-map parent block', () {
+      _writeFile('child.json', '{"name":"child","parent":"string"}');
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['name'], 'child');
+      expect(json.containsKey('parent'), isFalse);
+    });
+  });
+}
+
+void _testParentStructuredCliPromptsMerge() {
+  group('parent-config structured cliPrompts merge', () {
     test('merges structured cliPrompts section objects with matching id', () {
       _writeFile(
           'parent.json',
@@ -254,35 +288,6 @@ void _testParentResolution() {
       });
       expect(cliPrompts[2], 'base2');
       expect(cliPrompts[3], 'child1');
-    });
-
-    test('applies override directive', () {
-      _writeFile('parent.json', '{"params":{"k":"parent"}}');
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"parent.json"},
-        "override":["params.k"],
-        "params":{"k":"child"}
-      }''');
-      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
-      expect(json['params']['k'], 'child');
-    });
-
-    test('handles parent block with non-string path', () {
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":123}
-      }''');
-      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
-      expect(json['name'], 'child');
-      expect(json.containsKey('parent'), isFalse);
-    });
-
-    test('handles non-map parent block', () {
-      _writeFile('child.json', '{"name":"child","parent":"string"}');
-      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
-      expect(json['name'], 'child');
-      expect(json.containsKey('parent'), isFalse);
     });
   });
 }

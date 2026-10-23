@@ -25,6 +25,7 @@ void main() {
   manifestTests();
   scriptsTests();
   prefixNormalizationTests();
+  conditionalCliPromptsTests();
   extraDirsTests();
   commentStripperTests();
 }
@@ -299,7 +300,11 @@ void prefixNormalizationTests() {
       expect(names, contains('AGENTS.md'));
       expect(names, contains('LICENSE'));
     });
+  });
+}
 
+void conditionalCliPromptsTests() {
+  group('AgentPackCompiler conditional cliPrompts', () {
     test('structured conditional cliPrompts embed prompt and condition JS', () {
       write('prompts/codegraph_tools.md', '# CodeGraph\n');
       write('js/conditions/isCodeGraphAvailable.js',

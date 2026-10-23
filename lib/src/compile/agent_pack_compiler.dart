@@ -190,31 +190,15 @@ class AgentPackCompiler {
   void _collectPathsFromJson(Map<String, dynamic> config,
       Map<String, File> closure, Set<String> visitedJs) {
     _collectSinglePathKeys(config, closure, visitedJs);
-
     for (final item in _findList(config, 'cliPrompts')) {
-      if (item is String) {
-        _maybeAddPathReference(item, closure, visitedJs);
-      } else if (item is Map) {
-        final single = item['prompt'];
-        if (single is String && single.isNotEmpty) {
-          _maybeAddPathReference(single, closure, visitedJs);
-        }
-        final prompts = item['prompts'];
-        if (prompts is List) {
-          for (final p in prompts) {
-            if (p is String) _maybeAddPathReference(p, closure, visitedJs);
-          }
-        }
-        final condition = item['condition'];
-        if (condition is String && condition.isNotEmpty) {
-          _addPathReference(condition, closure, visitedJs);
-        }
-      }
+      _collectCliPromptItem(
+        item,
+        (v) => _maybeAddPathReference(v, closure, visitedJs),
+        (v) => _addPathReference(v, closure, visitedJs),
+      );
     }
-
     _collectCliCommands(config, closure, visitedJs);
   }
-
   /// Collects `cliCommands` paths; any `scripts/**` reference embeds the whole
   /// subtree (scripts self-locate via SCRIPT_DIR).
   void _collectCliCommands(Map<String, dynamic> config,
@@ -638,3 +622,21 @@ class _CommentStripper {
 }
 
 enum _State { code, lineComment, blockComment, string }
+
+void _collectCliPromptItem(
+  Object? item,
+  void Function(String) onPrompt,
+  void Function(String) onCondition,
+) {
+  if (item is String) {
+    onPrompt(item);
+    return;
+  }
+  if (item is! Map) return;
+  final single = item['prompt'];
+  if (single is String && single.isNotEmpty) onPrompt(single);
+  final prompts = item['prompts'];
+  if (prompts is List) prompts.whereType<String>().forEach(onPrompt);
+  final condition = item['condition'];
+  if (condition is String && condition.isNotEmpty) onCondition(condition);
+}

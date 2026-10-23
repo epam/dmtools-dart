@@ -282,32 +282,27 @@ List<String> _flattenCliPromptItem(
 bool isCliPromptConditionMet(dynamic rawResult) {
   if (rawResult == null) return false;
   if (rawResult is bool) return rawResult;
-  if (rawResult is Map) {
-    if (rawResult['uncaughtException'] == true) return false;
-    if (rawResult.containsKey('result')) {
-      return isCliPromptConditionMet(rawResult['result']);
-    }
-    return false;
-  }
-  final str = rawResult.toString().trim();
-  if (str.toLowerCase() == 'true') return true;
-  if (str.toLowerCase() == 'false') return false;
-  if (str.startsWith('{') || str.startsWith('"')) {
-    try {
-      // Decode JSON string or object returned by JsJobRunner.runScript
-      if (str == '"true"') return true;
-      if (str.startsWith('{')) {
-        final resultMatch =
-            RegExp(r'"result"\s*:\s*(true|"true")', caseSensitive: false)
-                .hasMatch(str);
-        final uncaughtMatch =
-            RegExp(r'"uncaughtException"\s*:\s*true', caseSensitive: false)
-                .hasMatch(str);
-        return resultMatch && !uncaughtMatch;
-      }
-    } on Object {
-      return false;
-    }
+  if (rawResult is Map) return _isConditionMetFromMap(rawResult);
+  return _isConditionMetFromString(rawResult.toString().trim());
+}
+
+bool _isConditionMetFromMap(Map<dynamic, dynamic> map) {
+  if (map['uncaughtException'] == true) return false;
+  if (map.containsKey('result')) {
+    return isCliPromptConditionMet(map['result']);
   }
   return false;
+}
+
+bool _isConditionMetFromString(String str) {
+  final lower = str.toLowerCase();
+  if (lower == 'true' || str == '"true"') return true;
+  if (lower == 'false' || !str.startsWith('{')) return false;
+  final resultMatch =
+      RegExp(r'"result"\s*:\s*(true|"true")', caseSensitive: false)
+          .hasMatch(str);
+  final uncaughtMatch =
+      RegExp(r'"uncaughtException"\s*:\s*true', caseSensitive: false)
+          .hasMatch(str);
+  return resultMatch && !uncaughtMatch;
 }

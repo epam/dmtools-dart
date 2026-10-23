@@ -179,6 +179,8 @@ void _testConfigFileResolution() {
   });
 
   _testParentResolution();
+  _testParentStructuredCliPromptsMerge();
+  _testParentStructuredCliPromptsStrategies();
   _testParentPackResolution();
   _testParentPackRegistryRef();
   _testParentPackEntryOverride();
@@ -241,6 +243,87 @@ void _testParentResolution() {
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['name'], 'child');
       expect(json.containsKey('parent'), isFalse);
+    });
+  });
+}
+
+void _testParentStructuredCliPromptsMerge() {
+  group('parent-config structured cliPrompts merge', () {
+    test('merges structured cliPrompts section objects with matching id', () {
+      _writeFile(
+          'parent.json',
+          jsonEncode({
+            'params': {
+              'cliPrompts': [
+                'base1',
+                {
+                  'id': 'codegraph',
+                  'prompt': 'cg1.md',
+                  'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+                },
+                'base2',
+              ],
+            },
+          }));
+      _writeFile(
+          'child.json',
+          jsonEncode({
+            'name': 'child',
+            'parent': {'path': 'parent.json'},
+            'merge': ['params.cliPrompts'],
+            'params': {
+              'cliPrompts': [
+                {'id': 'codegraph', 'prompt': 'cg2.md'},
+                'child1',
+              ],
+            },
+          }));
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      final cliPrompts = json['params']['cliPrompts'] as List;
+      expect(cliPrompts.length, 4);
+      expect(cliPrompts[0], 'base1');
+      expect(cliPrompts[1], {
+        'id': 'codegraph',
+        'prompts': ['cg1.md', 'cg2.md'],
+        'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+      });
+      expect(cliPrompts[2], 'base2');
+      expect(cliPrompts[3], 'child1');
+    });
+  });
+}
+
+void _testParentStructuredCliPromptsStrategies() {
+  group('parent-config structured cliPrompts strategies', () {
+    test('supports prepend and replace mergeStrategy', () {
+      _writeFile(
+        'parent.json',
+        '{"params":{"cliPrompts":['
+            '{"id":"s1","prompts":["p1"],"mergeStrategy":"prepend"},'
+            '{"id":"s2","prompts":["p2"]}]}}',
+      );
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},'
+            '"merge":["params.cliPrompts"],"params":{"cliPrompts":['
+            '{"id":"s1","prompt":"c1","mergeStrategy":"prepend","condition":"cond.js"},'
+            '{"id":"s2","prompt":"c2","mergeStrategy":"replace"},'
+            '{"id":"s3","prompt":"c3"}]}}',
+      );
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['cliPrompts'], [
+        {
+          'id': 's1',
+          'prompts': ['c1', 'p1'],
+          'mergeStrategy': 'prepend',
+          'condition': 'cond.js',
+        },
+        {
+          'id': 's2',
+          'prompts': ['c2'],
+        },
+        {'id': 's3', 'prompt': 'c3'},
+      ]);
     });
   });
 }

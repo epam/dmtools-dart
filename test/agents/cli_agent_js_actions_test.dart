@@ -17,6 +17,8 @@ void main() {
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
+  cliPromptsConditionTests();
+  cliPromptsConditionParserTests();
 }
 
 // ======================================================================
@@ -369,6 +371,95 @@ void cliOutputLineJsActionTests() {
       } finally {
         await tmp.delete(recursive: true);
       }
+    });
+  });
+}
+
+void cliPromptsConditionTests() {
+  group('CliAgent cliPrompts condition evaluation', () {
+    test('includes section when condition returns true and skips when false',
+        () async {
+      final tmp = await _createTempDir();
+      try {
+        final condTrue = _actionJs(tmp, 'cond_true.js', 'return true;');
+        final condFalse = _actionJs(tmp, 'cond_false.js', 'return false;');
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['cat']
+            ..cliPrompts = [
+              'BASE_PROMPT',
+              {
+                'id': 'codegraph',
+                'prompt': 'INCLUDED_SECTION',
+                'condition': condTrue.path,
+              },
+              {
+                'id': 'skipped',
+                'prompts': ['EXCLUDED_SECTION'],
+                'condition': condFalse.path,
+              },
+              'TAIL_PROMPT',
+            ]
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        final resp = result['response'] as String;
+        expect(resp, contains('BASE_PROMPT'));
+        expect(resp, contains('INCLUDED_SECTION'));
+        expect(resp, isNot(contains('EXCLUDED_SECTION')));
+        expect(resp, contains('TAIL_PROMPT'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void cliPromptsConditionParserTests() {
+  group('isCliPromptConditionMet & flattenCliPrompts', () {
+    test('isCliPromptConditionMet parses map, bool, and JSON string payloads',
+        () {
+      expect(isCliPromptConditionMet(null), isFalse);
+      expect(isCliPromptConditionMet(true), isTrue);
+      expect(isCliPromptConditionMet(false), isFalse);
+      expect(
+        isCliPromptConditionMet({'result': true, 'uncaughtException': false}),
+        isTrue,
+      );
+      expect(
+        isCliPromptConditionMet({'result': true, 'uncaughtException': true}),
+        isFalse,
+      );
+      expect(isCliPromptConditionMet('true'), isTrue);
+      expect(isCliPromptConditionMet('"true"'), isTrue);
+      expect(isCliPromptConditionMet('false'), isFalse);
+      expect(
+        isCliPromptConditionMet('{"result":true,"uncaughtException":false}'),
+        isTrue,
+      );
+      expect(
+        isCliPromptConditionMet('{"result":true,"uncaughtException":true}'),
+        isFalse,
+      );
+    });
+
+    test('flattenCliPrompts evaluates condition callback and non-map elements',
+        () {
+      final params = CliAgentParams()
+        ..cliPrompts = [
+          'p1',
+          42,
+          {'id': 's1', 'prompt': 'p2', 'condition': '  '},
+          {'id': 's2', 'prompt': 'p3', 'condition': 'yes'},
+          {'id': 's3', 'prompt': 'p4', 'condition': 'no'},
+        ];
+      expect(
+        params.flattenCliPrompts(
+          params.cliPrompts,
+          conditionEvaluator: (c) => c == 'yes',
+        ),
+        ['p1', 'p2', 'p3'],
+      );
     });
   });
 }

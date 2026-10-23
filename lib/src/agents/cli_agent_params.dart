@@ -131,8 +131,17 @@ class CliAgentParams {
   /// Returns `cliPrompts` as a flat string array, or `null`.
   ///
   /// Handles both plain string arrays and structured config (objects with
-  /// `id`/`prompts` fields), matching the Java `CliPromptsConfig.toStringArray()`.
-  List<String>? get cliPromptsAsArray => _flattenCliPrompts(cliPrompts);
+  /// `id`/`prompt`/`prompts`/`condition` fields), matching the Java
+  /// `CliPromptsConfig.toStringArray()`.
+  List<String>? get cliPromptsAsArray => flattenCliPrompts(cliPrompts);
+
+  /// Flattens `cliPrompts` using an optional [conditionEvaluator] for
+  /// sections that declare a `condition` script path.
+  List<String>? flattenCliPrompts(
+    dynamic value, {
+    bool Function(String condition)? conditionEvaluator,
+  }) =>
+      _flattenCliPrompts(value, conditionEvaluator: conditionEvaluator);
 
   /// Creates params from a JSON map (the `params` block of a job config).
   factory CliAgentParams.fromJson(Map<String, dynamic> json) {
@@ -225,23 +234,81 @@ Map<String, List<String>>? _parsePromptsByTracker(dynamic value) {
 
 /// Flattens `cliPrompts` (string array or structured config) to a flat list.
 ///
-/// Each element can be a plain string or an object with `id` and `prompts`
-/// keys (the `CliPromptsConfig` structured form). Returns `null` when the
-/// input is null or empty.
-List<String>? _flattenCliPrompts(dynamic value) {
+/// Each element can be a plain string or an object with `id`, `prompt`/`prompts`,
+/// and optional `condition` keys (the `CliPromptsConfig` structured form).
+/// Returns `null` when the input is null or empty.
+List<String>? _flattenCliPrompts(
+  dynamic value, {
+  bool Function(String condition)? conditionEvaluator,
+}) {
   if (value == null || value is! List) return null;
   final result = <String>[];
   for (final item in value) {
-    result.addAll(_flattenCliPromptItem(item));
+    result.addAll(
+      _flattenCliPromptItem(item, conditionEvaluator: conditionEvaluator),
+    );
   }
   return result.isEmpty ? null : result;
 }
 
 /// Flattens a single `cliPrompts` element (string or section object).
-List<String> _flattenCliPromptItem(dynamic item) {
+List<String> _flattenCliPromptItem(
+  dynamic item, {
+  bool Function(String condition)? conditionEvaluator,
+}) {
   if (item is String) return [item];
   if (item is! Map) return const [];
+  if (!_shouldIncludePromptSection(item, conditionEvaluator)) {
+    return const [];
+  }
+  return _extractSectionStrings(item);
+}
+
+bool _shouldIncludePromptSection(
+  Map<dynamic, dynamic> item,
+  bool Function(String condition)? conditionEvaluator,
+) {
+  final condition = item['condition'];
+  if (condition is! String || conditionEvaluator == null) return true;
+  final trimmed = condition.trim();
+  return trimmed.isEmpty || conditionEvaluator(trimmed);
+}
+
+List<String> _extractSectionStrings(Map<dynamic, dynamic> item) {
+  final result = <String>[];
+  final singlePrompt = item['prompt'];
+  if (singlePrompt is String && singlePrompt.isNotEmpty) {
+    result.add(singlePrompt);
+  }
   final prompts = item['prompts'];
-  if (prompts is! List) return const [];
-  return prompts.whereType<String>().toList();
+  if (prompts is List) {
+    result.addAll(prompts.whereType<String>());
+  }
+  return result;
+}
+
+/// Parses a JS condition return value (JSON string or decoded object) into a boolean.
+bool isCliPromptConditionMet(dynamic rawResult) {
+  if (rawResult == null) return false;
+  if (rawResult is bool) return rawResult;
+  if (rawResult is Map) return _isConditionMetFromMap(rawResult);
+  return _isConditionMetFromString(rawResult.toString().trim());
+}
+
+bool _isConditionMetFromMap(Map<dynamic, dynamic> map) {
+  if (map['uncaughtException'] == true) return false;
+  return isCliPromptConditionMet(map['result']);
+}
+
+bool _isConditionMetFromString(String str) {
+  final lower = str.toLowerCase();
+  if (lower == 'true' || str == '"true"') return true;
+  if (!str.startsWith('{')) return false;
+  final hasTrueResult =
+      RegExp(r'"result"\s*:\s*(true|"true")', caseSensitive: false)
+          .hasMatch(str);
+  final hasException =
+      RegExp(r'"uncaughtException"\s*:\s*true', caseSensitive: false)
+          .hasMatch(str);
+  return hasTrueResult && !hasException;
 }

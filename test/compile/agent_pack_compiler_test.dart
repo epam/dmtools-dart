@@ -25,6 +25,7 @@ void main() {
   manifestTests();
   scriptsTests();
   prefixNormalizationTests();
+  conditionalCliPromptsTests();
   extraDirsTests();
   commentStripperTests();
 }
@@ -298,6 +299,33 @@ void prefixNormalizationTests() {
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('AGENTS.md'));
       expect(names, contains('LICENSE'));
+    });
+  });
+}
+
+void conditionalCliPromptsTests() {
+  group('AgentPackCompiler conditional cliPrompts', () {
+    test('structured conditional cliPrompts embed prompt and condition JS', () {
+      write('prompts/codegraph_tools.md', '# CodeGraph\n');
+      write('js/conditions/isCodeGraphAvailable.js',
+          'function action() { return true; }\n');
+      final entry = write(
+          'cond_agent.json',
+          jsonEncode({
+            'name': 'CondAgent',
+            'params': {
+              'cliPrompts': [
+                {
+                  'id': 'codegraph',
+                  'prompt': './agents/prompts/codegraph_tools.md',
+                  'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+                },
+              ],
+            },
+          }));
+      final names = zipNames(compileAgent(entry).zipFile);
+      expect(names, contains('prompts/codegraph_tools.md'));
+      expect(names, contains('js/conditions/isCodeGraphAvailable.js'));
     });
   });
 }

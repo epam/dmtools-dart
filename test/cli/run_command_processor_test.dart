@@ -214,6 +214,48 @@ void _testParentResolution() {
       expect(json['items'], ['a', 'b', 'c']);
     });
 
+    test('merges structured cliPrompts section objects with matching id', () {
+      _writeFile(
+          'parent.json',
+          jsonEncode({
+            'params': {
+              'cliPrompts': [
+                'base1',
+                {
+                  'id': 'codegraph',
+                  'prompt': 'cg1.md',
+                  'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+                },
+                'base2',
+              ],
+            },
+          }));
+      _writeFile(
+          'child.json',
+          jsonEncode({
+            'name': 'child',
+            'parent': {'path': 'parent.json'},
+            'merge': ['params.cliPrompts'],
+            'params': {
+              'cliPrompts': [
+                {'id': 'codegraph', 'prompt': 'cg2.md'},
+                'child1',
+              ],
+            },
+          }));
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      final cliPrompts = json['params']['cliPrompts'] as List;
+      expect(cliPrompts.length, 4);
+      expect(cliPrompts[0], 'base1');
+      expect(cliPrompts[1], {
+        'id': 'codegraph',
+        'prompts': ['cg1.md', 'cg2.md'],
+        'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+      });
+      expect(cliPrompts[2], 'base2');
+      expect(cliPrompts[3], 'child1');
+    });
+
     test('applies override directive', () {
       _writeFile('parent.json', '{"params":{"k":"parent"}}');
       _writeFile('child.json', '''{

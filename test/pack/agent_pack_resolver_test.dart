@@ -750,6 +750,37 @@ void pathRewriteNestedTests() {
         File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path,
       );
     });
+
+    test(
+        'rewrites structured cliPrompts section prompt, prompts, and condition',
+        () {
+      final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
+      final config = <String, dynamic>{
+        'params': {
+          'cliPrompts': [
+            {
+              'id': 'codegraph',
+              'prompt': './agents/instructions/common/guide.md',
+              'prompts': ['agents/instructions/common/guide.md'],
+              'condition': 'agents/js/main.js',
+            },
+          ],
+        },
+      };
+      resolver.rewritePathsToPackRoot(config, pack.packRoot);
+      final params = config['params'] as Map<String, dynamic>;
+      final prompts = params['cliPrompts'] as List;
+      final section = prompts[0] as Map<String, dynamic>;
+      final expectedGuide =
+          File(p.join(pack.packRoot.path, 'instructions/common/guide.md'))
+              .absolute
+              .path;
+      final expectedJs =
+          File(p.join(pack.packRoot.path, 'js/main.js')).absolute.path;
+      expect(section['prompt'], expectedGuide);
+      expect((section['prompts'] as List)[0], expectedGuide);
+      expect(section['condition'], expectedJs);
+    });
   });
 }
 

@@ -17,6 +17,7 @@ void main() {
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
+  cliPromptsConditionTests();
 }
 
 // ======================================================================
@@ -366,6 +367,46 @@ void cliOutputLineJsActionTests() {
             ['go', 'stop']);
         // The second command never ran because the batch was aborted.
         expect(marker.existsSync(), isFalse);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void cliPromptsConditionTests() {
+  group('CliAgent cliPrompts condition evaluation', () {
+    test('includes section when condition returns true and skips when false',
+        () async {
+      final tmp = await _createTempDir();
+      try {
+        final condTrue = _actionJs(tmp, 'cond_true.js', 'return true;');
+        final condFalse = _actionJs(tmp, 'cond_false.js', 'return false;');
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['cat']
+            ..cliPrompts = [
+              'BASE_PROMPT',
+              {
+                'id': 'codegraph',
+                'prompt': 'INCLUDED_SECTION',
+                'condition': condTrue.path,
+              },
+              {
+                'id': 'skipped',
+                'prompts': ['EXCLUDED_SECTION'],
+                'condition': condFalse.path,
+              },
+              'TAIL_PROMPT',
+            ]
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        final resp = result['response'] as String;
+        expect(resp, contains('BASE_PROMPT'));
+        expect(resp, contains('INCLUDED_SECTION'));
+        expect(resp, isNot(contains('EXCLUDED_SECTION')));
+        expect(resp, contains('TAIL_PROMPT'));
       } finally {
         await tmp.delete(recursive: true);
       }

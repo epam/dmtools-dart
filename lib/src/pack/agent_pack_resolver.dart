@@ -715,6 +715,8 @@ class AgentPackResolver {
     'preAction',
     'postAction',
     'descriptionPath',
+    'prompt',
+    'condition',
   };
 
   void _rewriteObject(Map<String, dynamic> obj, Directory packRoot) {

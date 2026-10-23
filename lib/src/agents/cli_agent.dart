@@ -419,10 +419,14 @@ class CliAgent {
   /// periodically / per-line / on error. Otherwise the buffered path is used.
   Future<String> _executeCliCommands(String workDir) async {
     final builder = const CliCommandBuilder();
+    final resolvedPrompts = params.flattenCliPrompts(
+      params.cliPrompts,
+      conditionEvaluator: (cond) => _evaluateCliPromptCondition(cond, workDir),
+    );
     final finalCommands = builder.buildCommands(
       params.cliCommands,
       params.cliPrompt,
-      params.cliPromptsAsArray,
+      resolvedPrompts,
       params.cliPromptsByTracker,
       trackerType: propertyReader.getDefaultTracker(),
       workingDirectory: workDir,
@@ -545,6 +549,18 @@ class CliAgent {
       stderr.writeln('$name failed, continuing: $e');
       return null;
     }
+  }
+
+  /// Evaluates a `cliPrompts` section condition script via [_runContextJsAction].
+  bool _evaluateCliPromptCondition(String conditionPath, String workDir) {
+    final raw = _runContextJsAction(
+      'cliPrompts.condition',
+      conditionPath,
+      workDir,
+      const {},
+      contextParams: _metadataContextParams(),
+    );
+    return isCliPromptConditionMet(raw);
   }
 
   /// Top-level `metadata` binding merged into the params object of the

@@ -192,7 +192,24 @@ class AgentPackCompiler {
     _collectSinglePathKeys(config, closure, visitedJs);
 
     for (final item in _findList(config, 'cliPrompts')) {
-      if (item is String) _maybeAddPathReference(item, closure, visitedJs);
+      if (item is String) {
+        _maybeAddPathReference(item, closure, visitedJs);
+      } else if (item is Map) {
+        final single = item['prompt'];
+        if (single is String && single.isNotEmpty) {
+          _maybeAddPathReference(single, closure, visitedJs);
+        }
+        final prompts = item['prompts'];
+        if (prompts is List) {
+          for (final p in prompts) {
+            if (p is String) _maybeAddPathReference(p, closure, visitedJs);
+          }
+        }
+        final condition = item['condition'];
+        if (condition is String && condition.isNotEmpty) {
+          _addPathReference(condition, closure, visitedJs);
+        }
+      }
     }
 
     _collectCliCommands(config, closure, visitedJs);

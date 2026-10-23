@@ -485,10 +485,16 @@ class _ParentConfigResolver {
     for (final path in mergePaths) {
       _applyMergeDirective(result, parent, child, path);
     }
+    if (!overridePaths.contains('params.cliPrompts') &&
+        !mergePaths.contains('params.cliPrompts')) {
+      _applyStructuredCliPromptsMerge(result, parent, child);
+    }
     return result;
   }
 
   /// Concatenates parent + child arrays at [path] inside [result].
+  /// For `params.cliPrompts`, if either side contains section objects, merges
+  /// sections by `id` (Java `CliPromptsConfig.merge` parity).
   void _applyMergeDirective(
     Map<String, dynamic> result,
     Map<String, dynamic> parent,
@@ -498,8 +504,128 @@ class _ParentConfigResolver {
     final parentValue = _getByPath(parent, path);
     final childValue = _getByPath(child, path);
     if (parentValue is List && childValue is List) {
-      _setByPath(result, path, [...parentValue, ...childValue]);
+      if (path == 'params.cliPrompts' &&
+          (_containsStructuredPrompts(parentValue) ||
+              _containsStructuredPrompts(childValue))) {
+        _setByPath(
+          result,
+          path,
+          _mergeStructuredCliPrompts(parentValue, childValue),
+        );
+      } else {
+        _setByPath(result, path, [...parentValue, ...childValue]);
+      }
     }
+  }
+
+  /// Merges structured `params.cliPrompts` by section `id` when either parent
+  /// or child uses section objects (Java `ParentConfigResolver` parity).
+  void _applyStructuredCliPromptsMerge(
+    Map<String, dynamic> result,
+    Map<String, dynamic> parent,
+    Map<String, dynamic> child,
+  ) {
+    final parentValue = _getByPath(parent, 'params.cliPrompts');
+    final childValue = _getByPath(child, 'params.cliPrompts');
+    if (parentValue is! List || childValue is! List) return;
+    if (!_containsStructuredPrompts(parentValue) &&
+        !_containsStructuredPrompts(childValue)) {
+      return;
+    }
+    _setByPath(
+      result,
+      'params.cliPrompts',
+      _mergeStructuredCliPrompts(parentValue, childValue),
+    );
+  }
+
+  bool _containsStructuredPrompts(List<dynamic> list) =>
+      list.any((item) => item is Map);
+
+  List<dynamic> _mergeStructuredCliPrompts(
+    List<dynamic> baseList,
+    List<dynamic> overrideList,
+  ) {
+    final merged = <dynamic>[];
+    for (final baseItem in baseList) {
+      if (baseItem is! Map) {
+        merged.add(baseItem);
+        continue;
+      }
+      final id = baseItem['id']?.toString();
+      final overrideMatch = _findSectionById(overrideList, id);
+      if (overrideMatch == null) {
+        merged.add(baseItem);
+      } else {
+        merged.add(_mergeSectionMaps(baseItem, overrideMatch));
+      }
+    }
+    for (final overrideItem in overrideList) {
+      if (overrideItem is! Map) {
+        merged.add(overrideItem);
+        continue;
+      }
+      final id = overrideItem['id']?.toString();
+      if (_findSectionById(baseList, id) == null) {
+        merged.add(overrideItem);
+      }
+    }
+    return merged;
+  }
+
+  Map<dynamic, dynamic>? _findSectionById(List<dynamic> list, String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final item in list) {
+      if (item is Map && item['id']?.toString() == id) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _mergeSectionMaps(
+    Map<dynamic, dynamic> base,
+    Map<dynamic, dynamic> over,
+  ) {
+    final basePrompts = _extractSectionPrompts(base);
+    final overPrompts = _extractSectionPrompts(over);
+    final strategy =
+        (over['mergeStrategy']?.toString() ?? 'append').toLowerCase();
+    List<String> mergedPrompts;
+    if (strategy == 'prepend') {
+      mergedPrompts = [...overPrompts, ...basePrompts];
+    } else if (strategy == 'replace') {
+      mergedPrompts = [...overPrompts];
+    } else {
+      mergedPrompts = [...basePrompts, ...overPrompts];
+    }
+    final out = <String, dynamic>{
+      'id': base['id'].toString(),
+      'prompts': mergedPrompts,
+    };
+    final baseStrategy = base['mergeStrategy']?.toString();
+    if (baseStrategy != null &&
+        baseStrategy.isNotEmpty &&
+        baseStrategy != 'append') {
+      out['mergeStrategy'] = baseStrategy;
+    }
+    final overCond = over['condition']?.toString().trim();
+    final baseCond = base['condition']?.toString().trim();
+    final cond =
+        (overCond != null && overCond.isNotEmpty) ? overCond : baseCond;
+    if (cond != null && cond.isNotEmpty) {
+      out['condition'] = cond;
+    }
+    return out;
+  }
+
+  List<String> _extractSectionPrompts(Map<dynamic, dynamic> section) {
+    final out = <String>[];
+    final single = section['prompt'];
+    if (single is String && single.isNotEmpty) out.add(single);
+    final list = section['prompts'];
+    if (list is List) out.addAll(list.whereType<String>());
+    return out;
   }
 
   /// Reads a top-level string-list key from [config] (empty when absent).

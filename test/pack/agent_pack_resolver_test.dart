@@ -158,8 +158,8 @@ void zipSlipTests() {
     test('rejects ../ escape and absolute-path entries before unpacking', () {
       for (final bad in ['../evil.sh', '/abs/evil.sh']) {
         final zip = buildMalicious(bad);
-        expect(
-            () => resolver.resolve(zip.path), throwsA(isA<AgentPackException>()));
+        expect(() => resolver.resolve(zip.path),
+            throwsA(isA<AgentPackException>()));
         expect(
           Directory(p.join(packsRoot.path, 'evil-1.0.0')).existsSync(),
           isFalse,

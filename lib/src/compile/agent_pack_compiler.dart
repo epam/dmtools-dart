@@ -199,6 +199,7 @@ class AgentPackCompiler {
     }
     _collectCliCommands(config, closure, visitedJs);
   }
+
   /// Collects `cliCommands` paths; any `scripts/**` reference embeds the whole
   /// subtree (scripts self-locate via SCRIPT_DIR).
   void _collectCliCommands(Map<String, dynamic> config,

@@ -1,13 +1,4 @@
 {
-  "pr-373": [
-    {
-      "leg": "review",
-      "at": "2026-10-08T14:00:51Z",
-      "prompt": 105307,
-      "completion": 28003,
-      "total": 133310
-    }
-  ],
   "issue-380": [
     {
       "leg": "dev",
@@ -3450,6 +3441,17 @@
       "completion": 8839,
       "total": 142560,
       "cacheRead": 1974023,
+      "model": "claude-haiku-5.5"
+    }
+  ],
+  "pr-452": [
+    {
+      "leg": "review",
+      "at": "2026-10-24T00:54:59Z",
+      "prompt": 111863,
+      "completion": 42778,
+      "total": 154641,
+      "cacheRead": 1184242,
       "model": "claude-haiku-5.5"
     }
   ]

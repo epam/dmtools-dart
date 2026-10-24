@@ -27,6 +27,29 @@ import '../integrations/xray/xray_tools.dart';
 import 'tool_definition.dart';
 import 'tool_registry.dart';
 
+/// Static base catalog (all 16 concrete integration modules), constructed
+/// once per isolate.
+final List<ToolDefinition> _baseToolCatalog = List.unmodifiable([
+  ...jiraTools(),
+  ...githubTools(),
+  ...gitlabTools(),
+  ...confluenceTools(),
+  ...aiTools(),
+  ...fileTools(),
+  ...cliTools(),
+  ...envTools(),
+  ...adoTools(),
+  ...testrailTools(),
+  ...bitriseTools(),
+  ...jenkinsTools(),
+  ...figmaTools(),
+  ...teamsTools(),
+  ...sharepointTools(),
+  ...xrayTools(),
+  ...kbTools(),
+  ...mermaidTools(),
+]);
+
 /// Returns every tool definition registered in the default registry.
 ///
 /// Catalog order mirrors the Java `MCPToolRegistry` module list; the registry
@@ -37,27 +60,13 @@ import 'tool_registry.dart';
 /// the family is absent from the catalog and `dmtools list` (AC1). The
 /// concrete `github_*`/`gitlab_*` tools stay bit-identical either way
 /// (AC4).
-List<ToolDefinition> defaultToolCatalog() => [
-      ...jiraTools(),
-      ...githubTools(),
-      ...gitlabTools(),
-      ...confluenceTools(),
-      ...aiTools(),
-      ...fileTools(),
-      ...cliTools(),
-      ...envTools(),
-      ...adoTools(),
-      ...testrailTools(),
-      ...bitriseTools(),
-      ...jenkinsTools(),
-      ...figmaTools(),
-      ...teamsTools(),
-      ...sharepointTools(),
-      ...xrayTools(),
-      ...kbTools(),
-      ...mermaidTools(),
-      ...scmCiAliasCatalog(),
-    ];
+List<ToolDefinition> defaultToolCatalog() {
+  final aliases = scmCiAliasCatalog();
+  if (aliases.isEmpty) return _baseToolCatalog;
+  return [..._baseToolCatalog, ...aliases];
+}
+
+final Map<String, ToolRegistry> _defaultRegistryCache = {};
 
 /// Creates a [ToolRegistry] with every integration catalog registered.
 ///
@@ -66,7 +75,13 @@ List<ToolDefinition> defaultToolCatalog() => [
 /// output with [ToolRegistry.toolsForIntegrations] based on the resolved
 /// `DMTOOLS_INTEGRATIONS` configuration.
 ToolRegistry createDefaultToolRegistry() {
-  final registry = ToolRegistry();
-  registry.registerAll(defaultToolCatalog());
-  return registry;
+  final aliases = scmCiAliasCatalog();
+  final key = aliases.map((t) => t.name).join(',');
+  return _defaultRegistryCache.putIfAbsent(key, () {
+    final registry = ToolRegistry();
+    registry.registerAll(
+      aliases.isEmpty ? _baseToolCatalog : [..._baseToolCatalog, ...aliases],
+    );
+    return registry;
+  });
 }

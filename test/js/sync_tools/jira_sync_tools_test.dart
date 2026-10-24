@@ -79,6 +79,7 @@ void configureJira(JiraFixtureServer server, {String token = 'tok'}) {
     'JIRA_BASE_PATH': 'http://127.0.0.1:${server.port}',
     'JIRA_LOGIN_PASS_TOKEN': token,
     'JIRA_AUTH_TYPE': 'Basic',
+    'JIRA_RETRY_ENABLED': 'false',
   });
 }
 

@@ -18,22 +18,13 @@ concurrency:
 
 jobs:
   pick:
-    # Bitrise-first picker (owner 2026-10-13): the pool is preferred, but a
-    # dead/paused pool must never park the machine on "queued forever".
-    # Canary: dispatch the short-capped pool probe and poll briefly; the
-    # probe answering fast = pool alive -> pool. Any other outcome (no
-    # pickup within the window, red, dispatch failure) -> GitHub-hosted.
-    # Worst-case added latency when the pool is down: ~90s once per run.
-    # ubuntu-slim: separate hosted capacity class — the picker must not
-    # queue behind heavy ubuntu-latest load (fa release validations etc.);
-    # it only runs gh calls (~90s).
+    # Resolves dmtools-agents SHA once per run (gh-437).
     runs-on: ubuntu-slim
     outputs:
-      runner: ${{ steps.pick.outputs.runner }}
+      runner: ubuntu-24.04
       agents_sha: ${{ steps.agents.outputs.sha }}
     permissions:
       contents: read
-      actions: write
     steps:
       - name: Resolve dmtools-agents SHA once per run (gh-437)
         # Every job of this run fetches agents at THIS commit, so the
@@ -47,28 +38,6 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "### dmtools-agents SHA: \`${SHA:0:12}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "[quality] dmtools-agents pinned for this run: $SHA"
-      - name: Canary the Bitrise pool, else fall back to GitHub-hosted
-        id: pick
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          command -v gh >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gh; }
-          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run bitrise-probe.yml --ref "$GITHUB_REF_NAME" || true
-          VERDICT=no-pickup
-          RUNNER=ubuntu-24.04
-          for i in $(seq 1 9); do
-            sleep 10
-            R=$(gh run list --workflow bitrise-probe.yml --created ">$TS" \
-                 --limit 1 --json status,conclusion \
-                 --jq '.[0] | "\(.status)/\(.conclusion // "-")"' 2>/dev/null || echo none)
-            case "$R" in
-              completed/success) VERDICT=pool-up;   RUNNER=bitrise-runner-dmtools-ci; break ;;
-              completed/*)       VERDICT=pool-red;  break ;;
-            esac
-          done
-          echo "runner=$RUNNER" >> "$GITHUB_OUTPUT"
-          echo "picker: $VERDICT -> $RUNNER"
 
   static:
     # Fast lane: format + analyze need no toolchain (gcc/QuickJS) — they
@@ -91,6 +60,13 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
       - run: dart pub get
       - run: dart format --set-exit-if-changed .
       - run: dart analyze
@@ -137,6 +113,13 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
       - run: dart pub get
       - name: Install gcc
         run: |
@@ -154,8 +137,17 @@ jobs:
           done
           echo "apt failed after 3 attempts"
           exit 1
+      - name: Cache QuickJS shared library
+        uses: actions/cache@v4
+        with:
+          path: native/quickjs
+          key: quickjs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
       - name: Build QuickJS (quickjs_runtime package)
         run: |
+          if [ -s native/quickjs/libquickjs_bridge.so ]; then
+            echo "Using cached native/quickjs/libquickjs_bridge.so"
+            exit 0
+          fi
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
           bash "$PKG/tool/build_quickjs.sh"
       - name: dart test (shard ${{ matrix.shard }}/${{ env.TOTAL_SHARDS }}) --coverage
@@ -274,12 +266,6 @@ jobs:
           df -h / || true
       - uses: actions/checkout@v4
         if: needs.static.result == 'success' && needs.test.result == 'success'
-      - uses: dart-lang/setup-dart@v1
-        if: needs.static.result == 'success' && needs.test.result == 'success'
-        with:
-          sdk: stable
-      - run: dart pub get
-        if: needs.static.result == 'success' && needs.test.result == 'success'
       - uses: actions/download-artifact@v4
         if: needs.static.result == 'success' && needs.test.result == 'success'
         with:
@@ -306,10 +292,13 @@ jobs:
           echo "test_count=$TOTAL" >> "$GITHUB_OUTPUT"
       - name: Install crap4dart
         if: needs.static.result == 'success' && needs.test.result == 'success'
-        # Fixed in 0.9.5: the test_assertions parser for trailing named `skip:` args,
-        # so the two config excludes stay gone. Keep this pin aligned with the
-        # version the pre-commit hook runs locally.
-        run: dart pub global activate crap4dart 0.14.2
+        # Download prebuilt crap4dart-linux-x64 release binary (no Dart SDK needed).
+        run: |
+          CRAP_VER=v0.17.0
+          curl -fsSL "https://github.com/IstiN/crap4dart/releases/download/${CRAP_VER}/crap4dart-linux-x64" -o /tmp/crap4dart
+          chmod +x /tmp/crap4dart
+          sudo mv /tmp/crap4dart /usr/local/bin/crap4dart
+          crap4dart --version
       - run: crap4dart check --all
         if: needs.static.result == 'success' && needs.test.result == 'success'
       - run: crap4dart analyze
@@ -413,6 +402,13 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
       - run: dart pub get
       - name: Install gcc
         run: |
@@ -430,8 +426,17 @@ jobs:
           done
           echo "apt failed after 3 attempts"
           exit 1
+      - name: Cache QuickJS shared library
+        uses: actions/cache@v4
+        with:
+          path: native/quickjs
+          key: quickjs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
       - name: Build QuickJS (quickjs_runtime package)
         run: |
+          if [ -s native/quickjs/libquickjs_bridge.so ]; then
+            echo "Using cached native/quickjs/libquickjs_bridge.so"
+            exit 0
+          fi
           PKG=$(python3 -c "import json;print([p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='quickjs_runtime'][0].replace('file://',''))")
           bash "$PKG/tool/build_quickjs.sh"
       # Pinned via the agents/ submodule instead of a floating clone so the
@@ -491,6 +496,7 @@ jobs:
       - uses: actions/checkout@v4
         if: needs.agents-suite.result == 'success'
       - name: Fetch dmtools-agents (run SHA, no submodule pin)
+        if: needs.agents-suite.result == 'success'
         env:
           AGENTS_FETCH_REF: ${{ needs.pick.outputs.agents_sha }}
         run: bash tool/fetch_agents.sh
@@ -498,6 +504,14 @@ jobs:
         if: needs.agents-suite.result == 'success'
         with:
           sdk: stable
+      - name: Cache pub packages
+        if: needs.agents-suite.result == 'success'
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-
       - run: dart pub get
         if: needs.agents-suite.result == 'success'
       - uses: actions/download-artifact@v4

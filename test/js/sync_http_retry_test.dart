@@ -231,6 +231,7 @@ void delayMathTests() {
     test('Retry-After header overrides the backoff', () {
       expect(policy.statusDelayMs(1, {'Retry-After': '2'}), 2000);
       expect(policy.statusDelayMs(3, {'retry-after': '1'}), 1000);
+      expect(policy.statusDelayMs(3, {'Retry-After': '0'}), 0);
     });
 
     test('Retry-After above 300s aborts (null)', () {

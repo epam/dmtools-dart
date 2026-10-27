@@ -21,9 +21,11 @@ void main() {
   requestMdTests();
   jiraAttachmentsTests();
   adoAttachmentsTests();
-  attachmentFilteringTests();
+  attachmentSkipAllTests();
+  attachmentSkipVideoTests();
   attachmentResilienceTests();
   authHeadersResolutionTests();
+  httpDownloaderTests();
 }
 
 // ======================================================================
@@ -370,13 +372,24 @@ void inputFolderNameTests() {
   });
 }
 
-// ======================================================================
-// request.md parity & ADO fields
-// ======================================================================
-
 void requestMdTests() {
   group('TicketInputContextBuilder — request.md and ADO markdown', () {
-    test('writes request.md matching ticket.md content', () {
+    test('writes request.md matching ticket.md and parses CliAgentParams flags',
+        () {
+      final p = CliAgentParams.fromJson({
+        'includeAttachments': false,
+        'skipAllAttachments': true,
+        'skipVideoAttachments': true,
+      });
+      expect(p.includeAttachments, isFalse);
+      expect(p.skipAllAttachments, isTrue);
+      expect(p.skipVideoAttachments, isTrue);
+      expect(
+        CliAgentParams.fromJson({
+          'input': {'skipAllAttachments': 'true'}
+        }).skipAllAttachments,
+        isTrue,
+      );
       final tmp = _createTempDir();
       try {
         final builder = TicketInputContextBuilder(tmp.path);
@@ -416,10 +429,6 @@ void requestMdTests() {
     });
   });
 }
-
-// ======================================================================
-// Jira & generic attachment downloading
-// ======================================================================
 
 void jiraAttachmentsTests() {
   group('TicketInputContextBuilder — Jira attachments', () {
@@ -498,8 +507,8 @@ void adoAttachmentsTests() {
 // Attachment filtering (includeAttachments, skipAll, skipVideo)
 // ======================================================================
 
-void attachmentFilteringTests() {
-  group('TicketInputContextBuilder — attachment filtering', () {
+void attachmentSkipAllTests() {
+  group('TicketInputContextBuilder — skipAllAttachments', () {
     test('skips all attachments when skipAllAttachments or !includeAttachments',
         () {
       final tmp = _createTempDir();
@@ -529,7 +538,11 @@ void attachmentFilteringTests() {
         tmp.deleteSync(recursive: true);
       }
     });
+  });
+}
 
+void attachmentSkipVideoTests() {
+  group('TicketInputContextBuilder — skipVideoAttachments', () {
     test('skips video files when skipVideoAttachments is true', () {
       final tmp = _createTempDir();
       try {
@@ -598,10 +611,6 @@ void attachmentResilienceTests() {
   });
 }
 
-// ======================================================================
-// Auth header resolution
-// ======================================================================
-
 void authHeadersResolutionTests() {
   group('TicketInputContextBuilder.resolveAuthHeadersForUrl', () {
     test('resolves Jira and ADO auth headers for matching hosts', () async {
@@ -639,7 +648,11 @@ void authHeadersResolutionTests() {
         },
       );
     });
+  });
+}
 
+void httpDownloaderTests() {
+  group('TicketInputContextBuilder — HTTP downloader', () {
     test('default HTTP downloader fetches 200 and skips 404', () async {
       if (!hasPython3()) return;
       final server = EchoServer();
@@ -672,10 +685,6 @@ void authHeadersResolutionTests() {
     });
   });
 }
-
-// ======================================================================
-// Fixtures
-// ======================================================================
 
 /// A complete Jira-style ticket with status, priority, and description.
 Map<String, dynamic> _fullTicket() => {

@@ -16,9 +16,11 @@ void main() {
 
   titleToolTests();
   findToolTests();
+  findOrCreateToolTests();
   childrenToolTests();
   profileTests();
   searchByTextTests();
+  updatePageWithHistoryTests();
   contentByUrlTests();
   shortLinkAuthTests();
   downloadShortLinkTests();
@@ -151,7 +153,12 @@ void findToolTests() {
         throwsA(isA<StateError>()),
       );
     });
+  });
+}
 
+/// `findOrCreate`.
+void findOrCreateToolTests() {
+  group('ConfluenceClient.findOrCreate tools', () {
     test('findOrCreate returns the existing page', () async {
       final f = mockWithDefaultSpace(
         (o) => routeByPath({'/content': _listingBody}, o),
@@ -287,7 +294,12 @@ void searchByTextTests() {
         'ORDER BY lastModified ASC',
       );
     });
+  });
+}
 
+/// History-aware page update.
+void updatePageWithHistoryTests() {
+  group('ConfluenceClient.updatePageWithHistory', () {
     test('updatePageWithHistory sends the version message', () async {
       final f = mockConfluence((o) =>
           o.method == 'GET' ? '{"version":{"number":3}}' : '{"id":"555"}');

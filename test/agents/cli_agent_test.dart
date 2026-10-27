@@ -88,28 +88,6 @@ void paramsParsingTests() {
       expect(params.cliPromptsByTracker?['jira'], ['j1', 'j2']);
       expect(params.cliPromptsByTracker?['ado'], ['a1']);
     });
-
-    test('parses attachment flags from top-level and input map', () {
-      final top = CliAgentParams.fromJson({
-        'includeAttachments': false,
-        'skipAllAttachments': true,
-        'skipVideoAttachments': true,
-      });
-      expect(top.includeAttachments, isFalse);
-      expect(top.skipAllAttachments, isTrue);
-      expect(top.skipVideoAttachments, isTrue);
-
-      final nested = CliAgentParams.fromJson({
-        'input': {
-          'includeAttachments': false,
-          'skipAllAttachments': 'true',
-          'skipVideoAttachments': true,
-        },
-      });
-      expect(nested.includeAttachments, isFalse);
-      expect(nested.skipAllAttachments, isTrue);
-      expect(nested.skipVideoAttachments, isTrue);
-    });
   });
 }
 

@@ -50,6 +50,7 @@ void main() {
   findOrCreateChildrenTests();
   profileToolTests();
   searchToolTests();
+  searchSpaceClauseTests();
   updateToolTests();
   contentsByUrlsTests();
   contentsByUrlsMarkdownTests();
@@ -288,7 +289,11 @@ void searchToolTests() {
         ),
       );
     });
+  });
+}
 
+void searchSpaceClauseTests() {
+  group('confluence search space clause and limit tools', () {
     test(
         'search_content_by_text skips default space when query has space clause',
         () {

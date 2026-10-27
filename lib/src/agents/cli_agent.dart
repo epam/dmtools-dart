@@ -668,7 +668,13 @@ class CliAgent {
   /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty
   /// folder is created — the ticket-agnostic behavior.
   String _createInputContext(String workDir) {
-    return TicketInputContextBuilder(workDir).build(
+    return TicketInputContextBuilder(
+      workDir,
+      propertyReader: propertyReader,
+      includeAttachments: params.includeAttachments,
+      skipAllAttachments: params.skipAllAttachments,
+      skipVideoAttachments: params.skipVideoAttachments,
+    ).build(
       params.contextId,
       ticketData: _resolvedTicketData ?? ticketData,
     );

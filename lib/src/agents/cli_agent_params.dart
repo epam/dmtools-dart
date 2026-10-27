@@ -93,6 +93,14 @@ class CliAgentParams {
   /// Whether to skip the `postJSAction` hook. Default: `false`.
   bool skipPostJSAction = false;
 
+  /// Whether to download ticket attachments into the input folder. Default: `true`.
+  bool includeAttachments = true;
+
+  /// Whether to skip all ticket attachments. Default: `false`.
+  bool skipAllAttachments = false;
+
+  /// Whether to skip video attachments when [includeAttachments] is true. Default: `false`.
+  bool skipVideoAttachments = false;
   // --- Inherited from TrackerParams ---
 
   /// Output type — `comment`, `field`, `creation`, or `none`.
@@ -171,6 +179,12 @@ class CliAgentParams {
       ..skipPreJSAction = _parseBool(json['skipPreJSAction'], false)
       ..skipPreCliJSAction = _parseBool(json['skipPreCliJSAction'], false)
       ..skipPostJSAction = _parseBool(json['skipPostJSAction'], false)
+      ..includeAttachments =
+          _parseAttachmentFlag(json, 'includeAttachments', true)
+      ..skipAllAttachments =
+          _parseAttachmentFlag(json, 'skipAllAttachments', false)
+      ..skipVideoAttachments =
+          _parseAttachmentFlag(json, 'skipVideoAttachments', false)
       ..outputType = _parseString(json['outputType'])
       ..envVariables = _parseStringMap(json['envVariables'])
       ..metadata = _parseDynamicMap(json['metadata'])
@@ -190,6 +204,21 @@ String? _parseString(dynamic value) => value == null ? null : value.toString();
 bool _parseBool(dynamic value, bool defaultValue) {
   if (value is bool) return value;
   if (value is String) return value.toLowerCase() == 'true';
+  return defaultValue;
+}
+
+bool _parseAttachmentFlag(
+  Map<String, dynamic> json,
+  String key,
+  bool defaultValue,
+) {
+  if (json.containsKey(key) && json[key] != null) {
+    return _parseBool(json[key], defaultValue);
+  }
+  final input = json['input'];
+  if (input is Map && input.containsKey(key) && input[key] != null) {
+    return _parseBool(input[key], defaultValue);
+  }
   return defaultValue;
 }
 

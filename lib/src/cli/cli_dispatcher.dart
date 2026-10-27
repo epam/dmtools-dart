@@ -92,14 +92,22 @@ class CliDispatcher {
   /// `Process.run` (await-based). All other handlers are synchronous and
   /// complete immediately.
   Future<int> dispatch(List<String> args) async {
-    if (args.isEmpty) {
+    final stripped = _stripLeadingShellFlags(args);
+    if (stripped.isEmpty) {
       return _isTty() ? _interactiveStub() : _printHelp();
     }
-    final handler = _handlers[args.first];
-    if (handler == null)
-      return _toolDispatch(args.first, args.skip(1).toList());
-    return handler(args.skip(1).toList());
+    final handler = _handlers[stripped.first];
+    if (handler == null) {
+      return _toolDispatch(stripped.first, stripped.skip(1).toList());
+    }
+    return handler(stripped.skip(1).toList());
   }
+
+  /// Strips leading global verbosity flags (`--debug`, `--verbose`, `--quiet`)
+  /// before subcommand/tool lookup so `dmtools --debug run ...` dispatches to
+  /// `run`.
+  static List<String> _stripLeadingShellFlags(List<String> args) =>
+      args.skipWhile(_shellFlags.contains).toList();
 
   late final Map<String, FutureOr<int> Function(List<String> rest)> _handlers =
       {
@@ -720,7 +728,7 @@ class CliDispatcher {
   }
 
   /// Shell-level flags handled elsewhere and never treated as named args.
-  static const _shellFlags = {'--verbose', '--debug'};
+  static const _shellFlags = {'--verbose', '--debug', '--quiet'};
 
   /// Bare `key=value` positional tokens that name an argument.
   static final _namedTokenPattern = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*=.*');

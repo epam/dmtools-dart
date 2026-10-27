@@ -270,7 +270,7 @@ void _testParentStructuredCliPromptsMerge() {
           jsonEncode({
             'name': 'child',
             'parent': {'path': 'parent.json'},
-            'merge': ['params.cliPrompts'],
+            // Omit 'merge' to also exercise implicit _applyStructuredCliPromptsMerge
             'params': {
               'cliPrompts': [
                 {'id': 'codegraph', 'prompt': 'cg2.md'},
@@ -324,6 +324,17 @@ void _testParentStructuredCliPromptsStrategies() {
         },
         {'id': 's3', 'prompt': 'c3'},
       ]);
+    });
+
+    test('concatenates plain cliPrompts via merge directive', () {
+      _writeFile('parent.json', '{"params":{"cliPrompts":["p1"]}}');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},'
+            '"merge":["params.cliPrompts"],"params":{"cliPrompts":["c1"]}}',
+      );
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['cliPrompts'], ['p1', 'c1']);
     });
   });
 }
@@ -503,27 +514,41 @@ void _testParentPackEntryOverride() {
 /// pack cache. Split out for the loc gate.
 void _testChildPackRefs() {
   group('child pack: refs against a pack parent', () {
-    test('pack: strings in lists and maps rewrite into the pack cache', () {
+    test(
+        'pack: strings and repo-relative paths in child and encoded config rewrite into the pack cache',
+        () {
       final zip = _buildPackWithInstructions();
       final packsRoot = Directory('${_tmp.path}/packs');
       final resolver = AgentPackResolver(packsRoot: packsRoot);
       _writeFile('child.json', '''{
         "name":"child",
         "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
+        "override":["params.cliPrompts"],
         "params":{
-          "cliPrompts":["pack:instructions/review_rules.md","literal prompt"],
+          "cliPrompts":[
+            "pack:instructions/review_rules.md",
+            "literal prompt",
+            {"id":"cg","prompt":"agents/instructions/review_rules.md","condition":"agents/js/helper.js"}
+          ],
           "customParams":{"rulesFile":"pack:/instructions/review_rules.md"}
         }
       }''');
+      final encoded = base64.encode(utf8.encode(jsonEncode({
+        'params': {'postJSAction': 'agents/js/helper.js'}
+      })));
       final json = jsonDecode(
         RunCommandProcessor(
           packResolver: resolver,
-        ).process(['run', '${_tmp.path}/child.json']),
+        ).process(['run', '${_tmp.path}/child.json', encoded]),
       ) as Map;
-      final prompts = (json['params']['cliPrompts'] as List).cast<String>();
+      final prompts = json['params']['cliPrompts'] as List;
       expect(prompts[1], 'literal prompt');
       expect(prompts[0], startsWith(packsRoot.path));
-      expect(File(prompts[0]).existsSync(), isTrue);
+      expect(File(prompts[0] as String).existsSync(), isTrue);
+      final cgSection = prompts[2] as Map;
+      expect(cgSection['prompt'], prompts[0]);
+      expect(File(cgSection['condition'] as String).existsSync(), isTrue);
+      expect(json['params']['postJSAction'], cgSection['condition']);
       final rules = json['params']['customParams']['rulesFile'] as String;
       expect(rules, prompts[0], reason: 'pack:/ with a slash normalizes too');
     });

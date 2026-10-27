@@ -18,6 +18,7 @@ void main() {
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
   cliPromptsConditionTests();
+  cliPromptsPackConditionTests();
   cliPromptsConditionParserTests();
 }
 
@@ -410,6 +411,59 @@ void cliPromptsConditionTests() {
         expect(resp, contains('TAIL_PROMPT'));
       } finally {
         await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void cliPromptsPackConditionTests() {
+  group('CliAgent cliPrompts pack condition resolution', () {
+    test(
+        'resolves agents/ and pack: condition paths against workDir or unpacked pack root',
+        () async {
+      final tmp = await _createTempDir();
+      final packDir = await _createTempDir();
+      try {
+        Directory('${tmp.path}/js/conditions').createSync(recursive: true);
+        File('${tmp.path}/js/conditions/local.js')
+            .writeAsStringSync('function action() { return true; }\n');
+        File('${packDir.path}/manifest.json').writeAsStringSync('{}');
+        Directory('${packDir.path}/js/conditions').createSync(recursive: true);
+        final postJs = File('${packDir.path}/js/post.js')
+          ..writeAsStringSync('function action() {}\n');
+        File('${packDir.path}/js/conditions/packed.js')
+            .writeAsStringSync('function action() { return true; }\n');
+        final result = await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['cat']
+            ..postJSAction = postJs.path
+            ..cliPrompts = [
+              {
+                'id': 'local_cg',
+                'prompt': 'LOCAL_CG_INCLUDED',
+                'condition': './agents/js/conditions/local.js',
+              },
+              {
+                'id': 'pack_cg',
+                'prompt': 'PACK_CG_INCLUDED',
+                'condition': 'pack:/agents/js/conditions/packed.js',
+              },
+              {
+                'id': 'missing_cg',
+                'prompt': 'MISSING_CG_EXCLUDED',
+                'condition': 'agents/js/conditions/missing.js',
+              },
+            ]
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        final resp = result['response'] as String;
+        expect(resp, contains('LOCAL_CG_INCLUDED'));
+        expect(resp, contains('PACK_CG_INCLUDED'));
+        expect(resp, isNot(contains('MISSING_CG_EXCLUDED')));
+      } finally {
+        await tmp.delete(recursive: true);
+        await packDir.delete(recursive: true);
       }
     });
   });

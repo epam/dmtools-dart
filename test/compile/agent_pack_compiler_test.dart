@@ -26,6 +26,7 @@ void main() {
   scriptsTests();
   prefixNormalizationTests();
   conditionalCliPromptsTests();
+  thenActionClosureTests();
   extraDirsTests();
   commentStripperTests();
 }
@@ -305,10 +306,15 @@ void prefixNormalizationTests() {
 
 void conditionalCliPromptsTests() {
   group('AgentPackCompiler conditional cliPrompts', () {
-    test('structured conditional cliPrompts embed prompt and condition JS', () {
+    test(
+        'structured conditional cliPrompts and cliPromptsByTracker embed prompt and condition JS with transitive requires',
+        () {
       write('prompts/codegraph_tools.md', '# CodeGraph\n');
+      write('prompts/jira_tools.md', '# Jira\n');
+      write('js/common/cgHelper.js',
+          'exports.check = function() { return true; };\n');
       write('js/conditions/isCodeGraphAvailable.js',
-          'function action() { return true; }\n');
+          "var h = require('../common/cgHelper.js');\nfunction action() { return h.check(); }\n");
       final entry = write(
           'cond_agent.json',
           jsonEncode({
@@ -321,11 +327,50 @@ void conditionalCliPromptsTests() {
                   'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
                 },
               ],
+              'cliPromptsByTracker': {
+                'jira': [
+                  {
+                    'id': 'jira_cg',
+                    'prompts': ['./agents/prompts/jira_tools.md'],
+                    'condition':
+                        './agents/js/conditions/isCodeGraphAvailable.js',
+                  },
+                ],
+              },
             },
           }));
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('prompts/codegraph_tools.md'));
+      expect(names, contains('prompts/jira_tools.md'));
       expect(names, contains('js/conditions/isCodeGraphAvailable.js'));
+      expect(names, contains('js/common/cgHelper.js'));
+    });
+  });
+}
+
+void thenActionClosureTests() {
+  group('AgentPackCompiler thenAction closure', () {
+    test(
+        'customParams.contentOutput.thenAction embeds bare JS script and transitive requires',
+        () {
+      write('js/common/assignHelper.js', 'exports.assign = function() {};\n');
+      write('js/assignForSolutionArchitecture.js',
+          "var a = require('./common/assignHelper.js');\nfunction action() { a.assign(); }\n");
+      final entry = write(
+          'story_ac.json',
+          jsonEncode({
+            'name': 'StoryAC',
+            'params': {
+              'customParams': {
+                'contentOutput': {
+                  'thenAction': 'assignForSolutionArchitecture.js',
+                },
+              },
+            },
+          }));
+      final names = zipNames(compileAgent(entry).zipFile);
+      expect(names, contains('js/assignForSolutionArchitecture.js'));
+      expect(names, contains('js/common/assignHelper.js'));
     });
   });
 }

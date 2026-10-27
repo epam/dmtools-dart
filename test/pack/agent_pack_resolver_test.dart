@@ -703,7 +703,7 @@ void pathRewriteNestedTests() {
 void pathRewriteStructuredPromptsTests() {
   group('AgentPackResolver.rewritePathsToPackRoot structured cliPrompts', () {
     test(
-        'rewrites structured cliPrompts section prompt, prompts, and condition',
+        'rewrites structured cliPrompts section prompt, prompts, condition, and thenAction',
         () {
       final pack = resolver.resolve(buildPack('my_agent', '1.0.0').path);
       final config = <String, dynamic>{
@@ -716,6 +716,11 @@ void pathRewriteStructuredPromptsTests() {
               'condition': 'agents/js/main.js',
             },
           ],
+          'customParams': {
+            'contentOutput': {
+              'thenAction': 'main.js',
+            },
+          },
         },
       };
       resolver.rewritePathsToPackRoot(config, pack.packRoot);
@@ -730,6 +735,9 @@ void pathRewriteStructuredPromptsTests() {
       expect(section['prompt'], expectedGuide);
       expect((section['prompts'] as List)[0], expectedGuide);
       expect(section['condition'], expectedJs);
+      final contentOut =
+          (params['customParams'] as Map)['contentOutput'] as Map;
+      expect(contentOut['thenAction'], expectedJs);
     });
   });
 }

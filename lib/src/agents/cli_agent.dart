@@ -28,10 +28,13 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../config/env_file_parser.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/job_runner.dart';
+import '../pack/pack_provenance.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
@@ -487,14 +490,74 @@ class CliAgent {
 
   /// Evaluates a `cliPrompts` section condition script via [_runContextJsAction].
   bool _evaluateCliPromptCondition(String conditionPath, String workDir) {
+    final resolvedPath = _resolveConditionPath(conditionPath, workDir);
     final raw = _runContextJsAction(
       'cliPrompts.condition',
-      conditionPath,
+      resolvedPath,
       workDir,
       const {},
       contextParams: _metadataContextParams(),
     );
     return isCliPromptConditionMet(raw);
+  }
+
+  /// Resolves [conditionPath] against [workDir] or the active agent pack root
+  /// inferred from sibling JS action paths when running from an unpacked pack.
+  String _resolveConditionPath(String conditionPath, String workDir) {
+    final raw = conditionPath.trim();
+    if (raw.isEmpty || p.isAbsolute(raw)) return raw;
+    final ref = _stripPackScheme(raw);
+    final directFile = File(p.join(workDir, ref));
+    if (directFile.existsSync()) return directFile.absolute.path;
+    final normalized = normalizePackReferencePath(ref);
+    final strippedFile = File(p.join(workDir, normalized));
+    if (strippedFile.existsSync()) return strippedFile.absolute.path;
+    return _resolveInPackRoot(normalized) ?? conditionPath;
+  }
+
+  String _stripPackScheme(String ref) {
+    if (!ref.startsWith('pack:')) return ref;
+    return ref.substring('pack:'.length).replaceFirst(RegExp('^/+'), '');
+  }
+
+  String? _resolveInPackRoot(String ref) {
+    final packRoot = _inferPackRoot();
+    if (packRoot == null) return null;
+    final candidate = File(p.normalize(p.join(packRoot.path, ref)));
+    if (!p.isWithin(packRoot.path, candidate.path) || !candidate.existsSync()) {
+      return null;
+    }
+    return candidate.absolute.path;
+  }
+
+  /// Infers the unpacked pack directory from any configured JS action path.
+  Directory? _inferPackRoot() {
+    final candidates = [
+      params.preJSAction,
+      params.preCliJSAction,
+      params.postJSAction,
+      params.timerJSAction,
+    ];
+    for (final path in candidates) {
+      final root = _findPackRootFor(path);
+      if (root != null) return root;
+    }
+    return null;
+  }
+
+  Directory? _findPackRootFor(String? actionPath) {
+    if (actionPath == null || !p.isAbsolute(actionPath)) return null;
+    var dir = File(actionPath).parent;
+    for (var depth = 0; depth < 5; depth++) {
+      if (File(p.join(dir.path, packProvenanceFileName)).existsSync() ||
+          File(p.join(dir.path, 'manifest.json')).existsSync()) {
+        return dir;
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    return null;
   }
 
   /// Top-level `metadata` binding merged into `params` for JS hooks (#623).

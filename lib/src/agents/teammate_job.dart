@@ -330,9 +330,12 @@ class TeammateJob {
 /// for the keys, then `jira_get_ticket` + `jira_get_comments` hydration so
 /// the input folder carries the full ticket text and comments
 /// (Java `TicketContext.prepareContext` parity).
-Future<List<Map<String, dynamic>>> jiraTicketSource(String inputJql) async {
-  final dispatcher = SyncToolDispatcher(PropertyReader());
-  final raw = dispatcher.execute('jira_search_by_jql', {
+Future<List<Map<String, dynamic>>> jiraTicketSource(
+  String inputJql, {
+  String? Function(String toolName, Map<String, dynamic> args)? execute,
+}) async {
+  final exec = execute ?? SyncToolDispatcher(PropertyReader()).execute;
+  final raw = exec('jira_search_by_jql', {
     'jql': inputJql,
     'fields': ['summary', 'status', 'priority', 'labels'],
   });
@@ -340,8 +343,11 @@ Future<List<Map<String, dynamic>>> jiraTicketSource(String inputJql) async {
   return [
     for (final key in keys)
       hydrateTicket(
-        rawTicket: dispatcher.execute('jira_get_ticket', {'key': key}),
-        rawComments: dispatcher.execute('jira_get_comments', {'key': key}),
+        rawTicket: exec('jira_get_ticket', {
+          'key': key,
+          'fields': ['*navigable', 'attachment'],
+        }),
+        rawComments: exec('jira_get_comments', {'key': key}),
         key: key,
       ),
   ];

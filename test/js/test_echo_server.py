@@ -603,6 +603,57 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/download/attachments/"):
             self._send(b"PNG-fixture-bytes", "application/octet-stream")
             return
+        # Jira Cloud attachment 303 redirect fixture (gh-461):
+        # /rest/api/2/attachment/content/<id> requires Authorization and
+        # responds 303 See Other to a Location (either query ?to=<url> or
+        # same-port /media/file/<id>/binary). /media/file/<id>/binary
+        # rejects requests that still carry an Authorization header (403),
+        # matching api.media.atlassian.com / S3 signed URLs.
+        if self.path.startswith("/rest/api/2/attachment/content/"):
+            if not self.headers.get("Authorization"):
+                encoded = b'{"error": "missing jira auth"}'
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            query = urllib.parse.parse_qs(
+                urllib.parse.urlparse(self.path).query
+            )
+            port = self.server.server_address[1]
+            target = query.get(
+                "to", ["http://127.0.0.1:%d/media/file/1/binary" % port]
+            )[0]
+            self.send_response(303)
+            self.send_header("Location", target)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path.startswith("/media/file/"):
+            if self.headers.get("Authorization") or self.headers.get(
+                "X-Atlassian-Token"
+            ):
+                encoded = b'{"error": "foreign auth header rejected by CDN"}'
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            self._send(b"CDN-binary-bytes", "application/octet-stream")
+            return
+        if self.path.startswith("/same-origin-redir-target"):
+            if not self.headers.get("Authorization"):
+                encoded = b'{"error": "missing auth on same origin"}'
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            self._send(b"same-origin-bytes", "application/octet-stream")
+            return
         # Confluence short-link redirect: /l/... answers a 302 whose
         # Location points back at the 777 page URL (contents_by_urls must
         # resolve it and fetch that page). /l/chain answers a chained hop

@@ -101,8 +101,10 @@ class PackProvenance {
 }
 
 /// Strips `./` and `agents/` prefixes from [raw] and maps bare `.js` filenames
-/// (such as `thenAction: "assignForSolutionArchitecture.js"`) to `js/<name>`.
-String normalizePackReferencePath(String raw) {
+/// (such as `thenAction: "assignForSolutionArchitecture.js"`) to `js/<name>`
+/// unless `<rootPath>/<name>` exists directly at the root (legacy root-level
+/// scripts like `agents/restoreDescription.js`).
+String normalizePackReferencePath(String raw, {String? rootPath}) {
   var ref = raw.trim();
   while (ref.startsWith('./')) {
     ref = ref.substring(2);
@@ -111,6 +113,9 @@ String normalizePackReferencePath(String raw) {
     ref = ref.substring('agents/'.length);
   }
   if (!ref.contains('/') && ref.endsWith('.js')) {
+    if (rootPath != null && File(p.join(rootPath, ref)).existsSync()) {
+      return ref;
+    }
     return 'js/$ref';
   }
   return ref;

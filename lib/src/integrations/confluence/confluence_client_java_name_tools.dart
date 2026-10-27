@@ -252,4 +252,41 @@ extension ConfluenceJavaNameTools on ConfluenceClient {
       return null;
     }
   }
+
+  /// `confluence_get_page_inline_comments` — GET
+  /// `pages/{pageId}/inline-comments?body-format=storage[&limit=…]` via v2 API
+  /// (Java `Confluence.getPageInlineComments`).
+  Future<Map<String, dynamic>> getPageInlineComments(
+    String pageId, [
+    int? limit,
+  ]) async {
+    final body = await _http.getV2(
+      'pages/$pageId/inline-comments',
+      queryParams: {
+        'body-format': _kStorage,
+        if (limit != null && limit > 0) 'limit': '$limit',
+      },
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// `confluence_reply_to_inline_comment` — POST `inline-comments` via v2 API
+  /// (Java `Confluence.replyToInlineComment`).
+  Future<Map<String, dynamic>> replyToInlineComment(
+    String pageId,
+    String commentId,
+    String text,
+  ) async {
+    final body = await _http.postV2(
+      'inline-comments',
+      body: jsonEncode({
+        'parentCommentId': commentId,
+        'body': {
+          'representation': _kStorage,
+          'value': prepareConfluenceInlineCommentBody(text),
+        },
+      }),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
 }

@@ -8,6 +8,8 @@
 /// the parameter table in GOAL.md → Phase 5.
 library;
 
+import 'input_context_config.dart';
+
 /// Parameters for the [CliAgent] job.
 ///
 /// Ported from Java `CliAgentParams` which extends `TrackerParams`.
@@ -124,7 +126,21 @@ class CliAgentParams {
   /// Custom parameters exposed to JS actions as `customParams`.
   Map<String, dynamic>? customParams;
 
-  /// Returns the context ID from metadata, or `"cli-agent"` fallback.
+  /// Parsed smart input context configuration (`InputContextConfig`).
+  InputContextConfig? inputContextConfig;
+
+  /// Returns the effective [InputContextConfig] for `TicketInputContextBuilder`.
+  InputContextConfig get effectiveInputContextConfig =>
+      inputContextConfig ??
+      InputContextConfig.fromJson({
+        if (input != null) 'input': input,
+        'includeAttachments': includeAttachments,
+        'skipAllAttachments': skipAllAttachments,
+        'skipVideoAttachments': skipVideoAttachments,
+      });
+
+  /// Returns the context ID from metadata, `input.ticket` / `input` string, or
+  /// `"cli-agent"` fallback.
   ///
   /// Mirrors `CliAgent.getContextId()`.
   String get contextId {
@@ -132,6 +148,10 @@ class CliAgentParams {
     if (md != null && md['contextId'] is String) {
       final id = md['contextId'] as String;
       if (id.isNotEmpty) return id;
+    }
+    final ticketFromInput = effectiveInputContextConfig.ticket;
+    if (ticketFromInput != null && ticketFromInput.isNotEmpty) {
+      return ticketFromInput;
     }
     return 'cli-agent';
   }
@@ -191,7 +211,8 @@ class CliAgentParams {
       ..initiator = _parseString(json['initiator'])
       ..preJSAction = _parseString(json['preJSAction'])
       ..postJSAction = _parseString(json['postJSAction'])
-      ..customParams = _parseDynamicMap(json['customParams']);
+      ..customParams = _parseDynamicMap(json['customParams'])
+      ..inputContextConfig = InputContextConfig.fromJson(json);
   }
 }
 

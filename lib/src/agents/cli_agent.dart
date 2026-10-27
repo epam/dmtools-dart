@@ -39,6 +39,7 @@ import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
 import 'ticket_input_context_builder.dart';
+import 'ticket_smart_sources.dart';
 
 /// Executes a CliAgent job — lightweight CLI-agent orchestrator.
 ///
@@ -108,9 +109,10 @@ class CliAgent {
     }
     // Zone-scoped overrides: two CliAgent jobs running concurrently in one
     // isolate each keep their own `TrackerParams.envVariables` across
-    // awaits (Java gets this from ThreadLocal).
+    // awaits (Java gets this from ThreadLocal). Merge on top of any active
+    // overrides so parent/test overrides remain visible.
     return PropertyReader.runWithOverrides(
-      params.envVariables ?? {},
+      {...PropertyReader.getOverrides(), ...?params.envVariables},
       _runGuarded,
       extraEnv: parseEnvFile('${_resolveWorkingDirectory()}/dmtools.env'),
       basePath: _resolveWorkingDirectory(),
@@ -668,6 +670,7 @@ class CliAgent {
   /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty
   /// folder is created — the ticket-agnostic behavior.
   String _createInputContext(String workDir) {
+    final config = params.effectiveInputContextConfig;
     return TicketInputContextBuilder(
       workDir,
       propertyReader: propertyReader,
@@ -677,12 +680,25 @@ class CliAgent {
     ).build(
       params.contextId,
       ticketData: _resolvedTicketData ?? ticketData,
+      config: config,
     );
   }
 
-  /// Resolves ticket data from [ticketData] or `input/<contextId>/ticket.json`.
+  /// Resolves ticket data from [ticketData], `input/<contextId>/ticket.json`,
+  /// or by fetching `params.effectiveInputContextConfig.ticket` from the
+  /// configured tracker.
   Map<String, dynamic>? _resolveTicketData(String workDir) {
     if (ticketData != null) return ticketData;
+    final fromDisk = _readTicketJsonFromDisk(workDir);
+    if (fromDisk != null) return fromDisk;
+    final ticketKey = params.effectiveInputContextConfig.ticket;
+    if (ticketKey != null && ticketKey.isNotEmpty) {
+      return TicketSmartSources(propertyReader).fetchTicketByKey(ticketKey);
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _readTicketJsonFromDisk(String workDir) {
     if (params.contextId.isEmpty) return null;
     final folderName = TicketInputContextBuilder.toInputFolderName(
       params.contextId,

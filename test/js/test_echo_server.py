@@ -526,6 +526,26 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
               and "parent-id=root-page" in self.path):
             payload.clear()
             payload["results"] = []
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages/" in self.path
+              and "/inline-comments" in self.path):
+            payload.clear()
+            if "/pages/777/" in self.path:
+                payload["results"] = [
+                    {
+                        "id": "ic-1",
+                        "resolutionStatus": "open",
+                        "properties": {"inlineOriginalSelection": "hi"},
+                        "body": {
+                            "storage": {
+                                "value": "<p>Needs clarification</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    }
+                ]
+            else:
+                payload["results"] = []
         # v2 page object (contentById / updatePage version read / engine
         # getContent): version, ancestors, and a storage body in one shape.
         elif (self.command == "GET"

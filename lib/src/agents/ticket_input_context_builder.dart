@@ -19,10 +19,15 @@ import 'dart:io';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/sync_http_client.dart';
+import 'input_context_config.dart';
+import 'ticket_reference_extractor.dart';
+import 'ticket_smart_sources.dart';
 
 /// Downloads an attachment from [url] and returns the raw bytes, or `null`
 /// when the download fails.
 typedef AttachmentDownloader = List<int>? Function(String url);
+
+typedef _AttachmentRef = ({String name, String url});
 
 /// Builds the input context folder for CliAgent from tracker ticket data.
 ///
@@ -33,7 +38,8 @@ class TicketInputContextBuilder {
   /// Creates a builder rooted at [workingDirectory].
   ///
   /// [attachmentDownloader] overrides the default HTTP downloader (which
-  /// uses [SyncHttpClient] with Jira/ADO auth headers from [propertyReader]).
+  /// uses [SyncHttpClient] with Jira/ADO/GitHub auth headers from
+  /// [propertyReader]).
   TicketInputContextBuilder(
     this.workingDirectory, {
     AttachmentDownloader? attachmentDownloader,
@@ -58,6 +64,7 @@ class TicketInputContextBuilder {
 
   final PropertyReader _propertyReader;
   final AttachmentDownloader? _attachmentDownloader;
+  TicketSmartSources? _smartSources;
 
   static final RegExp _githubCompositeKey = RegExp(r'^[\w.-]+/[\w.-]+#(\d+)$');
   static final RegExp _githubBareKey = RegExp(r'^#(\d+)$');
@@ -118,6 +125,7 @@ class TicketInputContextBuilder {
   String build(
     String contextId, {
     Map<String, dynamic>? ticketData,
+    InputContextConfig? config,
     bool? includeAttachments,
     bool? skipAllAttachments,
     bool? skipVideoAttachments,
@@ -126,13 +134,28 @@ class TicketInputContextBuilder {
     final contextPath = '$workingDirectory/input/$folderName';
     Directory(contextPath).createSync(recursive: true);
     if (ticketData == null) return contextPath;
-    _writeTicketFiles(contextPath, ticketData);
+    final effectiveConfig = config ??
+        InputContextConfig(
+          includeAttachments: includeAttachments ?? this.includeAttachments,
+          skipAllAttachments: skipAllAttachments ?? this.skipAllAttachments,
+          skipVideoAttachments:
+              skipVideoAttachments ?? this.skipVideoAttachments,
+        );
+    _writeTicketFiles(contextPath, ticketData, effectiveConfig.includeComments);
     _downloadTicketAttachments(
       contextPath,
       ticketData,
-      include: includeAttachments ?? this.includeAttachments,
-      skipAll: skipAllAttachments ?? this.skipAllAttachments,
-      skipVideo: skipVideoAttachments ?? this.skipVideoAttachments,
+      include: includeAttachments ?? effectiveConfig.includeAttachments,
+      skipAll: skipAllAttachments ?? effectiveConfig.skipAllAttachments,
+      skipVideo: skipVideoAttachments ?? effectiveConfig.skipVideoAttachments,
+    );
+    (_smartSources ??= TicketSmartSources(_propertyReader)).resolveAll(
+      workingDirectory: workingDirectory,
+      contextId: contextId,
+      contextPath: contextPath,
+      ticketData: ticketData,
+      config: effectiveConfig,
+      builder: this,
     );
     return contextPath;
   }
@@ -140,7 +163,11 @@ class TicketInputContextBuilder {
   // -- File writers ----------------------------------------------------
 
   /// Writes ticket.md, request.md, ticket.json, subtasks/, and comments.md.
-  void _writeTicketFiles(String dir, Map<String, dynamic> ticket) {
+  void _writeTicketFiles(
+    String dir,
+    Map<String, dynamic> ticket,
+    bool includeComments,
+  ) {
     final markdown = _formatMarkdown(ticket);
     File('$dir/ticket.md').writeAsStringSync(markdown);
     File('$dir/request.md').writeAsStringSync(markdown);
@@ -149,7 +176,7 @@ class TicketInputContextBuilder {
     );
     final fields = _mapValue(ticket['fields']);
     _writeSubtasks(dir, fields);
-    _writeComments(dir, fields);
+    if (includeComments) _writeComments(dir, fields);
   }
 
   /// Writes each subtask in `fields.subtasks` to `subtasks/<key>.md`.
@@ -308,7 +335,7 @@ class TicketInputContextBuilder {
   /// Downloads one attachment and writes it to [dir]; errors are non-fatal.
   bool _downloadSingleAttachment(
     String dir,
-    ({String name, String url}) att,
+    _AttachmentRef att,
     AttachmentDownloader downloader,
   ) {
     final safeName = sanitizeAttachmentFileName(att.name.trim());
@@ -330,24 +357,49 @@ class TicketInputContextBuilder {
   }
 
   /// Collects attachments from Jira `fields.attachment`, top-level
-  /// `attachments`, ADO `relations`, and ADO embedded description images.
-  List<({String name, String url})> _extractAttachments(
+  /// `attachments`, ADO `relations`, ADO embedded description images, and
+  /// GitHub inline Markdown/HTML images when GitHub is configured.
+  List<_AttachmentRef> _extractAttachments(
     Map<String, dynamic> ticket,
   ) {
     final fields = _mapValue(ticket['fields']);
-    final result = <({String name, String url})>[];
+    final result = <_AttachmentRef>[];
     _addFieldAttachments(result, _listValue(fields['attachment']));
     _addFieldAttachments(result, _listValue(fields['attachments']));
     _addFieldAttachments(result, _listValue(ticket['attachments']));
     _addAdoRelationAttachments(result, _listValue(ticket['relations']));
     final adoDesc = _stringValue(fields['System.Description']);
     if (adoDesc != null) _addAdoEmbeddedImages(result, adoDesc);
+    if (SourceCapabilities(_propertyReader).isGithubConfigured) {
+      _addGithubInlineAttachments(result, fields);
+    }
     return result;
+  }
+
+  void _addGithubInlineAttachments(
+    List<_AttachmentRef> target,
+    Map<String, dynamic> fields,
+  ) {
+    final desc = _stringValue(fields['description']) ?? '';
+    final buf = StringBuffer(desc);
+    for (final c in _resolveComments(fields)) {
+      final body = _stringValue(_mapValue(c)['body']);
+      if (body != null) {
+        buf.write('\n');
+        buf.write(body);
+      }
+    }
+    final existingUrls = target.map((e) => e.url).toSet();
+    for (final att in TicketReferenceExtractor.extractGithubInlineAttachments(
+      buf.toString(),
+    )) {
+      if (existingUrls.add(att.url)) target.add(att);
+    }
   }
 
   /// Adds Jira-style (`filename`/`content` or `name`/`url`) attachments.
   void _addFieldAttachments(
-    List<({String name, String url})> target,
+    List<_AttachmentRef> target,
     List<dynamic> rawList,
   ) {
     for (final item in rawList) {
@@ -362,7 +414,7 @@ class TicketInputContextBuilder {
 
   /// Adds ADO `AttachedFile` relations (`relations[].rel == "AttachedFile"`).
   void _addAdoRelationAttachments(
-    List<({String name, String url})> target,
+    List<_AttachmentRef> target,
     List<dynamic> relations,
   ) {
     for (final item in relations) {
@@ -378,7 +430,7 @@ class TicketInputContextBuilder {
 
   /// Extracts embedded ADO attachment images from HTML description.
   void _addAdoEmbeddedImages(
-    List<({String name, String url})> target,
+    List<_AttachmentRef> target,
     String html,
   ) {
     for (final match in _adoEmbeddedImg.allMatches(html)) {
@@ -437,12 +489,15 @@ class TicketInputContextBuilder {
       _downloadFollowingRedirects(url, _propertyReader);
 
   /// Resolves auth headers matching [url] against configured trackers in
-  /// [reader] (Jira `Authorization` + `X-Atlassian-Token`, or ADO `Basic` PAT).
+  /// [reader] (Jira `Authorization` + `X-Atlassian-Token`, ADO `Basic` PAT,
+  /// or GitHub `Bearer` token).
   static Map<String, String>? resolveAuthHeadersForUrl(
     String url,
     PropertyReader reader,
   ) =>
-      _jiraHeadersForUrl(url, reader) ?? _adoHeadersForUrl(url, reader);
+      _jiraHeadersForUrl(url, reader) ??
+      _adoHeadersForUrl(url, reader) ??
+      _githubHeadersForUrl(url, reader);
 }
 
 /// Downloads [url] following up to 5 HTTP 3xx redirects while re-resolving
@@ -506,6 +561,18 @@ Map<String, String>? _adoHeadersForUrl(String url, PropertyReader reader) {
   }
   final basic = base64Encode(utf8.encode(':$pat'));
   return {'Authorization': 'Basic $basic'};
+}
+
+Map<String, String>? _githubHeadersForUrl(String url, PropertyReader reader) {
+  final token = SourceCapabilities.resolveGithubToken(reader);
+  if (token == null) return null;
+  final urlHost = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+  if (urlHost == 'github.com' ||
+      urlHost == 'api.github.com' ||
+      _matchesHost(url, reader.getGithubBasePath(), allowEmptyBase: false)) {
+    return {'Authorization': 'Bearer $token'};
+  }
+  return null;
 }
 
 bool _matchesHost(

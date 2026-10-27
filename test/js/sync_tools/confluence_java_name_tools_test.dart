@@ -59,6 +59,7 @@ void main() {
   downloadPagesToolTests();
   downloadPagesResolverTests();
   downloadPagesAttachmentsTests();
+  inlineCommentToolTests();
 }
 
 void contentByTitleTests() {
@@ -569,6 +570,38 @@ void downloadPagesAttachmentsTests() {
       final evil =
           File('${out.path}/Hi Page-attachments/evil.txt').readAsStringSync();
       expect(evil, 'CLEAN');
+    });
+  });
+}
+
+void inlineCommentToolTests() {
+  group('confluence inline comment tools', () {
+    test('get_page_inline_comments fetches v2 inline comments', () {
+      final raw = tools.dispatch('confluence_get_page_inline_comments', {
+        'pageId': '777',
+        'limit': 25,
+      });
+      final decoded = jsonDecode(raw) as Map;
+      final results = decoded['results'] as List;
+      expect(results, hasLength(1));
+      expect(results.first['id'], 'ic-1');
+    });
+
+    test('reply_to_inline_comment posts storage-formatted reply', () {
+      final raw = tools.dispatch('confluence_reply_to_inline_comment', {
+        'pageId': '777',
+        'commentId': 'ic-1',
+        'body': 'Line 1 & <tag>\n\nLine 2',
+      });
+      final decoded = jsonDecode(raw) as Map;
+      expect(decoded['method'], 'POST');
+      expect(decoded['path'], '/wiki/api/v2/inline-comments');
+      final sent = jsonDecode(decoded['body'] as String) as Map;
+      expect(sent['parentCommentId'], 'ic-1');
+      expect(
+        sent['body']['value'],
+        '<p>Line 1 &amp; &lt;tag&gt;</p>\n<p>Line 2</p>',
+      );
     });
   });
 }

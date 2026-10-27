@@ -415,7 +415,7 @@ class AgentPackCompiler {
         ref.startsWith('classpath:')) {
       return null;
     }
-    return normalizePackReferencePath(ref);
+    return normalizePackReferencePath(ref, rootPath: _rootPath);
   }
 
   /// Resolves a reference to a source file, or `null` when absent/not a file.

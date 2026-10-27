@@ -755,7 +755,7 @@ class AgentPackResolver {
     if (_isNonPathRef(raw)) {
       return null;
     }
-    final ref = normalizePackReferencePath(raw);
+    final ref = normalizePackReferencePath(raw, rootPath: packRoot.path);
     final candidate = File(p.normalize(p.join(packRoot.path, ref)));
     if (!p.isWithin(packRoot.path, candidate.path) || !candidate.existsSync()) {
       return null;

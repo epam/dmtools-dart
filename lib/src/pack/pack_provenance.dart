@@ -99,3 +99,19 @@ class PackProvenance {
         .writeAsStringSync(jsonEncode(toJson()));
   }
 }
+
+/// Strips `./` and `agents/` prefixes from [raw] and maps bare `.js` filenames
+/// (such as `thenAction: "assignForSolutionArchitecture.js"`) to `js/<name>`.
+String normalizePackReferencePath(String raw) {
+  var ref = raw.trim();
+  while (ref.startsWith('./')) {
+    ref = ref.substring(2);
+  }
+  if (ref.startsWith('agents/')) {
+    ref = ref.substring('agents/'.length);
+  }
+  if (!ref.contains('/') && ref.endsWith('.js')) {
+    return 'js/$ref';
+  }
+  return ref;
+}

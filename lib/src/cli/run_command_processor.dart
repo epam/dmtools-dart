@@ -203,13 +203,14 @@ class RunCommandProcessor {
     }
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
-    config = _ParentConfigResolver(packResolver: _packResolver)
-        .resolve(config, file.parent.path);
-    if (packRoot != null) {
-      AgentPackResolver().rewritePathsToPackRoot(config, packRoot);
-    }
-    config = _applyEncodedConfig(config, runArgs.encodedConfig);
+    final resolved = _ParentConfigResolver(packResolver: _packResolver)
+        .resolveWithPack(config, file.parent.path);
+    final effectivePackRoot = packRoot ?? resolved.packRoot;
+    config = _applyEncodedConfig(resolved.config, runArgs.encodedConfig);
     _injectParams(config, runArgs.overrides);
+    if (effectivePackRoot != null) {
+      AgentPackResolver().rewritePathsToPackRoot(config, effectivePackRoot);
+    }
     return jsonEncode(config);
   }
 
@@ -259,6 +260,11 @@ class _RunArgs {
 // Parent-config resolution
 // ======================================================================
 
+typedef _ResolvedParentConfig = ({
+  Map<String, dynamic> config,
+  Directory? packRoot,
+});
+
 /// Simplified port of Java `ParentConfigResolver`.
 ///
 /// Walks the `"parent"` chain declared in a config, deep-merging each child
@@ -279,24 +285,34 @@ class _ParentConfigResolver {
     Map<String, dynamic> child,
     String configDir, {
     bool rebaseActions = true,
+  }) =>
+      resolveWithPack(child, configDir, rebaseActions: rebaseActions).config;
+
+  /// Resolves [child] and returns both the merged config and the nearest
+  /// ancestor [packRoot] when inherited from an agent pack.
+  _ResolvedParentConfig resolveWithPack(
+    Map<String, dynamic> child,
+    String configDir, {
+    bool rebaseActions = true,
   }) {
     if (rebaseActions) _rebaseActionPaths(child, configDir);
     final parentBlock = child['parent'];
     if (parentBlock is! Map<String, dynamic>) {
-      return _stripMeta(child);
+      return (config: _stripMeta(child), packRoot: null);
     }
     final path = parentBlock['path'];
     if (path is! String) {
-      return _stripMeta(child);
+      return (config: _stripMeta(child), packRoot: null);
     }
     final loaded = _loadAndResolve(path, configDir);
     final overridePaths = _readStringList(child, 'override');
     final mergePaths = _readStringList(child, 'merge');
     final strippedChild = _stripMeta(child);
     if (loaded.packRoot != null) {
-      // The parent is an agent pack: the child's `pack:` references point
-      // inside it (zip flow — no agents checkout mounted, dm.ai parity).
+      // The parent is an agent pack: the child's `pack:` references and
+      // repo-relative paths point inside it (zip flow — no agents checkout).
       _rewritePackRefs(strippedChild, loaded.packRoot!);
+      _packResolver.rewritePathsToPackRoot(strippedChild, loaded.packRoot!);
     } else if (_containsPackRef(strippedChild)) {
       throw ArgumentError.value(
         path,
@@ -304,11 +320,14 @@ class _ParentConfigResolver {
         'child config uses pack: references but its parent is not an agent pack',
       );
     }
-    return _mergeWithDirectives(
-      loaded.config,
-      strippedChild,
-      overridePaths,
-      mergePaths,
+    return (
+      config: _mergeWithDirectives(
+        loaded.config,
+        strippedChild,
+        overridePaths,
+        mergePaths,
+      ),
+      packRoot: loaded.packRoot,
     );
   }
 
@@ -346,7 +365,7 @@ class _ParentConfigResolver {
   /// recursively resolves it. Returns the resolved config plus the pack
   /// root when the parent came from an agent pack, so the caller can
   /// resolve the child's `pack:` references against it.
-  ({Map<String, dynamic> config, Directory? packRoot}) _loadAndResolve(
+  _ResolvedParentConfig _loadAndResolve(
     String parentPath,
     String configDir,
   ) {
@@ -389,7 +408,7 @@ class _ParentConfigResolver {
     }
     final file = File('$configDir/$parentPath');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-    return (config: resolve(json, file.parent.path), packRoot: null);
+    return resolveWithPack(json, file.parent.path);
   }
 
   /// Scheme prefix marking a config string as a reference into the resolved

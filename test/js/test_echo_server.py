@@ -526,6 +526,26 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
               and "parent-id=root-page" in self.path):
             payload.clear()
             payload["results"] = []
+        elif (self.command == "GET"
+              and "/wiki/api/v2/pages/" in self.path
+              and "/inline-comments" in self.path):
+            payload.clear()
+            if "/pages/777/" in self.path:
+                payload["results"] = [
+                    {
+                        "id": "ic-1",
+                        "resolutionStatus": "open",
+                        "properties": {"inlineOriginalSelection": "hi"},
+                        "body": {
+                            "storage": {
+                                "value": "<p>Needs clarification</p>",
+                                "representation": "storage",
+                            }
+                        },
+                    }
+                ]
+            else:
+                payload["results"] = []
         # v2 page object (contentById / updatePage version read / engine
         # getContent): version, ancestors, and a storage body in one shape.
         elif (self.command == "GET"
@@ -1056,6 +1076,13 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     }
             payload.clear()
             payload["nodes"] = nodes
+        if (self.command == "GET"
+                and "/_apis/wit/workItems/55/comments" in self.path):
+            payload["comments"] = [{
+                "createdBy": {"displayName": "Ada"},
+                "createdDate": "2026-01-01",
+                "text": "ADO comment body",
+            }]
         response = json.dumps(payload)
         encoded = response.encode("utf-8")
         self.send_response(200)

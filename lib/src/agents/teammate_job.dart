@@ -23,6 +23,8 @@ import 'cli_agent.dart';
 import 'github_ticket_source.dart';
 import 'github_tracker_client.dart';
 import 'cli_agent_params.dart';
+import 'input_context_config.dart';
+import 'ticket_smart_sources.dart';
 
 /// Fetches the hydrated tickets for [inputJql]: each ticket is a raw tracker
 /// JSON map with at least `key` and `fields` (comments included).
@@ -78,8 +80,18 @@ class TeammateJob {
   /// Runs the job and returns `{'success': …, 'results': […]}` where each
   /// result item carries `ticket`, plus the [CliAgent] result fields.
   Future<Map<String, dynamic>> run() async {
-    final inputJql = (params['inputJql'] as String?)?.trim() ?? '';
+    final inputConfig = InputContextConfig.fromJson(params);
+    final inputJql =
+        ((params['inputJql'] as String?) ?? inputConfig.jql ?? '').trim();
     if (inputJql.isEmpty) {
+      final explicitKey = inputConfig.ticket;
+      if (explicitKey != null && explicitKey.isNotEmpty) {
+        final fetched = TicketSmartSources(propertyReader ?? PropertyReader())
+            .fetchTicketByKey(explicitKey);
+        return _runTickets([
+          {'key': explicitKey, 'fields': <String, dynamic>{}, ...?fetched},
+        ]);
+      }
       // Issues-driven pass-through: the caller prepared `input/ticket.md`
       // (e.g. the ai-teammate workflow wrote the issue body). Run
       // the config AS-IS through one [CliAgent] with a synthetic ticket —

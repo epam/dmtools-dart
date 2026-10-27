@@ -42,8 +42,8 @@ native/quickjs/*.dylib
 !.dmtools/copilot-sessions/
 .dmtools/copilot-sessions/**
 .dmtools-logs/
-input/
-outputs/
+/input/
+/outputs/
 
 # Local machine-loop runs materialize the dmtools-agents factory checkout
 # here — factory-sm.yml clones it into factory-agents/ in CI, and the SM

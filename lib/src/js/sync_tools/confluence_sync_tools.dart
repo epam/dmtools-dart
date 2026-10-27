@@ -61,6 +61,8 @@ class ConfluenceSyncTools {
         'confluence_update_page_with_history': _updatePageWithHistory,
         'confluence_upload_attachment': _uploadAttachment,
         'confluence_upload_attachments': _uploadAttachments,
+        'confluence_get_page_inline_comments': _getPageInlineComments,
+        'confluence_reply_to_inline_comment': _replyToInlineComment,
       };
 
   /// Dispatches a Confluence tool call, mirroring the dispatcher's errors.
@@ -506,13 +508,47 @@ class ConfluenceSyncTools {
       final downloadAttachments = args['downloadAttachments'] == null ||
           args['downloadAttachments'] == true ||
           args['downloadAttachments'] == 'true';
+      final includeComments =
+          args['includeComments'] == true || args['includeComments'] == 'true';
       final downloader = _PageDownloader(
         config,
         Directory(outputPath),
         downloadAttachments,
+        includeComments: includeComments,
+        defaultSpace: _defaultSpace(),
       );
       final written = downloader.download(urls, depth);
       return 'Downloaded $written Confluence page(s) to $outputPath';
+    });
+  }
+
+  /// `confluence_get_page_inline_comments` — GET
+  /// `{baseUrlV2}/pages/{pageId}/inline-comments?body-format=storage[&limit=…]`
+  /// (Java `Confluence.getPageInlineComments`).
+  String _getPageInlineComments(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final pageId = syncAsStr(args['pageId']);
+      final limit = args['limit'] is num
+          ? (args['limit'] as num).toInt()
+          : int.tryParse(syncAsStr(args['limit']));
+      return syncBodyOrError(_inlineCommentsResponse(config, pageId, limit));
+    });
+  }
+
+  /// `confluence_reply_to_inline_comment` — POST `{baseUrlV2}/inline-comments`
+  /// with storage-formatted paragraph body (Java `Confluence.replyToInlineComment`).
+  String _replyToInlineComment(Map<String, dynamic> args) {
+    return syncWithConfig(_config(), _notConfiguredError, (config) {
+      final commentId = syncAsStr(args['commentId']);
+      final body = prepareConfluenceInlineCommentBody(syncAsStr(args['body']));
+      return syncBodyOrError(SyncHttpClient.post(
+        '${_baseUrlV2(config)}/inline-comments',
+        headers: config.headers,
+        body: jsonEncode({
+          'parentCommentId': commentId,
+          'body': {'representation': 'storage', 'value': body},
+        }),
+      ));
     });
   }
 
@@ -721,54 +757,3 @@ List<String> _stringList(dynamic value) {
 /// Reads a boolean flag that may arrive as bool or string.
 bool _flagOrFalse(dynamic value) =>
     value == true || value == 'true' || value == 'True';
-
-/// Resolves [urlString] to its content object (Java `contentByUrl`), or
-/// `null` when the URL is malformed or the fetch fails.
-Map<String, dynamic>? _contentFromUrl(_Conf config, String urlString) {
-  final uri = Uri.tryParse(urlString);
-  if (uri == null) return null;
-  // The redirect follower tracks the *current* URL: each hop GETs the
-  // Location resolved by the previous hop, never the original input.
-  final resolved = _resolveShortLink(config, urlString, uri);
-  if (resolved == null) return null;
-  final (:ref, url: _) = resolved;
-  if (ref is ConfluencePageIdRef) {
-    final decoded =
-        syncTryDecode(syncBodyOrError(_pageByIdResponse(config, ref.id)));
-    return decoded is Map<String, dynamic> ? decoded : null;
-  }
-  if (ref is ConfluenceDisplayRef) {
-    final list = _contentList(
-      _titleAndSpaceResponse(config, ref.title, ref.space),
-    );
-    return list.isEmpty ? null : list.first;
-  }
-  return null;
-}
-
-/// Follows up to five 3xx hops for short links (`/l/…`, `/wiki/x/…`;
-/// curl never follows redirects), returning the final URL ref and the
-/// URL that produced it. Returns `null` when a hop fails or points at
-/// nothing parseable.
-({ConfluencePageRef ref, String url})? _resolveShortLink(
-  _Conf config,
-  String urlString,
-  Uri uri,
-) {
-  var ref = resolveConfluencePageUrl(uri);
-  var current = urlString;
-  for (var hops = 0; hops < 5; hops++) {
-    if (ref is! ConfluenceRedirectRef) break;
-    final resp = SyncHttpClient.get(current, headers: config.headers);
-    final location = resp.headers.entries
-        .where((e) => e.key.toLowerCase() == 'location')
-        .map((e) => e.value)
-        .firstOrNull;
-    if (location == null || !resp.isRedirect) return null;
-    final next = Uri.tryParse(location);
-    if (next == null) return null;
-    current = location;
-    ref = resolveConfluencePageUrl(next);
-  }
-  return (ref: ref, url: current);
-}

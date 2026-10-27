@@ -299,7 +299,10 @@ List<ToolDefinition> _javaNameUploadTools() => [
 Map<String, Future<dynamic> Function(Map<String, dynamic>)>
     _javaNameLookupHandlers(ConfluenceClient client) => {
           'confluence_content_by_title': (a) => client.contentByTitle(
-              a['title'] as String, a['format'] as String?),
+                a['title'] as String,
+                a['format'] as String?,
+                a['space'] as String?,
+              ),
           'confluence_content_by_title_and_space': (a) =>
               client.contentByTitleAndSpace(
                 a['title'] as String,
@@ -318,6 +321,7 @@ Map<String, Future<dynamic> Function(Map<String, dynamic>)>
               ),
           'confluence_find_content': (a) => client.findContent(
                 a['title'] as String,
+                space: a['space'] as String?,
                 format: a['format'] as String?,
               ),
           'confluence_find_content_by_title_and_space': (a) =>

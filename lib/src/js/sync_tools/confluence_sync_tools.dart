@@ -234,7 +234,7 @@ class ConfluenceSyncTools {
   /// configured default space (Java `contentByTitleInDefaultSpace`).
   String _contentByTitle(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final space = _defaultSpace();
+      final space = _effectiveSpace(args['space']);
       if (space == null) return syncErr(_defaultSpaceRequired);
       return _titleAndSpaceContent(config, args, space);
     });
@@ -252,7 +252,7 @@ class ConfluenceSyncTools {
   /// or JSON `null` (Java `findContentInDefaultSpace`).
   String _findContent(Map<String, dynamic> args) {
     return syncWithConfig(_config(), _notConfiguredError, (config) {
-      final space = _defaultSpace();
+      final space = _effectiveSpace(args['space']);
       if (space == null) return syncErr(_defaultSpaceRequired);
       return _firstContent(config, args, space);
     });
@@ -347,7 +347,7 @@ class ConfluenceSyncTools {
           ? (args['limit'] as num).toInt()
           : (int.tryParse(syncAsStr(args['limit'])) ?? 20);
       final cql = Uri.encodeQueryComponent(
-        '(title ~ "$query" OR text ~ "$query") ORDER BY lastModified ASC',
+        buildConfluenceTextSearchCql(query, _defaultSpace()),
       );
       final resp = SyncHttpClient.get(
         '${config.baseUrl}/content/search?cql=$cql'
@@ -516,8 +516,17 @@ class ConfluenceSyncTools {
     });
   }
 
-  /// The `CONFLUENCE_DEFAULT_SPACE` config value; `null` when unset.
-  String? _defaultSpace() => _reader.getConfluenceDefaultSpace();
+  /// The `CONFLUENCE_DEFAULT_SPACE` config value; `null` when unset or blank.
+  String? _defaultSpace() {
+    final space = _reader.getConfluenceDefaultSpace()?.trim();
+    return (space == null || space.isEmpty) ? null : space;
+  }
+
+  /// Explicit [space] argument when non-empty, else [_defaultSpace].
+  String? _effectiveSpace(dynamic space) {
+    final explicit = syncAsStr(space).trim();
+    return explicit.isNotEmpty ? explicit : _defaultSpace();
+  }
 
   /// Builds the page creation payload (Java `createPage` wire format).
   Map<String, dynamic> _pagePayload(Map<String, dynamic> args) {

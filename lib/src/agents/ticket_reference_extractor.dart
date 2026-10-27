@@ -45,27 +45,26 @@ class TicketReferenceExtractor {
     String? confluenceBasePath,
     String? text,
   ) {
-    if (confluenceBasePath == null ||
-        confluenceBasePath.trim().isEmpty ||
-        text == null ||
-        text.isEmpty) {
-      return const [];
-    }
-    final trimmedBase =
-        confluenceBasePath.trim().replaceAll(RegExp(r'/+$'), '');
-    final wikiIdx = trimmedBase.lastIndexOf('/wiki');
-    final domain =
-        wikiIdx >= 0 ? trimmedBase.substring(0, wikiIdx) : trimmedBase;
-    if (domain.isEmpty) return const [];
-    final escapedDomain = RegExp.escape(domain);
+    final domain = _confluenceBaseDomain(confluenceBasePath);
+    if (domain == null || text == null || text.isEmpty) return const [];
     final pattern = RegExp(
-        '$escapedDomain/(?:wiki/|l/cp/|spaces/|pages/|display/|x/)[^"\\s|\\]\\\\<>)]+');
+      '${RegExp.escape(domain)}/(?:wiki/|l/cp/|spaces/|pages/|display/|x/)[^"\\s|\\]\\\\<>)]+',
+    );
     final seen = <String>{};
     for (final match in pattern.allMatches(text)) {
       final cleaned = cleanupUrl(match.group(0)!);
       if (cleaned.isNotEmpty) seen.add(cleaned);
     }
     return seen.toList(growable: false);
+  }
+
+  static String? _confluenceBaseDomain(String? confluenceBasePath) {
+    final trimmed =
+        confluenceBasePath?.trim().replaceAll(RegExp(r'/+$'), '') ?? '';
+    if (trimmed.isEmpty) return null;
+    final wikiIdx = trimmed.lastIndexOf('/wiki');
+    final domain = wikiIdx >= 0 ? trimmed.substring(0, wikiIdx) : trimmed;
+    return domain.isEmpty ? null : domain;
   }
 
   /// Extracts unique Figma design/file/proto URLs from [text]
@@ -93,24 +92,29 @@ class TicketReferenceExtractor {
     Set<String> allowedPrefixes = const {},
   }) {
     if (text == null || text.isEmpty) return const [];
-    final normIgnore = ignorePrefixes
-        .map((p) => p.trim().toUpperCase())
-        .where((p) => p.isNotEmpty)
-        .toSet();
-    final normAllow = allowedPrefixes
-        .map((p) => p.trim().toUpperCase())
-        .where((p) => p.isNotEmpty)
-        .toSet();
+    final normIgnore = _normalizePrefixSet(ignorePrefixes);
+    final normAllow = _normalizePrefixSet(allowedPrefixes);
     final seen = <String>{};
     for (final match in _jiraKeyRegex.allMatches(text)) {
       final key = match.group(1);
-      if (key == null) continue;
-      final prefix = key.split('-').first.toUpperCase();
-      if (normAllow.isNotEmpty && !normAllow.contains(prefix)) continue;
-      if (normIgnore.isNotEmpty && normIgnore.contains(prefix)) continue;
-      seen.add(key);
+      if (key != null && _isPrefixAllowed(key, normAllow, normIgnore)) {
+        seen.add(key);
+      }
     }
     return seen.toList(growable: false);
+  }
+
+  static Set<String> _normalizePrefixSet(Set<String> raw) =>
+      raw.map((p) => p.trim().toUpperCase()).where((p) => p.isNotEmpty).toSet();
+
+  static bool _isPrefixAllowed(
+    String key,
+    Set<String> allowed,
+    Set<String> ignored,
+  ) {
+    final prefix = key.split('-').first.toUpperCase();
+    if (allowed.isNotEmpty && !allowed.contains(prefix)) return false;
+    return !ignored.contains(prefix);
   }
 
   /// Extracts referenced GitHub issues from [text] (`owner/repo#123`,
@@ -168,23 +172,31 @@ class TicketReferenceExtractor {
     if (text == null || text.isEmpty) return const [];
     final seenUrls = <String>{};
     final results = <({String name, String url})>[];
-    var index = 1;
     for (final m in _markdownImageOrLink.allMatches(text)) {
-      final label = m.group(1)?.trim() ?? '';
-      final url = cleanupUrl(m.group(2) ?? '');
-      if (url.isNotEmpty && seenUrls.add(url)) {
-        results.add(
-            (name: _deriveGithubAttachmentName(label, url, index++), url: url));
-      }
+      _addAttachmentIfNew(
+        results,
+        seenUrls,
+        m.group(1)?.trim() ?? '',
+        m.group(2) ?? '',
+      );
     }
     for (final m in _htmlImgTag.allMatches(text)) {
-      final url = cleanupUrl(m.group(1) ?? '');
-      if (url.isNotEmpty && seenUrls.add(url)) {
-        results.add(
-            (name: _deriveGithubAttachmentName('', url, index++), url: url));
-      }
+      _addAttachmentIfNew(results, seenUrls, '', m.group(1) ?? '');
     }
     return results;
+  }
+
+  static void _addAttachmentIfNew(
+    List<({String name, String url})> results,
+    Set<String> seenUrls,
+    String label,
+    String rawUrl,
+  ) {
+    final url = cleanupUrl(rawUrl);
+    if (url.isNotEmpty && seenUrls.add(url)) {
+      final name = _deriveGithubAttachmentName(label, url, results.length + 1);
+      results.add((name: name, url: url));
+    }
   }
 
   static String _deriveGithubAttachmentName(

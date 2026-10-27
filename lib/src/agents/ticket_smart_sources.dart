@@ -101,20 +101,23 @@ class TicketSmartSources {
     return buf.toString();
   }
 
-  String? _extractParentKey(Map<String, dynamic> ticket) {
-    final fields = ticket['fields'];
-    if (fields is Map) {
-      final parent = fields['parent'];
-      if (parent is Map && parent['key'] != null) {
-        final k = parent['key'].toString().trim();
-        if (k.isNotEmpty) return k;
-      }
-      final adoParent = fields['System.Parent'];
-      if (adoParent != null && adoParent.toString().trim().isNotEmpty) {
-        return adoParent.toString().trim();
-      }
+  String? _extractParentKey(Map<String, dynamic> ticket) =>
+      _extractFieldsParentKey(ticket['fields']) ??
+      _extractAdoParentFromRelations(ticket['relations']);
+
+  String? _extractFieldsParentKey(dynamic fields) {
+    if (fields is! Map) return null;
+    final parent = fields['parent'];
+    if (parent is Map && parent['key'] != null) {
+      final k = parent['key'].toString().trim();
+      if (k.isNotEmpty) return k;
     }
-    return _extractAdoParentFromRelations(ticket['relations']);
+    return _nonEmptyStr(fields['System.Parent']);
+  }
+
+  static String? _nonEmptyStr(dynamic v) {
+    final s = v?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
   }
 
   String? _extractAdoParentFromRelations(dynamic relations) {
@@ -212,20 +215,29 @@ class TicketSmartSources {
     String suffix,
     String rawJson,
   ) {
-    if (rawJson.isEmpty || rawJson == 'null') return;
+    final decoded = _decodeNonEmptyFigmaPayload(rawJson);
+    if (decoded == null) return;
+    File('${figmaDir.path}/${prefix}_$suffix').writeAsStringSync(
+      const JsonEncoder.withIndent('  ').convert(decoded),
+    );
+  }
+
+  Object? _decodeNonEmptyFigmaPayload(String rawJson) {
+    if (rawJson.isEmpty || rawJson == 'null') return null;
     try {
       final decoded = jsonDecode(rawJson);
-      if (decoded == null) return;
-      if (decoded is Map && decoded.length == 1 && decoded['error'] != null) {
-        return;
-      }
-      if (decoded is List && decoded.isEmpty) return;
-      File('${figmaDir.path}/${prefix}_$suffix').writeAsStringSync(
-        const JsonEncoder.withIndent('  ').convert(decoded),
-      );
+      if (decoded == null || _isEmptyOrErrorPayload(decoded)) return null;
+      return decoded;
     } catch (_) {
-      // Ignore malformed responses.
+      return null;
     }
+  }
+
+  static bool _isEmptyOrErrorPayload(Object decoded) {
+    if (decoded is Map) {
+      return decoded.length == 1 && decoded['error'] != null;
+    }
+    return decoded is List && decoded.isEmpty;
   }
 
   void _downloadFigmaPreviewImage(
@@ -362,15 +374,16 @@ class TicketSmartSources {
 
   List<String> _extractAdoRelationWorkItemIds(dynamic relations) {
     if (relations is! List) return const [];
-    final results = <String>[];
-    for (final rel in relations) {
-      if (rel is! Map || rel['rel'] == 'AttachedFile') continue;
-      final url = rel['url']?.toString() ?? '';
-      final m =
-          RegExp(r'/workItems/(\d+)', caseSensitive: false).firstMatch(url);
-      if (m != null) results.add(m.group(1)!);
-    }
-    return results;
+    return [
+      for (final rel in relations.whereType<Map>())
+        if (rel['rel'] != 'AttachedFile') ..._workItemIdsFromUrl(rel['url']),
+    ];
+  }
+
+  static Iterable<String> _workItemIdsFromUrl(dynamic url) {
+    final m = RegExp(r'/workItems/(\d+)', caseSensitive: false)
+        .firstMatch(url?.toString() ?? '');
+    return m != null ? [m.group(1)!] : const [];
   }
 
   bool _isClonedByLink(Map<dynamic, dynamic> link) {
@@ -474,26 +487,33 @@ class TicketSmartSources {
         headers: {'Authorization': 'Basic $basicAuth'},
       );
       if (!resp.isOk) return;
-      final decoded = jsonDecode(resp.body);
-      final rawList = decoded is Map ? decoded['comments'] : null;
-      if (rawList is! List || rawList.isEmpty) return;
+      final formatted = _formatAdoCommentsPayload(jsonDecode(resp.body));
+      if (formatted.isEmpty) return;
       final fields = (item['fields'] is Map)
           ? Map<String, dynamic>.from(item['fields'] as Map)
           : <String, dynamic>{};
-      fields['comments'] = [
-        for (final c in rawList.whereType<Map>())
-          {
-            'author': {
-              'name': (c['createdBy'] is Map)
-                  ? (c['createdBy'] as Map)['displayName']
-                  : null,
-            },
-            'created': c['createdDate'],
-            'body': c['text'] ?? '',
-          },
-      ];
+      fields['comments'] = formatted;
       item['fields'] = fields;
     } catch (_) {}
+  }
+
+  static List<Map<String, dynamic>> _formatAdoCommentsPayload(Object? decoded) {
+    final rawList = decoded is Map ? decoded['comments'] : null;
+    if (rawList is! List) return const [];
+    return [
+      for (final c in rawList.whereType<Map>()) _formatSingleAdoComment(c),
+    ];
+  }
+
+  static Map<String, dynamic> _formatSingleAdoComment(Map<dynamic, dynamic> c) {
+    final createdBy = c['createdBy'];
+    return {
+      'author': {
+        'name': createdBy is Map ? createdBy['displayName'] : null,
+      },
+      'created': c['createdDate'],
+      'body': c['text'] ?? '',
+    };
   }
 
   Map<String, dynamic>? _fetchGithubTicket(String rawKey) {

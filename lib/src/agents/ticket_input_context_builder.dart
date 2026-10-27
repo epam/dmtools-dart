@@ -565,14 +565,15 @@ Map<String, String>? _adoHeadersForUrl(String url, PropertyReader reader) {
 
 Map<String, String>? _githubHeadersForUrl(String url, PropertyReader reader) {
   final token = SourceCapabilities.resolveGithubToken(reader);
-  if (token == null) return null;
+  if (token == null || !_isGithubTargetUrl(url, reader)) return null;
+  return {'Authorization': 'Bearer $token'};
+}
+
+bool _isGithubTargetUrl(String url, PropertyReader reader) {
   final urlHost = Uri.tryParse(url)?.host.toLowerCase() ?? '';
-  if (urlHost == 'github.com' ||
+  return urlHost == 'github.com' ||
       urlHost == 'api.github.com' ||
-      _matchesHost(url, reader.getGithubBasePath(), allowEmptyBase: false)) {
-    return {'Authorization': 'Bearer $token'};
-  }
-  return null;
+      _matchesHost(url, reader.getGithubBasePath(), allowEmptyBase: false);
 }
 
 bool _matchesHost(

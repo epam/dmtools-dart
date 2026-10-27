@@ -1076,6 +1076,15 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                     }
             payload.clear()
             payload["nodes"] = nodes
+        if (self.command == "GET"
+                and "/_apis/wit/workItems/" in self.path
+                and "/comments" in self.path):
+            payload.clear()
+            payload["comments"] = [{
+                "createdBy": {"displayName": "Ada"},
+                "createdDate": "2026-01-01",
+                "text": "ADO comment body",
+            }]
         response = json.dumps(payload)
         encoded = response.encode("utf-8")
         self.send_response(200)

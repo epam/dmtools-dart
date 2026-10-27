@@ -94,11 +94,8 @@ class _PageDownloader {
   void _downloadPage(Map<String, dynamic> content, int depth) {
     final id = content['id']?.toString();
     if (id == null || id.isEmpty || !_processedIds.add(id)) return;
-    final body = content['body'];
-    final storage =
-        body is Map ? body['storage'] as Map<String, dynamic>? : null;
-    final value = storage?['value'];
-    if (value is! String) return;
+    final value = _storageValueOf(content);
+    if (value == null) return;
     _output.createSync(recursive: true);
     final rawTitle = content['title']?.toString() ?? id;
     final fileName = _sanitize(rawTitle);
@@ -106,6 +103,25 @@ class _PageDownloader {
       confluenceStorageToMarkdown(_resolvedBody(content, value)),
     );
     _written++;
+    _recordExtrasAndRecurse(content, id, rawTitle, fileName, value, depth);
+  }
+
+  String? _storageValueOf(Map<String, dynamic> content) {
+    final body = content['body'];
+    final storage =
+        body is Map ? body['storage'] as Map<String, dynamic>? : null;
+    final value = storage?['value'];
+    return value is String ? value : null;
+  }
+
+  void _recordExtrasAndRecurse(
+    Map<String, dynamic> content,
+    String id,
+    String rawTitle,
+    String fileName,
+    String value,
+    int depth,
+  ) {
     if (_includeComments) {
       _writeInlineComments(id, rawTitle, fileName);
     }
@@ -175,39 +191,30 @@ class _PageDownloader {
     final results = <Map<String, dynamic>>[];
     final resolver = _SyncConfluenceResolverClient(_config);
     for (final m in _acLinkPagePattern.allMatches(storage)) {
-      final attrs = m.group(1) ?? '';
-      final title = _titleAttrPattern.firstMatch(attrs)?.group(1);
-      if (title == null || title.trim().isEmpty) continue;
-      final cleanTitle = unescapeXml(title.trim());
-      final linkSpace = _spaceAttrPattern.firstMatch(attrs)?.group(1)?.trim();
-      final resolved = _findLinkedPage(
-        resolver,
-        cleanTitle,
-        linkSpace: linkSpace,
-        pageSpace: pageSpaceKey,
-      );
+      final resolved =
+          _resolveAcLinkMatch(resolver, m.group(1) ?? '', pageSpaceKey);
       if (resolved != null) results.add(resolved);
     }
     return results;
   }
 
-  Map<String, dynamic>? _findLinkedPage(
+  Map<String, dynamic>? _resolveAcLinkMatch(
     _SyncConfluenceResolverClient resolver,
-    String title, {
-    String? linkSpace,
-    String? pageSpace,
-  }) {
-    if (linkSpace != null && linkSpace.isNotEmpty) {
-      return resolver.findContent(title, spaceKey: linkSpace);
+    String attrs,
+    String? pageSpaceKey,
+  ) {
+    final title = _titleAttrPattern.firstMatch(attrs)?.group(1)?.trim();
+    if (title == null || title.isEmpty) return null;
+    final linkSpace = _spaceAttrPattern.firstMatch(attrs)?.group(1)?.trim();
+    final space = _firstNonEmpty([linkSpace, pageSpaceKey, _defaultSpace]);
+    return resolver.findContent(unescapeXml(title), spaceKey: space);
+  }
+
+  static String? _firstNonEmpty(List<String?> candidates) {
+    for (final c in candidates) {
+      if (c != null && c.isNotEmpty) return c;
     }
-    if (pageSpace != null && pageSpace.isNotEmpty) {
-      final inPageSpace = resolver.findContent(title, spaceKey: pageSpace);
-      if (inPageSpace != null) return inPageSpace;
-    }
-    if (_defaultSpace != null && _defaultSpace.isNotEmpty) {
-      return resolver.findContent(title, spaceKey: _defaultSpace);
-    }
-    return resolver.findContent(title);
+    return null;
   }
 
   void _writeInlineComments(

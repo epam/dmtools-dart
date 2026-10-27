@@ -225,7 +225,8 @@ void smartContextConfluenceTests() {
       'key': 'PROJ-1',
       'fields': {
         'summary': 'Confluence spec',
-        'description': 'Spec at $base/wiki/spaces/ENG/pages/777/Hi',
+        'description':
+            'Spec at $base/wiki/spaces/ENG/pages/777/Hi and $base/wiki/spaces/DOCS/pages/888/Main',
       },
     };
     final path = TicketInputContextBuilder(tmp.path).build(
@@ -235,6 +236,7 @@ void smartContextConfluenceTests() {
     );
     expect(File('$path/confluence/Hi Page.md').existsSync(), isTrue);
     expect(File('$path/confluence/Child Page.md').existsSync(), isTrue);
+    expect(File('$path/confluence/Source.md').existsSync(), isTrue);
     expect(File('$path/confluence/Hi Page-comments.md').existsSync(), isTrue);
     expect(
       File('$path/confluence/Hi Page-comments.md').readAsStringSync(),
@@ -344,6 +346,13 @@ void smartContextLinkedTicketTests() {
     expect(File('${tmp.path}/input/PROJ-30/ticket.json').existsSync(), isTrue);
     expect(File('${tmp.path}/input/gh-42/ticket.json').existsSync(), isTrue);
     expect(File('${tmp.path}/input/55/ticket.json').existsSync(), isTrue);
+    expect(
+      TicketInputContextBuilder.resolveAuthHeadersForUrl(
+        'https://github.com/user-attachments/assets/abc',
+        PropertyReader(),
+      ),
+      {'Authorization': 'Bearer gh-tok'},
+    );
   });
 }
 
@@ -364,6 +373,12 @@ Map<String, dynamic> _buildSampleTicketWithLinks() => {
           },
         ],
       },
+      'relations': [
+        {
+          'rel': 'System.LinkTypes.Hierarchy-Forward',
+          'url': 'https://dev.azure.com/org/proj/_apis/wit/workItems/66',
+        },
+      ],
     };
 
 void smartContextJobWiringTests() {

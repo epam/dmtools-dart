@@ -281,20 +281,7 @@ class TicketSmartSources {
   }) {
     final keys =
         _collectLinkedAndReferencedKeys(ticketData, combinedText, config);
-    final nextConfig = InputContextConfig(
-      smart: config.smart,
-      sources: config.sources,
-      depth: config.depth - 1,
-      includeComments: config.includeComments,
-      includeAttachments: config.includeAttachments,
-      skipVideoAttachments: config.skipVideoAttachments,
-      skipAllAttachments: config.skipAllAttachments,
-      ignoreClonedByRelationship: config.ignoreClonedByRelationship,
-      confluenceDepth: config.confluenceDepth,
-      confluenceAttachments: config.confluenceAttachments,
-      includeConfluenceComments: config.includeConfluenceComments,
-      includeParentConfluence: false,
-    );
+    final nextConfig = config.forLinkedTicket();
     for (final key in keys) {
       if (!visited.add(_normalizeKey(key))) continue;
       final linkedData = fetchTicketByKey(key);
@@ -334,50 +321,54 @@ class TicketSmartSources {
     InputContextConfig config,
   ) {
     if (!config.ignoreClonedByRelationship) return const [];
-    final results = <String>[];
-    final fields = ticket['fields'];
-    if (fields is Map && fields['issuelinks'] is List) {
-      for (final item in fields['issuelinks'] as List) {
-        if (item is! Map || !_isClonedByLink(item)) continue;
-        final inward = item['inwardIssue'];
-        final outward = item['outwardIssue'];
-        final linked =
-            inward is Map ? inward : (outward is Map ? outward : null);
-        final key = linked?['key']?.toString().trim();
-        if (key != null && key.isNotEmpty) results.add(key);
-      }
-    }
-    return results;
+    return _jiraLinkKeysWhere(ticket, _isClonedByLink);
   }
 
   List<String> _extractStructuredIssueLinks(
     Map<String, dynamic> ticket,
     InputContextConfig config,
   ) {
-    final results = <String>[];
+    final results = _jiraLinkKeysWhere(
+      ticket,
+      (link) => !(config.ignoreClonedByRelationship && _isClonedByLink(link)),
+    );
+    results.addAll(_extractAdoRelationWorkItemIds(ticket['relations']));
+    return results;
+  }
+
+  List<String> _jiraLinkKeysWhere(
+    Map<String, dynamic> ticket,
+    bool Function(Map<dynamic, dynamic> link) predicate,
+  ) {
     final fields = ticket['fields'];
-    if (fields is Map && fields['issuelinks'] is List) {
-      for (final item in fields['issuelinks'] as List) {
-        if (item is! Map) continue;
-        if (config.ignoreClonedByRelationship && _isClonedByLink(item)) {
-          continue;
-        }
-        final inward = item['inwardIssue'];
-        final outward = item['outwardIssue'];
-        final linked =
-            inward is Map ? inward : (outward is Map ? outward : null);
-        final key = linked?['key']?.toString().trim();
-        if (key != null && key.isNotEmpty) results.add(key);
-      }
+    final links = fields is Map ? fields['issuelinks'] : null;
+    if (links is! List) return <String>[];
+    final results = <String>[];
+    for (final item in links) {
+      if (item is! Map || !predicate(item)) continue;
+      final key = _linkedIssueKey(item);
+      if (key != null) results.add(key);
     }
-    if (ticket['relations'] is List) {
-      for (final rel in ticket['relations'] as List) {
-        if (rel is! Map || rel['rel'] == 'AttachedFile') continue;
-        final url = rel['url']?.toString() ?? '';
-        final m =
-            RegExp(r'/workItems/(\d+)', caseSensitive: false).firstMatch(url);
-        if (m != null) results.add(m.group(1)!);
-      }
+    return results;
+  }
+
+  String? _linkedIssueKey(Map<dynamic, dynamic> link) {
+    final inward = link['inwardIssue'];
+    final outward = link['outwardIssue'];
+    final linked = inward is Map ? inward : (outward is Map ? outward : null);
+    final key = linked?['key']?.toString().trim();
+    return (key != null && key.isNotEmpty) ? key : null;
+  }
+
+  List<String> _extractAdoRelationWorkItemIds(dynamic relations) {
+    if (relations is! List) return const [];
+    final results = <String>[];
+    for (final rel in relations) {
+      if (rel is! Map || rel['rel'] == 'AttachedFile') continue;
+      final url = rel['url']?.toString() ?? '';
+      final m =
+          RegExp(r'/workItems/(\d+)', caseSensitive: false).firstMatch(url);
+      if (m != null) results.add(m.group(1)!);
     }
     return results;
   }

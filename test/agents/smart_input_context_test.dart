@@ -22,8 +22,12 @@ void main() {
 
   inputContextConfigTests();
   sourceCapabilitiesTests();
-  referenceExtractorTests();
-  smartContextEchoTests();
+  referenceUrlExtractorTests();
+  referenceTicketExtractorTests();
+  smartContextConfluenceTests();
+  smartContextFigmaTests();
+  smartContextLinkedTicketTests();
+  smartContextJobWiringTests();
 }
 
 void inputContextConfigTests() {
@@ -127,8 +131,8 @@ void sourceCapabilitiesTests() {
   });
 }
 
-void referenceExtractorTests() {
-  group('TicketReferenceExtractor', () {
+void referenceUrlExtractorTests() {
+  group('TicketReferenceExtractor URLs', () {
     test('extracts Confluence URLs matching configured base domain', () {
       final urls = TicketReferenceExtractor.extractConfluenceUrls(
         'https://acme.atlassian.net/wiki',
@@ -152,7 +156,11 @@ void referenceExtractorTests() {
         'https://figma.com/file/def456/Spec',
       ]);
     });
+  });
+}
 
+void referenceTicketExtractorTests() {
+  group('TicketReferenceExtractor tickets', () {
     test('extracts Jira keys with ignore and allowed prefix filters', () {
       const text = 'Relates to PROJ-10, EXT-20, and SKIP-30.';
       expect(
@@ -198,210 +206,203 @@ void referenceExtractorTests() {
   });
 }
 
-void smartContextEchoTests() {
-  group('TicketSmartSources & TicketInputContextBuilder with EchoServer', () {
-    late EchoServer server;
-
-    setUp(() async {
-      server = EchoServer();
-      await server.start();
+void smartContextConfluenceTests() {
+  test('downloads Confluence pages + inline comments + attachments', () async {
+    final server = EchoServer();
+    await server.start();
+    addTearDown(server.stop);
+    final base = 'http://127.0.0.1:${server.port}';
+    PropertyReader.setOverrides({
+      'CONFLUENCE_BASE_PATH': '$base/wiki',
+      'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
+      'CONFLUENCE_AUTH_TYPE': 'Basic',
+      'CONFLUENCE_DEFAULT_SPACE': 'ENG',
     });
+    final tmp = Directory.systemTemp.createTempSync('dmtools_smart_conf_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
 
-    tearDown(() => server.stop());
+    final ticket = {
+      'key': 'PROJ-1',
+      'fields': {
+        'summary': 'Confluence spec',
+        'description': 'Spec at $base/wiki/spaces/ENG/pages/777/Hi',
+      },
+    };
+    final path = TicketInputContextBuilder(tmp.path).build(
+      'PROJ-1',
+      ticketData: ticket,
+      config: InputContextConfig()..confluenceDepth = 2,
+    );
+    expect(File('$path/confluence/Hi Page.md').existsSync(), isTrue);
+    expect(File('$path/confluence/Child Page.md').existsSync(), isTrue);
+    expect(File('$path/confluence/Hi Page-comments.md').existsSync(), isTrue);
+    expect(
+      File('$path/confluence/Hi Page-comments.md').readAsStringSync(),
+      contains('Needs clarification'),
+    );
+    expect(
+      File('$path/confluence/Hi Page-attachments/shot.png').existsSync(),
+      isTrue,
+    );
+  });
+}
 
-    test(
-        'downloads Confluence pages + inline comments + attachments when configured',
-        () {
-      final base = 'http://127.0.0.1:${server.port}';
-      PropertyReader.setOverrides({
-        'CONFLUENCE_BASE_PATH': '$base/wiki',
-        'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-token',
-        'CONFLUENCE_AUTH_TYPE': 'Basic',
-        'CONFLUENCE_DEFAULT_SPACE': 'ENG',
-      });
-      final tmp = Directory.systemTemp.createTempSync('dmtools_smart_conf_');
-      addTearDown(() => tmp.deleteSync(recursive: true));
+void smartContextFigmaTests() {
+  test('skips Confluence and Figma when their secrets are not configured', () {
+    PropertyReader.setOverrides({});
+    final tmp = Directory.systemTemp.createTempSync('dmtools_smart_unconf_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
 
-      final ticket = {
-        'key': 'PROJ-1',
-        'fields': {
-          'summary': 'Confluence spec',
-          'description': 'Spec at $base/wiki/spaces/ENG/pages/777/Hi',
-        },
-      };
-      final path = TicketInputContextBuilder(tmp.path).build(
-        'PROJ-1',
-        ticketData: ticket,
-        config: const InputContextConfig(confluenceDepth: 2),
-      );
-      expect(File('$path/confluence/Hi Page.md').existsSync(), isTrue);
-      expect(File('$path/confluence/Child Page.md').existsSync(), isTrue);
-      expect(File('$path/confluence/Hi Page-comments.md').existsSync(), isTrue);
-      expect(
-        File('$path/confluence/Hi Page-comments.md').readAsStringSync(),
-        contains('Needs clarification'),
-      );
-      expect(
-        File('$path/confluence/Hi Page-attachments/shot.png').existsSync(),
-        isTrue,
-      );
+    final ticket = {
+      'key': 'PROJ-2',
+      'fields': {
+        'summary': 'Unconfigured sources',
+        'description': 'Spec https://acme.atlassian.net/wiki/x/AB12 '
+            'and https://www.figma.com/design/abc123/Design?node-id=1-2',
+      },
+    };
+    final path = TicketInputContextBuilder(tmp.path).build(
+      'PROJ-2',
+      ticketData: ticket,
+    );
+    expect(Directory('$path/confluence').existsSync(), isFalse);
+    expect(Directory('$path/figma').existsSync(), isFalse);
+  });
+
+  test('downloads Figma structure, layers, text, comments, and preview image',
+      () async {
+    final server = EchoServer();
+    await server.start();
+    addTearDown(server.stop);
+    final base = 'http://127.0.0.1:${server.port}';
+    PropertyReader.setOverrides({
+      'FIGMA_BASE_PATH': '$base/figdl/v1',
+      'FIGMA_TOKEN': 'fig-secret',
     });
+    final tmp = Directory.systemTemp.createTempSync('dmtools_smart_figma_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
 
-    test('skips Confluence and Figma when their secrets are not configured',
-        () {
-      final base = 'http://127.0.0.1:${server.port}';
-      PropertyReader.setOverrides({});
-      final tmp = Directory.systemTemp.createTempSync('dmtools_smart_unconf_');
-      addTearDown(() => tmp.deleteSync(recursive: true));
+    final ticket = {
+      'key': 'PROJ-3',
+      'fields': {
+        'summary': 'Figma spec',
+        'description':
+            'UI: https://www.figma.com/design/fileKey1/App?node-id=1-2',
+      },
+    };
+    final path = TicketInputContextBuilder(tmp.path).build(
+      'PROJ-3',
+      ticketData: ticket,
+    );
+    final figmaDir = Directory('$path/figma');
+    expect(figmaDir.existsSync(), isTrue);
+    expect(
+      File('${figmaDir.path}/design_fileKey1_1-2_structure.json').existsSync(),
+      isTrue,
+    );
+    expect(
+      File('${figmaDir.path}/design_fileKey1_1-2.png').existsSync(),
+      isTrue,
+    );
+  });
+}
 
-      final ticket = {
-        'key': 'PROJ-2',
-        'fields': {
-          'summary': 'Unconfigured sources',
-          'description': 'Spec $base/wiki/spaces/ENG/pages/777/Hi '
-              'and https://www.figma.com/design/abc123/Design?node-id=1-2',
-        },
-      };
-      final path = TicketInputContextBuilder(tmp.path).build(
-        'PROJ-2',
-        ticketData: ticket,
-      );
-      expect(Directory('$path/confluence').existsSync(), isFalse);
-      expect(Directory('$path/figma').existsSync(), isFalse);
+void smartContextLinkedTicketTests() {
+  test('fetches linked tickets and GitHub inline attachments when configured',
+      () async {
+    final server = EchoServer();
+    await server.start();
+    addTearDown(server.stop);
+    final base = 'http://127.0.0.1:${server.port}';
+    PropertyReader.setOverrides({
+      'JIRA_BASE_PATH': base,
+      'JIRA_LOGIN_PASS_TOKEN': 'jira-tok',
+      'SOURCE_GITHUB_TOKEN': 'gh-tok',
+      'SOURCE_GITHUB_BASE_PATH': base,
+      'GITHUB_REPOSITORY': 'acme/app',
+      'ADO_BASE_PATH': base,
+      'ADO_ORGANIZATION': 'org',
+      'ADO_PROJECT': 'proj',
+      'ADO_PAT_TOKEN': 'ado-tok',
     });
+    final tmp = Directory.systemTemp.createTempSync('dmtools_smart_links_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
 
-    test('downloads Figma structure, layers, text, comments, and preview image',
-        () {
-      final base = 'http://127.0.0.1:${server.port}';
-      PropertyReader.setOverrides({
-        'FIGMA_BASE_PATH': '$base/figdl/v1',
-        'FIGMA_TOKEN': 'fig-secret',
-      });
-      final tmp = Directory.systemTemp.createTempSync('dmtools_smart_figma_');
-      addTearDown(() => tmp.deleteSync(recursive: true));
+    final ticket = _buildSampleTicketWithLinks();
+    final builder = TicketInputContextBuilder(
+      tmp.path,
+      attachmentDownloader: (_) => utf8.encode('img-bytes'),
+    );
+    final path = builder.build(
+      'PROJ-10',
+      ticketData: ticket,
+      config: InputContextConfig(depth: 1),
+    );
+    expect(File('$path/screen.png').existsSync(), isTrue);
+    expect(Directory('${tmp.path}/input/PROJ-999').existsSync(), isFalse);
+    expect(File('${tmp.path}/input/PROJ-20/ticket.json').existsSync(), isTrue);
+    expect(File('${tmp.path}/input/PROJ-30/ticket.json').existsSync(), isTrue);
+    expect(File('${tmp.path}/input/gh-42/ticket.json').existsSync(), isTrue);
+    expect(File('${tmp.path}/input/55/ticket.json').existsSync(), isTrue);
+  });
+}
 
-      final ticket = {
-        'key': 'PROJ-3',
-        'fields': {
-          'summary': 'Figma spec',
-          'description':
-              'UI: https://www.figma.com/design/fileKey1/App?node-id=1-2',
-        },
-      };
-      final path = TicketInputContextBuilder(tmp.path).build(
-        'PROJ-3',
-        ticketData: ticket,
-      );
-      final figmaDir = Directory('$path/figma');
-      expect(figmaDir.existsSync(), isTrue);
-      expect(
-        File('${figmaDir.path}/design_fileKey1_1-2_structure.json')
-            .existsSync(),
-        isTrue,
-      );
-      expect(
-        File('${figmaDir.path}/design_fileKey1_1-2.png').existsSync(),
-        isTrue,
-      );
+Map<String, dynamic> _buildSampleTicketWithLinks() => {
+      'key': 'PROJ-10',
+      'fields': {
+        'summary': 'Main ticket',
+        'description': 'See PROJ-20, #42, and AB#55.\n'
+            '![screen.png](https://github.com/user-attachments/assets/abc)',
+        'issuelinks': [
+          {
+            'type': {'name': 'Cloners', 'inward': 'is cloned by'},
+            'inwardIssue': {'key': 'PROJ-999'},
+          },
+          {
+            'type': {'name': 'Relates', 'inward': 'relates to'},
+            'outwardIssue': {'key': 'PROJ-30'},
+          },
+        ],
+      },
+    };
+
+void smartContextJobWiringTests() {
+  test('CliAgent and TeammateJob resolve input.ticket automatically', () async {
+    final server = EchoServer();
+    await server.start();
+    addTearDown(server.stop);
+    final base = 'http://127.0.0.1:${server.port}';
+    PropertyReader.setOverrides({
+      'JIRA_BASE_PATH': base,
+      'JIRA_LOGIN_PASS_TOKEN': 'jira-tok',
     });
+    final tmp = Directory.systemTemp.createTempSync('dmtools_cli_input_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
 
-    test('fetches linked tickets and GitHub inline attachments when configured',
-        () {
-      final base = 'http://127.0.0.1:${server.port}';
-      PropertyReader.setOverrides({
-        'JIRA_BASE_PATH': base,
-        'JIRA_LOGIN_PASS_TOKEN': 'jira-tok',
-        'SOURCE_GITHUB_TOKEN': 'gh-tok',
-        'SOURCE_GITHUB_BASE_PATH': base,
-        'GITHUB_REPOSITORY': 'acme/app',
-        'ADO_BASE_PATH': base,
-        'ADO_ORGANIZATION': 'org',
-        'ADO_PROJECT': 'proj',
-        'ADO_PAT_TOKEN': 'ado-tok',
-      });
-      final tmp = Directory.systemTemp.createTempSync('dmtools_smart_links_');
-      addTearDown(() => tmp.deleteSync(recursive: true));
-
-      final ticket = {
-        'key': 'PROJ-10',
-        'fields': {
-          'summary': 'Main ticket',
-          'description': 'See PROJ-20, #42, and AB#55.\n'
-              '![screen.png](https://github.com/user-attachments/assets/abc)',
-          'issuelinks': [
-            {
-              'type': {'name': 'Cloners', 'inward': 'is cloned by'},
-              'inwardIssue': {'key': 'PROJ-999'},
-            },
-            {
-              'type': {'name': 'Relates', 'inward': 'relates to'},
-              'outwardIssue': {'key': 'PROJ-30'},
-            },
-          ],
-        },
-      };
-      final builder = TicketInputContextBuilder(
-        tmp.path,
-        attachmentDownloader: (_) => utf8.encode('img-bytes'),
-      );
-      final path = builder.build(
-        'PROJ-10',
-        ticketData: ticket,
-        config: const InputContextConfig(depth: 1),
-      );
-      expect(File('$path/screen.png').existsSync(), isTrue);
-      // Cloned-by ticket PROJ-999 is ignored; PROJ-20, PROJ-30, gh-42, and 55 are built.
-      expect(Directory('${tmp.path}/input/PROJ-999').existsSync(), isFalse);
-      expect(
-          File('${tmp.path}/input/PROJ-20/ticket.json').existsSync(), isTrue);
-      expect(
-          File('${tmp.path}/input/PROJ-30/ticket.json').existsSync(), isTrue);
-      expect(File('${tmp.path}/input/gh-42/ticket.json').existsSync(), isTrue);
-      expect(File('${tmp.path}/input/55/ticket.json').existsSync(), isTrue);
+    final params = CliAgentParams.fromJson({
+      'input': {'ticket': 'PROJ-55', 'depth': 0},
+      'cliCommands': ['echo done'],
+      'cleanupInputFolder': false,
+      'workingDirectory': tmp.path,
     });
+    expect(params.contextId, 'PROJ-55');
+    final agentResult = await CliAgent(
+      params: params,
+      workingDirectory: tmp.path,
+    ).run();
+    expect(agentResult['success'], isTrue);
+    expect(File('${tmp.path}/input/PROJ-55/ticket.json').existsSync(), isTrue);
 
-    test(
-        'CliAgent and TeammateJob resolve input.ticket and input.jql automatically',
-        () async {
-      final base = 'http://127.0.0.1:${server.port}';
-      PropertyReader.setOverrides({
-        'JIRA_BASE_PATH': base,
-        'JIRA_LOGIN_PASS_TOKEN': 'jira-tok',
-      });
-      final tmp = Directory.systemTemp.createTempSync('dmtools_cli_input_');
-      addTearDown(() => tmp.deleteSync(recursive: true));
-
-      final params = CliAgentParams.fromJson({
-        'input': {'ticket': 'PROJ-55', 'depth': 0},
-        'cliCommands': ['echo done'],
+    final teammateResult = await TeammateJob(
+      params: {
+        'input': 'PROJ-77',
+        'cliCommands': ['echo teammate'],
         'cleanupInputFolder': false,
         'workingDirectory': tmp.path,
-      });
-      expect(params.contextId, 'PROJ-55');
-      final agentResult = await CliAgent(
-        params: params,
-        workingDirectory: tmp.path,
-      ).run();
-      expect(agentResult['success'], isTrue);
-      expect(
-        File('${tmp.path}/input/PROJ-55/ticket.json').existsSync(),
-        isTrue,
-      );
-
-      final teammateResult = await TeammateJob(
-        params: {
-          'input': 'PROJ-77',
-          'cliCommands': ['echo teammate'],
-          'cleanupInputFolder': false,
-          'workingDirectory': tmp.path,
-        },
-        workingDirectory: tmp.path,
-      ).run();
-      expect(teammateResult['success'], isTrue);
-      expect(
-        File('${tmp.path}/input/PROJ-77/ticket.json').existsSync(),
-        isTrue,
-      );
-    });
+      },
+      workingDirectory: tmp.path,
+    ).run();
+    expect(teammateResult['success'], isTrue);
+    expect(File('${tmp.path}/input/PROJ-77/ticket.json').existsSync(), isTrue);
   });
 }

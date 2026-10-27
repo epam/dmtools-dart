@@ -13,65 +13,75 @@ import '../config/property_reader_getters.dart';
 
 /// Configuration for `TicketInputContextBuilder`.
 class InputContextConfig {
-  /// Creates an [InputContextConfig] with defaults.
-  const InputContextConfig({
-    this.ticket,
-    this.jql,
+  /// Creates an [InputContextConfig] with the most common flags.
+  ///
+  /// For full configuration use [InputContextConfig.fromJson].
+  InputContextConfig({
     this.smart = true,
     this.sources = const [],
     this.depth = 0,
-    this.includeComments = true,
     this.includeAttachments = true,
     this.skipVideoAttachments = false,
     this.skipAllAttachments = false,
-    this.ignoreClonedByRelationship = true,
-    this.confluenceDepth = 1,
-    this.confluenceAttachments = true,
-    this.includeConfluenceComments = true,
-    this.includeParentConfluence = true,
   });
 
+  /// Returns a copy of this configuration for the next linked-ticket depth.
+  InputContextConfig forLinkedTicket() => InputContextConfig(
+        smart: smart,
+        sources: sources,
+        depth: depth - 1,
+        includeAttachments: includeAttachments,
+        skipVideoAttachments: skipVideoAttachments,
+        skipAllAttachments: skipAllAttachments,
+      )
+        ..includeComments = includeComments
+        ..ignoreClonedByRelationship = ignoreClonedByRelationship
+        ..confluenceDepth = confluenceDepth
+        ..confluenceAttachments = confluenceAttachments
+        ..includeConfluenceComments = includeConfluenceComments
+        ..includeParentConfluence = false;
+
   /// Explicit ticket key (from `input: "PROJ-123"` or `input.ticket`).
-  final String? ticket;
+  String? ticket;
 
   /// Explicit JQL / WIQL / GitHub search query (from `input.jql`).
-  final String? jql;
+  String? jql;
 
   /// Whether to automatically resolve URLs and references in ticket text.
-  final bool smart;
+  bool smart;
 
   /// Whitelist of smart sources (`confluence`, `figma`, etc.). Empty = all.
-  final List<String> sources;
+  List<String> sources;
 
   /// Linked-ticket traversal depth (`> 0` fetches linked/referenced tickets).
-  final int depth;
+  int depth;
 
   /// Whether to write `comments.md`.
-  final bool includeComments;
+  bool includeComments = true;
 
   /// Whether to download ticket attachments into the input folder.
-  final bool includeAttachments;
+  bool includeAttachments;
 
   /// Whether to skip video attachments when [includeAttachments] is true.
-  final bool skipVideoAttachments;
+  bool skipVideoAttachments;
 
   /// Whether to skip all ticket attachments.
-  final bool skipAllAttachments;
+  bool skipAllAttachments;
 
   /// Whether to ignore tickets linked via "is cloned by" / "clones".
-  final bool ignoreClonedByRelationship;
+  bool ignoreClonedByRelationship = true;
 
   /// How many levels of linked/child Confluence pages to follow.
-  final int confluenceDepth;
+  int confluenceDepth = 1;
 
   /// Whether to download attachments for fetched Confluence pages.
-  final bool confluenceAttachments;
+  bool confluenceAttachments = true;
 
   /// Whether to fetch inline comments for fetched Confluence pages.
-  final bool includeConfluenceComments;
+  bool includeConfluenceComments = true;
 
   /// Whether to also scan the parent ticket for smart source URLs.
-  final bool includeParentConfluence;
+  bool includeParentConfluence = true;
 
   /// Whether linked/referenced tickets should be fetched.
   bool get includeLinkedTickets => depth > 0;
@@ -97,26 +107,26 @@ class InputContextConfig {
         : null;
     final defaultDepth = rawInput is Map || ticketFromString != null ? 1 : 0;
     return InputContextConfig(
-      ticket: ticketFromString ?? _str(inputMap['ticket']),
-      jql: _str(inputMap['jql']),
       smart: _bool(inputMap, json, 'smart', true),
       sources: _strList(inputMap['sources'] ?? json['sources']),
       depth: _int(inputMap, json, 'depth', defaultDepth),
-      includeComments: _bool(inputMap, json, 'includeComments', true),
       includeAttachments: _bool(inputMap, json, 'includeAttachments', true),
       skipVideoAttachments:
           _bool(inputMap, json, 'skipVideoAttachments', false),
       skipAllAttachments: _bool(inputMap, json, 'skipAllAttachments', false),
-      ignoreClonedByRelationship:
-          _bool(inputMap, json, 'ignoreClonedByRelationship', true),
-      confluenceDepth: _int(inputMap, json, 'confluenceDepth', 1),
-      confluenceAttachments:
-          _bool(inputMap, json, 'confluenceAttachments', true),
-      includeConfluenceComments:
-          _bool(inputMap, json, 'includeConfluenceComments', true),
-      includeParentConfluence:
-          _bool(inputMap, json, 'includeParentConfluence', true),
-    );
+    )
+      ..ticket = ticketFromString ?? _str(inputMap['ticket'])
+      ..jql = _str(inputMap['jql'])
+      ..includeComments = _bool(inputMap, json, 'includeComments', true)
+      ..ignoreClonedByRelationship =
+          _bool(inputMap, json, 'ignoreClonedByRelationship', true)
+      ..confluenceDepth = _int(inputMap, json, 'confluenceDepth', 1)
+      ..confluenceAttachments =
+          _bool(inputMap, json, 'confluenceAttachments', true)
+      ..includeConfluenceComments =
+          _bool(inputMap, json, 'includeConfluenceComments', true)
+      ..includeParentConfluence =
+          _bool(inputMap, json, 'includeParentConfluence', true);
   }
 }
 

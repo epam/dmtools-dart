@@ -554,15 +554,14 @@ class _ParentConfigResolver {
     final parentValue = _getByPath(parent, _kParamsCliPrompts);
     final childValue = _getByPath(child, _kParamsCliPrompts);
     if (parentValue is! List || childValue is! List) return;
-    if (!_containsStructuredPrompts(parentValue) &&
-        !_containsStructuredPrompts(childValue)) {
-      return;
+    if (_containsStructuredPrompts(parentValue) ||
+        _containsStructuredPrompts(childValue)) {
+      _setByPath(
+        result,
+        _kParamsCliPrompts,
+        _mergeStructuredCliPrompts(parentValue, childValue),
+      );
     }
-    _setByPath(
-      result,
-      _kParamsCliPrompts,
-      _mergeStructuredCliPrompts(parentValue, childValue),
-    );
   }
 
   bool _containsStructuredPrompts(List<dynamic> list) =>

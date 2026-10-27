@@ -270,7 +270,7 @@ void _testParentStructuredCliPromptsMerge() {
           jsonEncode({
             'name': 'child',
             'parent': {'path': 'parent.json'},
-            'merge': ['params.cliPrompts'],
+            // Omit 'merge' to also exercise implicit _applyStructuredCliPromptsMerge
             'params': {
               'cliPrompts': [
                 {'id': 'codegraph', 'prompt': 'cg2.md'},
@@ -324,6 +324,17 @@ void _testParentStructuredCliPromptsStrategies() {
         },
         {'id': 's3', 'prompt': 'c3'},
       ]);
+    });
+
+    test('concatenates plain cliPrompts via merge directive', () {
+      _writeFile('parent.json', '{"params":{"cliPrompts":["p1"]}}');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},'
+            '"merge":["params.cliPrompts"],"params":{"cliPrompts":["c1"]}}',
+      );
+      final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
+      expect(json['params']['cliPrompts'], ['p1', 'c1']);
     });
   });
 }

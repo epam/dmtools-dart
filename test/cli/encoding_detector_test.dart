@@ -64,6 +64,23 @@ void _testUrlDecode() {
       expect(autoDetectAndDecode(encoded), '{"key":"value"}');
     });
 
+    test('decodes form-urlencoded JSON with + spaces', () {
+      const encoded = '%7B%0A++%22params%22%3A+%7B%7D%7D';
+      expect(autoDetectAndDecode(encoded), '{\n  "params": {}}');
+    });
+
+    test('preserves literal plus signs encoded as %2B alongside + spaces', () {
+      const encoded = '%7B%22expr%22%3A+%22a%2Bb%22%7D';
+      expect(autoDetectAndDecode(encoded), '{"expr": "a+b"}');
+    });
+
+    test('still decodes valid base64 containing + before URL decoding', () {
+      const text = '>>>???'; // base64 is 'Pj4+Pz8/' (contains '+')
+      final encoded = base64.encode(utf8.encode(text));
+      expect(encoded, contains('+'));
+      expect(autoDetectAndDecode(encoded), text);
+    });
+
     test('returns plain ASCII unchanged', () {
       expect(autoDetectAndDecode('plain'), 'plain');
     });

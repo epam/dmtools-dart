@@ -22,6 +22,9 @@ import '../pack/agent_pack_resolver.dart';
 
 const _kParamsCliPrompts = 'params.cliPrompts';
 
+/// Global shell-level verbosity flags ignored during `run` argument extraction.
+const _kRunShellFlags = {'--verbose', '--debug', '--quiet'};
+
 /// Processes `dmtools run` command arguments into resolved config JSON.
 class RunCommandProcessor {
   /// Creates a run-command processor. [packResolver] is a test seam for the
@@ -90,7 +93,9 @@ class RunCommandProcessor {
     var i = 0;
     while (i < remaining.length) {
       final arg = remaining[i];
-      if (arg.startsWith('--')) {
+      if (_kRunShellFlags.contains(arg)) {
+        i++;
+      } else if (arg.startsWith('--')) {
         final key = arg.substring(2);
         if (i + 1 < remaining.length) {
           overrides[key] = remaining[i + 1];

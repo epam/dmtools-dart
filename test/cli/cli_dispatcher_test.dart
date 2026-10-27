@@ -53,6 +53,7 @@ void main() {
   _testDirectToolHelp();
   _testNoArgs();
   _testDefaults();
+  _testLeadingShellFlags();
 }
 
 void _testVersion() {
@@ -730,6 +731,68 @@ void _testDefaults() {
       expect(errorLine, contains('(path: ${sealed.path}'));
       Process.runSync('chmod', ['644', sealed.path]);
       sealed.deleteSync();
+    });
+  });
+}
+
+void _testLeadingShellFlags() {
+  group('leading global verbosity flags (gh-455)', () {
+    test('--debug before run dispatches to run', () async {
+      final jsFile = File('${_tmp.path}/debug_fn.js')
+        ..writeAsStringSync('function action(params) { return 42; }');
+      expect(
+        await _dispatcher.dispatch(['--debug', 'run', jsFile.path]),
+        0,
+      );
+      expect(_lines.last, '42');
+    });
+
+    test('--verbose before list dispatches to list', () async {
+      expect(await _dispatcher.dispatch(['--verbose', 'list']), 0);
+      final decoded = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(decoded['tools'], isA<List<dynamic>>());
+    });
+
+    test('--quiet before doctor dispatches to doctor', () async {
+      expect(await _dispatcher.dispatch(['--quiet', 'doctor']), 0);
+      expect(_lines.join('\n'), startsWith('DMTools Configuration Check'));
+    });
+
+    test('multiple leading verbosity flags before direct tool invocation',
+        () async {
+      final testFile = File('${_tmp.path}/leading_flags.txt')
+        ..writeAsStringSync('flag content');
+      expect(
+        await _dispatcher.dispatch([
+          '--debug',
+          '--verbose',
+          '--quiet',
+          'file_read',
+          '--path',
+          testFile.path,
+        ]),
+        0,
+      );
+      final result = jsonDecode(_lines.last) as Map<String, dynamic>;
+      expect(result['content'], 'flag content');
+    });
+
+    test(
+        '--debug before run with form-urlencoded + encoded config and trailing --debug',
+        () async {
+      final jsFile = File('${_tmp.path}/debug_encoded.js')
+        ..writeAsStringSync(
+          'function action(params) { return params.jobParams.greeting; }',
+        );
+      const encoded =
+          '%7B%0A++%22params%22%3A+%7B%22jobParams%22%3A+%7B%22greeting%22%3A+%22hi+there%22%7D%7D%7D';
+      expect(
+        await _dispatcher.dispatch(
+          ['--debug', 'run', jsFile.path, '--debug', encoded],
+        ),
+        0,
+      );
+      expect(jsonDecode(_lines.last), 'hi there');
     });
   });
 }

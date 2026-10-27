@@ -283,27 +283,49 @@ class TicketInputContextBuilder {
     if (!include || skipAll) return;
     final attachments = _extractAttachments(ticket);
     if (attachments.isEmpty) return;
+    final key =
+        _stringValue(ticket['key']) ?? _stringValue(ticket['id']) ?? dir;
+    stdout.writeln(
+      '⬇️ Downloading ${attachments.length} attachments for ticket $key',
+    );
     final downloader = _attachmentDownloader ?? _defaultDownloadBytes;
+    var succeeded = 0;
+    var failed = 0;
     for (final att in attachments) {
       if (skipVideo && isVideoFile(att.name)) continue;
-      _downloadSingleAttachment(dir, att, downloader);
+      if (_downloadSingleAttachment(dir, att, downloader)) {
+        succeeded++;
+      } else {
+        failed++;
+      }
     }
+    stdout.writeln(
+      '📊 Attachment download summary: $succeeded succeeded, $failed failed '
+      'out of ${attachments.length} total',
+    );
   }
 
   /// Downloads one attachment and writes it to [dir]; errors are non-fatal.
-  void _downloadSingleAttachment(
+  bool _downloadSingleAttachment(
     String dir,
     ({String name, String url}) att,
     AttachmentDownloader downloader,
   ) {
     final safeName = sanitizeAttachmentFileName(att.name.trim());
-    if (safeName.isEmpty || att.url.trim().isEmpty) return;
+    if (safeName.isEmpty || att.url.trim().isEmpty) return false;
     try {
+      stdout.writeln('⬇️ Downloading: $safeName from ${att.url.trim()}');
       final bytes = downloader(att.url.trim());
-      if (bytes == null) return;
-      File('$dir/$safeName').writeAsBytesSync(bytes, flush: true);
+      if (bytes == null) return false;
+      final outPath = '$dir/$safeName';
+      File(outPath).writeAsBytesSync(bytes, flush: true);
+      stdout.writeln(
+        '✅ Downloaded attachment: $safeName (${bytes.length} bytes) to $outPath',
+      );
+      return true;
     } catch (e) {
       stderr.writeln('Failed to download attachment ${att.name}: $e');
+      return false;
     }
   }
 
@@ -411,21 +433,8 @@ class TicketInputContextBuilder {
 
   /// Default HTTP attachment downloader using [SyncHttpClient] and
   /// tracker auth headers from [_propertyReader].
-  List<int>? _defaultDownloadBytes(String url) {
-    final headers = resolveAuthHeadersForUrl(url, _propertyReader);
-    final resp = SyncHttpClient.get(
-      url,
-      headers: headers,
-      followRedirects: true,
-    );
-    if (!resp.isOk) {
-      stderr.writeln(
-        'Attachment download failed (HTTP ${resp.statusCode}) for $url',
-      );
-      return null;
-    }
-    return resp.bodyBytes;
-  }
+  List<int>? _defaultDownloadBytes(String url) =>
+      _downloadFollowingRedirects(url, _propertyReader);
 
   /// Resolves auth headers matching [url] against configured trackers in
   /// [reader] (Jira `Authorization` + `X-Atlassian-Token`, or ADO `Basic` PAT).
@@ -434,6 +443,43 @@ class TicketInputContextBuilder {
     PropertyReader reader,
   ) =>
       _jiraHeadersForUrl(url, reader) ?? _adoHeadersForUrl(url, reader);
+}
+
+/// Downloads [url] following up to 5 HTTP 3xx redirects while re-resolving
+/// origin-scoped auth headers per hop so Jira Cloud 303 redirects to
+/// `api.media.atlassian.com` do not forward Jira `Basic` auth (gh-461).
+List<int>? _downloadFollowingRedirects(String url, PropertyReader reader) {
+  var current = url;
+  for (var hop = 0; hop <= 5; hop++) {
+    final headers = TicketInputContextBuilder.resolveAuthHeadersForUrl(
+      current,
+      reader,
+    );
+    final resp = SyncHttpClient.get(
+      current,
+      headers: headers,
+      followRedirects: false,
+    );
+    if (resp.isOk) return resp.bodyBytes;
+    final location = _locationHeader(resp.headers);
+    if (!resp.isRedirect || location == null || hop == 5) {
+      stderr.writeln(
+        'Attachment download failed (HTTP ${resp.statusCode}) for $current',
+      );
+      return null;
+    }
+    current = Uri.parse(current).resolve(location).toString();
+  }
+  return null;
+}
+
+String? _locationHeader(Map<String, String> headers) {
+  for (final entry in headers.entries) {
+    if (entry.key.toLowerCase() == 'location' && entry.value.isNotEmpty) {
+      return entry.value;
+    }
+  }
+  return null;
 }
 
 Map<String, String>? _jiraHeadersForUrl(String url, PropertyReader reader) {
@@ -467,10 +513,14 @@ bool _matchesHost(
   String? configuredBase, {
   required bool allowEmptyBase,
 }) {
-  final baseHost = configuredBase != null && configuredBase.isNotEmpty
-      ? (Uri.tryParse(configuredBase)?.host.toLowerCase() ?? '')
-      : '';
+  final baseUri = configuredBase != null && configuredBase.isNotEmpty
+      ? Uri.tryParse(configuredBase)
+      : null;
+  final baseHost = baseUri?.host.toLowerCase() ?? '';
   if (baseHost.isEmpty) return allowEmptyBase;
-  final urlHost = Uri.tryParse(url)?.host.toLowerCase() ?? '';
-  return urlHost == baseHost;
+  final urlUri = Uri.tryParse(url);
+  if (urlUri == null || urlUri.host.isEmpty) return false;
+  return urlUri.scheme.toLowerCase() == (baseUri?.scheme.toLowerCase() ?? '') &&
+      urlUri.host.toLowerCase() == baseHost &&
+      urlUri.port == baseUri?.port;
 }

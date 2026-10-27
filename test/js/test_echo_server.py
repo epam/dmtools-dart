@@ -1077,9 +1077,7 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             payload.clear()
             payload["nodes"] = nodes
         if (self.command == "GET"
-                and "/_apis/wit/workItems/" in self.path
-                and "/comments" in self.path):
-            payload.clear()
+                and "/_apis/wit/workItems/55/comments" in self.path):
             payload["comments"] = [{
                 "createdBy": {"displayName": "Ada"},
                 "createdDate": "2026-01-01",

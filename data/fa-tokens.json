@@ -1,72 +1,4 @@
 {
-  "issue-380": [
-    {
-      "leg": "dev",
-      "at": "2026-10-10T19:30:29Z",
-      "prompt": 174103,
-      "completion": 62756,
-      "total": 236859,
-      "model": ""
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-10T19:58:22Z",
-      "prompt": 78036,
-      "completion": 24098,
-      "total": 102134,
-      "model": ""
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-10T20:47:18Z",
-      "prompt": 54474,
-      "completion": 14672,
-      "total": 69146,
-      "model": ""
-    }
-  ],
-  "pr-387": [
-    {
-      "leg": "review",
-      "at": "2026-10-12T08:59:18Z",
-      "prompt": 6696,
-      "completion": 0,
-      "total": 6696,
-      "model": "kimi-for-coding"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-12T09:10:54Z",
-      "prompt": 14571,
-      "completion": 0,
-      "total": 14571,
-      "model": "kimi-for-coding"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-12T09:49:39Z",
-      "prompt": 22394,
-      "completion": 0,
-      "total": 22394,
-      "model": "kimi-for-coding"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-12T10:00:27Z",
-      "prompt": 30216,
-      "completion": 0,
-      "total": 30216,
-      "model": "kimi-for-coding"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-12T10:06:56Z",
-      "prompt": 38038,
-      "completion": 0,
-      "total": 38038,
-      "model": "kimi-for-coding"
-    }
-  ],
   "pr-392": [
     {
       "leg": "review",
@@ -427,17 +359,6 @@
       "total": 92423,
       "cacheRead": 287642,
       "model": "claude-haiku-5.5"
-    }
-  ],
-  "pr-390": [
-    {
-      "leg": "review",
-      "at": "2026-10-13T17:38:40Z",
-      "prompt": 83588,
-      "completion": 22283,
-      "total": 105871,
-      "cacheRead": 1271296,
-      "model": "glm-5.3-flash"
     }
   ],
   "issue-401": [
@@ -3452,6 +3373,17 @@
       "completion": 42778,
       "total": 154641,
       "cacheRead": 1184242,
+      "model": "claude-haiku-5.5"
+    }
+  ],
+  "pr-463": [
+    {
+      "leg": "review",
+      "at": "2026-10-27T23:06:39Z",
+      "prompt": 83875,
+      "completion": 20656,
+      "total": 104531,
+      "cacheRead": 863330,
       "model": "claude-haiku-5.5"
     }
   ]

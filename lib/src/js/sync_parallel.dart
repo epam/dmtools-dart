@@ -106,10 +106,10 @@ Future<void> serveSyncWorker(
   boot.handshake.send(inbox.sendPort);
   await for (final message in inbox) {
     if (message == 'shutdown') {
-      // The pool's dispose sentinel: stop serving and tear down this
-      // worker's per-isolate HTTP worker (mirror of
-      // SyncHttpBridge._httpWorkerEntry — the sentinel must end the loop,
-      // or every dispose leaks the worker isolates).
+      // The pool's dispose sentinel: stop serving, close the ReceivePort so
+      // the isolate can exit cleanly, and tear down this worker's per-isolate
+      // HTTP worker.
+      inbox.close();
       SyncHttpBridge.shared.dispose();
       return;
     }

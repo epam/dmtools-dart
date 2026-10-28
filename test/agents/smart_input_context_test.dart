@@ -28,6 +28,7 @@ void main() {
   smartContextFigmaTests();
   smartContextLinkedTicketTests();
   smartContextJobWiringTests();
+  parallelInputConfigTests();
   parallelInputResilienceTests();
   parallelInputExecutionTests();
 }
@@ -424,8 +425,8 @@ void smartContextJobWiringTests() {
   });
 }
 
-void parallelInputResilienceTests() {
-  group('InputContextParallel config & resilience', () {
+void parallelInputConfigTests() {
+  group('InputContextParallel config & PropertyReader', () {
     test('parses clientConcurrency, parallelClients, and overrides', () {
       expect(clampInputClientConcurrency(0), 1);
       expect(clampInputClientConcurrency(99), maxInputClientConcurrency);
@@ -443,30 +444,38 @@ void parallelInputResilienceTests() {
       expect(cfg.concurrencyFor('figma'), 2);
       expect(cfg.concurrencyFor('attachments'), 5);
       expect(cfg.concurrencyFor('tickets'), 4);
-      PropertyReader.setOverrides({
-        'INPUT_TICKETS_CONCURRENCY': '6',
-        'INPUT_CLIENT_CONCURRENCY': '5',
-        'CONFLUENCE_PARALLELISM': '7',
-        'INPUT_PARALLEL_CLIENTS': 'false',
-        'INPUT_DOWNLOAD_RETRY_ATTEMPTS': '3',
-        'INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS': '200',
-      });
-      final reader = PropertyReader();
-      expect(reader.isInputParallelClientsEnabled(), isFalse);
-      expect(reader.getInputClientConcurrency(), 5);
-      expect(reader.getInputConcurrencyForClient('tickets'), 6);
-      expect(reader.getInputConcurrencyForClient('confluence'), 7);
-      expect(reader.getInputDownloadRetryAttempts(), 3);
-      expect(reader.getInputDownloadRetryBaseDelayMs(), 200);
-      expect(cfg.concurrencyFor('tickets', reader), 6);
-      expect(cfg.concurrencyFor('confluence', reader), 7);
-      expect(cfg.concurrencyFor('jira', reader), 5);
-      expect(InputContextConfig().isParallelClientsEnabled(reader), isFalse);
+      _verifyPropertyReaderConcurrencyGetters(cfg);
       final child = cfg.forLinkedTicket();
       expect(child.clientConcurrency, 4);
       expect(child.concurrencyFor('figma'), 2);
     });
+  });
+}
 
+void _verifyPropertyReaderConcurrencyGetters(InputContextConfig cfg) {
+  PropertyReader.setOverrides({
+    'INPUT_TICKETS_CONCURRENCY': '6',
+    'INPUT_CLIENT_CONCURRENCY': '5',
+    'CONFLUENCE_PARALLELISM': '7',
+    'INPUT_PARALLEL_CLIENTS': 'false',
+    'INPUT_DOWNLOAD_RETRY_ATTEMPTS': '3',
+    'INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS': '200',
+  });
+  final reader = PropertyReader();
+  expect(reader.isInputParallelClientsEnabled(), isFalse);
+  expect(reader.getInputClientConcurrency(), 5);
+  expect(reader.getInputConcurrencyForClient('tickets'), 6);
+  expect(reader.getInputConcurrencyForClient('confluence'), 7);
+  expect(reader.getInputDownloadRetryAttempts(), 3);
+  expect(reader.getInputDownloadRetryBaseDelayMs(), 200);
+  expect(cfg.concurrencyFor('tickets', reader), 6);
+  expect(cfg.concurrencyFor('confluence', reader), 7);
+  expect(cfg.concurrencyFor('jira', reader), 5);
+  expect(InputContextConfig().isParallelClientsEnabled(reader), isFalse);
+}
+
+void parallelInputResilienceTests() {
+  group('InputContextParallel resilience', () {
     test('downloadAttachmentBytesResilient retries 429/503 and stops on 404',
         () {
       final sleeps = <int>[];

@@ -187,18 +187,13 @@ class TicketSmartSources {
   }
 
   SyncParallelJob? _buildConfluenceLaneJob(
-    String contextPath,
-    String text,
-    InputContextConfig config,
-  ) {
-    if (!config.isSourceEnabled('confluence') ||
+      String contextPath, String text, InputContextConfig cfg) {
+    if (!cfg.isSourceEnabled('confluence') ||
         !capabilities.isConfluenceConfigured) {
       return null;
     }
     final urls = TicketReferenceExtractor.extractConfluenceUrls(
-      reader.getConfluenceBasePath(),
-      text,
-    );
+        reader.getConfluenceBasePath(), text);
     if (urls.isEmpty) return null;
     return SyncParallelJob(
       index: 0,
@@ -206,10 +201,10 @@ class TicketSmartSources {
       args: <String, dynamic>{
         'urls': urls,
         'outDir': '$contextPath/confluence',
-        'depth': config.confluenceDepth,
+        'depth': cfg.confluenceDepth,
         'downloadAttachments':
-            config.confluenceAttachments && !config.skipAllAttachments,
-        'includeComments': config.includeConfluenceComments,
+            cfg.confluenceAttachments && !cfg.skipAllAttachments,
+        'includeComments': cfg.includeConfluenceComments,
         'overrides': capturePropertyOverrides(),
         'testIsolation': PropertyReader.testIsolation,
       },

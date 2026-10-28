@@ -30,6 +30,7 @@ import 'ticket_smart_sources.dart';
 typedef AttachmentDownloader = List<int>? Function(String url);
 
 typedef _AttachmentRef = ({String name, String url});
+typedef _AttachmentDownloadCounts = ({int succeeded, int failed});
 
 /// Builds the input context folder for CliAgent from tracker ticket data.
 ///
@@ -324,14 +325,16 @@ class TicketInputContextBuilder {
       for (final att in attachments)
         if (!(skipVideo && isVideoFile(att.name))) att,
     ];
+    final skipped = attachments.length - filtered.length;
     final counts = _executeAttachmentDownloads(dir, filtered, concurrency);
+    final skippedSuffix = skipped > 0 ? ', $skipped skipped' : '';
     stdout.writeln(
       '📊 Attachment download summary: ${counts.succeeded} succeeded, '
-      '${counts.failed} failed out of ${attachments.length} total',
+      '${counts.failed} failed$skippedSuffix out of ${attachments.length} total',
     );
   }
 
-  ({int succeeded, int failed}) _executeAttachmentDownloads(
+  _AttachmentDownloadCounts _executeAttachmentDownloads(
     String dir,
     List<_AttachmentRef> attachments,
     int concurrency,
@@ -345,7 +348,7 @@ class TicketInputContextBuilder {
     return _downloadAttachmentsSequential(dir, attachments);
   }
 
-  ({int succeeded, int failed}) _downloadAttachmentsSequential(
+  _AttachmentDownloadCounts _downloadAttachmentsSequential(
     String dir,
     List<_AttachmentRef> attachments,
   ) {
@@ -362,7 +365,7 @@ class TicketInputContextBuilder {
     return (succeeded: succeeded, failed: failed);
   }
 
-  ({int succeeded, int failed}) _downloadAttachmentsParallel(
+  _AttachmentDownloadCounts _downloadAttachmentsParallel(
     String dir,
     List<_AttachmentRef> attachments,
     int concurrency,

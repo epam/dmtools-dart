@@ -41,21 +41,15 @@ const String kInputJobFetchTicket = 'fetch-ticket';
 /// Job kind: run the Confluence downloader lane.
 const String kInputJobConfluenceLane = 'confluence-lane';
 
-/// Default retry attempts for an attachment download when transient or
-/// rate-limit errors occur on top of [SyncHttpClient]'s transport retries.
-const int defaultInputDownloadRetryAttempts = 3;
-
-/// Default base backoff delay (ms) between attachment download retries.
-const int defaultInputDownloadRetryBaseDelayMs = 500;
-
 /// Registry of per-client worker pools used during input context building.
 class InputContextParallelPools {
   InputContextParallelPools._();
 
   static SyncWorkerPool? _orchestratorPool;
-  static SyncWorkerPool? _attachmentsPool;
-  static SyncWorkerPool? _figmaPool;
-  static SyncWorkerPool? _ticketsPool;
+  static final Map<int, SyncWorkerPool> _attachmentsPools =
+      <int, SyncWorkerPool>{};
+  static final Map<int, SyncWorkerPool> _figmaPools = <int, SyncWorkerPool>{};
+  static final Map<int, SyncWorkerPool> _ticketsPools = <int, SyncWorkerPool>{};
 
   /// Pool that runs separate integration client lanes concurrently.
   static SyncWorkerPool get orchestratorPool =>
@@ -66,28 +60,43 @@ class InputContextParallelPools {
       );
 
   /// Pool for ticket attachment downloads (default 3 workers).
-  static SyncWorkerPool attachmentsPool([int workers = 3]) =>
-      _attachmentsPool ??= SyncWorkerPool(
+  static SyncWorkerPool attachmentsPool([int workers = 3]) {
+    final w = clampInputClientConcurrency(workers);
+    return _attachmentsPools.putIfAbsent(
+      w,
+      () => SyncWorkerPool(
         _inputContextWorkerEntry,
-        name: 'input-attachments',
-        workerCount: clampInputClientConcurrency(workers),
-      );
+        name: 'input-attachments-$w',
+        workerCount: w,
+      ),
+    );
+  }
 
   /// Pool for Figma design metadata & image downloads (default 3 workers).
-  static SyncWorkerPool figmaPool([int workers = 3]) =>
-      _figmaPool ??= SyncWorkerPool(
+  static SyncWorkerPool figmaPool([int workers = 3]) {
+    final w = clampInputClientConcurrency(workers);
+    return _figmaPools.putIfAbsent(
+      w,
+      () => SyncWorkerPool(
         _inputContextWorkerEntry,
-        name: 'input-figma',
-        workerCount: clampInputClientConcurrency(workers),
-      );
+        name: 'input-figma-$w',
+        workerCount: w,
+      ),
+    );
+  }
 
   /// Pool for linked ticket hydration across Jira/GitHub/ADO (default 3 workers).
-  static SyncWorkerPool ticketsPool([int workers = 3]) =>
-      _ticketsPool ??= SyncWorkerPool(
+  static SyncWorkerPool ticketsPool([int workers = 3]) {
+    final w = clampInputClientConcurrency(workers);
+    return _ticketsPools.putIfAbsent(
+      w,
+      () => SyncWorkerPool(
         _inputContextWorkerEntry,
-        name: 'input-tickets',
-        workerCount: clampInputClientConcurrency(workers),
-      );
+        name: 'input-tickets-$w',
+        workerCount: w,
+      ),
+    );
+  }
 
   /// Boots the per-client worker pools while the main isolate's event loop is
   /// alive (before `TicketInputContextBuilder.build` runs).
@@ -100,22 +109,24 @@ class InputContextParallelPools {
     void Function(String message)? onError,
   }) async {
     final cfg = config ?? InputContextConfig();
-    if (!cfg.isParallelClientsEnabled(reader) && cfg.clientConcurrency <= 1)
-      return;
+    final parallelLanes = cfg.isParallelClientsEnabled(reader);
     final caps = SourceCapabilities(reader);
     final futures = <Future<void>>[
-      _bootOne(orchestratorPool, onError),
-      _bootOne(
-        attachmentsPool(cfg.concurrencyFor('attachments', reader)),
-        onError,
-      ),
-      if (caps.isFigmaConfigured)
+      if (parallelLanes) _bootOne(orchestratorPool, onError),
+      if (cfg.concurrencyFor('attachments', reader) > 1)
+        _bootOne(
+          attachmentsPool(cfg.concurrencyFor('attachments', reader)),
+          onError,
+        ),
+      if (caps.isFigmaConfigured && cfg.concurrencyFor('figma', reader) > 1)
         _bootOne(figmaPool(cfg.concurrencyFor('figma', reader)), onError),
-      if (caps.isJiraConfigured ||
-          caps.isGithubConfigured ||
-          caps.isAdoConfigured)
+      if ((caps.isJiraConfigured ||
+              caps.isGithubConfigured ||
+              caps.isAdoConfigured) &&
+          cfg.concurrencyFor('tickets', reader) > 1)
         _bootOne(ticketsPool(cfg.concurrencyFor('tickets', reader)), onError),
-      if (caps.isConfluenceConfigured)
+      if (caps.isConfluenceConfigured &&
+          cfg.concurrencyFor('confluence', reader) > 1)
         bootConfluenceSyncPool(
           reader,
           onError: onError ?? stderr.writeln,
@@ -142,12 +153,18 @@ class InputContextParallelPools {
   static void disposeAll() {
     _orchestratorPool?.dispose();
     _orchestratorPool = null;
-    _attachmentsPool?.dispose();
-    _attachmentsPool = null;
-    _figmaPool?.dispose();
-    _figmaPool = null;
-    _ticketsPool?.dispose();
-    _ticketsPool = null;
+    for (final p in _attachmentsPools.values) {
+      p.dispose();
+    }
+    _attachmentsPools.clear();
+    for (final p in _figmaPools.values) {
+      p.dispose();
+    }
+    _figmaPools.clear();
+    for (final p in _ticketsPools.values) {
+      p.dispose();
+    }
+    _ticketsPools.clear();
     confluenceSyncWorkerPool.dispose();
   }
 }
@@ -241,7 +258,8 @@ List<Map<String, dynamic>?> runBoundedClientJobs(
 Map<String, dynamic>? _runInlineSafe(SyncParallelJob job) {
   try {
     return runInputContextWorkerJob(job.kind, job.args);
-  } catch (_) {
+  } catch (e) {
+    stderr.writeln('dmtools: input context job (${job.kind}) failed: $e');
     return null;
   }
 }
@@ -272,17 +290,19 @@ Map<String, dynamic>? _executeAttachmentDownloadJob(
       : const {'ok': false};
 }
 
-/// Writes [bytes] to [outPath] atomically (via a temporary sibling file or
-/// cleanup-on-failure) so a failed write never leaves a corrupt partial file.
+/// Writes [bytes] to [outPath] atomically via a `.part` temporary sibling file
+/// and rename so a failed write never leaves a corrupt partial file.
 bool writeAttachmentBytesAtomically(String outPath, List<int> bytes) {
   final file = File(outPath);
+  final partFile = File('$outPath.part');
   try {
     file.parent.createSync(recursive: true);
-    file.writeAsBytesSync(bytes, flush: true);
+    partFile.writeAsBytesSync(bytes, flush: true);
+    partFile.renameSync(outPath);
     return true;
   } catch (_) {
     try {
-      if (file.existsSync()) file.deleteSync();
+      if (partFile.existsSync()) partFile.deleteSync();
     } catch (_) {}
     return false;
   }
@@ -426,6 +446,13 @@ Map<String, dynamic>? _executeFigmaRefJob(
   return const {'ok': true};
 }
 
+List<String> _nonEmptyStringList(dynamic raw) =>
+    (raw as List?)
+        ?.map((e) => e.toString())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false) ??
+    const <String>[];
+
 Map<String, dynamic>? _executeFetchTicketJob(
   PropertyReader reader,
   Map<String, dynamic> args,
@@ -441,11 +468,7 @@ Map<String, dynamic>? _executeConfluenceLaneJob(
   PropertyReader reader,
   Map<String, dynamic> args,
 ) {
-  final urls = (args['urls'] as List?)
-          ?.map((e) => e.toString())
-          .where((s) => s.isNotEmpty)
-          .toList(growable: false) ??
-      const <String>[];
+  final urls = _nonEmptyStringList(args['urls']);
   final outDir = args['outDir']?.toString() ?? '';
   if (urls.isEmpty || outDir.isEmpty) return const {'ok': false};
   ConfluenceSyncTools(reader).dispatch('confluence_download_pages', {

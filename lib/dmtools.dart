@@ -12,6 +12,7 @@ export 'src/agents/cli_command_builder.dart';
 export 'src/agents/cli_execution_helper.dart';
 export 'src/agents/instruction_processor.dart';
 export 'src/agents/input_context_config.dart';
+export 'src/agents/input_context_parallel.dart';
 export 'src/agents/teammate_job.dart';
 export 'src/agents/ticket_input_context_builder.dart';
 export 'src/agents/ticket_reference_extractor.dart';

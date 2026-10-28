@@ -20,6 +20,8 @@ import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/sync_http_client.dart';
 import 'input_context_config.dart';
+import '../js/sync_parallel.dart';
+import 'input_context_parallel.dart';
 import 'ticket_reference_extractor.dart';
 import 'ticket_smart_sources.dart';
 
@@ -28,6 +30,7 @@ import 'ticket_smart_sources.dart';
 typedef AttachmentDownloader = List<int>? Function(String url);
 
 typedef _AttachmentRef = ({String name, String url});
+typedef _AttachmentDownloadCounts = ({int succeeded, int failed});
 
 /// Builds the input context folder for CliAgent from tracker ticket data.
 ///
@@ -148,6 +151,8 @@ class TicketInputContextBuilder {
       include: includeAttachments ?? effectiveConfig.includeAttachments,
       skipAll: skipAllAttachments ?? effectiveConfig.skipAllAttachments,
       skipVideo: skipVideoAttachments ?? effectiveConfig.skipVideoAttachments,
+      concurrency:
+          effectiveConfig.concurrencyFor('attachments', _propertyReader),
     );
     (_smartSources ??= TicketSmartSources(_propertyReader)).resolveAll(
       workingDirectory: workingDirectory,
@@ -306,6 +311,7 @@ class TicketInputContextBuilder {
     required bool include,
     required bool skipAll,
     required bool skipVideo,
+    int concurrency = defaultInputClientConcurrency,
   }) {
     if (!include || skipAll) return;
     final attachments = _extractAttachments(ticket);
@@ -315,20 +321,85 @@ class TicketInputContextBuilder {
     stdout.writeln(
       '⬇️ Downloading ${attachments.length} attachments for ticket $key',
     );
+    final filtered = [
+      for (final att in attachments)
+        if (!(skipVideo && isVideoFile(att.name))) att,
+    ];
+    final skipped = attachments.length - filtered.length;
+    final counts = _executeAttachmentDownloads(dir, filtered, concurrency);
+    final skippedSuffix = skipped > 0 ? ', $skipped skipped' : '';
+    stdout.writeln(
+      '📊 Attachment download summary: ${counts.succeeded} succeeded, '
+      '${counts.failed} failed$skippedSuffix out of ${attachments.length} total',
+    );
+  }
+
+  _AttachmentDownloadCounts _executeAttachmentDownloads(
+    String dir,
+    List<_AttachmentRef> attachments,
+    int concurrency,
+  ) {
+    if (_attachmentDownloader == null &&
+        concurrency > 1 &&
+        attachments.length > 1 &&
+        InputContextParallelPools.attachmentsPool(concurrency).ready) {
+      return _downloadAttachmentsParallel(dir, attachments, concurrency);
+    }
+    return _downloadAttachmentsSequential(dir, attachments);
+  }
+
+  _AttachmentDownloadCounts _downloadAttachmentsSequential(
+    String dir,
+    List<_AttachmentRef> attachments,
+  ) {
     final downloader = _attachmentDownloader ?? _defaultDownloadBytes;
     var succeeded = 0;
     var failed = 0;
     for (final att in attachments) {
-      if (skipVideo && isVideoFile(att.name)) continue;
       if (_downloadSingleAttachment(dir, att, downloader)) {
         succeeded++;
       } else {
         failed++;
       }
     }
-    stdout.writeln(
-      '📊 Attachment download summary: $succeeded succeeded, $failed failed '
-      'out of ${attachments.length} total',
+    return (succeeded: succeeded, failed: failed);
+  }
+
+  _AttachmentDownloadCounts _downloadAttachmentsParallel(
+    String dir,
+    List<_AttachmentRef> attachments,
+    int concurrency,
+  ) {
+    final overrides = capturePropertyOverrides();
+    final jobs = <SyncParallelJob>[];
+    var invalidCount = 0;
+    for (final att in attachments) {
+      final safeName = sanitizeAttachmentFileName(att.name.trim());
+      final url = att.url.trim();
+      if (safeName.isEmpty || url.isEmpty) {
+        invalidCount++;
+        continue;
+      }
+      jobs.add(SyncParallelJob(
+        index: jobs.length,
+        kind: kInputJobAttachmentDownload,
+        args: <String, dynamic>{
+          'url': url,
+          'outPath': '$dir/$safeName',
+          'overrides': overrides,
+          'testIsolation': PropertyReader.testIsolation,
+        },
+      ));
+    }
+    final results = runBoundedClientJobs(
+      jobs,
+      pool: InputContextParallelPools.attachmentsPool(concurrency),
+      maxConcurrency: concurrency,
+    );
+    final succeeded = results.where((r) => r != null && r['ok'] == true).length;
+    return (
+      succeeded: succeeded,
+      failed: (results.length - succeeded) + invalidCount,
     );
   }
 
@@ -486,7 +557,7 @@ class TicketInputContextBuilder {
   /// Default HTTP attachment downloader using [SyncHttpClient] and
   /// tracker auth headers from [_propertyReader].
   List<int>? _defaultDownloadBytes(String url) =>
-      _downloadFollowingRedirects(url, _propertyReader);
+      downloadAttachmentBytesResilient(url, _propertyReader);
 
   /// Resolves auth headers matching [url] against configured trackers in
   /// [reader] (Jira `Authorization` + `X-Atlassian-Token`, ADO `Basic` PAT,
@@ -498,43 +569,6 @@ class TicketInputContextBuilder {
       _jiraHeadersForUrl(url, reader) ??
       _adoHeadersForUrl(url, reader) ??
       _githubHeadersForUrl(url, reader);
-}
-
-/// Downloads [url] following up to 5 HTTP 3xx redirects while re-resolving
-/// origin-scoped auth headers per hop so Jira Cloud 303 redirects to
-/// `api.media.atlassian.com` do not forward Jira `Basic` auth (gh-461).
-List<int>? _downloadFollowingRedirects(String url, PropertyReader reader) {
-  var current = url;
-  for (var hop = 0; hop <= 5; hop++) {
-    final headers = TicketInputContextBuilder.resolveAuthHeadersForUrl(
-      current,
-      reader,
-    );
-    final resp = SyncHttpClient.get(
-      current,
-      headers: headers,
-      followRedirects: false,
-    );
-    if (resp.isOk) return resp.bodyBytes;
-    final location = _locationHeader(resp.headers);
-    if (!resp.isRedirect || location == null || hop == 5) {
-      stderr.writeln(
-        'Attachment download failed (HTTP ${resp.statusCode}) for $current',
-      );
-      return null;
-    }
-    current = Uri.parse(current).resolve(location).toString();
-  }
-  return null;
-}
-
-String? _locationHeader(Map<String, String> headers) {
-  for (final entry in headers.entries) {
-    if (entry.key.toLowerCase() == 'location' && entry.value.isNotEmpty) {
-      return entry.value;
-    }
-  }
-  return null;
 }
 
 Map<String, String>? _jiraHeadersForUrl(String url, PropertyReader reader) {

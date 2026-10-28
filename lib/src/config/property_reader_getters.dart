@@ -608,4 +608,87 @@ extension PropertyReaderGetters on PropertyReader {
 
   /// Jenkins API token. Key: `JENKINS_API_TOKEN`.
   String? getJenkinsApiToken() => getValue(PropertyNames.JENKINS_API_TOKEN);
+
+  // --- Input Context Parallelism & Resilience ---
+
+  /// Whether input context clients run in parallel lanes.
+  /// Key: `INPUT_PARALLEL_CLIENTS`, default: true.
+  bool isInputParallelClientsEnabled() {
+    final v = getValue(PropertyNames.INPUT_PARALLEL_CLIENTS)?.trim();
+    if (v == null || v.isEmpty) return true;
+    return v.toLowerCase() != 'false' && v != '0';
+  }
+
+  /// Default per-client worker concurrency for input context downloads.
+  /// Key: `INPUT_CLIENT_CONCURRENCY`, default: 3, clamped to `1..16`.
+  int getInputClientConcurrency() => _parseClampedInputConcurrency(
+        getValue(PropertyNames.INPUT_CLIENT_CONCURRENCY),
+        3,
+      );
+
+  /// Per-client worker concurrency override for [client] (`confluence`,
+  /// `figma`, `jira`, `github`, `ado`, `attachments`, `tickets`).
+  ///
+  /// Checks `INPUT_<CLIENT>_CONCURRENCY`, then `CONFLUENCE_PARALLELISM` (when
+  /// [client] is `confluence`), and returns `null` when unset.
+  int? getInputConcurrencyForClient(String client) {
+    final propName = _inputClientPropertyName(client);
+    final primary = propName != null ? getValue(propName) : null;
+    final parsedPrimary = int.tryParse((primary ?? '').trim());
+    if (parsedPrimary != null) {
+      return _clampConcurrencyValue(parsedPrimary);
+    }
+    if (client.trim().toLowerCase() == 'confluence') {
+      final confRaw = getValue(PropertyNames.CONFLUENCE_PARALLELISM);
+      final parsedConf = int.tryParse((confRaw ?? '').trim());
+      if (parsedConf != null) return _clampConcurrencyValue(parsedConf);
+    }
+    return null;
+  }
+
+  /// Max retry attempts for transient/rate-limited input attachment downloads.
+  /// Key: `INPUT_DOWNLOAD_RETRY_ATTEMPTS`, default: 4, clamped to `1..10`.
+  int getInputDownloadRetryAttempts() {
+    final v = int.tryParse(
+      (getValue(PropertyNames.INPUT_DOWNLOAD_RETRY_ATTEMPTS) ?? '').trim(),
+    );
+    if (v == null) return 4;
+    if (v < 1) return 1;
+    if (v > 10) return 10;
+    return v;
+  }
+
+  /// Base backoff delay (ms) for input attachment download retries.
+  /// Key: `INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS`, default: 350.
+  int getInputDownloadRetryBaseDelayMs() {
+    final v = int.tryParse(
+      (getValue(PropertyNames.INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS) ?? '').trim(),
+    );
+    if (v == null || v < 0) return 350;
+    return v;
+  }
 }
+
+int _parseClampedInputConcurrency(String? raw, int fallback) {
+  final parsed = int.tryParse((raw ?? '').trim());
+  return _clampConcurrencyValue(parsed ?? fallback);
+}
+
+int _clampConcurrencyValue(int value) {
+  if (value < 1) return 1;
+  if (value > 16) return 16;
+  return value;
+}
+
+const Map<String, String> _inputClientPropertyNames = {
+  'confluence': PropertyNames.INPUT_CONFLUENCE_CONCURRENCY,
+  'figma': PropertyNames.INPUT_FIGMA_CONCURRENCY,
+  'jira': PropertyNames.INPUT_JIRA_CONCURRENCY,
+  'github': PropertyNames.INPUT_GITHUB_CONCURRENCY,
+  'ado': PropertyNames.INPUT_ADO_CONCURRENCY,
+  'attachments': PropertyNames.INPUT_ATTACHMENTS_CONCURRENCY,
+  'tickets': PropertyNames.INPUT_TICKETS_CONCURRENCY,
+};
+
+String? _inputClientPropertyName(String client) =>
+    _inputClientPropertyNames[client.trim().toLowerCase()];

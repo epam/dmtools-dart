@@ -148,7 +148,11 @@ Future<void> _httpWorkerEntry(_WorkerInit init) async {
     ..autoUncompress = false // curl parity: no implicit gzip decoding
     ..findProxy = HttpClient.findProxyFromEnvironment; // http_proxy parity
   await for (final message in inbox) {
-    if (message == 'shutdown') return;
+    if (message == 'shutdown') {
+      inbox.close();
+      client.close(force: true);
+      return;
+    }
     await _serveOne(client, responses, message as Uint8List);
   }
 }

@@ -38,6 +38,8 @@ import '../pack/pack_provenance.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
+import '../js/sync_http_bridge.dart';
+import 'input_context_parallel.dart';
 import 'ticket_input_context_builder.dart';
 import 'ticket_smart_sources.dart';
 
@@ -146,7 +148,7 @@ class CliAgent {
       await _executeScriptHook('setup', params.setup, workDir, null);
       _executeJsAction('preJSAction', params.preJSAction, null, null, workDir,
           skip: params.skipPreJSAction);
-      _inputContextPath = _createInputContext(workDir);
+      _inputContextPath = await _createInputContext(workDir);
       _executeJsAction(
         'preCliJSAction',
         params.preCliJSAction,
@@ -663,14 +665,12 @@ class CliAgent {
   }
 
   /// Creates the input context folder: `input/<contextId>/`.
-  ///
-  /// When resolved ticket data is set (fetched from a tracker, or loaded by
-  /// convention from `input/<contextId>/ticket.json`), the folder is
-  /// populated with `ticket.md`, `ticket.json`, `subtasks/`, and
-  /// `comments.md` via [TicketInputContextBuilder]. Otherwise an empty
-  /// folder is created — the ticket-agnostic behavior.
-  String _createInputContext(String workDir) {
+  Future<String> _createInputContext(String workDir) async {
     final config = params.effectiveInputContextConfig;
+    final resolved = _resolvedTicketData ?? ticketData;
+    if (resolved != null && SyncHttpBridge.shared.ready) {
+      await InputContextParallelPools.bootAll(propertyReader, config: config);
+    }
     return TicketInputContextBuilder(
       workDir,
       propertyReader: propertyReader,
@@ -679,14 +679,12 @@ class CliAgent {
       skipVideoAttachments: params.skipVideoAttachments,
     ).build(
       params.contextId,
-      ticketData: _resolvedTicketData ?? ticketData,
+      ticketData: resolved,
       config: config,
     );
   }
 
-  /// Resolves ticket data from [ticketData], `input/<contextId>/ticket.json`,
-  /// or by fetching `params.effectiveInputContextConfig.ticket` from the
-  /// configured tracker.
+  /// Resolves ticket data from [ticketData], disk, or `input.ticket`.
   Map<String, dynamic>? _resolveTicketData(String workDir) {
     if (ticketData != null) return ticketData;
     final fromDisk = _readTicketJsonFromDisk(workDir);

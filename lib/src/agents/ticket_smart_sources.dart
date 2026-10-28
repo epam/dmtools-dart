@@ -18,8 +18,12 @@ import '../js/sync_tools/confluence_sync_tools.dart';
 import '../js/sync_tools/figma_sync_tools.dart';
 import '../js/sync_tools/jira_sync_tools.dart';
 import 'input_context_config.dart';
+import '../js/sync_parallel.dart';
+import 'input_context_parallel.dart';
 import 'ticket_input_context_builder.dart';
 import 'ticket_reference_extractor.dart';
+
+typedef _FetchedTicketEntry = ({String key, Map<String, dynamic> ticket});
 
 /// Resolves and writes smart context sources (`confluence/`, `figma/`, and
 /// sibling `input/<linkedKey>/` folders) for a ticket.
@@ -31,6 +35,9 @@ class TicketSmartSources {
     FigmaSyncTools? figmaTools,
     JiraSyncTools? jiraTools,
   })  : capabilities = SourceCapabilities(reader),
+        _hasCustomConfluenceTools = confluenceTools != null,
+        _hasCustomFigmaTools = figmaTools != null,
+        _hasCustomJiraTools = jiraTools != null,
         _confluenceTools = confluenceTools ?? ConfluenceSyncTools(reader),
         _figmaTools = figmaTools ?? FigmaSyncTools(reader),
         _jiraTools = jiraTools ?? const JiraSyncTools();
@@ -44,6 +51,9 @@ class TicketSmartSources {
   final ConfluenceSyncTools _confluenceTools;
   final FigmaSyncTools _figmaTools;
   final JiraSyncTools _jiraTools;
+  final bool _hasCustomConfluenceTools;
+  final bool _hasCustomFigmaTools;
+  final bool _hasCustomJiraTools;
 
   /// Set of normalized ticket keys already visited in the current recursive
   /// smart-source resolution pass.
@@ -64,21 +74,33 @@ class TicketSmartSources {
     final ticketKey = _ticketKey(ticketData);
     if (ticketKey != null) _visited.add(_normalizeKey(ticketKey));
     final combinedText = _collectTicketText(ticketData, config);
-    _resolveConfluence(contextPath, combinedText, config);
-    _resolveFigma(contextPath, combinedText, config);
-    if (config.includeLinkedTickets) {
-      for (final ignored in _extractIgnoredLinkedKeys(ticketData, config)) {
-        _visited.add(_normalizeKey(ignored));
-      }
-      _resolveLinkedTickets(
-        workingDirectory: workingDirectory,
-        ticketData: ticketData,
-        combinedText: combinedText,
-        config: config,
-        builder: builder,
-        visited: _visited,
-      );
+    final canOffloadConfluence = config.parallelClients &&
+        !_hasCustomConfluenceTools &&
+        InputContextParallelPools.orchestratorPool.ready;
+    final confluenceJob = canOffloadConfluence
+        ? _buildConfluenceLaneJob(contextPath, combinedText, config)
+        : null;
+    if (!canOffloadConfluence) {
+      _resolveConfluence(contextPath, combinedText, config);
     }
+    _resolveFigma(contextPath, combinedText, config);
+    _resolveLinkedIfEnabled(ticketData, combinedText, config, builder);
+    if (confluenceJob != null) {
+      InputContextParallelPools.orchestratorPool.run([confluenceJob]);
+    }
+  }
+
+  void _resolveLinkedIfEnabled(
+    Map<String, dynamic> ticketData,
+    String combinedText,
+    InputContextConfig config,
+    TicketInputContextBuilder builder,
+  ) {
+    if (!config.includeLinkedTickets) return;
+    for (final ignored in _extractIgnoredLinkedKeys(ticketData, config)) {
+      _visited.add(_normalizeKey(ignored));
+    }
+    _resolveLinkedTickets(ticketData, combinedText, config, builder);
   }
 
   /// Collects text from the ticket (and optionally its parent ticket) for URL
@@ -164,6 +186,36 @@ class TicketSmartSources {
     }
   }
 
+  SyncParallelJob? _buildConfluenceLaneJob(
+    String contextPath,
+    String text,
+    InputContextConfig config,
+  ) {
+    if (!config.isSourceEnabled('confluence') ||
+        !capabilities.isConfluenceConfigured) {
+      return null;
+    }
+    final urls = TicketReferenceExtractor.extractConfluenceUrls(
+      reader.getConfluenceBasePath(),
+      text,
+    );
+    if (urls.isEmpty) return null;
+    return SyncParallelJob(
+      index: 0,
+      kind: kInputJobConfluenceLane,
+      args: <String, dynamic>{
+        'urls': urls,
+        'outDir': '$contextPath/confluence',
+        'depth': config.confluenceDepth,
+        'downloadAttachments':
+            config.confluenceAttachments && !config.skipAllAttachments,
+        'includeComments': config.includeConfluenceComments,
+        'overrides': capturePropertyOverrides(),
+        'testIsolation': PropertyReader.testIsolation,
+      },
+    );
+  }
+
   // -- Figma ------------------------------------------------------------
 
   void _resolveFigma(
@@ -178,18 +230,78 @@ class TicketSmartSources {
     if (urls.isEmpty) return;
     final figmaDir = Directory('$contextPath/figma')
       ..createSync(recursive: true);
+    final concurrency = config.concurrencyFor('figma', reader);
+    if (_canDownloadFigmaParallel(urls.length, concurrency)) {
+      _downloadFigmaRefsParallel(figmaDir, urls, config, concurrency);
+      return;
+    }
+    _downloadFigmaRefsSequential(figmaDir, urls, config);
+  }
+
+  bool _canDownloadFigmaParallel(int urlCount, int concurrency) =>
+      !_hasCustomFigmaTools &&
+      concurrency > 1 &&
+      urlCount > 1 &&
+      InputContextParallelPools.figmaPool(concurrency).ready;
+
+  void _downloadFigmaRefsSequential(
+    Directory figmaDir,
+    List<String> urls,
+    InputContextConfig config,
+  ) {
+    final includeAtts = config.includeAttachments && !config.skipAllAttachments;
     var index = 1;
     for (final url in urls) {
-      _downloadSingleFigmaRef(figmaDir, url, index++, config);
+      downloadSingleFigmaUrl(
+        figmaDir,
+        url,
+        index++,
+        includeComments: config.includeComments,
+        includeAttachments: includeAtts,
+      );
     }
   }
 
-  void _downloadSingleFigmaRef(
+  void _downloadFigmaRefsParallel(
+    Directory figmaDir,
+    List<String> urls,
+    InputContextConfig config,
+    int concurrency,
+  ) {
+    final overrides = capturePropertyOverrides();
+    final includeAtts = config.includeAttachments && !config.skipAllAttachments;
+    final jobs = <SyncParallelJob>[
+      for (var i = 0; i < urls.length; i++)
+        SyncParallelJob(
+          index: i,
+          kind: kInputJobFigmaRef,
+          args: <String, dynamic>{
+            'figmaDir': figmaDir.path,
+            'url': urls[i],
+            'index': i + 1,
+            'includeComments': config.includeComments,
+            'includeAttachments': includeAtts,
+            'overrides': overrides,
+            'testIsolation': PropertyReader.testIsolation,
+          },
+        ),
+    ];
+    runBoundedClientJobs(
+      jobs,
+      pool: InputContextParallelPools.figmaPool(concurrency),
+      maxConcurrency: concurrency,
+    );
+  }
+
+  /// Downloads metadata and preview image for a single Figma [url] into
+  /// [figmaDir].
+  void downloadSingleFigmaUrl(
     Directory figmaDir,
     String url,
-    int index,
-    InputContextConfig config,
-  ) {
+    int index, {
+    required bool includeComments,
+    required bool includeAttachments,
+  }) {
     final prefix = _figmaSafePrefix(url, index);
     _writeFigmaMetadataJson(figmaDir, prefix, 'structure.json',
         _figmaTools.dispatch('figma_get_file_structure', {'href': url}));
@@ -200,11 +312,11 @@ class TicketSmartSources {
       _writeFigmaMetadataJson(figmaDir, prefix, 'text.json',
           _figmaTools.dispatch('figma_get_text_content', {'href': url}));
     }
-    if (config.includeComments) {
+    if (includeComments) {
       _writeFigmaMetadataJson(figmaDir, prefix, 'comments.json',
           _figmaTools.dispatch('figma_get_file_comments', {'href': url}));
     }
-    if (config.includeAttachments && !config.skipAllAttachments) {
+    if (includeAttachments) {
       _downloadFigmaPreviewImage(figmaDir, prefix, url);
     }
   }
@@ -283,27 +395,69 @@ class TicketSmartSources {
 
   // -- Linked & Referenced Tickets --------------------------------------
 
-  void _resolveLinkedTickets({
-    required String workingDirectory,
-    required Map<String, dynamic> ticketData,
-    required String combinedText,
-    required InputContextConfig config,
-    required TicketInputContextBuilder builder,
-    required Set<String> visited,
-  }) {
+  void _resolveLinkedTickets(
+    Map<String, dynamic> ticketData,
+    String combinedText,
+    InputContextConfig config,
+    TicketInputContextBuilder builder,
+  ) {
     final keys =
         _collectLinkedAndReferencedKeys(ticketData, combinedText, config);
+    final unvisited = <String>[
+      for (final key in keys)
+        if (_visited.add(_normalizeKey(key))) key,
+    ];
+    if (unvisited.isEmpty) return;
     final nextConfig = config.forLinkedTicket();
-    for (final key in keys) {
-      if (!visited.add(_normalizeKey(key))) continue;
-      final linkedData = fetchTicketByKey(key);
-      if (linkedData == null) continue;
-      builder.build(
-        key,
-        ticketData: linkedData,
-        config: nextConfig,
-      );
+    for (final entry in _fetchLinkedTicketsBatch(unvisited, config)) {
+      builder.build(entry.key, ticketData: entry.ticket, config: nextConfig);
     }
+  }
+
+  List<_FetchedTicketEntry> _fetchLinkedTicketsBatch(
+    List<String> keys,
+    InputContextConfig config,
+  ) {
+    final concurrency = config.concurrencyFor('tickets', reader);
+    if (!_hasCustomJiraTools &&
+        concurrency > 1 &&
+        keys.length > 1 &&
+        InputContextParallelPools.ticketsPool(concurrency).ready) {
+      return _fetchLinkedTicketsParallel(keys, concurrency);
+    }
+    return [
+      for (final key in keys)
+        if (fetchTicketByKey(key) case final data?) (key: key, ticket: data),
+    ];
+  }
+
+  List<_FetchedTicketEntry> _fetchLinkedTicketsParallel(
+    List<String> keys,
+    int concurrency,
+  ) {
+    final overrides = capturePropertyOverrides();
+    final jobs = <SyncParallelJob>[
+      for (var i = 0; i < keys.length; i++)
+        SyncParallelJob(
+          index: i,
+          kind: kInputJobFetchTicket,
+          args: <String, dynamic>{
+            'key': keys[i],
+            'overrides': overrides,
+            'testIsolation': PropertyReader.testIsolation,
+          },
+        ),
+    ];
+    final results = runBoundedClientJobs(
+      jobs,
+      pool: InputContextParallelPools.ticketsPool(concurrency),
+      maxConcurrency: concurrency,
+    );
+    return [
+      for (var i = 0; i < results.length; i++)
+        if (results[i]?['ticket'] case final Map<dynamic, dynamic> rawTicket)
+          (key: keys[i], ticket: Map<String, dynamic>.from(rawTicket)),
+    ];
   }
 
   List<String> _collectLinkedAndReferencedKeys(
@@ -423,18 +577,22 @@ class TicketSmartSources {
     final trimmed = key.trim();
     if (trimmed.isEmpty) return null;
     if (_looksLikeGithubKey(trimmed)) {
-      return capabilities.isGithubConfigured
-          ? _fetchGithubTicket(trimmed)
-          : null;
+      return _fetchGithubIfConfigured(trimmed);
     }
     if (RegExp(r'^\d+$').hasMatch(trimmed)) {
-      return capabilities.isAdoConfigured ? _fetchAdoTicket(trimmed) : null;
+      return _fetchAdoIfConfigured(trimmed);
     }
     if (RegExp(r'^[A-Z][A-Z0-9]+-\d+$').hasMatch(trimmed)) {
       return capabilities.isJiraConfigured ? _fetchJiraTicket(trimmed) : null;
     }
     return null;
   }
+
+  Map<String, dynamic>? _fetchGithubIfConfigured(String key) =>
+      capabilities.isGithubConfigured ? _fetchGithubTicket(key) : null;
+
+  Map<String, dynamic>? _fetchAdoIfConfigured(String id) =>
+      capabilities.isAdoConfigured ? _fetchAdoTicket(id) : null;
 
   bool _looksLikeGithubKey(String key) =>
       RegExp(r'^(?:[\w.-]+/[\w.-]+#\d+|#\d+|gh-\d+)$', caseSensitive: false)
@@ -453,10 +611,9 @@ class TicketSmartSources {
 
   Map<String, dynamic>? _fetchAdoTicket(String id) {
     try {
-      final org = reader.getAdoOrganization();
-      final project = reader.getAdoProject();
-      final pat = reader.getAdoPatToken();
-      if (org == null || project == null || pat == null) return null;
+      final org = reader.getAdoOrganization() ?? '';
+      final project = reader.getAdoProject() ?? '';
+      final pat = reader.getAdoPatToken() ?? '';
       final base = reader.getAdoBasePath();
       final basic = base64Encode(utf8.encode(':$pat'));
       final url =
@@ -465,8 +622,7 @@ class TicketSmartSources {
         url,
         headers: {'Authorization': 'Basic $basic'},
       );
-      if (!resp.isOk) return null;
-      final decoded = jsonDecode(resp.body);
+      final decoded = resp.isOk ? jsonDecode(resp.body) : null;
       if (decoded is! Map<String, dynamic>) return null;
       _attachAdoComments(decoded, '$base/$org/$project/_apis', id, basic);
       return decoded;

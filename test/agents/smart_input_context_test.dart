@@ -28,6 +28,8 @@ void main() {
   smartContextFigmaTests();
   smartContextLinkedTicketTests();
   smartContextJobWiringTests();
+  parallelInputResilienceTests();
+  parallelInputExecutionTests();
 }
 
 void inputContextConfigTests() {
@@ -421,3 +423,186 @@ void smartContextJobWiringTests() {
     expect(File('${tmp.path}/input/PROJ-77/ticket.json').existsSync(), isTrue);
   });
 }
+
+void parallelInputResilienceTests() {
+  group('InputContextParallel config & resilience', () {
+    test('parses clientConcurrency, parallelClients, and overrides', () {
+      expect(clampInputClientConcurrency(0), 1);
+      expect(clampInputClientConcurrency(99), maxInputClientConcurrency);
+      final cfg = InputContextConfig.fromJson({
+        'input': {
+          'ticket': 'PROJ-1',
+          'parallelClients': false,
+          'clientConcurrency': 4,
+          'figmaConcurrency': 2,
+          'attachmentsConcurrency': 5,
+        },
+      });
+      expect(cfg.parallelClients, isFalse);
+      expect(cfg.clientConcurrency, 4);
+      expect(cfg.concurrencyFor('figma'), 2);
+      expect(cfg.concurrencyFor('attachments'), 5);
+      expect(cfg.concurrencyFor('tickets'), 4);
+      PropertyReader.setOverrides({'INPUT_TICKETS_CONCURRENCY': '6'});
+      expect(cfg.concurrencyFor('tickets', PropertyReader()), 6);
+      final child = cfg.forLinkedTicket();
+      expect(child.clientConcurrency, 4);
+      expect(child.concurrencyFor('figma'), 2);
+    });
+
+    test('downloadAttachmentBytesResilient retries 429/503 and stops on 404',
+        () {
+      final sleeps = <int>[];
+      var calls = 0;
+      final bytes = downloadAttachmentBytesResilient(
+        'https://jira.example.com/secure/attachment/1/spec.txt',
+        PropertyReader(),
+        baseDelayMs: 100,
+        sleepFn: sleeps.add,
+        httpGet: (_, __) => switch (++calls) {
+          1 => SyncHttpResponse(429, 'rate limit', {'Retry-After': '1'}),
+          2 => SyncHttpResponse(503, 'unavailable'),
+          _ => SyncHttpResponse(200, 'ok-payload'),
+        },
+      );
+      expect(utf8.decode(bytes!), 'ok-payload');
+      expect(calls, 3);
+      expect(sleeps.first, 1000);
+      final notFound = downloadAttachmentBytesResilient(
+        'https://jira.example.com/secure/attachment/1/missing.txt',
+        PropertyReader(),
+        httpGet: (_, __) => SyncHttpResponse(404, 'not found'),
+      );
+      expect(notFound, isNull);
+    });
+  });
+}
+
+void parallelInputExecutionTests() {
+  group('InputContextParallel execution', () {
+    test('runInputContextWorkerJob and runBoundedClientJobs execute inline',
+        () async {
+      final server = EchoServer();
+      await server.start();
+      addTearDown(server.stop);
+      final base = 'http://127.0.0.1:${server.port}';
+      _configureAllIntegrations(base);
+      final tmp = Directory.systemTemp.createTempSync('dmtools_par_jobs_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      Directory('${tmp.path}/figma').createSync(recursive: true);
+      final res = runBoundedClientJobs(
+        _buildSampleParallelJobs(base, tmp.path),
+        pool: InputContextParallelPools.attachmentsPool(3),
+        maxConcurrency: 3,
+      );
+      expect(res.length, 4);
+      expect(res[0]?['ok'], isTrue);
+      expect(res[1]?['key'], 'PROJ-20');
+      expect(res[2]?['ok'], isTrue);
+      expect(res[3]?['ok'], isTrue);
+    });
+
+    test('bootAll and parallel pools execute ticket context build end-to-end',
+        () async {
+      final server = EchoServer();
+      await server.start();
+      addTearDown(server.stop);
+      addTearDown(InputContextParallelPools.disposeAll);
+      final base = 'http://127.0.0.1:${server.port}';
+      _configureAllIntegrations(base);
+      await InputContextParallelPools.bootAll(PropertyReader());
+      final tmp = Directory.systemTemp.createTempSync('dmtools_par_e2e_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      final ticket = _buildParallelE2eTicket(base);
+      final path = TicketInputContextBuilder(tmp.path).build(
+        'PROJ-100',
+        ticketData: ticket,
+        config: InputContextConfig(depth: 1),
+      );
+      expect(File('$path/att1.txt').existsSync(), isTrue);
+      expect(File('$path/att2.txt').existsSync(), isTrue);
+      expect(Directory('$path/confluence').existsSync(), isTrue);
+      expect(Directory('$path/figma').existsSync(), isTrue);
+      expect(
+          File('${tmp.path}/input/PROJ-20/ticket.json').existsSync(), isTrue);
+      expect(
+          File('${tmp.path}/input/PROJ-30/ticket.json').existsSync(), isTrue);
+    });
+  });
+}
+
+void _configureAllIntegrations(String base) {
+  PropertyReader.setOverrides({
+    'JIRA_BASE_PATH': base,
+    'JIRA_LOGIN_PASS_TOKEN': 'jira-tok',
+    'CONFLUENCE_BASE_PATH': base,
+    'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-tok',
+    'FIGMA_BASE_PATH': '$base/figdl/v1',
+    'FIGMA_TOKEN': 'fig-tok',
+  });
+}
+
+List<SyncParallelJob> _buildSampleParallelJobs(String base, String dir) {
+  final overrides = capturePropertyOverrides();
+  return <SyncParallelJob>[
+    SyncParallelJob(
+      index: 0,
+      kind: kInputJobAttachmentDownload,
+      args: {
+        'url': '$base/secure/attachment/1/a.txt',
+        'outPath': '$dir/a.txt',
+        'overrides': overrides,
+      },
+    ),
+    SyncParallelJob(
+      index: 1,
+      kind: kInputJobFetchTicket,
+      args: {'key': 'PROJ-20', 'overrides': overrides},
+    ),
+    SyncParallelJob(
+      index: 2,
+      kind: kInputJobFigmaRef,
+      args: {
+        'figmaDir': '$dir/figma',
+        'url': 'https://www.figma.com/design/fileKey1/App?node-id=1-2',
+        'index': 1,
+        'includeComments': true,
+        'includeAttachments': false,
+        'overrides': overrides,
+      },
+    ),
+    SyncParallelJob(
+      index: 3,
+      kind: kInputJobConfluenceLane,
+      args: {
+        'urls': ['$base/wiki/spaces/ENG/pages/777/Hi'],
+        'outDir': '$dir/confluence',
+        'depth': 1,
+        'downloadAttachments': false,
+        'includeComments': false,
+        'overrides': overrides,
+      },
+    ),
+  ];
+}
+
+Map<String, dynamic> _buildParallelE2eTicket(String base) => {
+      'key': 'PROJ-100',
+      'fields': {
+        'summary': 'Parallel ticket',
+        'description': 'Doc: $base/wiki/spaces/ENG/pages/777/Hi '
+            'UI1: https://www.figma.com/design/fileKey1/App?node-id=1-2 '
+            'UI2: https://www.figma.com/design/fileKey2/App?node-id=3-4 '
+            'Links: PROJ-20 and PROJ-30',
+        'attachment': [
+          {
+            'filename': 'att1.txt',
+            'content': '$base/secure/attachment/1/a.txt'
+          },
+          {
+            'filename': 'att2.txt',
+            'content': '$base/secure/attachment/2/b.txt'
+          },
+        ],
+      },
+    };

@@ -11,6 +11,19 @@ library;
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 
+/// Default per-client concurrency (threads/workers per integration client).
+const int defaultInputClientConcurrency = 3;
+
+/// Maximum allowed per-client concurrency to protect against rate limits.
+const int maxInputClientConcurrency = 16;
+
+/// Clamp [value] into `[1, maxInputClientConcurrency]`.
+int clampInputClientConcurrency(int value) {
+  if (value < 1) return 1;
+  if (value > maxInputClientConcurrency) return maxInputClientConcurrency;
+  return value;
+}
+
 /// Configuration for `TicketInputContextBuilder`.
 class InputContextConfig {
   /// Creates an [InputContextConfig] with the most common flags.
@@ -39,7 +52,11 @@ class InputContextConfig {
         ..confluenceDepth = confluenceDepth
         ..confluenceAttachments = confluenceAttachments
         ..includeConfluenceComments = includeConfluenceComments
-        ..includeParentConfluence = false;
+        ..includeParentConfluence = false
+        ..parallelClients = parallelClients
+        ..clientConcurrency = clientConcurrency
+        ..clientConcurrencyOverrides =
+            Map<String, int>.from(clientConcurrencyOverrides);
 
   /// Explicit ticket key (from `input: "PROJ-123"` or `input.ticket`).
   String? ticket;
@@ -83,6 +100,31 @@ class InputContextConfig {
   /// Whether to also scan the parent ticket for smart source URLs.
   bool includeParentConfluence = true;
 
+  /// Whether separate integration clients (ticket attachments, Confluence,
+  /// Figma, linked tickets) execute concurrently in parallel lanes.
+  bool parallelClients = true;
+
+  /// Default per-client worker concurrency (default: 3, clamped to 1..16).
+  int clientConcurrency = defaultInputClientConcurrency;
+
+  /// Optional per-client concurrency overrides (`confluence`, `figma`,
+  /// `jira`, `github`, `ado`, `attachments`, `tickets`).
+  Map<String, int> clientConcurrencyOverrides = <String, int>{};
+
+  /// Returns the effective worker concurrency for [client] (`confluence`,
+  /// `figma`, `jira`, `github`, `ado`, `attachments`, `tickets`), checking
+  /// [clientConcurrencyOverrides], then environment overrides in [reader]
+  /// (`INPUT_<CLIENT>_CONCURRENCY` / `<CLIENT>_PARALLELISM` /
+  /// `INPUT_CLIENT_CONCURRENCY`), and falling back to [clientConcurrency].
+  int concurrencyFor(String client, [PropertyReader? reader]) {
+    final key = client.trim().toLowerCase();
+    final override = clientConcurrencyOverrides[key];
+    if (override != null) return clampInputClientConcurrency(override);
+    final envVal = _envConcurrencyFor(key, reader);
+    if (envVal != null) return clampInputClientConcurrency(envVal);
+    return clampInputClientConcurrency(clientConcurrency);
+  }
+
   /// Whether linked/referenced tickets should be fetched.
   bool get includeLinkedTickets => depth > 0;
 
@@ -106,6 +148,12 @@ class InputContextConfig {
         ? rawInput.trim()
         : null;
     final defaultDepth = rawInput is Map || ticketFromString != null ? 1 : 0;
+    final defaultConcurrency = _int(
+      inputMap,
+      json,
+      'clientConcurrency',
+      _int(inputMap, json, 'concurrency', defaultInputClientConcurrency),
+    );
     return InputContextConfig(
       smart: _bool(inputMap, json, 'smart', true),
       sources: _strList(inputMap['sources'] ?? json['sources']),
@@ -126,7 +174,13 @@ class InputContextConfig {
       ..includeConfluenceComments =
           _bool(inputMap, json, 'includeConfluenceComments', true)
       ..includeParentConfluence =
-          _bool(inputMap, json, 'includeParentConfluence', true);
+          _bool(inputMap, json, 'includeParentConfluence', true)
+      ..parallelClients = _bool(inputMap, json, 'parallelClients', true)
+      ..clientConcurrency = clampInputClientConcurrency(defaultConcurrency)
+      ..clientConcurrencyOverrides = _parseClientConcurrencyOverrides(
+        inputMap,
+        json,
+      );
   }
 }
 
@@ -245,4 +299,41 @@ List<String> _strList(dynamic value) {
         .toList(growable: false);
   }
   return const [];
+}
+
+int? _envConcurrencyFor(String client, PropertyReader? reader) {
+  if (reader == null) return null;
+  final upper = client.toUpperCase();
+  final candidates = <String>[
+    'INPUT_${upper}_CONCURRENCY',
+    '${upper}_PARALLELISM',
+    'INPUT_CLIENT_CONCURRENCY',
+  ];
+  for (final name in candidates) {
+    final parsed = int.tryParse(reader.getValue(name)?.trim() ?? '');
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+Map<String, int> _parseClientConcurrencyOverrides(
+  Map<String, dynamic> primary,
+  Map<String, dynamic> secondary,
+) {
+  final result = <String, int>{};
+  const clients = <String>[
+    'confluence',
+    'figma',
+    'jira',
+    'github',
+    'ado',
+    'attachments',
+    'tickets',
+  ];
+  for (final c in clients) {
+    final key = '${c}Concurrency';
+    final val = _int(primary, secondary, key, -1);
+    if (val > 0) result[c] = clampInputClientConcurrency(val);
+  }
+  return result;
 }

@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../../config/property_names.dart';
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/confluence/confluence_markdown.dart';

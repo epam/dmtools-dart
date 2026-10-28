@@ -8,6 +8,7 @@
 /// in [PropertyReader].
 library;
 
+import '../config/property_names.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 
@@ -123,6 +124,14 @@ class InputContextConfig {
     final envVal = _envConcurrencyFor(key, reader);
     if (envVal != null) return clampInputClientConcurrency(envVal);
     return clampInputClientConcurrency(clientConcurrency);
+  }
+
+  /// Returns whether separate integration clients should execute in parallel
+  /// lanes, checking [parallelClients] and `INPUT_PARALLEL_CLIENTS` in
+  /// [reader].
+  bool isParallelClientsEnabled([PropertyReader? reader]) {
+    if (!parallelClients) return false;
+    return reader?.isInputParallelClientsEnabled() ?? true;
   }
 
   /// Whether linked/referenced tickets should be fetched.
@@ -303,15 +312,11 @@ List<String> _strList(dynamic value) {
 
 int? _envConcurrencyFor(String client, PropertyReader? reader) {
   if (reader == null) return null;
-  final upper = client.toUpperCase();
-  final candidates = <String>[
-    'INPUT_${upper}_CONCURRENCY',
-    '${upper}_PARALLELISM',
-    'INPUT_CLIENT_CONCURRENCY',
-  ];
-  for (final name in candidates) {
-    final parsed = int.tryParse(reader.getValue(name)?.trim() ?? '');
-    if (parsed != null) return parsed;
+  final clientOverride = reader.getInputConcurrencyForClient(client);
+  if (clientOverride != null) return clientOverride;
+  final globalRaw = reader.getValue(PropertyNames.INPUT_CLIENT_CONCURRENCY);
+  if (globalRaw != null && globalRaw.trim().isNotEmpty) {
+    return reader.getInputClientConcurrency();
   }
   return null;
 }

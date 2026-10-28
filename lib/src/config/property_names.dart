@@ -156,6 +156,9 @@ class PropertyNames {
   static const String CONFLUENCE_LOGIN_PASS_TOKEN =
       'CONFLUENCE_LOGIN_PASS_TOKEN';
 
+  /// `CONFLUENCE_PARALLELISM` configuration property name (Java `ConfluenceParallel` parity).
+  static const String CONFLUENCE_PARALLELISM = 'CONFLUENCE_PARALLELISM';
+
   /// `DEFAULT_CI` configuration property name (Java `PropertyReader` parity).
   static const String DEFAULT_CI = 'DEFAULT_CI';
 
@@ -293,6 +296,43 @@ class PropertyNames {
 
   /// `IMAGE_MAX_DIMENSION` configuration property name (Java `PropertyReader` parity).
   static const String IMAGE_MAX_DIMENSION = 'IMAGE_MAX_DIMENSION';
+
+  /// `INPUT_ADO_CONCURRENCY` configuration property name.
+  static const String INPUT_ADO_CONCURRENCY = 'INPUT_ADO_CONCURRENCY';
+
+  /// `INPUT_ATTACHMENTS_CONCURRENCY` configuration property name.
+  static const String INPUT_ATTACHMENTS_CONCURRENCY =
+      'INPUT_ATTACHMENTS_CONCURRENCY';
+
+  /// `INPUT_CLIENT_CONCURRENCY` configuration property name.
+  static const String INPUT_CLIENT_CONCURRENCY = 'INPUT_CLIENT_CONCURRENCY';
+
+  /// `INPUT_CONFLUENCE_CONCURRENCY` configuration property name.
+  static const String INPUT_CONFLUENCE_CONCURRENCY =
+      'INPUT_CONFLUENCE_CONCURRENCY';
+
+  /// `INPUT_DOWNLOAD_RETRY_ATTEMPTS` configuration property name.
+  static const String INPUT_DOWNLOAD_RETRY_ATTEMPTS =
+      'INPUT_DOWNLOAD_RETRY_ATTEMPTS';
+
+  /// `INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS` configuration property name.
+  static const String INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS =
+      'INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS';
+
+  /// `INPUT_FIGMA_CONCURRENCY` configuration property name.
+  static const String INPUT_FIGMA_CONCURRENCY = 'INPUT_FIGMA_CONCURRENCY';
+
+  /// `INPUT_GITHUB_CONCURRENCY` configuration property name.
+  static const String INPUT_GITHUB_CONCURRENCY = 'INPUT_GITHUB_CONCURRENCY';
+
+  /// `INPUT_JIRA_CONCURRENCY` configuration property name.
+  static const String INPUT_JIRA_CONCURRENCY = 'INPUT_JIRA_CONCURRENCY';
+
+  /// `INPUT_PARALLEL_CLIENTS` configuration property name.
+  static const String INPUT_PARALLEL_CLIENTS = 'INPUT_PARALLEL_CLIENTS';
+
+  /// `INPUT_TICKETS_CONCURRENCY` configuration property name.
+  static const String INPUT_TICKETS_CONCURRENCY = 'INPUT_TICKETS_CONCURRENCY';
 
   /// `IS_READ_PULL_REQUEST_DIFF` configuration property name (Java `PropertyReader` parity).
   static const String IS_READ_PULL_REQUEST_DIFF = 'IS_READ_PULL_REQUEST_DIFF';
@@ -587,6 +627,7 @@ class PropertyNames {
     CONFLUENCE_EMAIL,
     CONFLUENCE_GRAPHQL_PATH,
     CONFLUENCE_LOGIN_PASS_TOKEN,
+    CONFLUENCE_PARALLELISM,
     DEFAULT_CI,
     DEFAULT_LLM,
     DEFAULT_SCM,
@@ -631,6 +672,17 @@ class PropertyNames {
     GITLAB_WORKSPACE,
     IMAGE_JPEG_QUALITY,
     IMAGE_MAX_DIMENSION,
+    INPUT_ADO_CONCURRENCY,
+    INPUT_ATTACHMENTS_CONCURRENCY,
+    INPUT_CLIENT_CONCURRENCY,
+    INPUT_CONFLUENCE_CONCURRENCY,
+    INPUT_DOWNLOAD_RETRY_ATTEMPTS,
+    INPUT_DOWNLOAD_RETRY_BASE_DELAY_MS,
+    INPUT_FIGMA_CONCURRENCY,
+    INPUT_GITHUB_CONCURRENCY,
+    INPUT_JIRA_CONCURRENCY,
+    INPUT_PARALLEL_CLIENTS,
+    INPUT_TICKETS_CONCURRENCY,
     IS_READ_PULL_REQUEST_DIFF,
     JENKINS_API_TOKEN,
     JENKINS_BASE_PATH,

@@ -74,7 +74,7 @@ class TicketSmartSources {
     final ticketKey = _ticketKey(ticketData);
     if (ticketKey != null) _visited.add(_normalizeKey(ticketKey));
     final combinedText = _collectTicketText(ticketData, config);
-    final canOffloadConfluence = config.parallelClients &&
+    final canOffloadConfluence = config.isParallelClientsEnabled(reader) &&
         !_hasCustomConfluenceTools &&
         InputContextParallelPools.orchestratorPool.ready;
     final confluenceJob = canOffloadConfluence

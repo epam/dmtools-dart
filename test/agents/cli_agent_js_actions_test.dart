@@ -522,77 +522,84 @@ void cliPromptsConditionParserTests() {
 void jobParamsBindingAndPreActionSkipTests() {
   group('CliAgent params.jobParams bindings and preJSAction==false skip (#465)',
       () {
-    test(
-        'params.jobParams exposes customParams, metadata, initiator, and outputType',
-        () async {
-      final tmp = await _createTempDir();
-      final log = '${tmp.path}/job_params.log';
-      try {
-        final js = _actionJs(
-          tmp,
-          'check_job_params.js',
-          'var jp = params.jobParams || params; '
-              'file_write({path: "$log", content: '
-              'jp.customParams.targetRepository + "|" + '
-              'jp.metadata.agentId + "|" + '
-              'jp.initiator + "|" + '
-              'jp.outputType});',
-        );
-        await (CliAgent(
-          params: CliAgentParams()
-            ..cliCommands = ['echo done']
-            ..customParams = const {'targetRepository': 'acme/repo'}
-            ..metadata = const {'contextId': 'KEY-1', 'agentId': 'pr_review'}
-            ..initiator = 'bot-user'
-            ..outputType = 'none'
-            ..preCliJSAction = js.path
-            ..cleanupInputFolder = false,
-          workingDirectory: tmp.path,
-        )).run();
-        expect(
-          (await File(log).readAsString()).trim(),
-          'acme/repo|pr_review|bot-user|none',
-        );
-      } finally {
-        await tmp.delete(recursive: true);
-      }
-    });
+    _jobParamsBindingTest();
+    _preActionSkipTest();
+  });
+}
 
-    test(
-        'preJSAction returning false skips input context, preCliJSAction, cliCommands, and postJSAction',
-        () async {
-      final tmp = await _createTempDir();
-      final log = '${tmp.path}/skipped_steps.log';
-      try {
-        final pre = _actionJs(tmp, 'pre_skip.js', 'return false;');
-        final preCli = _actionJs(
-          tmp,
-          'pre_cli.js',
-          'file_append({path: "$log", content: "preCli\\n"});',
-        );
-        final post = _actionJs(
-          tmp,
-          'post.js',
-          'file_append({path: "$log", content: "post\\n"});',
-        );
-        final result = await (CliAgent(
-          params: CliAgentParams()
-            ..cliCommands = ['echo cli >> "$log"']
-            ..metadata = const {'contextId': 'KEY-99'}
-            ..preJSAction = pre.path
-            ..preCliJSAction = preCli.path
-            ..postJSAction = post.path
-            ..cleanupInputFolder = false,
-          workingDirectory: tmp.path,
-        )).run();
-        expect(result['success'], isTrue);
-        expect(result['response'], 'Skipped by pre-action');
-        expect(File(log).existsSync(), isFalse);
-        expect(Directory('${tmp.path}/input/KEY-99').existsSync(), isFalse);
-      } finally {
-        await tmp.delete(recursive: true);
-      }
-    });
+void _jobParamsBindingTest() {
+  test(
+      'params.jobParams exposes customParams, metadata, initiator, and outputType',
+      () async {
+    final tmp = await _createTempDir();
+    final log = '${tmp.path}/job_params.log';
+    try {
+      final js = _actionJs(
+        tmp,
+        'check_job_params.js',
+        'var jp = params.jobParams || params; '
+            'file_write({path: "$log", content: '
+            'jp.customParams.targetRepository + "|" + '
+            'jp.metadata.agentId + "|" + '
+            'jp.initiator + "|" + '
+            'jp.outputType});',
+      );
+      await (CliAgent(
+        params: CliAgentParams()
+          ..cliCommands = ['echo done']
+          ..customParams = const {'targetRepository': 'acme/repo'}
+          ..metadata = const {'contextId': 'KEY-1', 'agentId': 'pr_review'}
+          ..initiator = 'bot-user'
+          ..outputType = 'none'
+          ..preCliJSAction = js.path
+          ..cleanupInputFolder = false,
+        workingDirectory: tmp.path,
+      )).run();
+      expect(
+        (await File(log).readAsString()).trim(),
+        'acme/repo|pr_review|bot-user|none',
+      );
+    } finally {
+      await tmp.delete(recursive: true);
+    }
+  });
+}
+
+void _preActionSkipTest() {
+  test(
+      'preJSAction returning false skips input context, preCliJSAction, cliCommands, and postJSAction',
+      () async {
+    final tmp = await _createTempDir();
+    final log = '${tmp.path}/skipped_steps.log';
+    try {
+      final pre = _actionJs(tmp, 'pre_skip.js', 'return false;');
+      final preCli = _actionJs(
+        tmp,
+        'pre_cli.js',
+        'file_append({path: "$log", content: "preCli\\n"});',
+      );
+      final post = _actionJs(
+        tmp,
+        'post.js',
+        'file_append({path: "$log", content: "post\\n"});',
+      );
+      final result = await (CliAgent(
+        params: CliAgentParams()
+          ..cliCommands = ['echo cli >> "$log"']
+          ..metadata = const {'contextId': 'KEY-99'}
+          ..preJSAction = pre.path
+          ..preCliJSAction = preCli.path
+          ..postJSAction = post.path
+          ..cleanupInputFolder = false,
+        workingDirectory: tmp.path,
+      )).run();
+      expect(result['success'], isTrue);
+      expect(result['response'], 'Skipped by pre-action');
+      expect(File(log).existsSync(), isFalse);
+      expect(Directory('${tmp.path}/input/KEY-99').existsSync(), isFalse);
+    } finally {
+      await tmp.delete(recursive: true);
+    }
   });
 }
 

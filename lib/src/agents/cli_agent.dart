@@ -144,30 +144,20 @@ class CliAgent {
       _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
-      final preResult = _executeJsAction(
-        'preJSAction',
-        params.preJSAction,
-        null,
-        null,
-        workDir,
-        skip: params.skipPreJSAction,
-      );
-      if (preResult?.trim() == 'false') {
+      final pre = _executeJsAction(
+          'preJSAction', params.preJSAction, null, null, workDir,
+          skip: params.skipPreJSAction);
+      if (pre?.trim() == 'false') {
         return {
           'success': true,
           'contextId': params.contextId,
-          'response': 'Skipped by pre-action',
+          'response': 'Skipped by pre-action'
         };
       }
       _inputContextPath = await _createInputContext(workDir);
-      _executeJsAction(
-        'preCliJSAction',
-        params.preCliJSAction,
-        null,
-        _inputContextPath,
-        workDir,
-        skip: params.skipPreCliJSAction,
-      );
+      _executeJsAction('preCliJSAction', params.preCliJSAction, null,
+          _inputContextPath, workDir,
+          skip: params.skipPreCliJSAction);
       response = await _runResponsePhase(workDir);
       await _executeScriptHook('cache', params.cache, workDir, response);
       return {
@@ -177,12 +167,8 @@ class CliAgent {
         if (_preCliSetupThrew) 'unexpectedSetupFailure': true,
       };
     } finally {
-      await _executeScriptHook(
-        'reset',
-        params.reset,
-        workDir,
-        _cliResult != null ? _extractResponse(_cliResult!) : null,
-      );
+      await _executeScriptHook('reset', params.reset, workDir,
+          _cliResult != null ? _extractResponse(_cliResult!) : null);
       _performCleanup(workDir);
     }
   }

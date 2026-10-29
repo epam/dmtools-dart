@@ -39,22 +39,8 @@ import 'job_registry.dart';
 
 /// Parses CLI arguments, dispatches commands and reports exit codes.
 class CliDispatcher {
-  /// Creates a dispatcher.
-  ///
-  /// [writer] receives every output line (defaults to `print`) and
-  /// [propertyReader] backs the `doctor` command and the alias-resolution
-  /// default reads (`DEFAULT_TRACKER` / `DEFAULT_SOURCE_CODE` resolve
-  /// through the standard property chain — overrides, config.properties,
-  /// `dmtools.env`, then the process environment — like the tracker-hub
-  /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
-  /// no-argument behaviour (interactive stub on a terminal, help
-  /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
-  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]) and
-  /// [confluencePool] the Confluence parallel pool booted lazily before
-  /// Confluence sync tools (defaults to `confluenceSyncWorkerPool`) —
-  /// test seams mirroring [JsRunConfig.pool]. [errorWriter] receives
-  /// diagnostics that must stay off the machine-parsed stdout (defaults
-  /// to `stderr.writeln`); a test seam like [writer].
+  /// Creates a dispatcher ([writer], [errorWriter], [propertyReader],
+  /// [isTty], and [pools] default to production wiring).
   CliDispatcher({
     void Function(String line)? writer,
     void Function(String line)? errorWriter,

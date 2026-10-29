@@ -21,6 +21,7 @@ import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/async_job_pool.dart';
 import '../js/job_runner.dart';
+import '../js/sync_http_bridge.dart';
 import '../js/sync_parallel.dart';
 import '../js/sync_tools/confluence_sync_tools.dart';
 import '../js/tool_bridge.dart';
@@ -265,7 +266,9 @@ class CliDispatcher {
     // this isolate's event loop — boot the Confluence pool now if the job
     // could reach one (see [bootConfluenceSyncPool]).
     await _prepareConfluencePool();
-    await InputContextParallelPools.bootAll(_reader, onError: _errorWriter);
+    if (SyncHttpBridge.shared.ready) {
+      await InputContextParallelPools.bootAll(_reader, onError: _errorWriter);
+    }
     if (name.toLowerCase() == 'jsrunner') {
       return _executeJsRunner(params);
     }

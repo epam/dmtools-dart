@@ -38,8 +38,6 @@ import '../pack/pack_provenance.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
-import '../js/sync_http_bridge.dart';
-import 'input_context_parallel.dart';
 import 'ticket_input_context_builder.dart';
 import 'ticket_smart_sources.dart';
 
@@ -681,9 +679,6 @@ class CliAgent {
   Future<String> _createInputContext(String workDir) async {
     final config = params.effectiveInputContextConfig;
     final resolved = _resolvedTicketData ?? ticketData;
-    if (resolved != null && SyncHttpBridge.shared.ready) {
-      await InputContextParallelPools.bootAll(propertyReader, config: config);
-    }
     return TicketInputContextBuilder(
       workDir,
       propertyReader: propertyReader,

@@ -15,6 +15,7 @@ import 'dart:io';
 import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../agents/teammate_job.dart';
+import '../agents/input_context_parallel.dart';
 import 'compile_command.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
@@ -264,6 +265,7 @@ class CliDispatcher {
     // this isolate's event loop — boot the Confluence pool now if the job
     // could reach one (see [bootConfluenceSyncPool]).
     await _prepareConfluencePool();
+    await InputContextParallelPools.bootAll(_reader, onError: _errorWriter);
     if (name.toLowerCase() == 'jsrunner') {
       return _executeJsRunner(params);
     }

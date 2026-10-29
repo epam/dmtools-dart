@@ -146,8 +146,21 @@ class CliAgent {
       _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
-      _executeJsAction('preJSAction', params.preJSAction, null, null, workDir,
-          skip: params.skipPreJSAction);
+      final preResult = _executeJsAction(
+        'preJSAction',
+        params.preJSAction,
+        null,
+        null,
+        workDir,
+        skip: params.skipPreJSAction,
+      );
+      if (preResult?.trim() == 'false') {
+        return {
+          'success': true,
+          'contextId': params.contextId,
+          'response': 'Skipped by pre-action',
+        };
+      }
       _inputContextPath = await _createInputContext(workDir);
       _executeJsAction(
         'preCliJSAction',
@@ -758,6 +771,10 @@ class CliAgent {
       'cliCommands': params.cliCommands,
       if (params.cliPrompt != null) 'cliPrompt': params.cliPrompt,
       if (params.contextId.isNotEmpty) 'contextId': params.contextId,
+      if (params.customParams != null) 'customParams': params.customParams,
+      if (params.metadata != null) 'metadata': params.metadata,
+      if (params.initiator != null) 'initiator': params.initiator,
+      if (params.outputType != null) 'outputType': params.outputType,
       if (response != null) 'response': response,
       if (inputFolderPath != null) 'inputFolderPath': inputFolderPath,
     };

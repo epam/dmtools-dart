@@ -38,8 +38,6 @@ import '../pack/pack_provenance.dart';
 import 'cli_agent_params.dart';
 import 'cli_command_builder.dart';
 import 'cli_execution_helper.dart';
-import '../js/sync_http_bridge.dart';
-import 'input_context_parallel.dart';
 import 'ticket_input_context_builder.dart';
 import 'ticket_smart_sources.dart';
 
@@ -146,17 +144,20 @@ class CliAgent {
       _resolvedTicketData = _resolveTicketData(workDir);
       _clearStaleOutputs(workDir);
       await _executeScriptHook('setup', params.setup, workDir, null);
-      _executeJsAction('preJSAction', params.preJSAction, null, null, workDir,
+      final pre = _executeJsAction(
+          'preJSAction', params.preJSAction, null, null, workDir,
           skip: params.skipPreJSAction);
+      if (pre?.trim() == 'false') {
+        return {
+          'success': true,
+          'contextId': params.contextId,
+          'response': 'Skipped by pre-action'
+        };
+      }
       _inputContextPath = await _createInputContext(workDir);
-      _executeJsAction(
-        'preCliJSAction',
-        params.preCliJSAction,
-        null,
-        _inputContextPath,
-        workDir,
-        skip: params.skipPreCliJSAction,
-      );
+      _executeJsAction('preCliJSAction', params.preCliJSAction, null,
+          _inputContextPath, workDir,
+          skip: params.skipPreCliJSAction);
       response = await _runResponsePhase(workDir);
       await _executeScriptHook('cache', params.cache, workDir, response);
       return {
@@ -166,12 +167,8 @@ class CliAgent {
         if (_preCliSetupThrew) 'unexpectedSetupFailure': true,
       };
     } finally {
-      await _executeScriptHook(
-        'reset',
-        params.reset,
-        workDir,
-        _cliResult != null ? _extractResponse(_cliResult!) : null,
-      );
+      await _executeScriptHook('reset', params.reset, workDir,
+          _cliResult != null ? _extractResponse(_cliResult!) : null);
       _performCleanup(workDir);
     }
   }
@@ -668,9 +665,6 @@ class CliAgent {
   Future<String> _createInputContext(String workDir) async {
     final config = params.effectiveInputContextConfig;
     final resolved = _resolvedTicketData ?? ticketData;
-    if (resolved != null && SyncHttpBridge.shared.ready) {
-      await InputContextParallelPools.bootAll(propertyReader, config: config);
-    }
     return TicketInputContextBuilder(
       workDir,
       propertyReader: propertyReader,
@@ -758,6 +752,10 @@ class CliAgent {
       'cliCommands': params.cliCommands,
       if (params.cliPrompt != null) 'cliPrompt': params.cliPrompt,
       if (params.contextId.isNotEmpty) 'contextId': params.contextId,
+      if (params.customParams != null) 'customParams': params.customParams,
+      if (params.metadata != null) 'metadata': params.metadata,
+      if (params.initiator != null) 'initiator': params.initiator,
+      if (params.outputType != null) 'outputType': params.outputType,
       if (response != null) 'response': response,
       if (inputFolderPath != null) 'inputFolderPath': inputFolderPath,
     };

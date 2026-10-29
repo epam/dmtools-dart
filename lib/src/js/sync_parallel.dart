@@ -153,6 +153,7 @@ class SyncWorkerPool {
   final int workerCount;
 
   final List<SendPort> _inboxes = <SendPort>[];
+  final List<Isolate> _isolates = <Isolate>[];
   Future<void>? _booting;
   var _next = 0;
 
@@ -175,11 +176,12 @@ class SyncWorkerPool {
   Future<void> _boot(int workers) async {
     for (var i = 0; i < workers; i++) {
       final handshake = ReceivePort();
-      await Isolate.spawn(
+      final iso = await Isolate.spawn(
         _entry,
         SyncWorkerBoot(handshake: handshake.sendPort),
         debugName: '$name-${i + 1}',
       );
+      _isolates.add(iso);
       _inboxes.add(await handshake.first as SendPort);
       handshake.close();
     }
@@ -236,6 +238,10 @@ class SyncWorkerPool {
       inbox.send('shutdown');
     }
     _inboxes.clear();
+    for (final iso in _isolates) {
+      iso.kill(priority: Isolate.beforeNextEvent);
+    }
+    _isolates.clear();
     _booting = null;
   }
 }

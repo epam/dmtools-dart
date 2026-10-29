@@ -15,11 +15,13 @@ import 'dart:io';
 import '../agents/agent_factory.dart';
 import '../agents/cli_agent.dart';
 import '../agents/teammate_job.dart';
+import '../agents/input_context_parallel.dart';
 import 'compile_command.dart';
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
 import '../js/async_job_pool.dart';
 import '../js/job_runner.dart';
+import '../js/sync_http_bridge.dart';
 import '../js/sync_parallel.dart';
 import '../js/sync_tools/confluence_sync_tools.dart';
 import '../js/tool_bridge.dart';
@@ -37,22 +39,8 @@ import 'job_registry.dart';
 
 /// Parses CLI arguments, dispatches commands and reports exit codes.
 class CliDispatcher {
-  /// Creates a dispatcher.
-  ///
-  /// [writer] receives every output line (defaults to `print`) and
-  /// [propertyReader] backs the `doctor` command and the alias-resolution
-  /// default reads (`DEFAULT_TRACKER` / `DEFAULT_SOURCE_CODE` resolve
-  /// through the standard property chain — overrides, config.properties,
-  /// `dmtools.env`, then the process environment — like the tracker-hub
-  /// routing rule; defaults to a CWD-rooted reader). [isTty] decides the
-  /// no-argument behaviour (interactive stub on a terminal, help
-  /// otherwise). [asyncPool] is the engine-worker pool booted lazily for
-  /// `runAsync` jobs (defaults to [AsyncJobPool.instance]) and
-  /// [confluencePool] the Confluence parallel pool booted lazily before
-  /// Confluence sync tools (defaults to `confluenceSyncWorkerPool`) —
-  /// test seams mirroring [JsRunConfig.pool]. [errorWriter] receives
-  /// diagnostics that must stay off the machine-parsed stdout (defaults
-  /// to `stderr.writeln`); a test seam like [writer].
+  /// Creates a dispatcher ([writer], [errorWriter], [propertyReader],
+  /// [isTty], and [pools] default to production wiring).
   CliDispatcher({
     void Function(String line)? writer,
     void Function(String line)? errorWriter,
@@ -264,6 +252,9 @@ class CliDispatcher {
     // this isolate's event loop — boot the Confluence pool now if the job
     // could reach one (see [bootConfluenceSyncPool]).
     await _prepareConfluencePool();
+    if (SyncHttpBridge.shared.ready) {
+      await InputContextParallelPools.bootAll(_reader, onError: _errorWriter);
+    }
     if (name.toLowerCase() == 'jsrunner') {
       return _executeJsRunner(params);
     }

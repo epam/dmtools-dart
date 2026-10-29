@@ -565,6 +565,8 @@ void _configureAllIntegrations(String base) {
     'CONFLUENCE_LOGIN_PASS_TOKEN': 'conf-tok',
     'FIGMA_BASE_PATH': '$base/figdl/v1',
     'FIGMA_TOKEN': 'fig-tok',
+    'INPUT_CLIENT_CONCURRENCY': '2',
+    'CONFLUENCE_PARALLELISM': '2',
   });
 }
 

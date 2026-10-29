@@ -55,6 +55,7 @@ final class SyncHttpBridge {
 
   final Mailbox _responses = Mailbox();
   SendPort? _workerPort;
+  Isolate? _isolate;
 
   /// Whether the worker isolate is running and [request] is usable.
   bool get ready => _workerPort != null;
@@ -68,7 +69,7 @@ final class SyncHttpBridge {
 
   Future<void> _boot() async {
     final handshake = ReceivePort();
-    await Isolate.spawn(
+    _isolate = await Isolate.spawn(
       _httpWorkerEntry,
       _WorkerInit(
         handshakeSendPort: handshake.sendPort,
@@ -117,6 +118,8 @@ final class SyncHttpBridge {
   /// Stops the worker isolate (test teardown; the CLI hard-exits instead).
   void dispose() {
     _workerPort?.send('shutdown');
+    _isolate?.kill(priority: Isolate.beforeNextEvent);
+    _isolate = null;
     _workerPort = null;
     _booting = null;
   }

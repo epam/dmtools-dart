@@ -112,6 +112,9 @@ class DoctorCommand {
       );
       if (ready) integrations.addAll(entry.key);
     }
+    if (_present(_reader.getRovoLoginPassToken())) {
+      integrations.add('rovo');
+    }
     return integrations;
   }
 

@@ -609,6 +609,54 @@ extension PropertyReaderGetters on PropertyReader {
   /// Jenkins API token. Key: `JENKINS_API_TOKEN`.
   String? getJenkinsApiToken() => getValue(PropertyNames.JENKINS_API_TOKEN);
 
+  // --- Atlassian Rovo MCP ---
+
+  /// Rovo remote MCP endpoint URL.
+  /// Key: `ROVO_MCP_URL`, default: `https://mcp.atlassian.com/v2/mcp`.
+  String getRovoMcpUrl() {
+    final v = getValue(PropertyNames.ROVO_MCP_URL);
+    if (v == null || v.trim().isEmpty)
+      return 'https://mcp.atlassian.com/v2/mcp';
+    return v.trim();
+  }
+
+  /// Rovo account email. Key: `ROVO_EMAIL`.
+  String? getRovoEmail() => getValue(PropertyNames.ROVO_EMAIL);
+
+  /// Rovo API token. Key: `ROVO_API_TOKEN`.
+  String? getRovoApiToken() => getValue(PropertyNames.ROVO_API_TOKEN);
+
+  /// Rovo auth type (`Basic` or `Bearer`).
+  /// Key: `ROVO_AUTH_TYPE`, default: `Basic`.
+  String getRovoAuthType() {
+    final v = getValue(PropertyNames.ROVO_AUTH_TYPE);
+    if (v == null || v.trim().isEmpty) return 'Basic';
+    return v.trim();
+  }
+
+  /// Rovo credentials (`base64(email:token)` for Basic or raw token for Bearer).
+  ///
+  /// If `ROVO_EMAIL` + `ROVO_API_TOKEN` are set: Bearer auth returns the raw
+  /// token; Basic auth returns `base64(email:token)`. If `ROVO_AUTH_TYPE` is
+  /// Bearer and `ROVO_API_TOKEN` is set, returns `ROVO_API_TOKEN`. Otherwise
+  /// falls back to `ROVO_LOGIN_PASS_TOKEN`.
+  String? getRovoLoginPassToken() {
+    final token = _nonBlankRovoValue(getRovoApiToken());
+    if (token == null) return getValue(PropertyNames.ROVO_LOGIN_PASS_TOKEN);
+    if (getRovoAuthType().toLowerCase() == 'bearer') return token;
+    final email = _nonBlankRovoValue(getRovoEmail());
+    if (email != null) return base64Encode(utf8.encode('$email:$token'));
+    return getValue(PropertyNames.ROVO_LOGIN_PASS_TOKEN);
+  }
+
+  String? _nonBlankRovoValue(String? value) {
+    final trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  /// Default Atlassian Cloud ID for Rovo MCP calls. Key: `ROVO_CLOUD_ID`.
+  String? getRovoCloudId() => getValue(PropertyNames.ROVO_CLOUD_ID);
+
   // --- Input Context Parallelism & Resilience ---
 
   /// Whether input context clients run in parallel lanes.

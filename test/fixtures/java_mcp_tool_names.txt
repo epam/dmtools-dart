@@ -327,6 +327,10 @@ ollama_ai_chat_with_files
 openai_ai_chat
 openai_ai_chat_with_files
 rally_test
+rovo_ask
+rovo_context
+rovo_search
+rovo_summarize
 sharepoint_download_file
 sharepoint_get_drive_item
 teams_auth_complete

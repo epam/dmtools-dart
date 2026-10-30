@@ -229,6 +229,10 @@ jira_xray_search_tickets:searchQueryJQL,fields
 jira_xray_test:
 ollama_ai_chat:message
 openai_ai_chat:message
+rovo_ask:question,cloudId
+rovo_context:objectType,identifier,cloudId
+rovo_search:query,cloudId,targetApp,limit
+rovo_summarize:contentId,cloudId
 teams_test:
 testrail_create_case:project_name,title,description,priority_id,refs,section_id
 testrail_create_case_detailed:project_name,title,preconditions,steps,expected,priority_id,type_id,refs,label_ids,section_id

@@ -33,6 +33,7 @@ import 'sync_tools/github_sync_tools.dart';
 import 'sync_tools/gitlab_sync_tools.dart';
 import 'sync_tools/jenkins_sync_tools.dart';
 import 'sync_tools/jira_sync_tools.dart';
+import 'sync_tools/rovo_sync_tools.dart';
 import 'sync_tools/scm_ci_sync_tools.dart';
 import '../integrations/env/env_tools.dart';
 
@@ -76,6 +77,9 @@ class SyncToolDispatcher {
   /// Figma tools; built lazily on the first `figma_*` dispatch.
   late final FigmaSyncTools _figma = FigmaSyncTools(_reader);
 
+  /// Atlassian Rovo MCP tools; built lazily on the first `rovo_*` dispatch.
+  late final RovoSyncTools _rovo = RovoSyncTools(_reader);
+
   /// Per-provider AI chat tools; built lazily on first `<provider>_ai_chat`.
   late final AiSyncTools _ai = AiSyncTools(_reader);
 
@@ -95,6 +99,7 @@ class SyncToolDispatcher {
     MapEntry('bitrise_', _bitrise.dispatch),
     MapEntry('jenkins_', _jenkins.dispatch),
     MapEntry('figma_', _figma.dispatch),
+    MapEntry('rovo_', _rovo.dispatch),
     MapEntry('scm_', _viaHandlers('scm', _scmCi.handlers)),
     MapEntry('env_', _viaHandlers('env', _envTools.handlers)),
     MapEntry('ci_', _viaHandlers('ci', _scmCi.handlers)),

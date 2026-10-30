@@ -217,3 +217,48 @@ String adoArg(Map<String, dynamic> args, List<String> keys) {
   }
   return '';
 }
+
+/// Formats an Azure DevOps HTTP 400 work-item field validation response body as
+/// a structured JSON error `{"error":..., "status":400, "field":..., "message":..., "flags":...}`,
+/// or returns `null` when [body] is not an ADO field validation error.
+String? formatAdoFieldValidationError(String? body) {
+  if (body == null || body.isEmpty) return null;
+  if (!body.contains('FieldStatusFlags') &&
+      !body.contains('invalidListValue') &&
+      !body.contains('RuleValidationException')) {
+    return null;
+  }
+  final decoded = _tryDecodeMap(body);
+  if (decoded == null) return null;
+  final props = _asMap(decoded['customProperties']);
+  final message =
+      '${props?['ErrorMessage'] ?? decoded['message'] ?? ''}'.trim();
+  if (message.isEmpty) return null;
+  final flags = '${props?['FieldStatusFlags'] ?? ''}'.trim();
+  final field = _extractAdoErrorField(props, message);
+  return jsonEncode({
+    'error': message,
+    'status': 400,
+    'field': field,
+    'message': message,
+    if (flags.isNotEmpty) 'flags': flags,
+  });
+}
+
+Map? _tryDecodeMap(String body) {
+  try {
+    return _asMap(jsonDecode(body));
+  } on FormatException {
+    return null;
+  }
+}
+
+String _extractAdoErrorField(Map? props, String message) {
+  final ref =
+      '${props?['FieldReferenceName'] ?? props?['FieldName'] ?? ''}'.trim();
+  if (ref.isNotEmpty) return ref;
+  final match = RegExp("The field '([^']+)'").firstMatch(message);
+  if (match == null) return '';
+  final name = match.group(1)!;
+  return name.contains('.') ? name : resolveAdoFieldName(name);
+}

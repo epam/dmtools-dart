@@ -6,6 +6,7 @@ ado_assign_work_item:id,userEmail
 ado_get_pipeline_logs:buildId,taskName,tailLines
 ado_get_pr_comments:repository,pullRequestId
 ado_get_pr_diff:repository,pullRequestId
+ado_get_work_item_type_states:workItemType,project
 ado_link_work_items:sourceId,targetId,relationship
 ado_list_pipeline_runs:pipelineId,top
 ado_list_pipelines:

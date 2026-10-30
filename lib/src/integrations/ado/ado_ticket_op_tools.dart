@@ -82,6 +82,22 @@ List<ToolDefinition> _ticketOpTools() => [
       ], aliases: [
         'tracker_move_to_status'
       ]),
+      _opTool(
+        'ado_get_work_item_type_states',
+        'List the valid states for a work item type in the project '
+            '(e.g., New, Active, Resolved, Closed)',
+        [
+          _req(
+              'workItemType', 'The work item type (e.g. User Story, Bug, Task)',
+              aliases: ['issueType', 'type']),
+          ToolParam(
+            name: 'project',
+            description:
+                'The project name (defaults to the configured project)',
+            required: false,
+          ),
+        ],
+      ),
       _opTool('ado_assign_work_item', 'Assign a work item to a user', [
         _workItemId(),
         _req('userEmail', 'The user email or display name',
@@ -227,6 +243,10 @@ Map<String, _AdoHandler> _ticketOpHandlers(AdoWorkItemOps ops) => {
             ),
           ),
       'ado_move_to_state': (a) => ops.moveToState(_id(a), _s(a, 'state')),
+      'ado_get_work_item_type_states': (a) => ops.getWorkItemTypeStates(
+            _s(a, 'workItemType', 'type'),
+            project: a['project'] as String?,
+          ),
       'ado_assign_work_item': (a) => ops.assign(_id(a), _s(a, 'userEmail')),
       'ado_update_description': (a) => ops.updateDescription(
           _id(a), _s(a, 'description'),

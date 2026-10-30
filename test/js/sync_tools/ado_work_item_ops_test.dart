@@ -66,6 +66,7 @@ void main() {
   _fieldCodeTests();
   _attachTests();
   _formatTests();
+  _typeStatesTests();
 }
 
 /// Wire shape of a PATCH echo: method, path, content type and patch ops.
@@ -520,6 +521,37 @@ void _formatFieldCommentCreateTests() {
       expect(patchOf(echo), [
         {'op': 'add', 'path': '/fields/System.Title', 'value': 'T'},
       ]);
+    });
+  });
+}
+
+void _typeStatesTests() {
+  group('ado_get_work_item_type_states', () {
+    test('GETs workitemtypes/{type}/states with encoded type', () {
+      final echo = call(
+        'ado_get_work_item_type_states',
+        {'workItemType': 'User Story'},
+      );
+      expect(echo['method'], 'GET');
+      expect(
+        echo['path'],
+        '/org/proj/_apis/wit/workitemtypes/User%20Story/states?api-version=7.0',
+      );
+    });
+
+    test('accepts project and issueType alias, rejects blank type', () {
+      final echo = call('ado_get_work_item_type_states', {
+        'issueType': 'Bug',
+        'project': 'OtherProj',
+      });
+      expect(
+        echo['path'],
+        '/org/OtherProj/_apis/wit/workitemtypes/Bug/states?api-version=7.0',
+      );
+      expect(
+        call('ado_get_work_item_type_states', {'workItemType': ' '})['error'],
+        'workItemType must not be empty',
+      );
     });
   });
 }

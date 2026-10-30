@@ -34,6 +34,7 @@ final Map<String, AdoSyncExecutor> adoWorkItemOpExecutors = {
   'ado_get_work_item_comments': _getComments,
   'ado_move_to_state': (c, a) =>
       _setField(c, a, 'System.State', adoArg(a, ['state', 'statusName'])),
+  'ado_get_work_item_type_states': _getWorkItemTypeStates,
   'ado_assign_work_item': (c, a) => _setField(
       c, a, 'System.AssignedTo', adoArg(a, ['userEmail', 'accountId'])),
   'ado_update_description': (c, a) => _setField(
@@ -63,12 +64,18 @@ String _orgUrl(AdoSyncConfig c) {
 
 String _idOf(Map<String, dynamic> a) => adoArg(a, ['id', 'key']);
 
-String _patch(AdoSyncConfig c, String id, String patchBody) =>
-    syncBodyOrError(SyncHttpClient.patch(
-      _itemUrl(c, id),
-      headers: _patchHeaders(c),
-      body: patchBody,
-    ));
+String _patch(AdoSyncConfig c, String id, String patchBody) {
+  final resp = SyncHttpClient.patch(
+    _itemUrl(c, id),
+    headers: _patchHeaders(c),
+    body: patchBody,
+  );
+  if (resp.statusCode == 400) {
+    final structured = formatAdoFieldValidationError(resp.body);
+    if (structured != null) return structured;
+  }
+  return syncBodyOrError(resp);
+}
 
 String _setField(
   AdoSyncConfig c,
@@ -202,6 +209,22 @@ String _getFieldCode(AdoSyncConfig c, Map<String, dynamic> a) {
   ));
   if (syncTryDecode(body) is! Map) return 'null';
   return jsonEncode(findAdoFieldCode(body, wanted));
+}
+
+/// `ado_get_work_item_type_states` — GET
+/// `{org}/{project}/_apis/wit/workitemtypes/{type}/states?api-version=7.0`.
+String _getWorkItemTypeStates(AdoSyncConfig c, Map<String, dynamic> a) {
+  final type = adoArg(a, ['workItemType', 'issueType', 'type']).trim();
+  if (type.isEmpty) return syncErr('workItemType must not be empty');
+  final project = adoArg(a, ['project']).trim();
+  final base = project.isEmpty
+      ? c.baseUrl
+      : '${_orgUrl(c)}/${Uri.encodeComponent(project)}/_apis';
+  final encodedType = Uri.encodeComponent(type);
+  return syncBodyOrError(SyncHttpClient.get(
+    '$base/wit/workitemtypes/$encodedType/states?api-version=$_apiVersion',
+    headers: c.headers,
+  ));
 }
 
 /// `ado_attach_file` — idempotent upload + `AttachedFile` relation.

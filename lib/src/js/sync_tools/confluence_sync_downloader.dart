@@ -57,10 +57,10 @@ class _PageDownloader {
   })  : _includeComments = includeComments,
         _defaultSpace = defaultSpace,
         _excerptInliner = ConfluenceExcerptInliner(
-          _SyncConfluenceResolverClient(_config),
+          _SyncConfluenceResolverClient(_config, defaultSpace),
         ),
         _mentionResolver = ConfluenceMentionResolver(
-          _SyncConfluenceResolverClient(_config),
+          _SyncConfluenceResolverClient(_config, defaultSpace),
         );
 
   int _written = 0;
@@ -189,7 +189,7 @@ class _PageDownloader {
     String? pageSpaceKey,
   ) {
     final results = <Map<String, dynamic>>[];
-    final resolver = _SyncConfluenceResolverClient(_config);
+    final resolver = _SyncConfluenceResolverClient(_config, _defaultSpace);
     for (final m in _acLinkPagePattern.allMatches(storage)) {
       final resolved =
           _resolveAcLinkMatch(resolver, m.group(1) ?? '', pageSpaceKey);

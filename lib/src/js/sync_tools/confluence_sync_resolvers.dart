@@ -7,14 +7,19 @@ part of 'confluence_sync_tools.dart';
 /// bb1b51e9 parity).
 class _SyncConfluenceResolverClient implements ConfluenceResolverClient {
   final _Conf _config;
+  final String? _defaultSpace;
 
-  /// Creates a client resolving against [config]'s REST base URL.
-  _SyncConfluenceResolverClient(this._config);
+  /// Creates a client resolving against [_config]'s REST base URL, falling
+  /// back to [_defaultSpace] when no explicit space key is passed.
+  _SyncConfluenceResolverClient(this._config, [this._defaultSpace]);
 
   @override
   Map<String, dynamic>? findContent(String title, {String? spaceKey}) {
+    final effectiveSpace = (spaceKey != null && spaceKey.trim().isNotEmpty)
+        ? spaceKey.trim()
+        : (_defaultSpace?.trim() ?? '');
     final list = _contentList(
-      _titleAndSpaceResponse(_config, title, spaceKey ?? ''),
+      _titleAndSpaceResponse(_config, title, effectiveSpace),
     );
     return list.isEmpty ? null : list.first;
   }

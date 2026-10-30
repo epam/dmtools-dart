@@ -6,6 +6,7 @@ import 'package:dmtools/src/integrations/confluence/confluence_page_url.dart';
 void main() {
   parseUrlTests();
   shortLinkAndRejectTests();
+  buildTextSearchCqlTests();
 }
 
 void parseUrlTests() {
@@ -83,6 +84,48 @@ void shortLinkAndRejectTests() {
           Uri.parse('https://conf.example.com/wiki/spaces/ENG'),
         ),
         isA<ConfluenceUnknownUrlRef>(),
+      );
+    });
+  });
+}
+
+void buildTextSearchCqlTests() {
+  group('buildConfluenceTextSearchCql', () {
+    test('omits space filter when defaultSpace is null or blank', () {
+      expect(
+        buildConfluenceTextSearchCql('docs', null),
+        '(title ~ "docs" OR text ~ "docs") ORDER BY lastModified ASC',
+      );
+      expect(
+        buildConfluenceTextSearchCql('docs', '   '),
+        '(title ~ "docs" OR text ~ "docs") ORDER BY lastModified ASC',
+      );
+    });
+
+    test('scopes CQL to defaultSpace when configured', () {
+      expect(
+        buildConfluenceTextSearchCql('docs', 'ENG'),
+        '(title ~ "docs" OR text ~ "docs") AND space = "ENG" '
+        'ORDER BY lastModified ASC',
+      );
+      expect(
+        buildConfluenceTextSearchCql('docs', '  ENG  '),
+        '(title ~ "docs" OR text ~ "docs") AND space = "ENG" '
+        'ORDER BY lastModified ASC',
+      );
+    });
+
+    test('preserves query when explicit space clause is present', () {
+      expect(
+        buildConfluenceTextSearchCql('docs AND space = "DEV"', 'ENG'),
+        '(title ~ "docs AND space = "DEV"" OR text ~ "docs AND space = "DEV"") '
+        'ORDER BY lastModified ASC',
+      );
+      expect(
+        buildConfluenceTextSearchCql('docs AND SPACE IN ("DEV")', 'ENG'),
+        '(title ~ "docs AND SPACE IN ("DEV")" '
+        'OR text ~ "docs AND SPACE IN ("DEV")") '
+        'ORDER BY lastModified ASC',
       );
     });
   });

@@ -26,7 +26,7 @@ bitrise_list_build_artifacts:appSlug,buildSlug
 bitrise_list_builds:appSlug,workflowId,branch,status,limit,next
 bitrise_test:
 bitrise_trigger_build:appSlug,workflowId,branch,commitMessage,envVars
-cli_execute_command:command,workingDirectory
+cli_execute_command:command,workingDirectory,expectNonZeroExit
 confluence_content_by_id:contentId,format
 confluence_content_by_title:title,format
 confluence_content_by_title_and_space:title,space,format
@@ -178,6 +178,7 @@ jira_clear_field:key,field
 # to java_mcp_param_drift.txt — the Dart side adds an optional `labels` param
 # the Java upstream does not declare.
 jira_create_ticket_with_json:project,fieldsJson
+jira_delete_comment:key,commentId
 jira_delete_ticket:key
 jira_execute_request:url
 jira_get_account_by_email:email
@@ -209,6 +210,7 @@ jira_set_fix_version:key,fixVersion
 jira_set_priority:key,priority
 jira_test:
 jira_update_all_fields_with_name:key,fieldName,value
+jira_update_comment:key,commentId,comment
 jira_update_description:key,description
 jira_update_field:key,field,value
 jira_update_field_as_adf:key,field,value

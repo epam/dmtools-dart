@@ -20,6 +20,7 @@ ado_get_pr_work_items
 ado_get_user_by_email
 ado_get_work_item
 ado_get_work_item_comments
+ado_get_work_item_type_states
 ado_link_work_items
 ado_list_pipeline_runs
 ado_list_pipelines

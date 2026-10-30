@@ -16,6 +16,7 @@ void main() {
   _fieldCodeTests();
   _attachTests();
   _resolveFieldNameTests();
+  _typeStatesAndValidationTests();
 }
 
 String router(RequestOptions o) => routeByPath({
@@ -25,6 +26,13 @@ String router(RequestOptions o) => routeByPath({
         ],
       }),
       '/wit/attachments': jsonEncode({'id': 'a', 'url': 'http://x/a'}),
+      '/wit/workitemtypes/User%20Story/states': jsonEncode({
+        'count': 2,
+        'value': [
+          {'name': 'New', 'category': 'Proposed'},
+          {'name': 'Active', 'category': 'InProgress'},
+        ],
+      }),
       '/workitems/\$Task': jsonEncode({'id': 321}),
     }, o);
 
@@ -267,3 +275,53 @@ const _jiraStyleNames = {
   'reporter': 'System.CreatedBy',
   'project': 'System.TeamProject',
 };
+
+void _typeStatesAndValidationTests() {
+  group('ado_get_work_item_type_states & 400 validation', () {
+    test('fetches states for work item type and encodes spaces', () async {
+      final f = mockAdo(router);
+      final ex = AdoToolExecutor(f.client);
+      final states = await ex.execute(
+        'ado_get_work_item_type_states',
+        {'workItemType': 'User Story'},
+      ) as List;
+      expect(states, hasLength(2));
+      expect(states.first['name'], 'New');
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/dmtools/_apis/wit/workitemtypes/User%20Story/states'),
+      );
+    });
+
+    test('supports explicit project and rejects blank workItemType', () async {
+      final f = mockAdo(router);
+      final ex = AdoToolExecutor(f.client);
+      await ex.execute('ado_get_work_item_type_states', {
+        'workItemType': 'User Story',
+        'project': 'CustomProj',
+      });
+      expect(
+        f.adapter.calls.single.path,
+        endsWith('/CustomProj/_apis/wit/workitemtypes/User%20Story/states'),
+      );
+      expect(
+        () =>
+            ex.execute('ado_get_work_item_type_states', {'workItemType': ' '}),
+        throwsArgumentError,
+      );
+    });
+
+    test('formatAdoFieldValidationError extracts structured fields', () {
+      const ado400 =
+          '{"customProperties":{"ErrorMessage":"The field \'State\' contains '
+          'the value \'In Review\' that is not in the list of supported values",'
+          '"FieldStatusFlags":"required, hasValues, limitedToValues, invalidListValue"}}';
+      final out = jsonDecode(formatAdoFieldValidationError(ado400)!) as Map;
+      expect(out['status'], 400);
+      expect(out['field'], 'System.State');
+      expect(out['message'], contains('In Review'));
+      expect(out['flags'], contains('invalidListValue'));
+      expect(formatAdoFieldValidationError('plain error'), isNull);
+    });
+  });
+}

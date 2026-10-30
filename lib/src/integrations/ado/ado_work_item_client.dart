@@ -10,6 +10,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show DioException;
+
+import 'ado_json.dart';
 import 'ado_http_client.dart';
 import 'ado_work_item_ops.dart';
 
@@ -20,9 +23,20 @@ class AdoWorkItemOps {
   /// Creates the operations bound to [_http].
   AdoWorkItemOps(this._http);
 
-  Future<Map<String, dynamic>> _patchItem(int id, String patch) async =>
-      jsonDecode(await _http.patchPatch('wit/workitems/$id', body: patch))
+  Future<Map<String, dynamic>> _patchItem(int id, String patch) async {
+    try {
+      return jsonDecode(
+              await _http.patchPatch('wit/workitems/$id', body: patch))
           as Map<String, dynamic>;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        final structured =
+            formatAdoFieldValidationError('${e.response?.data ?? ''}');
+        if (structured != null) throw StateError(structured);
+      }
+      rethrow;
+    }
+  }
 
   /// Sets one [field] (reference name) on work item [id]. With [markdown]
   /// the field's format is also set to Markdown (Java `format` support).
@@ -152,6 +166,23 @@ class AdoWorkItemOps {
         ? await _http.get('wit/fields')
         : await _http.getInProject(project.trim(), 'wit/fields');
     return findAdoFieldCode(body, fieldName);
+  }
+
+  /// `ado_get_work_item_type_states` — lists the valid states for
+  /// [workItemType] in [project] (or the configured project when omitted).
+  Future<List<Map<String, dynamic>>> getWorkItemTypeStates(
+    String workItemType, {
+    String? project,
+  }) async {
+    final type = workItemType.trim();
+    if (type.isEmpty) {
+      throw ArgumentError('workItemType must not be empty');
+    }
+    final path = 'wit/workitemtypes/${Uri.encodeComponent(type)}/states';
+    final body = (project == null || project.trim().isEmpty)
+        ? await _http.get(path)
+        : await _http.getInProject(project.trim(), path);
+    return unwrapAdoItems(jsonDecode(body));
   }
 
   /// `ado_attach_file` — uploads [filePath] and links it to work item [id];

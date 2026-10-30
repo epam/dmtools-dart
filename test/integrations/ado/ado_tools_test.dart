@@ -16,6 +16,7 @@ void main() {
 /// Ticket-operation tools added for dm.ai #661, in declaration order.
 const _ticketOpNames = [
   'ado_move_to_state',
+  'ado_get_work_item_type_states',
   'ado_assign_work_item',
   'ado_update_description',
   'ado_update_tags',

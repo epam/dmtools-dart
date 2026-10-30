@@ -13,12 +13,6 @@ import 'github_fixture_helper.dart';
 
 /// Tests for [TrackerGitHubRouter] — the gh-N → GitHub Issues routing of
 /// tracker-shaped `jira_*` calls when Jira is unconfigured (gh-62).
-///
-/// The routing-decision groups run without HTTP: a fired route with no
-/// GitHub config surfaces the config error envelope; a suppressed route
-/// returns `null`. Server-dependent tests use the scripted GitHub fixture
-/// subprocess (see `github_fixture_server.py`) because Dart's HttpServer
-/// runs on the event loop, frozen during `Process.runSync('curl', …)`.
 void main() {
   setUpAll(() => PropertyReader.testIsolation = true);
   tearDownAll(() {
@@ -76,8 +70,7 @@ void _keyShapeTests() {
   });
 }
 
-/// Routing-decision tests where the route fires (no HTTP: the missing
-/// GitHub config error proves the route was taken).
+/// Routing-decision tests where the route fires (no HTTP).
 void _routingFireTests() {
   tearDown(PropertyReader.clearOverrides);
 
@@ -192,10 +185,7 @@ void _routingLogTests() {
   });
 }
 
-/// The two config-missing failure modes stay distinguishable: the error
-/// envelope names exactly the piece that is missing — the token, or the
-/// tracker repo (with the offending value) — so an operator knows which
-/// env var to fix without guessing.
+/// Missing token vs malformed tracker-repo config errors stay distinct.
 void _configErrorTests() {
   tearDown(PropertyReader.clearOverrides);
 
@@ -227,9 +217,7 @@ void _configErrorTests() {
   });
 }
 
-/// The malformed/absent tracker-repo shapes `_repoSegment` rejects
-/// surface the tracker-repo error envelope — never a routing miss or a
-/// confusing token complaint.
+/// Malformed/absent tracker-repo shapes surface the tracker-repo error.
 void _configErrorRepoTests() {
   tearDown(PropertyReader.clearOverrides);
 
@@ -249,8 +237,7 @@ void _configErrorRepoTests() {
   });
 
   test('all repo vars absent names the tracker repo error', () {
-    // Explicit empty overrides pin the repo chain absent even when the
-    // host environment carries GITHUB_REPOSITORY.
+    // Empty overrides pin the repo chain absent even in CI.
     PropertyReader.setOverrides(const {
       'SOURCE_GITHUB_TOKEN': 'ghp-test',
       'DMTOOLS_TRACKER_REPO': '',
@@ -329,8 +316,7 @@ void _fixtureReadTools() {
   });
 }
 
-/// `jira_post_comment` round-trips: the posted body is converted from
-/// Jira wiki markup to Markdown (gh-125), plain bodies pass through.
+/// `jira_post_comment`, `jira_update_comment`, `jira_delete_comment`.
 void _fixturePostComment() {
   final fx = _Fixture();
   setUp(fx.start);
@@ -350,8 +336,7 @@ void _fixturePostComment() {
   });
 
   test('jira_post_comment converts Jira wiki markup to Markdown (gh-125)', () {
-    // The agents' JS post-action templates hard-code Jira wiki markup;
-    // the GitHub comment path must render it readable (gh-122 evidence).
+    // JS post-action templates hard-code Jira wiki markup (gh-122).
     const jira = 'h3. Done\n\n{code}dart\nx();\n{code}\n'
         'See [PR #1|https://x.y/1]';
     const expected =
@@ -369,11 +354,11 @@ void _fixturePostComment() {
 
   test('jira_update_comment PATCHes issue comment and converts Jira markup',
       () {
-    jsonDecode(fx.tools.dispatch('jira_update_comment', {
+    fx.tools.dispatch('jira_update_comment', {
       'key': 'gh-50',
       'commentId': '10',
       'comment': 'h3. Updated',
-    })) as Map<String, dynamic>;
+    });
     final request =
         jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
     expect(request['method'], 'PATCH');
@@ -382,10 +367,8 @@ void _fixturePostComment() {
   });
 
   test('jira_delete_comment DELETEs issue comment', () {
-    final out = fx.tools.dispatch('jira_delete_comment', {
-      'key': 'gh-50',
-      'commentId': '10',
-    });
+    final out = fx.tools
+        .dispatch('jira_delete_comment', {'key': 'gh-50', 'commentId': '10'});
     expect(jsonDecode(out), '');
     final request =
         jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
@@ -410,12 +393,9 @@ void _fixtureLabelTools() {
         jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
     expect(request['method'], 'POST');
     expect(request['path'], '/repos/o/r/issues/50/labels');
-    expect(
-      jsonDecode(request['body'] as String),
-      {
-        'labels': ['pr_approved']
-      },
-    );
+    expect(jsonDecode(request['body'] as String), {
+      'labels': ['pr_approved']
+    });
   });
 
   test('jira_remove_label deletes the label', () {
@@ -766,8 +746,7 @@ void _fixtureEntryPoints() {
   });
 }
 
-/// The opt-in rule: with a real Jira config, gh-N calls keep the Jira
-/// path — zero regression for Java-parity environments.
+/// With a real Jira config, gh-N calls keep the Jira path.
 void _optInTests() {
   late GithubFixtureServer fx;
   const tools = JiraSyncTools();
@@ -792,17 +771,9 @@ void _optInTests() {
       'key': 'gh-50',
       'label': 'pr_approved',
     });
-    expect(
-      fx.requests,
-      contains('GET /rest/api/latest/issue/gh-50?fields=labels'),
-    );
-    expect(
-      fx.requests,
-      contains('PUT /rest/api/latest/issue/gh-50'),
-    );
-    expect(
-      fx.requests.where((r) => r.contains('/repos/')),
-      isEmpty,
-    );
+    expect(fx.requests,
+        contains('GET /rest/api/latest/issue/gh-50?fields=labels'));
+    expect(fx.requests, contains('PUT /rest/api/latest/issue/gh-50'));
+    expect(fx.requests.where((r) => r.contains('/repos/')), isEmpty);
   });
 }

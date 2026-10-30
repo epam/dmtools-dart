@@ -10,6 +10,7 @@ void main() {
   jiraGetTicketShapeTests();
   toolCatalogParamTests();
   executorDispatchTests();
+  executorCommentAndLabelDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -195,6 +196,29 @@ void executorDispatchTests() {
       expect(spy.calls, ['searchByJql:project = X']);
     });
 
+    test('routes jira_move_to_status with key and statusName', () async {
+      await executor.execute(
+          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'});
+      expect(spy.calls, ['moveToStatus:PROJ-1:Done']);
+    });
+
+    test('throws ArgumentError for an unknown tool', () {
+      expect(() => executor.execute('jira_no_such', {}), throwsArgumentError);
+    });
+  });
+}
+
+/// Dispatch tests for comment and label mutation tools.
+void executorCommentAndLabelDispatchTests() {
+  group('JiraToolExecutor.execute (comments & labels)', () {
+    late _SpyJiraClient spy;
+    late JiraToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJiraClient(mockHttp((o) => '{}').http);
+      executor = JiraToolExecutor(spy);
+    });
+
     test('routes jira_post_comment with key and comment', () async {
       await executor.execute('jira_post_comment', {
         'key': 'PROJ-1',
@@ -225,16 +249,6 @@ void executorDispatchTests() {
       await executor
           .execute('jira_remove_label', {'key': 'PROJ-1', 'label': 'b'});
       expect(spy.calls, ['removeLabel:PROJ-1:b']);
-    });
-
-    test('routes jira_move_to_status with key and statusName', () async {
-      await executor.execute(
-          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'});
-      expect(spy.calls, ['moveToStatus:PROJ-1:Done']);
-    });
-
-    test('throws ArgumentError for an unknown tool', () {
-      expect(() => executor.execute('jira_no_such', {}), throwsArgumentError);
     });
   });
 }

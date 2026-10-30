@@ -15,6 +15,13 @@ const _contract = <String, Map<String, List<String>>>{
   'jira_post_comment': {
     'comment': ['comment', 'text', 'body'],
   },
+  'jira_update_comment': {
+    'commentId': ['commentId', 'id'],
+    'comment': ['comment', 'text', 'body'],
+  },
+  'jira_delete_comment': {
+    'commentId': ['commentId', 'id'],
+  },
   'jira_search_by_jql': {
     'jql': ['jql', 'wiql', 'query', 'searchQueryJQL'],
   },

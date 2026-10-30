@@ -255,6 +255,7 @@ jira_create_project_issue_type
 jira_create_ticket_basic
 jira_create_ticket_with_json
 jira_create_ticket_with_parent
+jira_delete_comment
 jira_delete_project
 jira_delete_ticket
 jira_download_attachment
@@ -295,6 +296,7 @@ jira_setup_project_workflow
 jira_sync_project_workflow
 jira_test
 jira_update_all_fields_with_name
+jira_update_comment
 jira_update_description
 jira_update_field
 jira_update_field_as_adf

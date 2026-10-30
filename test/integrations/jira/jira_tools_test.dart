@@ -10,6 +10,7 @@ void main() {
   jiraGetTicketShapeTests();
   toolCatalogParamTests();
   executorDispatchTests();
+  executorCommentAndLabelDispatchTests();
 }
 
 /// Looks up a registered tool by name.
@@ -22,6 +23,8 @@ const _expectedToolNames = [
   'jira_get_ticket',
   'jira_search_by_jql',
   'jira_post_comment',
+  'jira_update_comment',
+  'jira_delete_comment',
   'jira_add_label',
   'jira_remove_label',
   'jira_move_to_status',
@@ -94,7 +97,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the seventy tools in declaration order', () {
+    test('registers the seventy-two tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 
@@ -193,12 +196,50 @@ void executorDispatchTests() {
       expect(spy.calls, ['searchByJql:project = X']);
     });
 
+    test('routes jira_move_to_status with key and statusName', () async {
+      await executor.execute(
+          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'});
+      expect(spy.calls, ['moveToStatus:PROJ-1:Done']);
+    });
+
+    test('throws ArgumentError for an unknown tool', () {
+      expect(() => executor.execute('jira_no_such', {}), throwsArgumentError);
+    });
+  });
+}
+
+/// Dispatch tests for comment and label mutation tools.
+void executorCommentAndLabelDispatchTests() {
+  group('JiraToolExecutor.execute (comments & labels)', () {
+    late _SpyJiraClient spy;
+    late JiraToolExecutor executor;
+
+    setUp(() {
+      spy = _SpyJiraClient(mockHttp((o) => '{}').http);
+      executor = JiraToolExecutor(spy);
+    });
+
     test('routes jira_post_comment with key and comment', () async {
       await executor.execute('jira_post_comment', {
         'key': 'PROJ-1',
         'comment': 'hi',
       });
       expect(spy.calls, ['postComment:PROJ-1:hi']);
+    });
+
+    test('routes jira_update_comment and jira_delete_comment', () async {
+      await executor.execute('jira_update_comment', {
+        'key': 'PROJ-1',
+        'commentId': '10001',
+        'comment': 'updated',
+      });
+      expect(spy.calls, ['updateComment:PROJ-1:10001:updated']);
+      spy.calls.clear();
+      await executor.execute('jira_delete_comment', {
+        'key': 'PROJ-1',
+        'commentId': '10001',
+      });
+      expect(spy.calls, ['deleteComment:PROJ-1:10001']);
     });
 
     test('routes jira_add_label and jira_remove_label', () async {
@@ -208,16 +249,6 @@ void executorDispatchTests() {
       await executor
           .execute('jira_remove_label', {'key': 'PROJ-1', 'label': 'b'});
       expect(spy.calls, ['removeLabel:PROJ-1:b']);
-    });
-
-    test('routes jira_move_to_status with key and statusName', () async {
-      await executor.execute(
-          'jira_move_to_status', {'key': 'PROJ-1', 'statusName': 'Done'});
-      expect(spy.calls, ['moveToStatus:PROJ-1:Done']);
-    });
-
-    test('throws ArgumentError for an unknown tool', () {
-      expect(() => executor.execute('jira_no_such', {}), throwsArgumentError);
     });
   });
 }
@@ -251,6 +282,19 @@ class _SpyJiraClient extends JiraClient {
   Future<void> postComment(String key, String comment) {
     calls.add('postComment:$key:$comment');
     return super.postComment(key, comment);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateComment(
+      String key, String commentId, String comment) {
+    calls.add('updateComment:$key:$commentId:$comment');
+    return super.updateComment(key, commentId, comment);
+  }
+
+  @override
+  Future<void> deleteComment(String key, String commentId) {
+    calls.add('deleteComment:$key:$commentId');
+    return super.deleteComment(key, commentId);
   }
 
   @override

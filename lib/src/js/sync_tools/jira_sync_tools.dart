@@ -50,6 +50,12 @@ class JiraSyncTools {
   Map<String, String Function(Map<String, dynamic> args)> get handlers => {
         'jira_get_ticket': _getTicket,
         'jira_post_comment': _postComment,
+        'jira_update_comment': _updateComment,
+        'jira_edit_comment': _updateComment,
+        'tracker_update_comment': _updateComment,
+        'tracker_edit_comment': _updateComment,
+        'jira_delete_comment': _deleteComment,
+        'tracker_delete_comment': _deleteComment,
         'jira_search_by_jql': _searchByJql,
         'jira_add_label': _addLabel,
         'jira_remove_label': _removeLabel,
@@ -112,6 +118,33 @@ class JiraSyncTools {
           '${config.baseUrl}/issue/${_asStr(args['key'])}/comment',
           body,
         );
+      });
+
+  /// `jira_update_comment` — PUT `issue/{key}/comment/{commentId}`.
+  ///
+  /// Converts the comment body via [markdownToJiraMarkup] first (same as
+  /// [_postComment]), then PUTs the updated comment body.
+  String _updateComment(Map<String, dynamic> args) => _run((config) {
+        final commentId = _asStr(args['commentId'] ?? args['id']);
+        final commentText =
+            _asStr(args['comment'] ?? args['text'] ?? args['body']);
+        final body = jsonEncode(
+          {'body': markdownToJiraMarkup(commentText)},
+        );
+        return _putBody(
+          config,
+          '${config.baseUrl}/issue/${_asStr(args['key'])}/comment/$commentId',
+          body,
+        );
+      });
+
+  /// `jira_delete_comment` — DELETE `issue/{key}/comment/{commentId}`.
+  String _deleteComment(Map<String, dynamic> args) => _run((config) {
+        final commentId = _asStr(args['commentId'] ?? args['id']);
+        return _bodyOrError(SyncHttpClient.delete(
+          '${config.baseUrl}/issue/${_asStr(args['key'])}/comment/$commentId',
+          headers: config.headers,
+        ));
       });
 
   /// `jira_search_by_jql` — GET `search/jql` (Cloud) or `search` (Server).

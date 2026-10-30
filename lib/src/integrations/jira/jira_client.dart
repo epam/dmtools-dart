@@ -170,6 +170,27 @@ class JiraClient {
     );
   }
 
+  /// `jira_update_comment` — PUT `/rest/api/latest/issue/{key}/comment/{commentId}`.
+  ///
+  /// Converts [comment] Markdown → Jira wiki markup first (same as
+  /// [postComment]), then replaces the comment body.
+  Future<Map<String, dynamic>> updateComment(
+    String key,
+    String commentId,
+    String comment,
+  ) async {
+    final body = await _http.put(
+      'issue/$key/comment/$commentId',
+      body: jsonEncode({'body': markdownToJiraMarkup(comment)}),
+    );
+    return _decodeMap(body);
+  }
+
+  /// `jira_delete_comment` — DELETE `/rest/api/latest/issue/{key}/comment/{commentId}`.
+  Future<void> deleteComment(String key, String commentId) async {
+    await _http.delete('issue/$key/comment/$commentId');
+  }
+
   /// `jira_add_label` — adds [label] to [key] if not already present.
   Future<void> addLabel(String key, String label) async {
     final labels = await _fetchLabels(key);

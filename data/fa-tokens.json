@@ -1,15 +1,6 @@
 {
   "issue-384": [
     {
-      "leg": "review",
-      "at": "2026-10-16T20:33:24Z",
-      "prompt": 47225,
-      "completion": 31121,
-      "total": 78346,
-      "cacheRead": 895331,
-      "model": "claude-haiku-5.5"
-    },
-    {
       "leg": "rework",
       "at": "2026-10-16T21:25:46Z",
       "prompt": 85082,
@@ -47,33 +38,6 @@
     }
   ],
   "pr-414": [
-    {
-      "leg": "rework",
-      "at": "2026-10-16T18:04:32Z",
-      "prompt": 115836,
-      "completion": 561,
-      "total": 116397,
-      "cacheRead": 99556,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-16T18:32:21Z",
-      "prompt": 124455,
-      "completion": 480,
-      "total": 124935,
-      "cacheRead": 108192,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-16T18:54:33Z",
-      "prompt": 132999,
-      "completion": 523,
-      "total": 133522,
-      "cacheRead": 116736,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T21:02:03Z",
@@ -147,87 +111,7 @@
       "model": "claude-haiku-5.5"
     }
   ],
-  "issue-388": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:19:47Z",
-      "prompt": 50250,
-      "completion": 4218,
-      "total": 54468,
-      "cacheRead": 261374,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "issue-400": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:20:09Z",
-      "prompt": 29629,
-      "completion": 4014,
-      "total": 33643,
-      "cacheRead": 273621,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "issue-398": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:20:17Z",
-      "prompt": 32368,
-      "completion": 5389,
-      "total": 37757,
-      "cacheRead": 359339,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "issue-385": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:20:19Z",
-      "prompt": 36075,
-      "completion": 8033,
-      "total": 44108,
-      "cacheRead": 527505,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-16T19:41:35Z",
-      "prompt": 38556,
-      "completion": 9179,
-      "total": 47735,
-      "cacheRead": 740522,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-16T20:30:45Z",
-      "prompt": 33740,
-      "completion": 5447,
-      "total": 39187,
-      "cacheRead": 253366,
-      "model": "claude-haiku-5.5"
-    }
-  ],
   "issue-393": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:20:22Z",
-      "prompt": 33232,
-      "completion": 6247,
-      "total": 39479,
-      "cacheRead": 620216,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-16T19:57:33Z",
-      "prompt": 41848,
-      "completion": 9319,
-      "total": 51167,
-      "cacheRead": 1129213,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T21:17:07Z",
@@ -312,33 +196,6 @@
   ],
   "issue-397": [
     {
-      "leg": "dev",
-      "at": "2026-10-16T19:20:37Z",
-      "prompt": 36329,
-      "completion": 6728,
-      "total": 43057,
-      "cacheRead": 459366,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "rework",
-      "at": "2026-10-16T20:11:42Z",
-      "prompt": 42751,
-      "completion": 3083,
-      "total": 45834,
-      "cacheRead": 141090,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-16T20:31:02Z",
-      "prompt": 31475,
-      "completion": 4165,
-      "total": 35640,
-      "cacheRead": 207957,
-      "model": "claude-haiku-5.5"
-    },
-    {
       "leg": "rework",
       "at": "2026-10-16T22:43:27Z",
       "prompt": 46050,
@@ -384,38 +241,7 @@
       "model": "claude-haiku-5.5"
     }
   ],
-  "issue-407": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:21:00Z",
-      "prompt": 29656,
-      "completion": 6146,
-      "total": 35802,
-      "cacheRead": 513433,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "issue-399": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:21:05Z",
-      "prompt": 25946,
-      "completion": 4298,
-      "total": 30244,
-      "cacheRead": 349532,
-      "model": "claude-haiku-5.5"
-    }
-  ],
   "issue-395": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:21:24Z",
-      "prompt": 61403,
-      "completion": 15908,
-      "total": 77311,
-      "cacheRead": 1399447,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T22:37:17Z",
@@ -490,15 +316,6 @@
     }
   ],
   "issue-391": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:22:42Z",
-      "prompt": 48011,
-      "completion": 14581,
-      "total": 62592,
-      "cacheRead": 1151826,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T21:08:45Z",
@@ -601,15 +418,6 @@
   ],
   "issue-394": [
     {
-      "leg": "dev",
-      "at": "2026-10-16T19:24:10Z",
-      "prompt": 63391,
-      "completion": 20482,
-      "total": 83873,
-      "cacheRead": 1733507,
-      "model": "claude-haiku-5.5"
-    },
-    {
       "leg": "rework",
       "at": "2026-10-16T22:22:44Z",
       "prompt": 34611,
@@ -620,15 +428,6 @@
     }
   ],
   "issue-396": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:27:43Z",
-      "prompt": 106560,
-      "completion": 43114,
-      "total": 149674,
-      "cacheRead": 6067275,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T23:17:28Z",
@@ -792,27 +591,7 @@
       "model": "claude-haiku-5.5"
     }
   ],
-  "issue-386": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:29:12Z",
-      "prompt": 50066,
-      "completion": 7728,
-      "total": 57794,
-      "cacheRead": 968490,
-      "model": "claude-haiku-5.5"
-    }
-  ],
   "issue-389": [
-    {
-      "leg": "dev",
-      "at": "2026-10-16T19:31:27Z",
-      "prompt": 83382,
-      "completion": 26542,
-      "total": 109924,
-      "cacheRead": 2421348,
-      "model": "claude-haiku-5.5"
-    },
     {
       "leg": "rework",
       "at": "2026-10-16T22:08:34Z",
@@ -892,37 +671,6 @@
       "completion": 2887,
       "total": 60256,
       "cacheRead": 248159,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "pr-418": [
-    {
-      "leg": "review",
-      "at": "2026-10-16T19:53:20Z",
-      "prompt": 27573,
-      "completion": 3348,
-      "total": 30921,
-      "cacheRead": 165107,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "pr-416": [
-    {
-      "leg": "rework",
-      "at": "2026-10-16T20:01:40Z",
-      "prompt": 62224,
-      "completion": 9950,
-      "total": 72174,
-      "cacheRead": 1270043,
-      "model": "claude-haiku-5.5"
-    },
-    {
-      "leg": "review",
-      "at": "2026-10-16T20:25:25Z",
-      "prompt": 47325,
-      "completion": 2981,
-      "total": 50306,
-      "cacheRead": 149705,
       "model": "claude-haiku-5.5"
     }
   ],
@@ -2418,6 +2166,17 @@
       "completion": 4400,
       "total": 54148,
       "cacheRead": 162629,
+      "model": "claude-haiku-5.5"
+    }
+  ],
+  "pr-470": [
+    {
+      "leg": "review",
+      "at": "2026-10-30T21:01:06Z",
+      "prompt": 80529,
+      "completion": 20316,
+      "total": 100845,
+      "cacheRead": 990697,
       "model": "claude-haiku-5.5"
     }
   ]

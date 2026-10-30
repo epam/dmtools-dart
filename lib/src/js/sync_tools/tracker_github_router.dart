@@ -1,48 +1,8 @@
-/// GitHub Issues backend for tracker-shaped `jira_*` tool calls.
+/// GitHub Issues backend for tracker-shaped `jira_*` tool calls when the
+/// ticket key matches `gh-<number>` and Jira is unconfigured (`gh-62`).
 ///
-/// Routing rule (explicit and opt-in): a tracker call routes to GitHub
-/// Issues only when the ticket key matches `gh-<number>` **and** Jira is
-/// not configured (no `JIRA_BASE_PATH` or no Jira auth token — the same
-/// conditions under which the Jira executors report
-/// `{"error": "Jira not configured"}`). Any real Jira config keeps the
-/// current Jira behavior — zero regression for Java-parity environments.
-/// The keyless `jira_search_by_jql` routes whenever Jira is unconfigured
-/// (its only alternative is the config error). One line is logged at
-/// dispatch: `tracker: gh-50 → github issues`.
-///
-/// Routing table (`gh-N` → GitHub Issues on the tracker repo):
-///
-/// | `jira_*` call            | GitHub routing                                        |
-/// |--------------------------|-------------------------------------------------------|
-/// | `jira_get_ticket`        | GET issue → Jira-shaped ticket (`key`, `fields.summary`/`description`/`labels`/`status.name`) |
-/// | `jira_get_comments`      | GET issue comments → `{comments: [...]}` (Jira shape) |
-/// | `jira_post_comment`      | POST issue comment                                    |
-/// | `jira_add_label`         | POST issue labels                                     |
-/// | `jira_remove_label`      | DELETE issue label (absent label = success)           |
-/// | `jira_move_to_status`    | label `status:<name>`; Done-ish names close the issue, Open-ish names reopen it |
-/// | `jira_search_by_jql`     | a whole-JQL `key` filter fetches those issues; `key` AND-ed labels/status/assignee filters apply client-side (`in` = ANY, absent issues skipped); keyless queries map single-value filters onto the issues list; an honest "unsupported JQL" error otherwise |
-///
-/// List endpoints (issues list, comments) walk `per_page=100` pages
-/// until a short page — results are never silently capped at 100 items.
-/// Key-scoped searches apply their AND-ed filters client-side, where
-/// multi-value `in` clauses are correct (ANY semantics); keyless
-/// queries support single-value labels/status/assignee filters only
-/// (GitHub's list endpoint ANDs comma-joined labels and takes one
-/// state/assignee), so multi-value clauses there are an honest
-/// unsupported-JQL error rather than a silently narrowed result.
-///
-/// Status mapping for `jira_move_to_status` (normalized lowercase):
-/// Done-ish — done, closed, resolved, complete, completed, fixed, merged —
-/// also PATCHes the issue `state: closed`; Open-ish — open, reopened, todo,
-/// backlog, new, in progress, in development, ready for development,
-/// in review, review, ready for review — PATCHes `state: open` on a closed
-/// issue. Every other name is label-only. A `status:<name>` label wins over
-/// the open/closed state when `jira_get_ticket` derives `status.name`.
-///
-/// The tracker repo resolves from `DMTOOLS_TRACKER_REPO`, then
-/// `GITHUB_REPOSITORY`, then `SOURCE_GITHUB_REPOSITORY` (`owner/repo`
-/// form). Auth and transport reuse the `github_*` sync stack
-/// (`SOURCE_GITHUB_TOKEN`, [SyncHttpClient]) — no new auth path.
+/// Any real Jira config keeps the standard Jira path; keyless
+/// `jira_search_by_jql` routes whenever Jira is unconfigured.
 library;
 
 import 'dart:convert';
@@ -224,6 +184,32 @@ class TrackerGitHubRouter {
     return null;
   }
 
+  /// Comment tools (`jira_get_comments`, `jira_post_comment`,
+  /// `jira_update_comment` / `jira_edit_comment`, `jira_delete_comment`).
+  String? _routeCommentTool(
+    String toolName,
+    _GhRouteConfig c,
+    String number,
+    Map<String, dynamic> args,
+  ) {
+    if (toolName == 'jira_get_comments') return _getComments(c, number);
+    if (toolName == 'jira_post_comment') {
+      return _postComment(c, number, syncAsStr(args['comment']));
+    }
+    if (toolName == 'jira_update_comment' || toolName == 'jira_edit_comment') {
+      return _updateComment(
+        c,
+        number,
+        syncAsStr(args['commentId'] ?? args['id']),
+        syncAsStr(args['comment'] ?? args['text'] ?? args['body']),
+      );
+    }
+    if (toolName == 'jira_delete_comment') {
+      return _deleteComment(c, syncAsStr(args['commentId'] ?? args['id']));
+    }
+    return null;
+  }
+
   /// Dispatches a routed ticket tool to its GitHub Issues mapping.
   String _routeKeyTool(
     String toolName,
@@ -233,22 +219,11 @@ class TrackerGitHubRouter {
   ) {
     final labelTool = _routeLabelTool(toolName, c, number, args);
     if (labelTool != null) return labelTool;
+    final commentTool = _routeCommentTool(toolName, c, number, args);
+    if (commentTool != null) return commentTool;
     return switch (toolName) {
       'jira_get_ticket' =>
         _withIssue(c, number, (i) => jsonEncode(_ticketFromIssue(i))),
-      'jira_get_comments' => _getComments(c, number),
-      'jira_post_comment' =>
-        _postComment(c, number, syncAsStr(args['comment'])),
-      'jira_update_comment' || 'jira_edit_comment' => _updateComment(
-          c,
-          number,
-          syncAsStr(args['commentId'] ?? args['id']),
-          syncAsStr(args['comment'] ?? args['text'] ?? args['body']),
-        ),
-      'jira_delete_comment' => _deleteComment(
-          c,
-          syncAsStr(args['commentId'] ?? args['id']),
-        ),
       'jira_move_to_status' =>
         _moveToStatus(c, number, syncAsStr(args['statusName'])),
       _ => syncErr('Unsupported tracker tool: $toolName'),

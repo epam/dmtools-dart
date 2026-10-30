@@ -58,6 +58,9 @@ const _routableKeyTools = {
   'jira_get_ticket',
   'jira_get_comments',
   'jira_post_comment',
+  'jira_update_comment',
+  'jira_edit_comment',
+  'jira_delete_comment',
   'jira_add_label',
   'jira_remove_label',
   'jira_move_to_status',
@@ -236,6 +239,16 @@ class TrackerGitHubRouter {
       'jira_get_comments' => _getComments(c, number),
       'jira_post_comment' =>
         _postComment(c, number, syncAsStr(args['comment'])),
+      'jira_update_comment' || 'jira_edit_comment' => _updateComment(
+          c,
+          number,
+          syncAsStr(args['commentId'] ?? args['id']),
+          syncAsStr(args['comment'] ?? args['text'] ?? args['body']),
+        ),
+      'jira_delete_comment' => _deleteComment(
+          c,
+          syncAsStr(args['commentId'] ?? args['id']),
+        ),
       'jira_move_to_status' =>
         _moveToStatus(c, number, syncAsStr(args['statusName'])),
       _ => syncErr('Unsupported tracker tool: $toolName'),
@@ -277,6 +290,36 @@ class TrackerGitHubRouter {
       return syncErr('unexpected GitHub comment payload for gh-$number');
     }
     return jsonEncode(_commentFromJson(created));
+  }
+
+  /// `jira_update_comment` — PATCH an issue comment by [commentId]; returns
+  /// the updated comment in the Jira comment shape.
+  String _updateComment(
+    _GhRouteConfig c,
+    String number,
+    String commentId,
+    String body,
+  ) {
+    final resp = SyncHttpClient.patch(
+      '${c.baseUrl}/repos/${c.repoSeg}/issues/comments/$commentId',
+      headers: c.headers,
+      body: jsonEncode({'body': jiraMarkupToMarkdown(body)}),
+    );
+    if (!resp.isOk) return _respError(resp);
+    final updated = _tryDecode(resp.body);
+    if (updated is! Map<String, dynamic>) {
+      return syncErr('unexpected GitHub comment payload for gh-$number');
+    }
+    return jsonEncode(_commentFromJson(updated));
+  }
+
+  /// `jira_delete_comment` — DELETE an issue comment by [commentId].
+  String _deleteComment(_GhRouteConfig c, String commentId) {
+    final resp = SyncHttpClient.delete(
+      '${c.baseUrl}/repos/${c.repoSeg}/issues/comments/$commentId',
+      headers: c.headers,
+    );
+    return resp.isOk ? jsonEncode('') : _respError(resp);
   }
 
   /// `jira_add_label` — POST the labels array; returns the updated labels.

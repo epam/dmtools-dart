@@ -39,7 +39,8 @@ List<ToolDefinition> _searchTools() => [
       ),
     ];
 
-/// Comment tool: `jira_post_comment`.
+/// Comment tools: `jira_post_comment`, `jira_update_comment`,
+/// `jira_delete_comment`.
 List<ToolDefinition> _commentTools() => [
       _jiraTool(
         name: 'jira_post_comment',
@@ -48,6 +49,32 @@ List<ToolDefinition> _commentTools() => [
         params: [
           _keyParam,
           _commentTextParam,
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_update_comment',
+        aliases: [
+          'jira_edit_comment',
+          'tracker_update_comment',
+          'tracker_edit_comment',
+        ],
+        description:
+            'Update (edit) an existing comment on a Jira ticket by its comment ID',
+        category: 'comment_management',
+        params: [
+          _keyParam,
+          _commentIdParam,
+          _commentTextParam,
+        ],
+      ),
+      _jiraTool(
+        name: 'jira_delete_comment',
+        aliases: ['tracker_delete_comment'],
+        description: 'Delete a comment from a Jira ticket by its comment ID',
+        category: 'comment_management',
+        params: [
+          _keyParam,
+          _commentIdParam,
         ],
       ),
     ];
@@ -507,6 +534,14 @@ const _commentTextParam = ToolParam(
   description: 'The comment text to post',
   required: true,
   aliases: ['text', 'body'],
+);
+
+/// Reusable parameter: the comment ID on a Jira ticket.
+const _commentIdParam = ToolParam(
+  name: 'commentId',
+  description: 'The ID of the comment',
+  required: true,
+  aliases: ['id'],
 );
 
 /// Reusable parameter: the field name to update.

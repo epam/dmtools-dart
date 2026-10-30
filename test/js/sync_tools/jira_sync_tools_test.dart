@@ -92,6 +92,12 @@ void _testHandlerCatalog() {
           containsAll([
             'jira_get_ticket',
             'jira_post_comment',
+            'jira_update_comment',
+            'jira_edit_comment',
+            'tracker_update_comment',
+            'tracker_edit_comment',
+            'jira_delete_comment',
+            'tracker_delete_comment',
             'jira_search_by_jql',
             'jira_add_label',
             'jira_remove_label',
@@ -190,6 +196,27 @@ void testPostCommentConversion() {
     }));
     final posted = jsonDecode(body['body'] as String)['body'] as String;
     expect(posted, 'plain text, no markup');
+  });
+
+  test('jira_update_comment PUTs converted markdown to comment endpoint', () {
+    final body = jsonDecode(tools.dispatch('jira_update_comment', {
+      'key': 'P-1',
+      'commentId': '10001',
+      'comment': '## Updated\n\n- **done**',
+    }));
+    expect(body['method'], 'PUT');
+    expect(body['path'], '/rest/api/latest/issue/P-1/comment/10001');
+    final updated = jsonDecode(body['body'] as String)['body'] as String;
+    expect(updated, 'h2. Updated\n\n- *done*');
+  });
+
+  test('jira_delete_comment DELETEs comment endpoint', () {
+    final body = jsonDecode(tools.dispatch('jira_delete_comment', {
+      'key': 'P-1',
+      'commentId': '10001',
+    }));
+    expect(body['method'], 'DELETE');
+    expect(body['path'], '/rest/api/latest/issue/P-1/comment/10001');
   });
 }
 

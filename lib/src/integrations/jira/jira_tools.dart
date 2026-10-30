@@ -188,6 +188,20 @@ class JiraToolExecutor {
               a['key'] as String,
               a['comment'] as String,
             ),
+        'jira_update_comment': (a) => _client.updateComment(
+              a['key'] as String,
+              a['commentId'] as String,
+              a['comment'] as String,
+            ),
+        'jira_edit_comment': (a) => _client.updateComment(
+              a['key'] as String,
+              a['commentId'] as String,
+              a['comment'] as String,
+            ),
+        'jira_delete_comment': (a) => _client.deleteComment(
+              a['key'] as String,
+              a['commentId'] as String,
+            ),
         'jira_add_label': (a) => _client.addLabel(
               a['key'] as String,
               a['label'] as String,

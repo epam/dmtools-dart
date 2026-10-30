@@ -154,6 +154,30 @@ void postCommentTests() {
       expect(jsonDecode(call.data as String), {'body': 'hello world'});
     });
   });
+
+  group('JiraClient.updateComment', () {
+    test('PUTs converted comment body and decodes the updated comment',
+        () async {
+      final f = mockJira((o) => '{"id":"10001","body":"*updated*"}');
+      final res =
+          await f.client.updateComment('PROJ-1', '10001', '**updated**');
+      expect(res, {'id': '10001', 'body': '*updated*'});
+      final call = f.adapter.calls.single;
+      expect(call.method, 'PUT');
+      expect(call.path, endsWith('/issue/PROJ-1/comment/10001'));
+      expect(jsonDecode(call.data as String), {'body': '*updated*'});
+    });
+  });
+
+  group('JiraClient.deleteComment', () {
+    test('DELETEs comment by commentId', () async {
+      final f = mockJira((o) => '');
+      await f.client.deleteComment('PROJ-1', '10001');
+      final call = f.adapter.calls.single;
+      expect(call.method, 'DELETE');
+      expect(call.path, endsWith('/issue/PROJ-1/comment/10001'));
+    });
+  });
 }
 
 /// `jira_add_label` / `jira_remove_label`.

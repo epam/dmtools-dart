@@ -22,6 +22,8 @@ const _expectedToolNames = [
   'jira_get_ticket',
   'jira_search_by_jql',
   'jira_post_comment',
+  'jira_update_comment',
+  'jira_delete_comment',
   'jira_add_label',
   'jira_remove_label',
   'jira_move_to_status',
@@ -94,7 +96,7 @@ void toolCatalogShapeTests() {
   group('jiraTools catalog', () {
     final tools = jiraTools();
 
-    test('registers the seventy tools in declaration order', () {
+    test('registers the seventy-two tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolNames);
     });
 
@@ -201,6 +203,21 @@ void executorDispatchTests() {
       expect(spy.calls, ['postComment:PROJ-1:hi']);
     });
 
+    test('routes jira_update_comment and jira_delete_comment', () async {
+      await executor.execute('jira_update_comment', {
+        'key': 'PROJ-1',
+        'commentId': '10001',
+        'comment': 'updated',
+      });
+      expect(spy.calls, ['updateComment:PROJ-1:10001:updated']);
+      spy.calls.clear();
+      await executor.execute('jira_delete_comment', {
+        'key': 'PROJ-1',
+        'commentId': '10001',
+      });
+      expect(spy.calls, ['deleteComment:PROJ-1:10001']);
+    });
+
     test('routes jira_add_label and jira_remove_label', () async {
       await executor.execute('jira_add_label', {'key': 'PROJ-1', 'label': 'b'});
       expect(spy.calls, ['addLabel:PROJ-1:b']);
@@ -251,6 +268,19 @@ class _SpyJiraClient extends JiraClient {
   Future<void> postComment(String key, String comment) {
     calls.add('postComment:$key:$comment');
     return super.postComment(key, comment);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateComment(
+      String key, String commentId, String comment) {
+    calls.add('updateComment:$key:$commentId:$comment');
+    return super.updateComment(key, commentId, comment);
+  }
+
+  @override
+  Future<void> deleteComment(String key, String commentId) {
+    calls.add('deleteComment:$key:$commentId');
+    return super.deleteComment(key, commentId);
   }
 
   @override

@@ -366,6 +366,32 @@ void _fixturePostComment() {
     expect(request['path'], '/repos/o/r/issues/50/comments');
     expect(jsonDecode(request['body'] as String), {'body': expected});
   });
+
+  test('jira_update_comment PATCHes issue comment and converts Jira markup',
+      () {
+    jsonDecode(fx.tools.dispatch('jira_update_comment', {
+      'key': 'gh-50',
+      'commentId': '10',
+      'comment': 'h3. Updated',
+    })) as Map<String, dynamic>;
+    final request =
+        jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
+    expect(request['method'], 'PATCH');
+    expect(request['path'], '/repos/o/r/issues/comments/10');
+    expect(jsonDecode(request['body'] as String), {'body': '### Updated'});
+  });
+
+  test('jira_delete_comment DELETEs issue comment', () {
+    final out = fx.tools.dispatch('jira_delete_comment', {
+      'key': 'gh-50',
+      'commentId': '10',
+    });
+    expect(jsonDecode(out), '');
+    final request =
+        jsonDecode(fx.server.lastRequestJson!) as Map<String, dynamic>;
+    expect(request['method'], 'DELETE');
+    expect(request['path'], '/repos/o/r/issues/comments/10');
+  });
 }
 
 /// Label add/remove mappings, including the absent-label tolerance.

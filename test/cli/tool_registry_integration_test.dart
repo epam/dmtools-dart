@@ -40,6 +40,7 @@ void _testCatalogMembership() {
         'jira_xray',
         'kb',
         'mermaid',
+        'rovo',
       };
       expect(_registry.availableIntegrations.length, expected.length);
       expect(_registry.availableIntegrations, containsAll(expected));

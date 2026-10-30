@@ -641,23 +641,17 @@ extension PropertyReaderGetters on PropertyReader {
   /// Bearer and `ROVO_API_TOKEN` is set, returns `ROVO_API_TOKEN`. Otherwise
   /// falls back to `ROVO_LOGIN_PASS_TOKEN`.
   String? getRovoLoginPassToken() {
-    final email = getRovoEmail();
-    final token = getRovoApiToken();
-    final authType = getRovoAuthType();
-    if (email != null &&
-        email.trim().isNotEmpty &&
-        token != null &&
-        token.trim().isNotEmpty) {
-      if (authType.toLowerCase() == 'bearer') return token.trim();
-      final creds = '${email.trim()}:${token.trim()}';
-      return base64Encode(utf8.encode(creds));
-    }
-    if (authType.toLowerCase() == 'bearer' &&
-        token != null &&
-        token.trim().isNotEmpty) {
-      return token.trim();
-    }
+    final token = _nonBlankRovoValue(getRovoApiToken());
+    if (token == null) return getValue(PropertyNames.ROVO_LOGIN_PASS_TOKEN);
+    if (getRovoAuthType().toLowerCase() == 'bearer') return token;
+    final email = _nonBlankRovoValue(getRovoEmail());
+    if (email != null) return base64Encode(utf8.encode('$email:$token'));
     return getValue(PropertyNames.ROVO_LOGIN_PASS_TOKEN);
+  }
+
+  String? _nonBlankRovoValue(String? value) {
+    final trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
   }
 
   /// Default Atlassian Cloud ID for Rovo MCP calls. Key: `ROVO_CLOUD_ID`.

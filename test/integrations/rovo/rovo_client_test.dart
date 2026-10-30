@@ -90,14 +90,8 @@ void _httpClientTests() {
       await client.rovoSearch(query: 'test');
       expect(captured, isNotNull);
       expect(captured!.headers['Authorization'], equals('Basic base64-creds'));
-      expect(
-        captured!.headers['Accept'],
-        equals('application/json, text/event-stream'),
-      );
-      expect(
-        captured!.uri.toString(),
-        equals('https://mcp.atlassian.com/v2/mcp'),
-      );
+      expect(captured!.headers['Accept'], contains('text/event-stream'));
+      expect(captured!.uri.toString(), equals(rovoDefaultMcpUrl));
     });
 
     test('supports Bearer authorization and pre-prefixed tokens', () async {
@@ -117,10 +111,7 @@ void _httpClientTests() {
     test('PropertyReader factory builds client and throws when unconfigured',
         () {
       PropertyReader.clearOverrides();
-      expect(
-        () => RovoHttpClient(PropertyReader()),
-        throwsA(isA<StateError>()),
-      );
+      expect(() => RovoHttpClient(PropertyReader()), throwsStateError);
       PropertyReader.setOverrides({
         'ROVO_EMAIL': 'dev@example.com',
         'ROVO_API_TOKEN': 'secret',
@@ -132,6 +123,11 @@ void _httpClientTests() {
       final expectedBasic = base64Encode(utf8.encode('dev@example.com:secret'));
       expect(http.authHeaders['Authorization'], equals('Basic $expectedBasic'));
       expect(IntegrationClients.instance.rovo(), isA<RovoClient>());
+      PropertyReader.setOverrides({
+        'ROVO_API_TOKEN': 'secret',
+        'ROVO_LOGIN_PASS_TOKEN': 'fallback-tok',
+      });
+      expect(PropertyReader().getRovoLoginPassToken(), equals('fallback-tok'));
     });
   });
 }

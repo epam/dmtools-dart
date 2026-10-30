@@ -472,6 +472,24 @@ class PropertyNames {
   /// `RALLY_TOKEN` configuration property name (Java `PropertyReader` parity).
   static const String RALLY_TOKEN = 'RALLY_TOKEN';
 
+  /// `ROVO_API_TOKEN` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_API_TOKEN = 'ROVO_API_TOKEN';
+
+  /// `ROVO_AUTH_TYPE` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_AUTH_TYPE = 'ROVO_AUTH_TYPE';
+
+  /// `ROVO_CLOUD_ID` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_CLOUD_ID = 'ROVO_CLOUD_ID';
+
+  /// `ROVO_EMAIL` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_EMAIL = 'ROVO_EMAIL';
+
+  /// `ROVO_LOGIN_PASS_TOKEN` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_LOGIN_PASS_TOKEN = 'ROVO_LOGIN_PASS_TOKEN';
+
+  /// `ROVO_MCP_URL` configuration property name (Java `PropertyReader` parity).
+  static const String ROVO_MCP_URL = 'ROVO_MCP_URL';
+
   /// `SHAREPOINT_SCOPES` configuration property name (Java `PropertyReader` parity).
   static const String SHAREPOINT_SCOPES = 'SHAREPOINT_SCOPES';
 
@@ -727,6 +745,12 @@ class PropertyNames {
     PROMPT_CHUNK_TOKEN_LIMIT,
     RALLY_PATH,
     RALLY_TOKEN,
+    ROVO_API_TOKEN,
+    ROVO_AUTH_TYPE,
+    ROVO_CLOUD_ID,
+    ROVO_EMAIL,
+    ROVO_LOGIN_PASS_TOKEN,
+    ROVO_MCP_URL,
     SHAREPOINT_SCOPES,
     SLEEP_TIME_REQUEST,
     SOURCE_GITHUB_BASE_PATH,

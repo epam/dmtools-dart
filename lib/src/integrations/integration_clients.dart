@@ -95,6 +95,12 @@ class IntegrationClients {
         () => XrayClient(XrayHttpClient(PropertyReader())),
       );
 
+  /// The shared Atlassian Rovo MCP client (built on first access).
+  RovoClient rovo() => _cached(
+        'rovo',
+        () => RovoClient(RovoHttpClient(PropertyReader())),
+      );
+
   /// Drops every cached client.
   ///
   /// Production code never needs this (configuration does not change within

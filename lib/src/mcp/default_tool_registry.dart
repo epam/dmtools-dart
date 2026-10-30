@@ -20,6 +20,7 @@ import '../integrations/jira/jira_tools.dart';
 import '../integrations/kb/kb_tools.dart';
 import '../integrations/mermaid/mermaid_tools.dart';
 import '../integrations/scm/scm_ci_alias_catalog.dart';
+import '../integrations/rovo/rovo_tools.dart';
 import '../integrations/sharepoint/sharepoint_tools.dart';
 import '../integrations/teams/teams_tools.dart';
 import '../integrations/testrail/testrail_tools.dart';
@@ -48,6 +49,7 @@ final List<ToolDefinition> _baseToolCatalog = List.unmodifiable([
   ...xrayTools(),
   ...kbTools(),
   ...mermaidTools(),
+  ...rovoTools(),
 ]);
 
 /// Returns every tool definition registered in the default registry.

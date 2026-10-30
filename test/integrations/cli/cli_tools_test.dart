@@ -33,15 +33,23 @@ void toolCatalogTests() {
       expect(tool.category, 'system');
     });
 
-    test('cli_execute_command declares command and workingDirectory', () {
+    test(
+        'cli_execute_command declares command, workingDirectory, and expectNonZeroExit',
+        () {
       final tool = tools.first;
-      expect(tool.params.map((p) => p.name), ['command', 'workingDirectory']);
+      expect(
+        tool.params.map((p) => p.name),
+        ['command', 'workingDirectory', 'expectNonZeroExit'],
+      );
       expect(
         tool.params.firstWhere((p) => p.name == 'command').required,
         isTrue,
       );
       final wd = tool.params.firstWhere((p) => p.name == 'workingDirectory');
       expect(wd.required, isFalse);
+      final expectExit =
+          tool.params.firstWhere((p) => p.name == 'expectNonZeroExit');
+      expect(expectExit.required, isFalse);
     });
   });
 }

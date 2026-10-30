@@ -26,7 +26,7 @@ bitrise_list_build_artifacts:appSlug,buildSlug
 bitrise_list_builds:appSlug,workflowId,branch,status,limit,next
 bitrise_test:
 bitrise_trigger_build:appSlug,workflowId,branch,commitMessage,envVars
-cli_execute_command:command,workingDirectory
+cli_execute_command:command,workingDirectory,expectNonZeroExit
 confluence_content_by_id:contentId,format
 confluence_content_by_title:title,format
 confluence_content_by_title_and_space:title,space,format

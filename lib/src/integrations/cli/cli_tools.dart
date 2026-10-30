@@ -52,6 +52,14 @@ List<ToolDefinition> cliTools() => [
                 'path relative to current directory.',
             required: false,
           ),
+          ToolParam(
+            name: 'expectNonZeroExit',
+            description: "When 'true', non-zero exit codes are treated as "
+                'expected outcomes: suppresses ERROR stack trace logging '
+                '(logs a single DEBUG line instead) while still propagating '
+                'the failure.',
+            required: false,
+          ),
         ],
       ),
       ToolDefinition(
@@ -132,6 +140,7 @@ class CliToolExecutor {
     String command, {
     List<String>? args,
     String? workingDirectory,
+    String? expectNonZeroExit,
     OutputLineSink? mirror,
   }) async {
     if (!isAllowed(command)) {
@@ -233,6 +242,7 @@ class CliToolExecutor {
           a['command'] as String,
           args: _parseArgs(a['args']),
           workingDirectory: a['workingDirectory'] as String?,
+          expectNonZeroExit: a['expectNonZeroExit']?.toString(),
         ),
     'cli_execute_command_with_env': (a) => executeCommandWithEnv(
           a['command'] as String,

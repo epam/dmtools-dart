@@ -82,6 +82,31 @@ class AdoHttpClient extends BaseHttpClient {
   /// Builds an organization-scoped URL: `{base}/{organization}/_apis/{path}`.
   String buildOrgUrl(String path) => '$basePath/$_organization/_apis/$path';
 
+  /// Organization name configured for this client.
+  String get organization => _organization;
+
+  /// Base URL for the VSSPS host (`{base}/{org}/_apis` for local http test
+  /// servers, `https://vssps.dev.azure.com/{org}/_apis` otherwise).
+  String get vsspsBaseUrl => basePath.startsWith('http://')
+      ? '$basePath/$_organization/_apis'
+      : 'https://vssps.dev.azure.com/$_organization/_apis';
+
+  /// Performs a GET against the VSSPS host (`/_apis/{path}`) with
+  /// `api-version=7.1-preview.1` and returns body + `X-MS-ContinuationToken`.
+  Future<({String body, String? continuationToken})> getVssps(
+    String path, {
+    Map<String, String>? queryParams,
+  }) async {
+    final response = await dio.get<String>(
+      '$vsspsBaseUrl/$path',
+      queryParameters: {'api-version': '7.1-preview.1', ...?queryParams},
+      options: Options(headers: {...headers, 'User-Agent': 'DMTools'}),
+    );
+    final token = response.headers.value('X-MS-ContinuationToken') ??
+        response.headers.value('x-ms-continuationtoken');
+    return (body: response.data ?? '', continuationToken: token);
+  }
+
   /// Performs a GET against an org-scoped path, with the API version attached.
   Future<String> getOrg(String path) async {
     final response = await dio.get<String>(

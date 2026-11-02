@@ -212,4 +212,48 @@ class AdoWorkItemOps {
     }
     return {'status': 'success', 'id': '$id', 'name': name};
   }
+
+  /// `ado_get_user_by_email` — resolves an Azure DevOps user by [email] via
+  /// paginated Graph `/_apis/graph/users` with an Identities API fallback.
+  Future<Map<String, dynamic>> getUserByEmail(String email) async {
+    final seen = <String>{};
+    String? token;
+    for (var page = 0; page < 100; page++) {
+      final res = await _http.getVssps(
+        'graph/users',
+        queryParams: token == null ? null : {'continuationToken': token},
+      );
+      final parsed = parseAdoGraphUsersPage(
+        res.body,
+        email,
+        headerToken: res.continuationToken,
+      );
+      if (parsed.user != null) return parsed.user!;
+      final next = parsed.nextToken;
+      if (next == null || !seen.add(next)) break;
+      token = next;
+    }
+    final fallback = await _findUserViaIdentities(email);
+    if (fallback != null) return fallback;
+    throw StateError('User not found with email: $email');
+  }
+
+  Future<Map<String, dynamic>?> _findUserViaIdentities(String email) async {
+    try {
+      final res = await _http.getVssps(
+        'identities',
+        queryParams: {'searchFilter': 'MailAddress', 'filterValue': email},
+      );
+      final parsed = parseAdoIdentitiesFallback(res.body, email);
+      if (parsed.user != null) return parsed.user;
+      if (parsed.graphDescriptor != null) {
+        final graph =
+            await _http.getVssps('graph/users/${parsed.graphDescriptor}');
+        return jsonDecode(graph.body) as Map<String, dynamic>;
+      }
+    } on Object {
+      return null;
+    }
+    return null;
+  }
 }

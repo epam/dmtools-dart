@@ -262,3 +262,87 @@ String _extractAdoErrorField(Map? props, String message) {
   final name = match.group(1)!;
   return name.contains('.') ? name : resolveAdoFieldName(name);
 }
+
+/// Finds a user matching [email] (case-insensitive `principalName` or
+/// `mailAddress`) in a Graph `/_apis/graph/users` response body, and extracts
+/// the next continuation token (preferring [headerToken] over JSON
+/// `continuationToken`).
+({Map<String, dynamic>? user, String? nextToken}) parseAdoGraphUsersPage(
+  String? body,
+  String email, {
+  String? headerToken,
+}) {
+  final decoded = _tryDecodeMap(body ?? '');
+  final user = _matchGraphUser(decoded?['value'], email.trim().toLowerCase());
+  if (user != null) return (user: user, nextToken: null);
+  final next = _firstNonEmpty([headerToken, decoded?['continuationToken']]);
+  return (user: null, nextToken: next.isEmpty ? null : next);
+}
+
+Map<String, dynamic>? _matchGraphUser(dynamic users, String target) {
+  if (target.isEmpty || users is! List) return null;
+  for (final u in users.whereType<Map>()) {
+    if (target == '${u['principalName'] ?? ''}'.toLowerCase() ||
+        target == '${u['mailAddress'] ?? ''}'.toLowerCase()) {
+      return Map<String, dynamic>.from(u);
+    }
+  }
+  return null;
+}
+
+/// Parses an Identities `/_apis/identities` response body for [email] (dm.ai #814).
+({Map<String, dynamic>? user, String? graphDescriptor})
+    parseAdoIdentitiesFallback(String? body, String email) {
+  final identity = _firstIdentityMap(_tryDecodeMap(body ?? ''));
+  if (identity == null) return (user: null, graphDescriptor: null);
+  final normalized = _normalizeIdentityUser(identity, email);
+  if (normalized != null) return (user: normalized, graphDescriptor: null);
+  final descriptor = '${identity['descriptor'] ?? ''}'.trim();
+  final isGraphDesc = descriptor.isNotEmpty && !descriptor.contains(';');
+  return (user: null, graphDescriptor: isGraphDesc ? descriptor : null);
+}
+
+Map<String, dynamic>? _firstIdentityMap(Map? decoded) {
+  final list = decoded?['value'];
+  if (list is! List || list.isEmpty || list.first is! Map) return null;
+  return Map<String, dynamic>.from(list.first as Map);
+}
+
+Map<String, dynamic>? _normalizeIdentityUser(
+    Map<String, dynamic> identity, String email) {
+  final id = '${identity['id'] ?? ''}'.trim();
+  final displayName = _firstNonEmpty([
+    identity['customDisplayName'],
+    identity['providerDisplayName'],
+    identity['displayName'],
+  ]);
+  if (id.isEmpty && displayName.isEmpty) return null;
+  if (displayName.isNotEmpty) identity['displayName'] = displayName;
+  final mail = _firstNonEmpty([
+    identity['mailAddress'],
+    identity['emailAddress'],
+    _identityPropertyValue(identity, 'Mail'),
+    _identityPropertyValue(identity, 'Account'),
+    email,
+  ]);
+  if (!identity.containsKey('mailAddress') &&
+      !identity.containsKey('emailAddress')) {
+    identity['mailAddress'] = mail;
+  }
+  return identity;
+}
+
+String _firstNonEmpty(List<Object?> candidates) {
+  for (final c in candidates) {
+    final s = '${c ?? ''}'.trim();
+    if (s.isNotEmpty) return s;
+  }
+  return '';
+}
+
+String? _identityPropertyValue(Map<String, dynamic> identity, String key) {
+  final val =
+      '${_asMap(_asMap(identity['properties'])?[key])?[r'$value'] ?? ''}'
+          .trim();
+  return val.isEmpty ? null : val;
+}

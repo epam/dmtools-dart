@@ -6,7 +6,6 @@ ado_get_my_profile
 ado_get_pipeline_run
 ado_get_pr_reviewers
 ado_get_pr_work_items
-ado_get_user_by_email
 ado_search_by_wiql
 ado_set_pr_vote
 ado_update_pr

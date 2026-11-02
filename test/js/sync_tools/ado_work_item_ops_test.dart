@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/src/config/property_reader.dart';
+import 'package:dmtools/src/integrations/ado/ado_work_item_ops.dart';
 import 'package:dmtools/src/js/sync_tools/ado_sync_tools.dart';
 import 'package:test/test.dart';
 
@@ -67,6 +68,7 @@ void main() {
   _attachTests();
   _formatTests();
   _typeStatesTests();
+  _getUserByEmailSyncTests();
 }
 
 /// Wire shape of a PATCH echo: method, path, content type and patch ops.
@@ -551,6 +553,54 @@ void _typeStatesTests() {
       expect(
         call('ado_get_work_item_type_states', {'workItemType': ' '})['error'],
         'workItemType must not be empty',
+      );
+    });
+  });
+}
+
+void _getUserByEmailSyncTests() {
+  group('ado_get_user_by_email sync (dm.ai #814)', () {
+    test('parseAdoGraphUsersPage and parseAdoIdentitiesFallback', () {
+      final p1 = parseAdoGraphUsersPage(
+        '{"value":[{"principalName":"a@x.com"}],"continuationToken":"b"}',
+        'Target@Example.com',
+        headerToken: 'hdr-tok',
+      );
+      expect(p1.user, isNull);
+      expect(p1.nextToken, 'hdr-tok');
+      final p2 = parseAdoGraphUsersPage(
+        '{"value":[{"mailAddress":"target@example.com","displayName":"T"}]}',
+        'Target@Example.com',
+      );
+      expect(p2.user?['displayName'], 'T');
+      final id = parseAdoIdentitiesFallback(
+        '{"value":[{"id":"g1","descriptor":"ClaimsIdentity;x",'
+            '"providerDisplayName":"P","properties":{"Mail":{"\$value":"p@x"}}}]}',
+        'u@example.com',
+      );
+      expect(id.user?['id'], 'g1');
+      expect(id.user?['displayName'], 'P');
+      expect(id.user?['mailAddress'], 'p@x');
+      expect(id.graphDescriptor, isNull);
+    });
+
+    test('sync handler queries graph/users and falls back to identities',
+        () async {
+      expect(
+        call('ado_get_user_by_email', {'email': ' '})['error'],
+        'email must not be empty',
+      );
+      final res = call('ado_get_user_by_email', {'email': 'u@example.com'});
+      expect(
+          res['error'], contains('User not found with email: u@example.com'));
+      final log = await fullLog();
+      expect(log, hasLength(2));
+      expect(
+          log[0]['path'], '/org/_apis/graph/users?api-version=7.1-preview.1');
+      expect(
+        log[1]['path'],
+        '/org/_apis/identities?searchFilter=MailAddress'
+        '&filterValue=u%40example.com&api-version=7.1-preview.1',
       );
     });
   });

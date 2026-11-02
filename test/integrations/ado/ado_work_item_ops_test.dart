@@ -17,6 +17,7 @@ void main() {
   _attachTests();
   _resolveFieldNameTests();
   _typeStatesAndValidationTests();
+  _getUserByEmailTests();
 }
 
 String router(RequestOptions o) => routeByPath({
@@ -324,4 +325,75 @@ void _typeStatesAndValidationTests() {
       expect(formatAdoFieldValidationError('plain error'), isNull);
     });
   });
+}
+
+void _getUserByEmailTests() {
+  group('ado_get_user_by_email (dm.ai #814)', () {
+    test('paginates graph/users via continuationToken', () async {
+      final f = mockAdo(_graphPaginationRouter);
+      final ex = AdoToolExecutor(f.client);
+      final user = await ex.execute(
+        'ado_get_user_by_email',
+        {'email': 'second@example.com'},
+      ) as Map;
+      expect(user['displayName'], 'Second Page User');
+      expect(user['descriptor'], 'aad.p2');
+      expect(f.adapter.calls, hasLength(2));
+    });
+
+    test('falls back to identities API without graph/users/descriptor call',
+        () async {
+      final f = mockAdo(_identitiesFallbackRouter);
+      final ex = AdoToolExecutor(f.client);
+      final user = await ex.execute(
+        'ado_get_user_by_email',
+        {'email': 'u@example.com'},
+      ) as Map;
+      expect(user['id'], '11111111-2222-3333-4444-555555555555');
+      expect(user['displayName'], 'Identity User');
+      expect(user['mailAddress'], 'u@example.com');
+      expect(
+        f.adapter.calls.any((c) => c.path.contains('ClaimsIdentity')),
+        isFalse,
+      );
+    });
+  });
+}
+
+String _graphPaginationRouter(RequestOptions o) {
+  if (!o.path.endsWith('/_apis/graph/users')) return '{}';
+  if (o.queryParameters['continuationToken'] == 'page2') {
+    return jsonEncode({
+      'value': [
+        {
+          'principalName': 'second@example.com',
+          'displayName': 'Second Page User',
+          'descriptor': 'aad.p2',
+        }
+      ]
+    });
+  }
+  return jsonEncode({
+    'value': [
+      {'principalName': 'first@example.com'}
+    ],
+    'continuationToken': 'page2',
+  });
+}
+
+String _identitiesFallbackRouter(RequestOptions o) {
+  if (o.path.endsWith('/_apis/graph/users')) return jsonEncode({'value': []});
+  if (o.path.endsWith('/_apis/identities')) {
+    return jsonEncode({
+      'value': [
+        {
+          'id': '11111111-2222-3333-4444-555555555555',
+          'descriptor':
+              r'Microsoft.IdentityModel.Claims.ClaimsIdentity;guid\u@example.com',
+          'customDisplayName': 'Identity User',
+        }
+      ]
+    });
+  }
+  return '{}';
 }

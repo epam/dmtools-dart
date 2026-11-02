@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dmtools/src/config/property_reader.dart';
+import 'package:dmtools/src/integrations/ado/ado_work_item_ops.dart';
 import 'package:dmtools/src/js/sync_tools/ado_sync_tools.dart';
 import 'package:test/test.dart';
 
@@ -67,6 +68,7 @@ void main() {
   _attachTests();
   _formatTests();
   _typeStatesTests();
+  _getUserByEmailSyncTests();
 }
 
 /// Wire shape of a PATCH echo: method, path, content type and patch ops.
@@ -552,6 +554,61 @@ void _typeStatesTests() {
         call('ado_get_work_item_type_states', {'workItemType': ' '})['error'],
         'workItemType must not be empty',
       );
+    });
+  });
+}
+
+void _getUserByEmailSyncTests() {
+  group('ado_get_user_by_email sync (dm.ai #814)', () {
+    test(
+        'parseAdoGraphUsersPage prefers header token and matches case-insensitively',
+        () {
+      final page1 = parseAdoGraphUsersPage(
+        jsonEncode({
+          'value': [
+            {'principalName': 'first@example.com'}
+          ],
+          'continuationToken': 'body-tok',
+        }),
+        'Target@Example.com',
+        headerToken: 'hdr-tok',
+      );
+      expect(page1.user, isNull);
+      expect(page1.nextToken, 'hdr-tok');
+
+      final page2 = parseAdoGraphUsersPage(
+        jsonEncode({
+          'value': [
+            {'mailAddress': 'target@example.com', 'displayName': 'Target'}
+          ],
+        }),
+        'Target@Example.com',
+      );
+      expect(page2.user?['displayName'], 'Target');
+    });
+
+    test('parseAdoIdentitiesFallback builds user without graph descriptor call',
+        () {
+      final parsed = parseAdoIdentitiesFallback(
+        jsonEncode({
+          'value': [
+            {
+              'id': 'guid-1',
+              'descriptor':
+                  r'Microsoft.IdentityModel.Claims.ClaimsIdentity;g\u@example.com',
+              'providerDisplayName': 'Prov Name',
+              'properties': {
+                'Mail': {r'$value': 'prop@example.com'}
+              },
+            }
+          ]
+        }),
+        'u@example.com',
+      );
+      expect(parsed.user?['id'], 'guid-1');
+      expect(parsed.user?['displayName'], 'Prov Name');
+      expect(parsed.user?['mailAddress'], 'prop@example.com');
+      expect(parsed.graphDescriptor, isNull);
     });
   });
 }

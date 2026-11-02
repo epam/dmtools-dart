@@ -37,6 +37,7 @@ final Map<String, AdoSyncExecutor> adoWorkItemOpExecutors = {
   'ado_get_work_item_type_states': _getWorkItemTypeStates,
   'ado_assign_work_item': (c, a) => _setField(
       c, a, 'System.AssignedTo', adoArg(a, ['userEmail', 'accountId'])),
+  'ado_get_user_by_email': _getUserByEmail,
   'ado_update_description': (c, a) => _setField(
       c, a, 'System.Description', adoArg(a, ['description']),
       markdown: _isMarkdown(a)),
@@ -60,6 +61,12 @@ Map<String, String> _patchHeaders(AdoSyncConfig c) =>
 String _orgUrl(AdoSyncConfig c) {
   final projectUrl = c.baseUrl.substring(0, c.baseUrl.length - '/_apis'.length);
   return projectUrl.substring(0, projectUrl.lastIndexOf('/'));
+}
+
+/// The organization name extracted from `baseUrl` (`{base}/{org}/{project}/_apis`).
+String _orgName(AdoSyncConfig c) {
+  final orgUrl = _orgUrl(c);
+  return orgUrl.substring(orgUrl.lastIndexOf('/') + 1);
 }
 
 String _idOf(Map<String, dynamic> a) => adoArg(a, ['id', 'key']);
@@ -262,4 +269,51 @@ String? _upload(AdoSyncConfig c, String name, File file) {
   final decoded = syncTryDecode(syncBodyOrError(resp));
   final url = decoded is Map ? decoded['url'] : null;
   return url is String && url.isNotEmpty ? url : null;
+}
+
+/// `ado_get_user_by_email` — paginated Graph `/_apis/graph/users` with an
+/// Identities `/_apis/identities` fallback (dm.ai #814).
+String _getUserByEmail(AdoSyncConfig c, Map<String, dynamic> a) {
+  final email = adoArg(a, ['email']).trim();
+  if (email.isEmpty) return syncErr('email must not be empty');
+  final vssps = 'https://vssps.dev.azure.com/${_orgName(c)}/_apis';
+  final seen = <String>{};
+  String? token;
+  for (var page = 0; page < 100; page++) {
+    final q = token == null
+        ? ''
+        : '&continuationToken=${Uri.encodeQueryComponent(token)}';
+    final resp = SyncHttpClient.get(
+        '$vssps/graph/users?api-version=7.1-preview.1$q',
+        headers: c.headers);
+    if (!resp.isOk) break;
+    final hdr = resp.headers['X-MS-ContinuationToken'] ??
+        resp.headers['x-ms-continuationtoken'];
+    final parsed = parseAdoGraphUsersPage(resp.body, email, headerToken: hdr);
+    if (parsed.user != null) return jsonEncode(parsed.user);
+    final next = parsed.nextToken;
+    if (next == null || next.isEmpty || !seen.add(next)) break;
+    token = next;
+  }
+  return _findUserViaIdentitiesSync(c, vssps, email);
+}
+
+String _findUserViaIdentitiesSync(AdoSyncConfig c, String vssps, String email) {
+  final q = Uri.encodeQueryComponent(email);
+  final resp = SyncHttpClient.get(
+    '$vssps/identities?searchFilter=MailAddress&filterValue=$q&api-version=7.1-preview.1',
+    headers: c.headers,
+  );
+  if (resp.isOk) {
+    final parsed = parseAdoIdentitiesFallback(resp.body, email);
+    if (parsed.user != null) return jsonEncode(parsed.user);
+    if (parsed.graphDescriptor != null) {
+      final g = SyncHttpClient.get(
+        '$vssps/graph/users/${parsed.graphDescriptor}?api-version=7.1-preview.1',
+        headers: c.headers,
+      );
+      if (g.isOk) return g.body;
+    }
+  }
+  return syncErr('User not found with email: $email');
 }

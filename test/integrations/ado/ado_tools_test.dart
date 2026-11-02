@@ -18,6 +18,7 @@ const _ticketOpNames = [
   'ado_move_to_state',
   'ado_get_work_item_type_states',
   'ado_assign_work_item',
+  'ado_get_user_by_email',
   'ado_update_description',
   'ado_update_tags',
   'ado_update_field',

@@ -98,6 +98,13 @@ List<ToolDefinition> _ticketOpTools() => [
           ),
         ],
       ),
+      ..._ticketUserAndTextTools(),
+      ..._ticketFieldTools(),
+      ..._ticketLinkTools(),
+    ];
+
+/// User and text/tag ticket tools: assign, get-user-by-email, description, tags.
+List<ToolDefinition> _ticketUserAndTextTools() => [
       _opTool('ado_assign_work_item', 'Assign a work item to a user', [
         _workItemId(),
         _req('userEmail', 'The user email or display name',
@@ -106,6 +113,12 @@ List<ToolDefinition> _ticketOpTools() => [
         'tracker_assign_ticket',
         'tracker_assign'
       ]),
+      _opTool(
+        'ado_get_user_by_email',
+        'Get user information by email address in Azure DevOps',
+        [_req('email', 'User email address')],
+        aliases: ['tracker_get_user_by_email'],
+      ),
       _opTool(
           'ado_update_description', 'Update the description of a work item', [
         _workItemId(),
@@ -126,8 +139,6 @@ List<ToolDefinition> _ticketOpTools() => [
                   "'tag1;tag2;tag3')"),
         ],
       ),
-      ..._ticketFieldTools(),
-      ..._ticketLinkTools(),
     ];
 
 /// Field-level tools: update-field, set-priority, get-field-code.
@@ -248,6 +259,7 @@ Map<String, _AdoHandler> _ticketOpHandlers(AdoWorkItemOps ops) => {
             project: a['project'] as String?,
           ),
       'ado_assign_work_item': (a) => ops.assign(_id(a), _s(a, 'userEmail')),
+      'ado_get_user_by_email': (a) => ops.getUserByEmail(_s(a, 'email')),
       'ado_update_description': (a) => ops.updateDescription(
           _id(a), _s(a, 'description'),
           format: a['format'] as String?),

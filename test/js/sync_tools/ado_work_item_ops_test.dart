@@ -610,5 +610,25 @@ void _getUserByEmailSyncTests() {
       expect(parsed.user?['mailAddress'], 'prop@example.com');
       expect(parsed.graphDescriptor, isNull);
     });
+
+    test('sync handler queries graph/users and falls back to identities',
+        () async {
+      expect(
+        call('ado_get_user_by_email', {'email': ' '})['error'],
+        'email must not be empty',
+      );
+      final res = call('ado_get_user_by_email', {'email': 'u@example.com'});
+      expect(
+          res['error'], contains('User not found with email: u@example.com'));
+      final log = await fullLog();
+      expect(log, hasLength(2));
+      expect(
+          log[0]['path'], '/org/_apis/graph/users?api-version=7.1-preview.1');
+      expect(
+        log[1]['path'],
+        '/org/_apis/identities?searchFilter=MailAddress'
+        '&filterValue=u%40example.com&api-version=7.1-preview.1',
+      );
+    });
   });
 }

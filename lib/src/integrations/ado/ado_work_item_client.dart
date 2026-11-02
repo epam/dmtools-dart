@@ -230,7 +230,7 @@ class AdoWorkItemOps {
       );
       if (parsed.user != null) return parsed.user!;
       final next = parsed.nextToken;
-      if (next == null || next.isEmpty || !seen.add(next)) break;
+      if (next == null || !seen.add(next)) break;
       token = next;
     }
     final fallback = await _findUserViaIdentities(email);

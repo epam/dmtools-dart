@@ -63,10 +63,13 @@ String _orgUrl(AdoSyncConfig c) {
   return projectUrl.substring(0, projectUrl.lastIndexOf('/'));
 }
 
-/// The organization name extracted from `baseUrl` (`{base}/{org}/{project}/_apis`).
-String _orgName(AdoSyncConfig c) {
+/// Base URL for the VSSPS host (`{base}/{org}/_apis` for local http test
+/// servers, `https://vssps.dev.azure.com/{org}/_apis` otherwise).
+String _vsspsUrl(AdoSyncConfig c) {
   final orgUrl = _orgUrl(c);
-  return orgUrl.substring(orgUrl.lastIndexOf('/') + 1);
+  if (orgUrl.startsWith('http://')) return '$orgUrl/_apis';
+  final orgName = orgUrl.substring(orgUrl.lastIndexOf('/') + 1);
+  return 'https://vssps.dev.azure.com/$orgName/_apis';
 }
 
 String _idOf(Map<String, dynamic> a) => adoArg(a, ['id', 'key']);
@@ -276,7 +279,7 @@ String? _upload(AdoSyncConfig c, String name, File file) {
 String _getUserByEmail(AdoSyncConfig c, Map<String, dynamic> a) {
   final email = adoArg(a, ['email']).trim();
   if (email.isEmpty) return syncErr('email must not be empty');
-  final vssps = 'https://vssps.dev.azure.com/${_orgName(c)}/_apis';
+  final vssps = _vsspsUrl(c);
   final graphUser = _searchGraphUsersSync(c, vssps, email);
   if (graphUser != null) return jsonEncode(graphUser);
   return _findUserViaIdentitiesSync(c, vssps, email);

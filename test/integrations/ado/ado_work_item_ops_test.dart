@@ -341,7 +341,7 @@ void _getUserByEmailTests() {
       expect(f.adapter.calls, hasLength(2));
     });
 
-    test('falls back to identities API without graph/users/descriptor call',
+    test('falls back to identities API and throws when user not found',
         () async {
       final f = mockAdo(_identitiesFallbackRouter);
       final ex = AdoToolExecutor(f.client);
@@ -355,6 +355,12 @@ void _getUserByEmailTests() {
       expect(
         f.adapter.calls.any((c) => c.path.contains('ClaimsIdentity')),
         isFalse,
+      );
+      final empty = mockAdo((_) => jsonEncode({'value': []}));
+      expect(
+        () => AdoToolExecutor(empty.client)
+            .execute('ado_get_user_by_email', {'email': 'ghost@example.com'}),
+        throwsStateError,
       );
     });
   });

@@ -85,14 +85,20 @@ class AdoHttpClient extends BaseHttpClient {
   /// Organization name configured for this client.
   String get organization => _organization;
 
-  /// Performs a GET against the VSSPS host (`https://vssps.dev.azure.com/{org}/_apis/{path}`)
-  /// with `api-version=7.1-preview.1` and returns the body + `X-MS-ContinuationToken` header.
+  /// Base URL for the VSSPS host (`{base}/{org}/_apis` for local http test
+  /// servers, `https://vssps.dev.azure.com/{org}/_apis` otherwise).
+  String get vsspsBaseUrl => basePath.startsWith('http://')
+      ? '$basePath/$_organization/_apis'
+      : 'https://vssps.dev.azure.com/$_organization/_apis';
+
+  /// Performs a GET against the VSSPS host (`/_apis/{path}`) with
+  /// `api-version=7.1-preview.1` and returns body + `X-MS-ContinuationToken`.
   Future<({String body, String? continuationToken})> getVssps(
     String path, {
     Map<String, String>? queryParams,
   }) async {
     final response = await dio.get<String>(
-      'https://vssps.dev.azure.com/$_organization/_apis/$path',
+      '$vsspsBaseUrl/$path',
       queryParameters: {'api-version': '7.1-preview.1', ...?queryParams},
       options: Options(headers: {...headers, 'User-Agent': 'DMTools'}),
     );

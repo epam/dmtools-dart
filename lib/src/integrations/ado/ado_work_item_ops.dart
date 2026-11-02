@@ -272,52 +272,64 @@ String _extractAdoErrorField(Map? props, String message) {
   String email, {
   String? headerToken,
 }) {
-  final decoded = body == null ? null : _tryDecodeMap(body);
-  final users = decoded?['value'];
-  final target = email.trim().toLowerCase();
-  for (final u in users is List ? users.whereType<Map>() : const <Map>[]) {
-    final principal = '${u['principalName'] ?? ''}'.toLowerCase();
-    final mail = '${u['mailAddress'] ?? ''}'.toLowerCase();
-    if (target.isNotEmpty && (target == principal || target == mail)) {
-      return (user: Map<String, dynamic>.from(u), nextToken: null);
+  final decoded = _tryDecodeMap(body ?? '');
+  final user = _matchGraphUser(decoded?['value'], email.trim().toLowerCase());
+  if (user != null) return (user: user, nextToken: null);
+  final next = _firstNonEmpty([headerToken, decoded?['continuationToken']]);
+  return (user: null, nextToken: next.isEmpty ? null : next);
+}
+
+Map<String, dynamic>? _matchGraphUser(dynamic users, String target) {
+  if (target.isEmpty || users is! List) return null;
+  for (final u in users.whereType<Map>()) {
+    if (target == '${u['principalName'] ?? ''}'.toLowerCase() ||
+        target == '${u['mailAddress'] ?? ''}'.toLowerCase()) {
+      return Map<String, dynamic>.from(u);
     }
   }
-  final bodyToken = '${decoded?['continuationToken'] ?? ''}'.trim();
-  final hdr = (headerToken ?? '').trim();
-  final next = hdr.isNotEmpty ? hdr : (bodyToken.isNotEmpty ? bodyToken : null);
-  return (user: null, nextToken: next);
+  return null;
 }
 
 /// Parses an Identities `/_apis/identities` response body for [email] (dm.ai #814).
 ({Map<String, dynamic>? user, String? graphDescriptor})
     parseAdoIdentitiesFallback(String? body, String email) {
-  final decoded = body == null ? null : _tryDecodeMap(body);
+  final identity = _firstIdentityMap(_tryDecodeMap(body ?? ''));
+  if (identity == null) return (user: null, graphDescriptor: null);
+  final normalized = _normalizeIdentityUser(identity, email);
+  if (normalized != null) return (user: normalized, graphDescriptor: null);
+  final descriptor = '${identity['descriptor'] ?? ''}'.trim();
+  final isGraphDesc = descriptor.isNotEmpty && !descriptor.contains(';');
+  return (user: null, graphDescriptor: isGraphDesc ? descriptor : null);
+}
+
+Map<String, dynamic>? _firstIdentityMap(Map? decoded) {
   final list = decoded?['value'];
-  if (list is! List || list.isEmpty || list.first is! Map) {
-    return (user: null, graphDescriptor: null);
-  }
-  final identity = Map<String, dynamic>.from(list.first as Map);
+  if (list is! List || list.isEmpty || list.first is! Map) return null;
+  return Map<String, dynamic>.from(list.first as Map);
+}
+
+Map<String, dynamic>? _normalizeIdentityUser(
+    Map<String, dynamic> identity, String email) {
   final id = '${identity['id'] ?? ''}'.trim();
   final displayName = _firstNonEmpty([
     identity['customDisplayName'],
     identity['providerDisplayName'],
     identity['displayName'],
   ]);
-  if (id.isNotEmpty || displayName.isNotEmpty) {
-    if (displayName.isNotEmpty) identity['displayName'] = displayName;
-    final propMail = _identityPropertyValue(identity, 'Mail') ??
-        _identityPropertyValue(identity, 'Account');
-    if (!identity.containsKey('mailAddress') &&
-        !identity.containsKey('emailAddress')) {
-      identity['mailAddress'] = propMail ?? email;
-    }
-    return (user: identity, graphDescriptor: null);
+  if (id.isEmpty && displayName.isEmpty) return null;
+  if (displayName.isNotEmpty) identity['displayName'] = displayName;
+  final mail = _firstNonEmpty([
+    identity['mailAddress'],
+    identity['emailAddress'],
+    _identityPropertyValue(identity, 'Mail'),
+    _identityPropertyValue(identity, 'Account'),
+    email,
+  ]);
+  if (!identity.containsKey('mailAddress') &&
+      !identity.containsKey('emailAddress')) {
+    identity['mailAddress'] = mail;
   }
-  final descriptor = '${identity['descriptor'] ?? ''}'.trim();
-  if (descriptor.isNotEmpty && !descriptor.contains(';')) {
-    return (user: null, graphDescriptor: descriptor);
-  }
-  return (user: null, graphDescriptor: null);
+  return identity;
 }
 
 String _firstNonEmpty(List<Object?> candidates) {

@@ -277,6 +277,13 @@ String _getUserByEmail(AdoSyncConfig c, Map<String, dynamic> a) {
   final email = adoArg(a, ['email']).trim();
   if (email.isEmpty) return syncErr('email must not be empty');
   final vssps = 'https://vssps.dev.azure.com/${_orgName(c)}/_apis';
+  final graphUser = _searchGraphUsersSync(c, vssps, email);
+  if (graphUser != null) return jsonEncode(graphUser);
+  return _findUserViaIdentitiesSync(c, vssps, email);
+}
+
+Map<String, dynamic>? _searchGraphUsersSync(
+    AdoSyncConfig c, String vssps, String email) {
   final seen = <String>{};
   String? token;
   for (var page = 0; page < 100; page++) {
@@ -286,16 +293,16 @@ String _getUserByEmail(AdoSyncConfig c, Map<String, dynamic> a) {
     final resp = SyncHttpClient.get(
         '$vssps/graph/users?api-version=7.1-preview.1$q',
         headers: c.headers);
-    if (!resp.isOk) break;
+    if (!resp.isOk) return null;
     final hdr = resp.headers['X-MS-ContinuationToken'] ??
         resp.headers['x-ms-continuationtoken'];
     final parsed = parseAdoGraphUsersPage(resp.body, email, headerToken: hdr);
-    if (parsed.user != null) return jsonEncode(parsed.user);
+    if (parsed.user != null) return parsed.user;
     final next = parsed.nextToken;
-    if (next == null || next.isEmpty || !seen.add(next)) break;
+    if (next == null || !seen.add(next)) return null;
     token = next;
   }
-  return _findUserViaIdentitiesSync(c, vssps, email);
+  return null;
 }
 
 String _findUserViaIdentitiesSync(AdoSyncConfig c, String vssps, String email) {

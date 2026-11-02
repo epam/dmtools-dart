@@ -560,55 +560,28 @@ void _typeStatesTests() {
 
 void _getUserByEmailSyncTests() {
   group('ado_get_user_by_email sync (dm.ai #814)', () {
-    test(
-        'parseAdoGraphUsersPage prefers header token and matches case-insensitively',
-        () {
-      final page1 = parseAdoGraphUsersPage(
-        jsonEncode({
-          'value': [
-            {'principalName': 'first@example.com'}
-          ],
-          'continuationToken': 'body-tok',
-        }),
+    test('parseAdoGraphUsersPage and parseAdoIdentitiesFallback', () {
+      final p1 = parseAdoGraphUsersPage(
+        '{"value":[{"principalName":"a@x.com"}],"continuationToken":"b"}',
         'Target@Example.com',
         headerToken: 'hdr-tok',
       );
-      expect(page1.user, isNull);
-      expect(page1.nextToken, 'hdr-tok');
-
-      final page2 = parseAdoGraphUsersPage(
-        jsonEncode({
-          'value': [
-            {'mailAddress': 'target@example.com', 'displayName': 'Target'}
-          ],
-        }),
+      expect(p1.user, isNull);
+      expect(p1.nextToken, 'hdr-tok');
+      final p2 = parseAdoGraphUsersPage(
+        '{"value":[{"mailAddress":"target@example.com","displayName":"T"}]}',
         'Target@Example.com',
       );
-      expect(page2.user?['displayName'], 'Target');
-    });
-
-    test('parseAdoIdentitiesFallback builds user without graph descriptor call',
-        () {
-      final parsed = parseAdoIdentitiesFallback(
-        jsonEncode({
-          'value': [
-            {
-              'id': 'guid-1',
-              'descriptor':
-                  r'Microsoft.IdentityModel.Claims.ClaimsIdentity;g\u@example.com',
-              'providerDisplayName': 'Prov Name',
-              'properties': {
-                'Mail': {r'$value': 'prop@example.com'}
-              },
-            }
-          ]
-        }),
+      expect(p2.user?['displayName'], 'T');
+      final id = parseAdoIdentitiesFallback(
+        '{"value":[{"id":"g1","descriptor":"ClaimsIdentity;x",'
+            '"providerDisplayName":"P","properties":{"Mail":{"\$value":"p@x"}}}]}',
         'u@example.com',
       );
-      expect(parsed.user?['id'], 'guid-1');
-      expect(parsed.user?['displayName'], 'Prov Name');
-      expect(parsed.user?['mailAddress'], 'prop@example.com');
-      expect(parsed.graphDescriptor, isNull);
+      expect(id.user?['id'], 'g1');
+      expect(id.user?['displayName'], 'P');
+      expect(id.user?['mailAddress'], 'p@x');
+      expect(id.graphDescriptor, isNull);
     });
 
     test('sync handler queries graph/users and falls back to identities',

@@ -326,8 +326,29 @@ class AgentPackResolver {
     if (githubToken != null && Uri.parse(urlString).host == 'github.com') {
       headers['Authorization'] = 'Bearer $githubToken';
     }
-    final response =
-        SyncHttpClient.get(urlString, headers: headers, followRedirects: true);
+    var effectiveUrl = urlString;
+    var response =
+        SyncHttpClient.get(effectiveUrl, headers: headers, followRedirects: true);
+    if (response.statusCode == 404) {
+      final fallback = findReleaseAssetInEarlierReleases(
+        effectiveUrl,
+        githubToken,
+        httpGet: (u, h) {
+          final r = SyncHttpClient.get(u, headers: h, followRedirects: true);
+          return (statusCode: r.statusCode, body: r.body);
+        },
+      );
+      if (fallback != null) {
+        final fbResp =
+            SyncHttpClient.get(fallback, headers: headers, followRedirects: true);
+        if (fbResp.statusCode == 200) {
+          stderr.writeln(
+              'Resolved pinned pack asset from earlier release -> $fallback');
+          effectiveUrl = fallback;
+          response = fbResp;
+        }
+      }
+    }
     if (response.statusCode != 200) {
       throw AgentPackException(
           'Failed to download pack: HTTP ${response.statusCode} for $urlString');
@@ -335,7 +356,7 @@ class AgentPackResolver {
     final tmp = File(
         '${Directory.systemTemp.path}/dmtools-pack-${DateTime.now().microsecondsSinceEpoch}.zip');
     tmp.writeAsBytesSync(response.bodyBytes);
-    _verifyDownloadedSha256(tmp, urlString, githubToken);
+    _verifyDownloadedSha256(tmp, effectiveUrl, githubToken);
     return tmp;
   }
 

@@ -59,5 +59,53 @@ void main() {
         'js/assignForSolutionArchitecture.js',
       );
     });
+
+    test('parseGithubReleaseAssetUrl and extractReleaseAssetDownloadUrl', () {
+      final parsed = parseGithubReleaseAssetUrl(
+        'https://github.com/IstiN/dmtools-agents/releases/download/t1/a-1.zip',
+      );
+      expect(parsed?.apiBase, 'https://api.github.com');
+      expect(parsed?.asset, 'a-1.zip');
+      expect(parseGithubReleaseAssetUrl('https://example.com/a.zip'), isNull);
+      expect(
+        extractReleaseAssetDownloadUrl(
+          '[{"tag_name":"t0","assets":[{"name":"a-1.zip","browser_download_url":"https://dl/a-1.zip"}]}]',
+          'a-1.zip',
+          origin: 'https://github.com',
+          owner: 'IstiN',
+          repo: 'dmtools-agents',
+        ),
+        'https://dl/a-1.zip',
+      );
+      expect(
+        extractReleaseAssetDownloadUrl(
+          'not-json',
+          'a-1.zip',
+          origin: 'https://github.com',
+          owner: 'IstiN',
+          repo: 'dmtools-agents',
+        ),
+        isNull,
+      );
+      expect(
+        findReleaseAssetInEarlierReleases(
+          'https://github.com/IstiN/dmtools-agents/releases/download/t1/a-1.zip',
+          'tok',
+          httpGet: (u, h) => (
+            statusCode: 200,
+            body: '[{"tag_name":"t0","assets":[{"name":"a-1.zip"}]}]',
+          ),
+        ),
+        'https://github.com/IstiN/dmtools-agents/releases/download/t0/a-1.zip',
+      );
+      expect(
+        findReleaseAssetInEarlierReleases(
+          'https://example.com/a-1.zip',
+          null,
+          httpGet: (u, h) => (statusCode: 404, body: ''),
+        ),
+        isNull,
+      );
+    });
   });
 }

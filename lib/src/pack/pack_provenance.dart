@@ -120,3 +120,103 @@ String normalizePackReferencePath(String raw, {String? rootPath}) {
   }
   return ref;
 }
+
+/// Matches a GitHub/local release download URL:
+/// `<origin>/<owner>/<repo>/releases/download/<tag>/<asset>.zip`.
+final RegExp _githubReleaseAssetRegExp = RegExp(
+  r'^(https?://[^/]+)/([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)/releases/download/([^/]+)/([A-Za-z0-9._-]+\.zip)$',
+);
+
+/// Parses [url] as a GitHub release asset download URL and returns the
+/// releases API base URL + asset filename, or `null` if it does not match.
+({String origin, String owner, String repo, String asset, String apiBase})?
+    parseGithubReleaseAssetUrl(String url) {
+  final m = _githubReleaseAssetRegExp.firstMatch(url);
+  if (m == null) return null;
+  final origin = m.group(1)!;
+  final apiBase = origin.toLowerCase() == 'https://github.com'
+      ? 'https://api.github.com'
+      : origin;
+  return (
+    origin: origin,
+    owner: m.group(2)!,
+    repo: m.group(3)!,
+    asset: m.group(5)!,
+    apiBase: apiBase,
+  );
+}
+
+/// Searches a JSON-encoded `/repos/{owner}/{repo}/releases` array [body] for
+/// an asset named [assetName] and returns its download URL, or `null`.
+String? extractReleaseAssetDownloadUrl(
+  String body,
+  String assetName, {
+  required String origin,
+  required String owner,
+  required String repo,
+}) {
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! List) return null;
+    for (final rel in decoded.whereType<Map>()) {
+      final url = _matchReleaseAsset(rel, assetName, origin, owner, repo);
+      if (url != null) return url;
+    }
+  } on Object {
+    return null;
+  }
+  return null;
+}
+
+String? _matchReleaseAsset(
+  Map<dynamic, dynamic> rel,
+  String assetName,
+  String origin,
+  String owner,
+  String repo,
+) {
+  final assets = rel['assets'];
+  if (assets is! List) return null;
+  final tag = '${rel['tag_name'] ?? ''}'.trim();
+  for (final a in assets.whereType<Map>()) {
+    if ('${a['name'] ?? ''}' != assetName) continue;
+    final dl = '${a['browser_download_url'] ?? ''}'.trim();
+    if (dl.isNotEmpty) return dl;
+    if (tag.isNotEmpty) {
+      return '$origin/$owner/$repo/releases/download/$tag/$assetName';
+    }
+  }
+  return null;
+}
+
+/// Queries the GitHub releases API for [urlString] (when it is a
+/// `<origin>/<owner>/<repo>/releases/download/<tag>/<asset>.zip` URL) and
+/// returns the download URL from an earlier release if found.
+String? findReleaseAssetInEarlierReleases(
+  String urlString,
+  String? githubToken, {
+  required ({int statusCode, String body}) Function(
+    String url,
+    Map<String, String> headers,
+  ) httpGet,
+}) {
+  final parsed = parseGithubReleaseAssetUrl(urlString);
+  if (parsed == null) return null;
+  final headers = <String, String>{'Accept': 'application/vnd.github+json'};
+  final host = Uri.parse(parsed.apiBase).host;
+  if (githubToken != null &&
+      (host == 'github.com' || host == 'api.github.com')) {
+    headers['Authorization'] = 'Bearer $githubToken';
+  }
+  final apiUrl = '${parsed.apiBase}/repos/${parsed.owner}/${parsed.repo}'
+      '/releases?per_page=100';
+  final res = httpGet(apiUrl, headers);
+  if (res.statusCode != 200) return null;
+  return extractReleaseAssetDownloadUrl(
+    res.body,
+    parsed.asset,
+    origin: parsed.origin,
+    owner: parsed.owner,
+    repo: parsed.repo,
+  );
+}

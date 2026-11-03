@@ -29,6 +29,7 @@ void main() {
   group('AgentPackResolver registry refs', () {
     _registrationShapeTests();
     _explicitVersionTests();
+    _explicitVersionFallbackTests();
     _latestResolutionTests();
     _unknownAgentTests();
     _availableAgentsListingTests();
@@ -91,6 +92,42 @@ void _explicitVersionTests() {
         File(p.join(pack.packRoot.path, 'js/main.js')).existsSync(),
         isTrue,
       );
+    } finally {
+      server.isolate.kill();
+    }
+  });
+}
+
+void _explicitVersionFallbackTests() {
+  test('explicit @version 404 falls back to earlier release via releases API',
+      () async {
+    final zipBytes = buildPack('my_agent', '0.1.271').readAsBytesSync();
+    const asset = 'my_agent-0.1.271.zip';
+    const oldPath =
+        '/IstiN/dmtools-agents/releases/download/agents-rel-20261102-161644/$asset';
+    final server = await startRegistryServer({
+      oldPath: zipBytes,
+      '$oldPath.sha256': utf8.encode('${sha256.convert(zipBytes)}  $asset'),
+      '/repos/IstiN/dmtools-agents/releases': utf8.encode(
+        jsonEncode([
+          {
+            'tag_name': 'agents-rel-20261102-161644',
+            'assets': [
+              {'name': asset}
+            ],
+          }
+        ]),
+      ),
+    });
+    try {
+      final r = AgentPackResolver(
+        packsRoot: packsRoot,
+        registryBaseUrl: 'http://127.0.0.1:${server.port}'
+            '/IstiN/dmtools-agents/releases/download/agents-rel-20261102-181429',
+      );
+      final pack = r.resolve('my_agent@0.1.271');
+      expect(pack.agent, 'my_agent');
+      expect(pack.version, '0.1.271');
     } finally {
       server.isolate.kill();
     }

@@ -327,8 +327,8 @@ class AgentPackResolver {
       headers['Authorization'] = 'Bearer $githubToken';
     }
     var effectiveUrl = urlString;
-    var response =
-        SyncHttpClient.get(effectiveUrl, headers: headers, followRedirects: true);
+    var response = SyncHttpClient.get(effectiveUrl,
+        headers: headers, followRedirects: true);
     if (response.statusCode == 404) {
       final fallback = findReleaseAssetInEarlierReleases(
         effectiveUrl,
@@ -339,8 +339,8 @@ class AgentPackResolver {
         },
       );
       if (fallback != null) {
-        final fbResp =
-            SyncHttpClient.get(fallback, headers: headers, followRedirects: true);
+        final fbResp = SyncHttpClient.get(fallback,
+            headers: headers, followRedirects: true);
         if (fbResp.statusCode == 200) {
           stderr.writeln(
               'Resolved pinned pack asset from earlier release -> $fallback');

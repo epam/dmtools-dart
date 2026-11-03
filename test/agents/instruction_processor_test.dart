@@ -63,6 +63,20 @@ void filePathEmbeddingTests() {
         tmp.deleteSync(recursive: true);
       }
     });
+
+    test(
+        'embeds content from a pack: file path when present in workingDirectory',
+        () {
+      final tmp = Directory.systemTemp.createTempSync('ip_test_');
+      try {
+        File('${tmp.path}/notes.md').writeAsStringSync('# Pack Notes\nBody');
+        final processor = InstructionProcessor(workingDirectory: tmp.path);
+        final result = processor.process('Review pack:notes.md please');
+        expect(result, contains('## notes.md\n# Pack Notes\nBody'));
+      } finally {
+        tmp.deleteSync(recursive: true);
+      }
+    });
   });
 }
 
@@ -239,6 +253,14 @@ void nonExistentFileTests() {
         workingDirectory: '/nonexistent/dir',
       );
       const prompt = 'Read ./missing.md for details';
+      expect(processor.process(prompt), prompt);
+    });
+
+    test('leaves non-existent pack: file path unchanged', () {
+      final processor = InstructionProcessor(
+        workingDirectory: '/nonexistent/dir',
+      );
+      const prompt = 'Read pack:notes.md for details';
       expect(processor.process(prompt), prompt);
     });
 

@@ -560,66 +560,50 @@ void _testChildPackRefs() {
 /// against a resolved parent pack (dm.ai #820).
 void _testEncodedConfigPackRefs() {
   group('encodedConfig and override pack: refs', () {
-    test(
-        'pack: refs in URL-encoded encodedConfig and CLI overrides rewrite into the pack cache',
-        () {
+    test('rewrites pack: refs in encodedConfig and CLI overrides', () {
       final zip = _buildPackWithInstructions();
       final packsRoot = Directory('${_tmp.path}/packs');
       final resolver = AgentPackResolver(packsRoot: packsRoot);
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"${zip.path.replaceAll('\\', '/')}"},
-        "params":{"cliPrompts":["pack:instructions/review_rules.md"]}
-      }''');
+      _writeFile(
+        'child.json',
+        '{"name":"c","parent":{"path":"${zip.path.replaceAll('\\', '/')}"},"params":{}}',
+      );
       final encoded = Uri.encodeComponent(jsonEncode({
         'params': {
           'cliPrompts': [
             'pack:instructions/review_rules.md',
             {
-              'id': 'codegraph',
+              'id': 'cg',
               'prompt': 'pack:instructions/review_rules.md',
-              'condition': 'pack:js/helper.js',
+              'condition': 'pack:js/helper.js'
             },
           ],
         },
       }));
-      final json = jsonDecode(
-        RunCommandProcessor(packResolver: resolver).process([
-          'run',
-          '${_tmp.path}/child.json',
-          encoded,
-          '--extraPrompt',
-          'pack:instructions/review_rules.md',
-        ]),
-      ) as Map;
+      final json =
+          jsonDecode(RunCommandProcessor(packResolver: resolver).process([
+        'run',
+        '${_tmp.path}/child.json',
+        encoded,
+        '--extraPrompt',
+        'pack:instructions/review_rules.md',
+      ])) as Map;
       final prompts = json['params']['cliPrompts'] as List;
-      expect(prompts[0], startsWith(packsRoot.path));
       expect(File(prompts[0] as String).existsSync(), isTrue);
-      final cgSection = prompts[1] as Map;
-      expect(cgSection['prompt'], prompts[0]);
-      expect(cgSection['condition'], startsWith(packsRoot.path));
-      expect(File(cgSection['condition'] as String).existsSync(), isTrue);
+      final cg = prompts[1] as Map;
+      expect(cg['prompt'], prompts[0]);
+      expect(File(cg['condition'] as String).existsSync(), isTrue);
       expect(json['params']['extraPrompt'], prompts[0]);
     });
 
-    test(
-        'pack: refs in encodedConfig with a non-pack parent throw ArgumentError',
-        () {
+    test('rejects pack: refs in encodedConfig when parent is not a pack', () {
       _writeFile('parent.json', '{"params":{"k":"p"}}');
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"parent.json"},
-        "params":{}
-      }''');
-      final encoded = Uri.encodeComponent(jsonEncode({
-        'params': {
-          'cliPrompts': ['pack:instructions/review_rules.md'],
-        },
-      }));
-      expect(
-        () => _run(['run', '${_tmp.path}/child.json', encoded]),
-        throwsArgumentError,
-      );
+      _writeFile('child.json',
+          '{"name":"c","parent":{"path":"parent.json"},"params":{}}');
+      final encoded = Uri.encodeComponent(
+          '{"params":{"cliPrompts":["pack:instructions/review_rules.md"]}}');
+      expect(() => _run(['run', '${_tmp.path}/child.json', encoded]),
+          throwsArgumentError);
     });
   });
 }

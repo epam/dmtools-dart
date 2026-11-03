@@ -29,6 +29,7 @@ void main() {
   group('AgentPackResolver registry refs', () {
     _registrationShapeTests();
     _explicitVersionTests();
+    _explicitVersionFallbackTests();
     _latestResolutionTests();
     _unknownAgentTests();
     _availableAgentsListingTests();
@@ -95,7 +96,9 @@ void _explicitVersionTests() {
       server.isolate.kill();
     }
   });
+}
 
+void _explicitVersionFallbackTests() {
   test('explicit @version 404 falls back to earlier release via releases API',
       () async {
     final zipBytes = buildPack('my_agent', '0.1.271').readAsBytesSync();

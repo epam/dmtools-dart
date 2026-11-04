@@ -137,6 +137,10 @@ void _mdToStorageBlockTests() {
     );
   });
 
+  _mdToStorageTableAndQuoteTests();
+}
+
+void _mdToStorageTableAndQuoteTests() {
   test('table cells and paragraphs preserve <br/> tags', () {
     expect(
       markdownToConfluenceStorage(

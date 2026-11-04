@@ -137,6 +137,22 @@ void _mdToStorageBlockTests() {
     );
   });
 
+  _mdToStorageTableAndQuoteTests();
+}
+
+void _mdToStorageTableAndQuoteTests() {
+  test('table cells and paragraphs preserve <br/> tags', () {
+    expect(
+      markdownToConfluenceStorage(
+        '| Test ID | Check |\n| --- | --- |\n'
+        '| 1 | Check X:<br/>- item 1<br>- item 2 |',
+      ),
+      '<table><tbody><tr><th>Test ID</th><th>Check</th></tr>'
+      '<tr><td>1</td><td>Check X:<br/>- item 1<br/>- item 2</td></tr>'
+      '</tbody></table>',
+    );
+  });
+
   test('blockquotes and horizontal rules render', () {
     expect(
       markdownToConfluenceStorage('> quoted'),
@@ -280,6 +296,21 @@ void _roundTripTests() {
           '- point one\n- point two\n';
       final back = confluenceStorageToMarkdown(markdownToConfluenceStorage(md));
       expect(back, md.trim());
+    });
+
+    test('table cells with <br/> survive storage and back', () {
+      const md = '| Test ID | Check |\n| --- | --- |\n'
+          '| 1 | Check that the manifest is generated:<br/>'
+          '- Column A is populated<br/>- Column B is populated |';
+      final storage = markdownToConfluenceStorage(md);
+      expect(
+        storage,
+        contains(
+          '<td>Check that the manifest is generated:<br/>'
+          '- Column A is populated<br/>- Column B is populated</td>',
+        ),
+      );
+      expect(confluenceStorageToMarkdown(storage), md);
     });
   });
 }

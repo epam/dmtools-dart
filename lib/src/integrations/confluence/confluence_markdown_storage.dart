@@ -32,6 +32,7 @@ class _XmlNode {
   String _childContent(_XmlNode child) {
     if (child.name == null) return unescapeXml(child.text);
     if (child.name == 'time') return child.attrs['datetime'] ?? child.content;
+    if (child.name == 'br') return '<br/>';
     return child.content;
   }
 

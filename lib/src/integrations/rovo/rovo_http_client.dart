@@ -16,12 +16,21 @@ import '../base_http_client.dart';
 /// Default Atlassian Rovo remote MCP URL.
 const String rovoDefaultMcpUrl = 'https://mcp.atlassian.com/v2/mcp';
 
+/// MCP Streamable HTTP session header name.
+const String rovoMcpSessionIdHeader = 'Mcp-Session-Id';
+
+/// Response from a Rovo MCP HTTP POST request, including an optional session ID.
+typedef RovoPostResponse = ({String body, String? sessionId});
+
 /// Low-level Rovo HTTP transport used by [RovoClient].
 class RovoHttpClient extends BaseHttpClient {
   final String _authValue;
 
   /// Optional default Atlassian Cloud ID configured via `ROVO_CLOUD_ID`.
   final String? defaultCloudId;
+
+  /// Current MCP session ID obtained during the `initialize` handshake.
+  String? sessionId;
 
   /// Creates a client from [reader]'s Rovo configuration.
   ///
@@ -77,7 +86,30 @@ class RovoHttpClient extends BaseHttpClient {
   Map<String, String> get authHeaders => {
         'Authorization': _authValue,
         'Accept': 'application/json, text/event-stream',
+        if (sessionId != null && sessionId!.trim().isNotEmpty)
+          rovoMcpSessionIdHeader: sessionId!.trim(),
       };
+
+  /// Performs a POST request and captures the `Mcp-Session-Id` response header
+  /// when [captureSessionHeader] is `true`.
+  Future<RovoPostResponse> postRpc(
+    String body, {
+    bool captureSessionHeader = false,
+  }) async {
+    final response = await dio.post<String>(
+      buildUrl(''),
+      data: body,
+      options: Options(headers: headers),
+    );
+    String? capturedSessionId;
+    if (captureSessionHeader) {
+      capturedSessionId = response.headers.value(rovoMcpSessionIdHeader);
+      if (capturedSessionId != null && capturedSessionId.trim().isNotEmpty) {
+        sessionId = capturedSessionId.trim();
+      }
+    }
+    return (body: response.data ?? '', sessionId: capturedSessionId);
+  }
 
   @override
   String buildUrl(String path) => path.isEmpty ? basePath : '$basePath/$path';

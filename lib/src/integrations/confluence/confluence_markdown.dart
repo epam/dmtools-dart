@@ -437,8 +437,10 @@ String _renderList(_Block block) {
       final status =
           i < flags.length && flags[i] == 'c' ? 'complete' : 'incomplete';
       final body = block.children[i].map(_renderBlock).join();
-      items.add('<ac:task><ac:task-status>$status</ac:task-status>'
-          '<ac:task-body>$body</ac:task-body></ac:task>');
+      items.add(
+        '<ac:task><ac:task-status>$status</ac:task-status>'
+        '<ac:task-body>$body</ac:task-body></ac:task>',
+      );
     }
     return '<ac:task-list>${items.join()}</ac:task-list>';
   }
@@ -452,23 +454,54 @@ String _renderList(_Block block) {
 /// Renders inline Markdown ([text]) into storage XHTML.
 String _inline(String text) {
   final stash = <String>[];
-  var work = _stashPattern(text, stash, RegExp(r'`([^`]+)`'),
-      (m) => '<code>${escapeXml(m[1]!)}</code>');
+  var work = _stashPattern(
+    text,
+    stash,
+    RegExp(r'`([^`]+)`'),
+    (m) => '<code>${escapeXml(m[1]!)}</code>',
+  );
   work = _stashPattern(
-      work, stash, RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'), _renderImage);
+    work,
+    stash,
+    RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'),
+    _renderImage,
+  );
   work = _stashPattern(
-      work, stash, RegExp(r'\[([^\]]*)\]\(([^)]+)\)'), _renderLink);
-  work = _stashPattern(work, stash, RegExp(r'\*\*([^*]+)\*\*'),
-      (m) => '<strong>${escapeXml(m[1]!)}</strong>');
-  work = _stashPattern(work, stash, RegExp(r'(?<!\*)\*([^*\n]+)\*(?!\*)'),
-      (m) => '<em>${escapeXml(m[1]!)}</em>');
-  work = _stashPattern(work, stash, RegExp(r'~~([^~]+)~~'),
-      (m) => '<del>${escapeXml(m[1]!)}</del>');
+    work,
+    stash,
+    RegExp(r'\[([^\]]*)\]\(([^)]+)\)'),
+    _renderLink,
+  );
   work = _stashPattern(
-      work,
-      stash,
-      RegExp(r'(?<![\("=\u0000])(https?://[^\s<)]+)'),
-      (m) => '<a href="${escapeXml(m[1]!)}">${escapeXml(m[1]!)}</a>');
+    work,
+    stash,
+    RegExp(r'\*\*([^*]+)\*\*'),
+    (m) => '<strong>${escapeXml(m[1]!)}</strong>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'(?<!\*)\*([^*\n]+)\*(?!\*)'),
+    (m) => '<em>${escapeXml(m[1]!)}</em>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'~~([^~]+)~~'),
+    (m) => '<del>${escapeXml(m[1]!)}</del>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'<br\s*/?>', caseSensitive: false),
+    (_) => '<br/>',
+  );
+  work = _stashPattern(
+    work,
+    stash,
+    RegExp(r'(?<![\("=\u0000])(https?://[^\s<)]+)'),
+    (m) => '<a href="${escapeXml(m[1]!)}">${escapeXml(m[1]!)}</a>',
+  );
   return _restore(escapeXml(work), stash);
 }
 

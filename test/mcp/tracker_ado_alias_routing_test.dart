@@ -44,6 +44,10 @@ void main() {
         registry.resolveToolAlias('ado_search_by_wiql'), 'ado_list_work_items');
   });
 
+  _aliasAndParamTests(registry);
+}
+
+void _aliasAndParamTests(ToolRegistry registry) {
   test('source_code_create_pr routes to github, gitlab, and ado', () {
     expect(
       registry.resolveToolAlias('source_code_create_pr',

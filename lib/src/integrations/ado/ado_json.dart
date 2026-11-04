@@ -67,3 +67,12 @@ Iterable<List<int>> batchIds(List<int> ids, {int size = 200}) sync* {
     yield ids.sublist(start, end);
   }
 }
+
+/// Normalizes an ADO branch reference: short branch names (without a `refs/`
+/// prefix) become `refs/heads/<branch>`, while full `refs/...` names and
+/// empty strings pass through trimmed.
+String normalizeAdoBranchRef(String refName) {
+  final trimmed = refName.trim();
+  if (trimmed.isEmpty || trimmed.startsWith('refs/')) return trimmed;
+  return 'refs/heads/$trimmed';
+}

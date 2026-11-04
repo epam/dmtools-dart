@@ -15,13 +15,6 @@ late GitHubSyncTools tools;
 late Directory tmp;
 
 /// Tests for [GitHubSyncTools] — the sync `github_*` executors.
-///
-/// Java spec: `GitHub.java` — parameter names (`workspace`, `repository`,
-/// `pullRequestId`, `text`) must match exactly; that is what the
-/// dmtools-agents scripts pass. Server-dependent tests use the scripted
-/// GitHub fixture subprocess (or the plain echo server) because Dart's
-/// [HttpServer] runs on the event loop, frozen during
-/// `Process.runSync('curl', …)`.
 void main() {
   setUpAll(() => PropertyReader.testIsolation = true);
   tearDownAll(() {
@@ -44,6 +37,7 @@ void _registryTests() {
         names,
         containsAll(const [
           'github_get_pr',
+          'github_create_pr',
           'github_list_prs',
           'github_create_comment',
           'github_add_pr_comment',
@@ -94,11 +88,6 @@ void _noConfigTests() {
 }
 
 /// All fixture-server backed groups.
-///
-/// Each helper is wrapped in its own [group] so its `setUp`/`tearDown`
-/// (which start/stop a fixture server) apply only to that group's tests —
-/// top-level `setUp`s would all run for every test, each spawning a
-/// server while only the last one's port ends up in the config override.
 void _fixtureGroups() {
   group('GitHubSyncTools PR tools (fixture)', _fixturePrTools);
   group('GitHubSyncTools comment tools (fixture)', _fixtureCommentTools);
@@ -212,6 +201,26 @@ void fixtureprtools_p2() {
       'GET /repos/o/r/branches?per_page=100&page=1',
       'GET /repos/o/r/branches?per_page=100&page=2',
     ]);
+  });
+
+  test('github_create_pr POSTs pulls with canonical and alias params', () {
+    tools.handlers['github_create_pr']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'title': 'Add feature',
+      'sourceBranch': 'feat/x',
+      'targetBranch': 'main',
+      'description': 'Details',
+    });
+    final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+    expect(sent['method'], 'POST');
+    expect(sent['path'], '/repos/o/r/pulls');
+    expect(jsonDecode(sent['body'] as String), {
+      'title': 'Add feature',
+      'head': 'feat/x',
+      'base': 'main',
+      'body': 'Details',
+    });
   });
 }
 
@@ -661,9 +670,6 @@ void fixtureactionstools_p2() {
       'ref': 'develop',
       'inputs': {'user_request': 'rework PROJ-1'},
     });
-    // The success message must arrive JSON-encoded: the QuickJS FFI
-    // bridge parses every host result with JS_ParseJSON — raw text throws
-    // "host callback returned invalid JSON" (live: #687 SM dispatch).
     expect(result, '"Workflow \'rework.yml\' triggered successfully on o/r"');
     expect(jsonDecode(result),
         "Workflow 'rework.yml' triggered successfully on o/r");
@@ -677,8 +683,6 @@ void fixtureactionstools_p2() {
       'repository': 'r',
       'runId': '55',
     });
-    // Log text is JSON-encoded for the FFI bridge — assert on the decoded
-    // payload (the exact string JS sees after the bridge unwraps it).
     final decoded = jsonDecode(result) as String;
     expect(decoded, contains('--- job1.txt ---\n\nstep one log'));
     expect(decoded, contains('--- job2.txt ---\n\nstep two log'));

@@ -74,6 +74,7 @@ final Map<String, String Function(Map<String, dynamic> args)> _adoHandlers =
   'ado_remove_work_item_label': _removeWorkItemLabel,
   'ado_list_work_items': _listWorkItems,
   'ado_list_prs': _listPrs,
+  'ado_create_pr': _createPr,
   'ado_get_pr': _getPr,
   'ado_get_pr_comments': _getPrComments,
   'ado_add_pr_comment': _addPrComment,
@@ -257,6 +258,22 @@ String _listPrs(_AdoConfig config, Map<String, dynamic> args) {
   final url = '${_prPath(config, args)}'
       '?searchCriteria.status=$status&api-version=$_adoApiVersion';
   return syncBodyOrError(SyncHttpClient.get(url, headers: config.headers));
+}
+
+/// `ado_create_pr` — POST `git/repositories/{repo}/pullrequests`.
+///
+/// Ports Java `createPullRequest`: short branch names gain `refs/heads/` via
+/// [normalizeAdoBranchRef], and `description` is omitted when null.
+String _createPr(_AdoConfig config, Map<String, dynamic> args) {
+  final url = '${_prPath(config, args)}?api-version=$_adoApiVersion';
+  final description = args['description'];
+  final body = <String, dynamic>{
+    'sourceRefName': normalizeAdoBranchRef(syncAsStr(args['sourceRefName'])),
+    'targetRefName': normalizeAdoBranchRef(syncAsStr(args['targetRefName'])),
+    'title': syncAsStr(args['title']),
+    if (description != null) 'description': syncAsStr(description),
+  };
+  return _postBody(config, url, jsonEncode(body));
 }
 
 /// `ado_get_pr` — GET `git/repositories/{repo}/pullrequests/{id}`.

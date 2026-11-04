@@ -23,6 +23,7 @@ List<ToolDefinition> _pullRequestTools() => [
           ),
         ],
       ),
+      _createPrTool(),
       ToolDefinition(
         name: 'ado_get_pr',
         aliases: ['source_code_get_pr'],
@@ -304,6 +305,35 @@ List<ToolDefinition> _pipelineAgentTools() => [
       _triggerPipelineTool(),
       _getPipelineLogsTool(),
     ];
+
+/// PR create tool: `ado_create_pr` (Java `createPullRequest`).
+ToolDefinition _createPrTool() => ToolDefinition(
+      name: 'ado_create_pr',
+      aliases: ['source_code_create_pr'],
+      description: 'Create a pull request in an Azure DevOps Git repository.',
+      integration: 'ado',
+      category: 'pull_requests',
+      params: [
+        _repositoryParam,
+        ToolParam(
+          name: 'sourceRefName',
+          description: 'The full source branch ref',
+        ),
+        ToolParam(
+          name: 'targetRefName',
+          description: 'The full target branch ref',
+        ),
+        ToolParam(
+          name: 'title',
+          description: 'The pull request title',
+        ),
+        ToolParam(
+          name: 'description',
+          description: 'The pull request description (Markdown supported)',
+          required: false,
+        ),
+      ],
+    );
 
 /// PR comment-threads tool: `ado_get_pr_comments` (Java
 /// `getPullRequestThreads`).

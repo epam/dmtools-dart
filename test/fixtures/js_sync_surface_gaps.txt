@@ -112,7 +112,6 @@ file_write_lines
 github_add_collaborator
 github_close_pr
 github_create_branch
-github_create_pr
 github_create_release
 github_create_review
 github_delete_branch

@@ -1,15 +1,4 @@
 {
-  "pr-446": [
-    {
-      "leg": "review",
-      "at": "2026-10-20T22:36:36Z",
-      "prompt": 69213,
-      "completion": 16436,
-      "total": 85649,
-      "cacheRead": 671998,
-      "model": "claude-haiku-5.5"
-    }
-  ],
   "pr-448": [
     {
       "leg": "review",
@@ -124,6 +113,17 @@
       "completion": 20158,
       "total": 83032,
       "cacheRead": 557254,
+      "model": "claude-haiku-5.5"
+    }
+  ],
+  "pr-475": [
+    {
+      "leg": "review",
+      "at": "2026-11-04T11:25:10Z",
+      "prompt": 79602,
+      "completion": 21379,
+      "total": 100981,
+      "cacheRead": 1436017,
       "model": "claude-haiku-5.5"
     }
   ]

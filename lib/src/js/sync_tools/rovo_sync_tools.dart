@@ -12,6 +12,7 @@ import 'dart:convert';
 import '../../config/property_reader.dart';
 import '../../config/property_reader_getters.dart';
 import '../../integrations/rovo/rovo_client.dart';
+import '../../integrations/rovo/rovo_http_client.dart';
 import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
 
@@ -31,6 +32,14 @@ class RovoSyncTools {
     String? body,
   }) _post;
   int _requestId = 0;
+  String? _sessionId;
+  bool _sessionInitialized = false;
+
+  /// Current MCP session ID obtained during the `initialize` handshake.
+  String? get sessionId => _sessionId;
+
+  /// Whether this instance has completed the MCP `initialize` handshake.
+  bool get isSessionInitialized => _sessionInitialized;
 
   /// Creates Rovo sync tooling reading config from [reader].
   ///
@@ -151,7 +160,68 @@ class RovoSyncTools {
         }
       });
 
+  Map<String, String> _headersWithSession(_RovoConf c) => {
+        ...c.headers,
+        if (_sessionId != null && _sessionId!.trim().isNotEmpty)
+          rovoMcpSessionIdHeader: _sessionId!.trim(),
+      };
+
+  static String? _extractSessionIdHeader(Map<String, String> headers) {
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == rovoMcpSessionIdHeader.toLowerCase() &&
+          entry.value.trim().isNotEmpty) {
+        return entry.value.trim();
+      }
+    }
+    return null;
+  }
+
+  void _ensureSessionInitialized(_RovoConf c) {
+    if (_sessionInitialized) return;
+    final initPayload = RovoClient.buildInitializeRequest(id: ++_requestId);
+    final initResp = _post(
+      c.url,
+      headers: _headersWithSession(c),
+      body: jsonEncode(initPayload),
+    );
+    final captured = _extractSessionIdHeader(initResp.headers);
+    if (captured != null) {
+      _sessionId = captured;
+    }
+    if (!initResp.isOk) {
+      return;
+    }
+    final notifyPayload = RovoClient.buildInitializedNotification();
+    _post(
+      c.url,
+      headers: _headersWithSession(c),
+      body: jsonEncode(notifyPayload),
+    );
+    _sessionInitialized = true;
+  }
+
+  /// Resets the current MCP session state so the next tool call re-initializes.
+  void resetSession() {
+    _sessionId = null;
+    _sessionInitialized = false;
+  }
+
   String _callRemote(
+    _RovoConf c,
+    String toolName,
+    Map<String, dynamic> toolArgs,
+  ) {
+    _ensureSessionInitialized(c);
+    final resp = _postToolCall(c, toolName, toolArgs);
+    if (RovoClient.isMissingOrExpiredSessionError(resp.body)) {
+      resetSession();
+      _ensureSessionInitialized(c);
+      return _unwrapResponse(_postToolCall(c, toolName, toolArgs));
+    }
+    return _unwrapResponse(resp);
+  }
+
+  SyncHttpResponse _postToolCall(
     _RovoConf c,
     String toolName,
     Map<String, dynamic> toolArgs,
@@ -161,8 +231,11 @@ class RovoSyncTools {
       toolName: toolName,
       arguments: toolArgs,
     );
-    final resp = _post(c.url, headers: c.headers, body: jsonEncode(payload));
-    return _unwrapResponse(resp);
+    return _post(
+      c.url,
+      headers: _headersWithSession(c),
+      body: jsonEncode(payload),
+    );
   }
 
   static String _unwrapResponse(SyncHttpResponse resp) {

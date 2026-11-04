@@ -45,8 +45,17 @@ class RovoClient {
   /// Detail level requesting an AI-generated summary of a Confluence page.
   static const String detailAiSummary = 'ai_summary';
 
+  /// MCP Streamable HTTP protocol version negotiated during `initialize`.
+  static const String mcpProtocolVersion = '2025-03-26';
   final RovoHttpClient _http;
   int _requestId = 0;
+  bool _sessionInitialized = false;
+
+  /// Whether this client has completed the MCP `initialize` handshake.
+  bool get isSessionInitialized => _sessionInitialized;
+
+  /// Current MCP session ID from [_http].
+  String? get sessionId => _http.sessionId;
 
   /// Creates a client backed by [_http].
   RovoClient(this._http);
@@ -124,7 +133,51 @@ class RovoClient {
   }
 
   /// Sends a JSON-RPC 2.0 `tools/call` request for [toolName] with [arguments].
+  /// Performs the MCP Streamable HTTP `initialize` handshake once per session.
+  Future<void> ensureSessionInitialized() async {
+    if (_sessionInitialized) return;
+    final initPayload = buildInitializeRequest(id: ++_requestId);
+    final initResp = await _http.postRpc(
+      jsonEncode(initPayload),
+      captureSessionHeader: true,
+    );
+    unwrapJsonRpcResponse(initResp.body);
+    final notifyPayload = buildInitializedNotification();
+    try {
+      await _http.postRpc(jsonEncode(notifyPayload));
+    } on Object {
+      // Best-effort notification per MCP Streamable HTTP spec.
+    }
+    _sessionInitialized = true;
+  }
+
+  /// Resets the current MCP session state so the next tool call re-initializes.
+  void resetSession() {
+    _http.sessionId = null;
+    _sessionInitialized = false;
+  }
+
+  /// Sends a JSON-RPC 2.0 `tools/call` request for [toolName] with [arguments].
   Future<String> callRemoteTool(
+    String toolName,
+    Map<String, dynamic> arguments,
+  ) async {
+    await ensureSessionInitialized();
+    try {
+      return await _postToolCall(toolName, arguments);
+    } on Object catch (e) {
+      if (!isMissingOrExpiredSessionError(e.toString()) &&
+          !(e is DioException &&
+              isMissingOrExpiredSessionError(e.response?.data?.toString()))) {
+        rethrow;
+      }
+      resetSession();
+      await ensureSessionInitialized();
+      return _postToolCall(toolName, arguments);
+    }
+  }
+
+  Future<String> _postToolCall(
     String toolName,
     Map<String, dynamic> arguments,
   ) async {
@@ -136,6 +189,29 @@ class RovoClient {
     final rawResponse = await _http.post('', body: jsonEncode(payload));
     return unwrapJsonRpcResponse(rawResponse);
   }
+
+  /// Builds a JSON-RPC 2.0 `initialize` handshake request envelope.
+  static Map<String, dynamic> buildInitializeRequest({required int id}) =>
+      <String, dynamic>{
+        'jsonrpc': '2.0',
+        'id': id,
+        'method': 'initialize',
+        'params': <String, dynamic>{
+          'protocolVersion': mcpProtocolVersion,
+          'capabilities': const <String, dynamic>{},
+          'clientInfo': const <String, dynamic>{
+            'name': 'dmtools',
+            'version': '1.0.0',
+          },
+        },
+      };
+
+  /// Builds a JSON-RPC 2.0 `notifications/initialized` notification envelope.
+  static Map<String, dynamic> buildInitializedNotification() =>
+      const <String, dynamic>{
+        'jsonrpc': '2.0',
+        'method': 'notifications/initialized',
+      };
 
   /// Builds a JSON-RPC 2.0 `tools/call` request envelope.
   static Map<String, dynamic> buildJsonRpcRequest({
@@ -152,6 +228,17 @@ class RovoClient {
           'arguments': arguments,
         },
       };
+
+  /// Checks whether [text] indicates a missing or expired MCP session.
+  static bool isMissingOrExpiredSessionError(String? text) {
+    if (text == null || text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    return lower.contains('must be an initialize request') ||
+        lower.contains('no session id') ||
+        lower.contains('session not found') ||
+        lower.contains('invalid session') ||
+        lower.contains('session expired');
+  }
 
   /// Unwraps a JSON-RPC 2.0 or SSE `data:` response from the Rovo MCP server.
   ///

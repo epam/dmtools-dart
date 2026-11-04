@@ -60,6 +60,7 @@ void _testHandlerSurface() {
       'ado_attach_file',
       'ado_list_work_items',
       'ado_list_prs',
+      'ado_create_pr',
       'ado_get_pr',
       'ado_get_pr_comments',
       'ado_add_pr_comment',
@@ -401,6 +402,28 @@ void testprwritetools_p4() {
       '/org/proj/_apis/git/repositories/repo/pullrequests/5/labels/'
       'e10671ab?api-version=7.0-preview.1',
     );
+  });
+
+  test('ado_create_pr POSTs normalized branch refs and optional description',
+      () {
+    final body = echo('ado_create_pr', {
+      'repository': 'repo',
+      'sourceRefName': 'feature/short',
+      'targetRefName': 'refs/heads/main',
+      'title': 'Add saved cards',
+      'description': 'PR body',
+    });
+    expect(body['method'], 'POST');
+    expect(
+      body['path'],
+      '/org/proj/_apis/git/repositories/repo/pullrequests?api-version=7.0',
+    );
+    expect(jsonDecode(body['body'] as String), {
+      'sourceRefName': 'refs/heads/feature/short',
+      'targetRefName': 'refs/heads/main',
+      'title': 'Add saved cards',
+      'description': 'PR body',
+    });
   });
 }
 

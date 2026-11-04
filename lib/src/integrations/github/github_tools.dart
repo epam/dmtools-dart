@@ -117,9 +117,20 @@ ToolDefinition _createPrTool() => ToolDefinition(
       description: 'Create a GitHub pull request',
       integration: 'github',
       category: 'pull_requests',
+      aliases: ['source_code_create_pr'],
       params: [
-        _ownerParam(),
-        _repoParam(),
+        ToolParam(
+          name: 'owner',
+          description: 'The repository owner (user or organization)',
+          required: true,
+          aliases: ['workspace'],
+        ),
+        ToolParam(
+          name: 'repo',
+          description: 'The repository name',
+          required: true,
+          aliases: ['repository'],
+        ),
         ToolParam(
           name: 'title',
           description: 'The title of the new pull request',
@@ -129,11 +140,13 @@ ToolDefinition _createPrTool() => ToolDefinition(
           name: 'head',
           description: 'The branch containing changes (source)',
           required: true,
+          aliases: ['sourceBranch', 'sourceRefName'],
         ),
         ToolParam(
           name: 'base',
           description: 'The branch to merge changes into (target)',
           required: true,
+          aliases: ['targetBranch', 'targetRefName'],
         ),
       ],
     );

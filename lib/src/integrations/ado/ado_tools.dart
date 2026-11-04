@@ -299,6 +299,13 @@ class AdoToolExecutor {
           a['linkType'] as String,
         ),
     'ado_list_prs': (a) => _client.listPrs(a['status'] as String?),
+    'ado_create_pr': (a) => _client.createPullRequest(
+          a['repository'] as String,
+          a['sourceRefName'] as String,
+          a['targetRefName'] as String,
+          a['title'] as String,
+          description: a['description'] as String?,
+        ),
     'ado_get_pr': (a) => _client.getPr(_id(a)),
     'ado_get_pull_request_reviewers': (a) => _client.getPullRequestReviewers(
           a['project'] as String,

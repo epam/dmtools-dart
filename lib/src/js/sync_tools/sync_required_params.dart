@@ -33,6 +33,7 @@ const Map<String, List<String>> kGithubRequiredParams = {
   'github_add_pr_label': ['workspace', 'repository', 'pullRequestId', 'label'],
   'github_create_check_run': ['workspace', 'repository', 'name', 'headSha'],
   'github_create_commit_status': ['workspace', 'repository', 'sha', 'state'],
+  'github_create_pr': ['owner', 'repo', 'title', 'head', 'base'],
   'github_delete_pr_comment': ['workspace', 'repository', 'commentId'],
   'github_delete_release_asset': ['workspace', 'repository', 'assetId'],
   'github_dismiss_pr_review': [
@@ -213,6 +214,12 @@ const Map<String, List<String>> kGitlabRequiredParams = {
 const Map<String, Map<String, List<String>>> kGithubParamAliases = {
   'github_add_inline_comment': {
     'path': ['filePath'],
+  },
+  'github_create_pr': {
+    'owner': ['workspace'],
+    'repo': ['repository'],
+    'head': ['sourceBranch', 'sourceRefName'],
+    'base': ['targetBranch', 'targetRefName'],
   },
   'github_reply_to_pr_thread': {
     'inReplyToId': ['threadId'],

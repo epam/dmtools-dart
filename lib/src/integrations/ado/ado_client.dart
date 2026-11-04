@@ -135,6 +135,29 @@ class AdoClient {
     return _decodeList(body);
   }
 
+  /// `ado_create_pr` — POST `git/repositories/{repository}/pullrequests`.
+  ///
+  /// Short branch names (without a `refs/` prefix) are normalized to
+  /// `refs/heads/<branch>` via [normalizeAdoBranchRef].
+  Future<Map<String, dynamic>> createPullRequest(
+    String repository,
+    String sourceRefName,
+    String targetRefName,
+    String title, {
+    String? description,
+  }) async {
+    final body = await _http.post(
+      'git/repositories/$repository/pullrequests',
+      body: jsonEncode({
+        'sourceRefName': normalizeAdoBranchRef(sourceRefName),
+        'targetRefName': normalizeAdoBranchRef(targetRefName),
+        'title': title,
+        if (description != null) 'description': description,
+      }),
+    );
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
   /// `ado_get_pr` — GET `{org}/{project}/_apis/git/pullrequests/{id}`.
   Future<Map<String, dynamic>> getPr(int id) async {
     final body = await _http.get('git/pullrequests/$id');

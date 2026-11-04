@@ -357,6 +357,20 @@ void _executorTests() {
   });
 }
 
+SyncHttpResponse? _handleSyncHandshakeRpc(String? method, String sessionId) {
+  if (method == 'initialize') {
+    return SyncHttpResponse(
+      200,
+      '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26"}}',
+      {rovoMcpSessionIdHeader: sessionId},
+    );
+  }
+  if (method == 'notifications/initialized') {
+    return SyncHttpResponse(202, '');
+  }
+  return null;
+}
+
 void _syncToolsTests() {
   group('RovoSyncTools dispatch', () {
     test('dispatches all 4 tools and falls back on 403', () {
@@ -369,17 +383,11 @@ void _syncToolsTests() {
         PropertyReader(),
         post: (url, {headers, body}) {
           final rpc = jsonDecode(body!) as Map<String, dynamic>;
-          final method = rpc['method'] as String?;
-          if (method == 'initialize') {
-            return SyncHttpResponse(
-              200,
-              '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26"}}',
-              {rovoMcpSessionIdHeader: 'sync-session-99'},
-            );
-          }
-          if (method == 'notifications/initialized') {
-            return SyncHttpResponse(202, '');
-          }
+          final hs = _handleSyncHandshakeRpc(
+            rpc['method'] as String?,
+            'sync-session-99',
+          );
+          if (hs != null) return hs;
           final params = rpc['params'] as Map<String, dynamic>;
           final args = params['arguments'] as Map<String, dynamic>;
           final mode = args['mode'] as String?;
@@ -456,13 +464,28 @@ void _syncToolsErrorTests() {
 void _sessionHandshakeTests() {
   group('MCP initialize session handshake', () {
     test('RovoClient captures Mcp-Session-Id and retries on expired session',
-        _testRovoClientHandshakeAndRetry);
-    test('RovoSyncTools reinitializes session on 400 missing session ID',
-        _testRovoSyncToolsHandshakeAndRetry);
+        () async {
+      final state = _createRovoClientRetryFixture();
+      final res = await state.client.rovoSearch(query: 'hello');
+      expect(res, equals('recovered'));
+      expect(state.client.sessionId, equals('session-test-123'));
+      expect(state.client.isSessionInitialized, isTrue);
+      expect(state.calls(), equals(2));
+    });
+    test('RovoSyncTools reinitializes session on 400 missing session ID', () {
+      final state = _createRovoSyncRetryFixture();
+      expect(
+        state.sync.dispatch('rovo_search', {'query': 'hello'}),
+        equals('sync-recovered'),
+      );
+      expect(state.sync.sessionId, equals('sync-sess-42'));
+      expect(state.sync.isSessionInitialized, isTrue);
+      expect(state.calls(), equals(2));
+    });
   });
 }
 
-Future<void> _testRovoClientHandshakeAndRetry() async {
+({RovoClient client, int Function() calls}) _createRovoClientRetryFixture() {
   var toolCalls = 0;
   final client = _makeClient((req) {
     expect(req.headers[rovoMcpSessionIdHeader], equals('session-test-123'));
@@ -476,31 +499,21 @@ Future<void> _testRovoClientHandshakeAndRetry() async {
     }
     return (status: 200, body: _rpcSuccess('recovered'));
   });
-  final res = await client.rovoSearch(query: 'hello');
-  expect(res, equals('recovered'));
-  expect(client.sessionId, equals('session-test-123'));
-  expect(client.isSessionInitialized, isTrue);
-  expect(toolCalls, equals(2));
+  return (client: client, calls: () => toolCalls);
 }
 
-void _testRovoSyncToolsHandshakeAndRetry() {
+({RovoSyncTools sync, int Function() calls}) _createRovoSyncRetryFixture() {
   PropertyReader.setOverrides({'ROVO_LOGIN_PASS_TOKEN': 'tok'});
   var toolCalls = 0;
   final sync = RovoSyncTools(
     PropertyReader(),
     post: (url, {headers, body}) {
       final rpc = jsonDecode(body!) as Map<String, dynamic>;
-      final method = rpc['method'] as String?;
-      if (method == 'initialize') {
-        return SyncHttpResponse(
-          200,
-          '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26"}}',
-          {rovoMcpSessionIdHeader: 'sync-sess-42'},
-        );
-      }
-      if (method == 'notifications/initialized') {
-        return SyncHttpResponse(202, '');
-      }
+      final hs = _handleSyncHandshakeRpc(
+        rpc['method'] as String?,
+        'sync-sess-42',
+      );
+      if (hs != null) return hs;
       expect(headers?[rovoMcpSessionIdHeader], equals('sync-sess-42'));
       toolCalls++;
       if (toolCalls == 1) {
@@ -513,11 +526,5 @@ void _testRovoSyncToolsHandshakeAndRetry() {
       return SyncHttpResponse(200, _rpcSuccess('sync-recovered'));
     },
   );
-  expect(
-    sync.dispatch('rovo_search', {'query': 'hello'}),
-    equals('sync-recovered'),
-  );
-  expect(sync.sessionId, equals('sync-sess-42'));
-  expect(sync.isSessionInitialized, isTrue);
-  expect(toolCalls, equals(2));
+  return (sync: sync, calls: () => toolCalls);
 }

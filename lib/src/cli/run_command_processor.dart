@@ -208,11 +208,15 @@ class RunCommandProcessor {
     }
     final raw = file.readAsStringSync();
     var config = jsonDecode(raw) as Map<String, dynamic>;
-    final resolved = _ParentConfigResolver(packResolver: _packResolver)
-        .resolveWithPack(config, file.parent.path);
+    final parentResolver = _ParentConfigResolver(packResolver: _packResolver);
+    final resolved = parentResolver.resolveWithPack(config, file.parent.path);
     final effectivePackRoot = packRoot ?? resolved.packRoot;
     config = _applyEncodedConfig(resolved.config, runArgs.encodedConfig);
     _injectParams(config, runArgs.overrides);
+    parentResolver.rewriteRemainingPackRefs(
+      config,
+      fallbackPackRoot: packRoot,
+    );
     if (effectivePackRoot != null) {
       AgentPackResolver().rewritePathsToPackRoot(config, effectivePackRoot);
     }
@@ -282,6 +286,27 @@ class _ParentConfigResolver {
 
   final AgentPackResolver _packResolver;
 
+  /// Nearest ancestor pack root discovered during the latest [resolve] /
+  /// [resolveWithPack] call, or `null` when no pack parent was visited.
+  Directory? resolvedPackRoot;
+
+  /// Rewrites any `pack:` references remaining in [config] (e.g. introduced by
+  /// `encodedConfig` or CLI `--key value` overrides) against [resolvedPackRoot]
+  /// or [fallbackPackRoot] (dm.ai #820).
+  void rewriteRemainingPackRefs(
+    Map<String, dynamic> config, {
+    Directory? fallbackPackRoot,
+  }) {
+    final effectiveRoot = resolvedPackRoot ?? fallbackPackRoot;
+    if (effectiveRoot != null) {
+      _rewritePackRefs(config, effectiveRoot);
+    } else if (_containsPackRef(config)) {
+      throw ArgumentError(
+        'child config uses pack: references but its parent is not an agent pack',
+      );
+    }
+  }
+
   /// Resolves [child] by walking up its parent chain.
   ///
   /// [configDir] is the directory of the file that [child] was loaded from;
@@ -315,6 +340,7 @@ class _ParentConfigResolver {
     final strippedChild = _stripMeta(child);
     if (loaded.packRoot != null) {
       // The parent is an agent pack: the child's `pack:` references and
+      resolvedPackRoot = loaded.packRoot;
       // repo-relative paths point inside it (zip flow — no agents checkout).
       _rewritePackRefs(strippedChild, loaded.packRoot!);
       _packResolver.rewritePathsToPackRoot(strippedChild, loaded.packRoot!);

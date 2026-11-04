@@ -25,7 +25,7 @@ import 'dart:io';
 /// stays pinned to the known list, and the leading boundary (`/`, `./`,
 /// `../`) keeps ordinary prose with dots out.
 final RegExp _filePathRegExp = RegExp(
-  r'(?<![:/\w])\.{0,2}/[\w./-]+\.(?:md|txt|json|yaml|yml)\b',
+  r'(?:pack:/*|(?<![:/\w])\.{0,2}/)[\w./-]+\.(?:md|txt|json|yaml|yml)\b',
 );
 
 /// Matches GitHub pull-request URLs (captures owner, repo, number).
@@ -74,7 +74,7 @@ class InstructionProcessor {
         // runner path (~110 chars each) is pure prompt-token bloat (the
         // Java InstructionProcessor inlines bare content; cross-file
         // references like "see tdd_approach.md" only need the basename).
-        final basename = path.replaceAll('\\', '/').split('/').last;
+        final basename = resolved.replaceAll('\\', '/').split('/').last;
         return '## $basename\n${file.readAsStringSync()}';
       } catch (_) {
         return path;
@@ -112,9 +112,12 @@ class InstructionProcessor {
   /// paths are resolved against [workingDirectory] (or the current
   /// directory when null), with `.` and `..` segments normalized.
   String _resolveFilePath(String input) {
-    if (input.startsWith('/')) return input;
+    final cleaned = input.startsWith('pack:')
+        ? input.substring('pack:'.length).replaceFirst(RegExp(r'^/+'), '')
+        : input;
+    if (cleaned.startsWith('/')) return cleaned;
     final base = workingDirectory ?? Directory.current.absolute.path;
-    final segments = [...base.split('/'), ...input.split('/')];
+    final segments = [...base.split('/'), ...cleaned.split('/')];
     final stack = <String>[];
     for (final seg in segments) {
       if (seg.isEmpty || seg == '.') continue;

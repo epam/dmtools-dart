@@ -44,6 +44,24 @@ void main() {
         registry.resolveToolAlias('ado_search_by_wiql'), 'ado_list_work_items');
   });
 
+  test('source_code_create_pr routes to github, gitlab, and ado', () {
+    expect(
+      registry.resolveToolAlias('source_code_create_pr',
+          defaultSourceCode: 'github'),
+      'github_create_pr',
+    );
+    expect(
+      registry.resolveToolAlias('source_code_create_pr',
+          defaultSourceCode: 'gitlab'),
+      'gitlab_create_mr',
+    );
+    expect(
+      registry.resolveToolAlias('source_code_create_pr',
+          defaultSourceCode: 'ado'),
+      'ado_create_pr',
+    );
+  });
+
   test('Java param aliases map onto the canonical ADO params', () {
     Map<String, dynamic> apply(String tool, Map<String, dynamic> args) =>
         registry.getTool(tool)!.applyParamAliases(args);

@@ -158,6 +158,7 @@ void catalogParamTests() {
         ['owner', 'repo', 'title', 'head', 'base'],
       );
       expect(tool.params.every((p) => p.required), isTrue);
+      expect(tool.aliases, ['source_code_create_pr']);
     });
   });
 

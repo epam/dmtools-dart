@@ -66,6 +66,7 @@ class GitHubSyncTools {
   Map<String, String Function(Map<String, dynamic> args)> get _agentHandlers =>
       {
         'github_get_pr': (args) => _run(_getPr, args),
+        'github_create_pr': (args) => _run(_createPr, args),
         'github_list_prs': (args) => _run(_listPrs, args),
         'github_list_branches': (args) => _run(_listBranches, args),
         'github_add_pr_comment': (args) => _run(_addPrComment, args),
@@ -142,6 +143,19 @@ String _run(
 /// `github_get_pr` — GET `repos/{w}/{r}/pulls/{id}` (Java `pullRequest`).
 String _getPr(GhSyncConfig c, Map<String, dynamic> a) =>
     syncBodyOrError(SyncHttpClient.get(_prUrl(c, a), headers: c.headers));
+
+/// `github_create_pr` — POST `repos/{owner}/{repo}/pulls` (Java `createPr`).
+String _createPr(GhSyncConfig c, Map<String, dynamic> a) {
+  final owner = syncAsStr(a['owner'] ?? a['workspace']);
+  final repo = syncAsStr(a['repo'] ?? a['repository']);
+  final body = <String, dynamic>{
+    'title': syncAsStr(a['title']),
+    'head': syncAsStr(a['head'] ?? a['sourceBranch'] ?? a['sourceRefName']),
+    'base': syncAsStr(a['base'] ?? a['targetBranch'] ?? a['targetRefName']),
+  };
+  _putIfNotBlank(body, 'body', a['body'] ?? a['description']);
+  return _postJson(c, '${c.baseUrl}/repos/$owner/$repo/pulls', body);
+}
 
 /// `github_add_pr_comment` — POST `repos/{w}/{r}/issues/{id}/comments`.
 String _addPrComment(GhSyncConfig c, Map<String, dynamic> a) =>

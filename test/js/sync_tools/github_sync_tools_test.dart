@@ -44,6 +44,7 @@ void _registryTests() {
         names,
         containsAll(const [
           'github_get_pr',
+          'github_create_pr',
           'github_list_prs',
           'github_create_comment',
           'github_add_pr_comment',
@@ -212,6 +213,26 @@ void fixtureprtools_p2() {
       'GET /repos/o/r/branches?per_page=100&page=1',
       'GET /repos/o/r/branches?per_page=100&page=2',
     ]);
+  });
+
+  test('github_create_pr POSTs pulls with canonical and alias params', () {
+    tools.handlers['github_create_pr']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'title': 'Add feature',
+      'sourceBranch': 'feat/x',
+      'targetBranch': 'main',
+      'description': 'Details',
+    });
+    final sent = jsonDecode(fx.lastRequestJson!) as Map<String, dynamic>;
+    expect(sent['method'], 'POST');
+    expect(sent['path'], '/repos/o/r/pulls');
+    expect(jsonDecode(sent['body'] as String), {
+      'title': 'Add feature',
+      'head': 'feat/x',
+      'base': 'main',
+      'body': 'Details',
+    });
   });
 }
 

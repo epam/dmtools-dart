@@ -65,6 +65,7 @@ void catalogOrderTests() {
         'ado_get_project_details',
         'ado_get_project_properties',
         'ado_list_prs',
+        'ado_create_pr',
         'ado_get_pr',
         'ado_get_pull_request_reviewers',
         'ado_add_pull_request_reviewer',
@@ -137,6 +138,22 @@ void catalogTests() {
       expect(tool.params.single.required, isFalse);
     });
 
+    test('ado_create_pr declares required refs and optional description', () {
+      final tool = toolNamed('ado_create_pr');
+      expect(tool.aliases, ['source_code_create_pr']);
+      expect(tool.params.map((p) => p.name), [
+        'repository',
+        'sourceRefName',
+        'targetRefName',
+        'title',
+        'description',
+      ]);
+      expect(
+        tool.params.where((p) => p.required).map((p) => p.name),
+        ['repository', 'sourceRefName', 'targetRefName', 'title'],
+      );
+    });
+
     test('ado_get_pr declares a required numeric id', () {
       final tool = toolNamed('ado_get_pr');
       expect(tool.params.single.name, 'id');
@@ -176,6 +193,29 @@ void executorRoutingTests() {
     test('routes ado_list_prs with an explicit status', () async {
       await f.executor.execute('ado_list_prs', {'status': 'abandoned'});
       expect(f.spy.calls, ['listPrs:abandoned']);
+    });
+
+    test('routes ado_create_pr and normalizes short branch refs', () async {
+      await f.executor.execute('ado_create_pr', {
+        'repository': 'saved_cards_service',
+        'sourceRefName': 'feature/short',
+        'targetRefName': 'refs/heads/main',
+        'title': 'Add saved cards',
+        'description': 'Body',
+      });
+      final call = f.adapter.calls.single;
+      expect(call.method, 'POST');
+      expect(
+        call.path,
+        endsWith('/git/repositories/saved_cards_service/pullrequests'),
+      );
+      expect(
+        '${call.data}',
+        contains('"sourceRefName":"refs/heads/feature/short"'),
+      );
+      expect('${call.data}', contains('"targetRefName":"refs/heads/main"'));
+      expect('${call.data}', contains('"title":"Add saved cards"'));
+      expect('${call.data}', contains('"description":"Body"'));
     });
 
     test('routes ado_get_pr with id', () async {

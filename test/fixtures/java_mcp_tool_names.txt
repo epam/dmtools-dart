@@ -5,6 +5,7 @@ ado_add_pr_reviewer
 ado_add_work_item_comment
 ado_add_work_item_label
 ado_assign_work_item
+ado_create_pr
 ado_create_work_item
 ado_delete_pr_comment
 ado_download_attachment

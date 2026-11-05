@@ -109,7 +109,31 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             if "metafail" in auth:
                 self._respond('{"errors": ["forbidden"]}', status=503)
                 return
+            if "projectKeys=CLOUD" in self.path:
+                self._respond(json.dumps({
+                    "projects": [{
+                        "key": "CLOUD",
+                        "issuetypes": [
+                            {"id": "10001", "name": "Story"},
+                            {"id": "10004", "name": "Bug"},
+                        ],
+                    }]
+                }))
+                return
             self._respond(CREATE_META)
+            return
+        if "/project/SERVER" in self.path:
+            self._respond(json.dumps({
+                "key": "SERVER",
+                "issueTypes": [{"id": "3", "name": "Task"}],
+            }))
+            return
+        if self.path.split("?")[0].endswith("/issuetype"):
+            auth = self.headers.get("Authorization", "")
+            if "metafail" in auth:
+                self._respond('{"errors": ["forbidden"]}', status=503)
+                return
+            self._respond(json.dumps([{"id": "99", "name": "Epic"}]))
             return
         if self.command == "POST" and "/issue" in self.path \
                 and '"FAILCREATE"' in body:

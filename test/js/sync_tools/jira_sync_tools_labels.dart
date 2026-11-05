@@ -120,3 +120,51 @@ void testcreatelabels_p2() {
     expect(fields['labels'], ['via-json']);
   });
 }
+
+/// `jira_get_issue_types` tests (gh-479).
+void _testGetIssueTypes() {
+  group('JiraSyncTools jira_get_issue_types', () {
+    setUp(() async {
+      server = JiraFixtureServer();
+      await server.start();
+      configureJira(server);
+      tools = JiraSyncTools();
+    });
+    tearDown(() {
+      PropertyReader.clearOverrides();
+      server.stop();
+    });
+    _testGetIssueTypesCases();
+  });
+}
+
+void _testGetIssueTypesCases() {
+  test('extracts issue types from createmeta projects array', () {
+    final decoded = jsonDecode(
+      tools.dispatch('jira_get_issue_types', {'project': 'CLOUD'}),
+    ) as List;
+    expect(decoded.map((e) => (e as Map)['name']).toList(), ['Story', 'Bug']);
+  });
+
+  test('falls back to project/<key> when createmeta projects is empty', () {
+    final decoded = jsonDecode(
+      tools.dispatch('jira_get_issue_types', {'project': 'SERVER'}),
+    ) as List;
+    expect(decoded.map((e) => (e as Map)['name']).toList(), ['Task']);
+  });
+
+  test('falls back to global /issuetype when project endpoint has no list', () {
+    final decoded = jsonDecode(
+      tools.dispatch('jira_get_issue_types', {'project': 'OTHER'}),
+    ) as List;
+    expect(decoded.map((e) => (e as Map)['name']).toList(), ['Epic']);
+  });
+
+  test('surfaces HTTP error when createmeta and fallbacks all fail', () {
+    configureJira(server, token: 'metafail');
+    final error = errOf(
+      tools.dispatch('jira_get_issue_types', {'project': 'OTHER'}),
+    );
+    expect(error['error'], contains('HTTP 503'));
+  });
+}

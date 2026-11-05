@@ -179,3 +179,87 @@ String _multiFieldUpdateResult(
         '${_failureDetail('HTTP ${fallback.statusCode}', fallback)}',
   );
 }
+
+/// `jira_get_issue_types` engine (Java `JiraClient.getIssueTypes`, gh-479).
+///
+/// 1. `GET issue/createmeta?projectKeys=<project>&expand=projects.issuetypes.fields`
+///    - extracts `projects[0].issuetypes` (or `issueTypes`) or top-level list.
+/// 2. Fallback on error or empty result (Jira Server / Data Center):
+///    - `GET project/<project>` (`issueTypes` / `issuetypes` list)
+///    - `GET issuetype` (top-level list).
+String _getIssueTypesFor(_JiraSyncConfig config, Map<String, dynamic> args) {
+  final project = _asStr(args['project']);
+  final metaUrl = '${config.baseUrl}/issue/createmeta'
+      '?projectKeys=${Uri.encodeQueryComponent(project)}'
+      '&expand=projects.issuetypes.fields';
+  final metaResp = SyncHttpClient.get(metaUrl, headers: config.headers);
+  if (metaResp.isOk) {
+    final fromMeta = _extractCreateMetaIssueTypes(metaResp.body);
+    if (fromMeta != null && fromMeta.isNotEmpty) {
+      return jsonEncode(fromMeta);
+    }
+  }
+  return _getServerIssueTypesFallback(config, project, metaResp);
+}
+
+/// Extracts the issue-types array from a `createmeta` response body, or
+/// `null` when the body is neither a top-level list nor a `projects` object.
+List<dynamic>? _extractCreateMetaIssueTypes(String body) {
+  final decoded = _tryDecode(body);
+  if (decoded is List) return decoded;
+  if (decoded is! Map<String, dynamic>) return null;
+  final projects = decoded['projects'];
+  if (projects is List) return _extractFirstProjectIssueTypes(projects);
+  return _extractDirectIssueTypesList(decoded);
+}
+
+List<dynamic> _extractFirstProjectIssueTypes(List<dynamic> projects) {
+  if (projects.isEmpty) return const [];
+  final first = projects.first;
+  if (first is Map) {
+    final types = _extractDirectIssueTypesList(first);
+    if (types != null) return types;
+  }
+  return const [];
+}
+
+List<dynamic>? _extractDirectIssueTypesList(Map<dynamic, dynamic> map) {
+  final direct = map['issuetypes'] ?? map['issueTypes'] ?? map['values'];
+  return direct is List ? direct : null;
+}
+
+/// Jira Server / Data Center fallback for `jira_get_issue_types`: tries
+/// `GET project/<project>` (`issueTypes`), then `GET issuetype`.
+String _getServerIssueTypesFallback(
+  _JiraSyncConfig config,
+  String project,
+  SyncHttpResponse metaResp,
+) {
+  final fromProject = _fetchProjectIssueTypes(config, project);
+  if (fromProject != null) return jsonEncode(fromProject);
+  final fromGlobal = _fetchGlobalIssueTypes(config);
+  if (fromGlobal != null) return jsonEncode(fromGlobal);
+  if (!metaResp.isOk) return _bodyOrError(metaResp);
+  return jsonEncode(const <Object?>[]);
+}
+
+List<dynamic>? _fetchProjectIssueTypes(_JiraSyncConfig config, String project) {
+  if (project.isEmpty) return null;
+  final resp = SyncHttpClient.get(
+    '${config.baseUrl}/project/${Uri.encodeComponent(project)}',
+    headers: config.headers,
+  );
+  if (!resp.isOk) return null;
+  final decoded = _tryDecode(resp.body);
+  return decoded is Map ? _extractDirectIssueTypesList(decoded) : null;
+}
+
+List<dynamic>? _fetchGlobalIssueTypes(_JiraSyncConfig config) {
+  final resp = SyncHttpClient.get(
+    '${config.baseUrl}/issuetype',
+    headers: config.headers,
+  );
+  if (!resp.isOk) return null;
+  final decoded = _tryDecode(resp.body);
+  return decoded is List ? decoded : null;
+}

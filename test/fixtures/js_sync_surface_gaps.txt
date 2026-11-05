@@ -187,7 +187,6 @@ jira_get_components
 jira_get_fields
 jira_get_fix_versions
 jira_get_issue_link_types
-jira_get_issue_types
 jira_get_priorities
 jira_get_project_board_config
 jira_get_project_details

@@ -34,6 +34,7 @@ void main() {
     _testAttachFile();
     _testFieldCustomCode();
     _testUpdateFieldEngine();
+    _testGetIssueTypes();
   }
 }
 
@@ -121,6 +122,7 @@ void _testHandlerCatalog() {
             'tracker_link_tickets',
             'jira_get_field_custom_code',
             'jira_attach_file_to_ticket',
+            'jira_get_issue_types',
           ]));
     });
   });

@@ -79,6 +79,7 @@ class JiraSyncTools {
         'tracker_link_tickets': _linkIssues,
         'jira_get_field_custom_code': _getFieldCustomCode,
         'jira_attach_file_to_ticket': _attachFileToTicket,
+        'jira_get_issue_types': _getIssueTypes,
       };
 
   /// Dispatches a Jira tool call against [handlers].
@@ -566,6 +567,15 @@ class JiraSyncTools {
         );
         return best == null ? 'null' : jsonEncode(best.id);
       });
+
+  /// `jira_get_issue_types` — fetch issue types for a project (gh-479).
+  ///
+  /// Mirrors Java `JiraClient.getIssueTypes(project)`: queries
+  /// `issue/createmeta?projectKeys=<project>&expand=projects.issuetypes.fields`
+  /// first, then falls back to `project/<project>` and `issuetype` for Jira
+  /// Server / Data Center where createmeta may be disabled or empty.
+  String _getIssueTypes(Map<String, dynamic> args) =>
+      _run((config) => _getIssueTypesFor(config, args));
 
   /// `jira_attach_file_to_ticket` — multipart POST `issue/{key}/attachments`.
   ///

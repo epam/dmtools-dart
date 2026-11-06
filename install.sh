@@ -70,10 +70,240 @@ else
   asset="dmtools-${os}-${arch}.tar.gz"
 fi
 
-# ── 2. Resolve version ──────────────────────────────────────────────────────
+# ── 2. Parse CLI arguments & skill selection (dm.ai#675 parity) ─────────────
+AVAILABLE_SKILLS_CSV="dmtools,jira,confluence,github,gitlab,figma,teams,sharepoint,ado,testrail,xray"
+ALWAYS_ON_INTEGRATIONS="ai,cli,file,kb,mermaid"
+skills_arg=""
+skills_was_set=0
+all_skills_flag=0
+no_skill_files=0
+skip_unknown_skills=0
+prune_skills=0
+strict_mode=0
+version_arg=""
+
+case "$(printf '%s' "${DMTOOLS_STRICT_INSTALL:-false}" | tr '[:upper:]' '[:lower:]')" in
+  "" | false | 0 | no | off) strict_mode=0 ;;
+  true | 1 | yes | on) strict_mode=1 ;;
+  *)
+    err "Invalid DMTOOLS_STRICT_INSTALL value: ${DMTOOLS_STRICT_INSTALL}. Use true or false."
+    exit 1
+    ;;
+esac
+
+append_skill_arg() {
+  val="$(printf '%s' "$1" | sed "s/^[[:space:]\"']*//;s/[[:space:]\"']*$//")"
+  [ -n "$val" ] || return 0
+  if [ -n "$skills_arg" ]; then
+    skills_arg="${skills_arg},${val}"
+  else
+    skills_arg="$val"
+  fi
+  skills_was_set=1
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-skills)
+      no_skill_files=1
+      shift
+      ;;
+    --skill)
+      if [ $# -lt 2 ]; then
+        err "Missing value for --skill. Use --skill jira"
+        exit 1
+      fi
+      append_skill_arg "$2"
+      shift 2
+      ;;
+    --skill=*)
+      append_skill_arg "${1#--skill=}"
+      shift
+      ;;
+    --skills)
+      if [ $# -lt 2 ]; then
+        err "Missing value for --skills. Use --skills=jira,github or --skills jira,github"
+        exit 1
+      fi
+      append_skill_arg "$2"
+      shift 2
+      ;;
+    --skills=*)
+      append_skill_arg "${1#--skills=}"
+      shift
+      ;;
+    --all-skills)
+      all_skills_flag=1
+      shift
+      ;;
+    --skip-unknown)
+      skip_unknown_skills=1
+      shift
+      ;;
+    --prune)
+      prune_skills=1
+      shift
+      ;;
+    --strict)
+      strict_mode=1
+      shift
+      ;;
+    --help | -h)
+      echo "Usage: install.sh [--skill <name>] [--skills=<name,name>] [--all-skills] [--no-skills] [--prune] [--skip-unknown] [--strict] [version]"
+      echo "  --skill <name>      Select a single skill. Repeat to add more skills."
+      echo "  --skills=<csv>      Comma-separated skill selection (${AVAILABLE_SKILLS_CSV})."
+      echo "  --all-skills        Install every supported skill."
+      echo "  --no-skills         Do not install skill files into agent directories (~/.claude, ...)"
+      echo "  --prune             Remove unselected DMTools skills from agent directories."
+      echo "  --skip-unknown      Warn and continue when unknown skill names are supplied."
+      echo "  --strict            Legacy alias for strict invalid-skill handling."
+      echo "  version             Optional DMTools version (vX.Y.Z or X.Y.Z)."
+      exit 0
+      ;;
+    --*)
+      err "Unknown installer option: $1"
+      exit 1
+      ;;
+    *)
+      if [ -n "$version_arg" ]; then
+        err "Only one version argument is supported. Received: $version_arg $1"
+        exit 1
+      fi
+      version_arg="$1"
+      shift
+      ;;
+  esac
+done
+
+is_known_skill() {
+  case "$1" in
+    dmtools | jira | confluence | github | gitlab | figma | teams | sharepoint | ado | testrail | xray)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+csv_contains() {
+  case ",$1," in
+    *,"$2",*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+csv_append_unique() {
+  if [ -z "$1" ]; then
+    printf '%s' "$2"
+  elif csv_contains "$1" "$2"; then
+    printf '%s' "$1"
+  else
+    printf '%s,%s' "$1" "$2"
+  fi
+}
+
+skills_source="default"
+raw_skills="all"
+if [ "$all_skills_flag" -eq 1 ]; then
+  raw_skills="all"
+  skills_source="cli"
+elif [ "$skills_was_set" -eq 1 ]; then
+  raw_skills="$skills_arg"
+  skills_source="cli"
+elif [ "${DMTOOLS_SKILLS+x}" = "x" ]; then
+  raw_skills="${DMTOOLS_SKILLS:-}"
+  skills_source="env"
+fi
+
+normalized_raw="$(printf '%s' "$raw_skills" | sed "s/^[[:space:]\"']*//;s/[[:space:]\"']*$//" | tr '[:upper:]' '[:lower:]')"
+compact_raw="$(printf '%s' "$normalized_raw" | tr -d ',[:space:]')"
+install_all_skills=0
+effective_skills_csv=""
+invalid_skills_csv=""
+
+if [ -z "$compact_raw" ] || [ "$normalized_raw" = "all" ]; then
+  install_all_skills=1
+else
+  saw_all=0
+  old_ifs="$IFS"
+  IFS=','
+  # shellcheck disable=SC2086
+  set -- $raw_skills
+  IFS="$old_ifs"
+  for tok in "$@"; do
+    tok="$(printf '%s' "$tok" | sed "s/^[[:space:]\"']*//;s/[[:space:]\"']*$//" | tr '[:upper:]' '[:lower:]')"
+    [ -n "$tok" ] || continue
+    [ "$tok" = "jira_xray" ] && tok="xray"
+    if [ "$tok" = "all" ]; then
+      saw_all=1
+      continue
+    fi
+    if is_known_skill "$tok"; then
+      effective_skills_csv="$(csv_append_unique "$effective_skills_csv" "$tok")"
+    else
+      invalid_skills_csv="$(csv_append_unique "$invalid_skills_csv" "$tok")"
+    fi
+  done
+  [ "$saw_all" -eq 1 ] && install_all_skills=1
+fi
+
+if [ "$install_all_skills" -eq 1 ]; then
+  effective_skills_csv="$AVAILABLE_SKILLS_CSV"
+fi
+
+if [ -n "$invalid_skills_csv" ] && [ "$skills_source" != "cli" ] && [ "$skip_unknown_skills" -ne 1 ]; then
+  warn "Skipping unknown skills: $invalid_skills_csv"
+fi
+
+if [ -z "$effective_skills_csv" ]; then
+  err "No valid skills selected. Unknown skills: ${invalid_skills_csv:-none}. Allowed skills: $AVAILABLE_SKILLS_CSV"
+  exit 1
+fi
+
+if [ -n "$invalid_skills_csv" ]; then
+  if [ "$skip_unknown_skills" -eq 1 ]; then
+    warn "Skipping unknown skills: $invalid_skills_csv"
+  elif [ "$strict_mode" -eq 1 ]; then
+    err "Unknown skills are not allowed in strict mode: $invalid_skills_csv. Allowed skills: $AVAILABLE_SKILLS_CSV"
+    exit 1
+  elif [ "$skills_source" = "cli" ]; then
+    err "Unknown skills: $invalid_skills_csv. Use --skip-unknown to continue."
+    exit 1
+  fi
+fi
+
+effective_integrations_csv="$ALWAYS_ON_INTEGRATIONS"
+old_ifs="$IFS"
+IFS=','
+# shellcheck disable=SC2086
+set -- $effective_skills_csv
+IFS="$old_ifs"
+for sk in "$@"; do
+  case "$sk" in
+    jira | confluence | github | gitlab | figma | ado | testrail)
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "$sk")"
+      ;;
+    teams)
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "teams")"
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "teams_auth")"
+      ;;
+    sharepoint)
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "sharepoint")"
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "teams_auth")"
+      ;;
+    xray)
+      effective_integrations_csv="$(csv_append_unique "$effective_integrations_csv" "jira_xray")"
+      ;;
+  esac
+done
+
+info "Effective skills: $effective_skills_csv (source: $skills_source)"
+info "Effective integrations: $effective_integrations_csv"
+
 # DMTOOLS_DOWNLOAD_BASE overrides the artifact root (default: GitHub Releases)
 # — used by mirrors and by the installer's own tests.
-version="${1:-${DMTOOLS_VERSION:-}}"
+version="${version_arg:-${DMTOOLS_VERSION:-}}"
 if [ -n "$version" ]; then
   case "$version" in
     v*) ;;
@@ -87,7 +317,6 @@ else
   download_base="${DMTOOLS_DOWNLOAD_BASE:-https://github.com/${REPO}/releases/latest/download}"
   display_version="latest"
 fi
-
 # ── 3. Optional auth (private repo) ─────────────────────────────────────────
 fetch() {
   # fetch <url> <output-file> — curl or wget, with optional bearer auth.
@@ -288,6 +517,71 @@ printf '%s\n' "$display_version" > "$install_root/version.txt"
 
 ok "Installed $install_bin/$BINARY"
 
+# ── 5b. Persist installer skill config & metadata (dm.ai#675 parity) ────────
+installer_env_path="${DMTOOLS_INSTALLER_ENV_PATH:-$install_bin/dmtools-installer.env}"
+runtime_env_path="${DMTOOLS_RUNTIME_ENV_PATH:-$install_bin/dmtools-runtime.env}"
+installed_skills_json_path="${DMTOOLS_INSTALLED_SKILLS_JSON_PATH:-$install_root/installed-skills.json}"
+endpoints_json_path="${DMTOOLS_ENDPOINTS_JSON_PATH:-$install_root/endpoints.json}"
+mkdir -p "$(dirname "$installer_env_path")" "$(dirname "$runtime_env_path")"
+
+cat > "$installer_env_path" <<EOF
+# Generated by the DMTools installer.
+DMTOOLS_SKILLS="$effective_skills_csv"
+DMTOOLS_INTEGRATIONS="$effective_integrations_csv"
+EOF
+rm -f "$runtime_env_path"
+
+skills_json="["
+endpoints_json="["
+first_item=1
+old_ifs="$IFS"
+IFS=','
+# shellcheck disable=SC2086
+set -- $effective_skills_csv
+IFS="$old_ifs"
+for sk in "$@"; do
+  if [ "$first_item" -eq 0 ]; then
+    skills_json="${skills_json}, "
+    endpoints_json="${endpoints_json}, "
+  fi
+  skills_json="${skills_json}{\"name\":\"${sk}\"}"
+  endpoints_json="${endpoints_json}{\"name\":\"${sk}\",\"path\":\"/dmtools/${sk}\"}"
+  first_item=0
+done
+skills_json="${skills_json}]"
+endpoints_json="${endpoints_json}]"
+
+integrations_json="["
+first_item=1
+old_ifs="$IFS"
+IFS=','
+# shellcheck disable=SC2086
+set -- $effective_integrations_csv
+IFS="$old_ifs"
+for ig in "$@"; do
+  if [ "$first_item" -eq 0 ]; then
+    integrations_json="${integrations_json}, "
+  fi
+  integrations_json="${integrations_json}\"${ig}\""
+  first_item=0
+done
+integrations_json="${integrations_json}]"
+
+cat > "$installed_skills_json_path" <<EOF
+{
+  "version": "$display_version",
+  "installed_skills": $skills_json,
+  "integrations": $integrations_json
+}
+EOF
+
+cat > "$endpoints_json_path" <<EOF
+{
+  "version": "$display_version",
+  "endpoints": $endpoints_json
+}
+EOF
+
 # ── 6. Ensure the bin directory is on PATH ──────────────────────────────────
 case ":${PATH}:" in
   *":$install_bin:") ok "'$BINARY' is already on PATH." ;;
@@ -341,6 +635,37 @@ else
   warn "installed binary failed the smoke test (rc=$smoke_rc): $smoke_out"
   warn "try setting JSR_QUICKJS_LIB to"
   warn "$install_bin/native/quickjs/libquickjs_bridge.so"
+fi
+
+# ── 8. Install/update agent skills globally (dm.ai#675 parity) ──────────────
+# Runs skill-install.sh from the canonical epam/dm.ai release (or
+# DMTOOLS_SKILL_INSTALL_BASE_URL) with --global so ~/.claude, ~/.copilot, and
+# ~/.agents receive the selected skills automatically. Never fatal: the CLI
+# binary is already installed.
+if [ "$no_skill_files" -eq 1 ] || [ "${DMTOOLS_INSTALLER_SKIP_SKILL_FILES:-false}" = "true" ]; then
+  info "Skipping skill files (--no-skills)."
+elif ! command -v bash >/dev/null 2>&1; then
+  warn "bash is not available — skipping global agent skill installation."
+else
+  skill_base="${DMTOOLS_SKILL_INSTALL_BASE_URL:-https://github.com/epam/dm.ai/releases/latest/download}"
+  skill_script="$install_root/skill-install.sh"
+  info "Installing agent skills ($effective_skills_csv) into user-level agent directories..."
+  if ! fetch "$skill_base/skill-install.sh" "$skill_script" 2>/dev/null; then
+    warn "Could not download skill-install.sh from $skill_base — skills were not installed. Retry later with: curl -fsSL $skill_base/skill-install.sh | bash -s -- --global --skills=$effective_skills_csv"
+  else
+    chmod +x "$skill_script"
+    set -- --global
+    if [ "$install_all_skills" -eq 1 ]; then
+      set -- "$@" --all-skills
+    else
+      set -- "$@" "--skills=$effective_skills_csv"
+    fi
+    [ "$skip_unknown_skills" -eq 1 ] && set -- "$@" --skip-unknown
+    [ "$prune_skills" -eq 1 ] && set -- "$@" --prune
+    if ! DMTOOLS_SKILL_RELEASE_BASE_URL="${DMTOOLS_SKILL_RELEASE_BASE_URL:-$skill_base}" bash "$skill_script" "$@"; then
+      warn "Skill installation did not complete; the DMTools CLI itself is installed."
+    fi
+  fi
 fi
 
 printf '\n'

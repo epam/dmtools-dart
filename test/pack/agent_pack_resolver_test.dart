@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
+import 'package:dmtools/src/js/sync_http_bridge.dart';
 import 'package:dmtools/src/compile/agent_pack_compiler.dart'
     hide AgentPackException;
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
@@ -25,6 +26,7 @@ void main() {
     agentRoot.deleteSync(recursive: true);
     packsRoot.deleteSync(recursive: true);
   });
+  tearDownAll(SyncHttpBridge.shared.dispose);
 
   isPackDetectionTests();
   localResolutionTests();

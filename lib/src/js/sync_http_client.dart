@@ -16,7 +16,6 @@
 ///   argv size limit (`E2BIG`).
 library;
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -154,8 +153,13 @@ class SyncHttpClient {
   }
 
   /// One transport attempt: pooled-isolate bridge when booted, curl
-  /// subprocess otherwise. The fallback also kicks [SyncHttpBridge.boot]
-  /// so later requests (after any event-loop turn) use the pool.
+  /// subprocess otherwise.
+  ///
+  /// Does NOT implicitly call [SyncHttpBridge.boot]: the CLI (`bin/dmtools.dart`)
+  /// and worker isolates boot the bridge explicitly while their event loop is
+  /// alive (and dispose it on exit). Implicitly booting from an arbitrary test
+  /// isolate leaks a live `_httpWorkerEntry` `ReceivePort`, which prevents the
+  /// Dart test runner's `--coverage` collector from exiting at suite teardown.
   static SyncHttpResponse _transport(
     String method,
     String url, {
@@ -165,7 +169,6 @@ class SyncHttpClient {
   }) {
     final bridge = SyncHttpBridge.shared;
     if (!bridge.ready) {
-      unawaited(bridge.boot());
       return _curlRequest(method, url,
           headers: headers, body: body, followRedirects: followRedirects);
     }

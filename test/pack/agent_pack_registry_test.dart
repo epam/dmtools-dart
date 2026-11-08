@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:dmtools/src/js/sync_http_bridge.dart';
 import 'package:dmtools/src/pack/agent_pack_resolver.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -25,6 +26,7 @@ void main() {
     agentRoot.deleteSync(recursive: true);
     packsRoot.deleteSync(recursive: true);
   });
+  tearDownAll(SyncHttpBridge.shared.dispose);
 
   group('AgentPackResolver registry refs', () {
     _registrationShapeTests();

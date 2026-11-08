@@ -318,26 +318,114 @@ else
   display_version="latest"
 fi
 # ── 3. Optional auth (private repo) ─────────────────────────────────────────
-fetch() {
-  # fetch <url> <output-file> — curl or wget, with optional bearer auth.
+fetch_direct() {
+  # fetch_direct <url> <output-file> — curl or wget with bounded timeouts/retries.
   if command -v curl >/dev/null 2>&1; then
     if [ -n "${DMTOOLS_GITHUB_TOKEN:-}" ]; then
-      curl -fSL --progress-bar -H "Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
+      curl -fSL --connect-timeout 15 --max-time 60 --retry 2 --retry-delay 2 \
+        --progress-bar -H "Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
         "$1" -o "$2"
     else
-      curl -fSL --progress-bar "$1" -o "$2"
+      curl -fSL --connect-timeout 15 --max-time 60 --retry 2 --retry-delay 2 \
+        --progress-bar "$1" -o "$2"
     fi
   elif command -v wget >/dev/null 2>&1; then
     if [ -n "${DMTOOLS_GITHUB_TOKEN:-}" ]; then
-      wget --progress=bar -q --header="Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
+      wget --timeout=30 --tries=3 --progress=bar -q \
+        --header="Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
         -O "$2" "$1"
     else
-      wget --progress=bar -q -O "$2" "$1"
+      wget --timeout=30 --tries=3 --progress=bar -q -O "$2" "$1"
     fi
   else
     err "neither curl nor wget is available."
     exit 1
   fi
+}
+
+fetch_gh_api_asset() {
+  # Fallback when GitHub browser_download_url returns 502/503/504 edge errors:
+  # resolves the asset id via the GitHub Releases REST API and downloads with
+  # Accept: application/octet-stream (or `gh release download` when available).
+  api_repo="$1"
+  api_tag="$2"
+  api_asset="$3"
+  api_out="$4"
+  if command -v gh >/dev/null 2>&1; then
+    gh_dir="$(dirname "$api_out")"
+    if [ "$api_tag" = "latest" ]; then
+      if gh release download --repo "$api_repo" --pattern "$api_asset" --dir "$gh_dir" --clobber >/dev/null 2>&1 &&
+        [ -s "$gh_dir/$api_asset" ]; then
+        [ "$gh_dir/$api_asset" = "$api_out" ] || mv "$gh_dir/$api_asset" "$api_out"
+        return 0
+      fi
+    else
+      if gh release download "$api_tag" --repo "$api_repo" --pattern "$api_asset" --dir "$gh_dir" --clobber >/dev/null 2>&1 &&
+        [ -s "$gh_dir/$api_asset" ]; then
+        [ "$gh_dir/$api_asset" = "$api_out" ] || mv "$gh_dir/$api_asset" "$api_out"
+        return 0
+      fi
+    fi
+  fi
+  command -v curl >/dev/null 2>&1 || return 1
+  if [ "$api_tag" = "latest" ]; then
+    rel_ep="https://api.github.com/repos/${api_repo}/releases/latest"
+  else
+    rel_ep="https://api.github.com/repos/${api_repo}/releases/tags/${api_tag}"
+  fi
+  rel_json="$tmpdir/release_meta_$$.json"
+  if [ -n "${DMTOOLS_GITHUB_TOKEN:-}" ]; then
+    curl -fsSL --connect-timeout 15 --max-time 30 \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
+      "$rel_ep" -o "$rel_json" 2>/dev/null || return 1
+  else
+    curl -fsSL --connect-timeout 15 --max-time 30 \
+      -H "Accept: application/vnd.github+json" \
+      "$rel_ep" -o "$rel_json" 2>/dev/null || return 1
+  fi
+  asset_api_url="$(tr '\n' ' ' < "$rel_json" | sed 's/{"url":/\n{"url":/g' | grep "\"name\"[[:space:]]*:[[:space:]]*\"${api_asset}\"" | sed -n 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\/releases\/assets\/[0-9]*\)".*/\1/p' | head -n 1)"
+  rm -f "$rel_json"
+  [ -n "$asset_api_url" ] || return 1
+  if [ -n "${DMTOOLS_GITHUB_TOKEN:-}" ]; then
+    curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 --retry-delay 2 \
+      -H "Accept: application/octet-stream" \
+      -H "Authorization: Bearer ${DMTOOLS_GITHUB_TOKEN}" \
+      "$asset_api_url" -o "$api_out"
+  else
+    curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 --retry-delay 2 \
+      -H "Accept: application/octet-stream" \
+      "$asset_api_url" -o "$api_out"
+  fi
+}
+
+fetch() {
+  # fetch <url> <output-file> — tries direct URL first, then falls back to
+  # GitHub Releases API asset download if the URL is a github.com release asset.
+  if fetch_direct "$1" "$2"; then
+    return 0
+  fi
+  case "$1" in
+    https://github.com/*/*/releases/latest/download/*)
+      f_rest="${1#https://github.com/}"
+      f_repo="${f_rest%%/releases/latest/download/*}"
+      f_asset="${1##*/}"
+      warn "direct download failed ($1); falling back to GitHub Releases API for ${f_repo}@latest/${f_asset}..."
+      fetch_gh_api_asset "$f_repo" "latest" "$f_asset" "$2"
+      return $?
+      ;;
+    https://github.com/*/*/releases/download/*/*)
+      f_rest="${1#https://github.com/}"
+      f_repo="${f_rest%%/releases/download/*}"
+      f_after="${f_rest#*/releases/download/}"
+      f_tag="${f_after%%/*}"
+      f_asset="${1##*/}"
+      warn "direct download failed ($1); falling back to GitHub Releases API for ${f_repo}@${f_tag}/${f_asset}..."
+      fetch_gh_api_asset "$f_repo" "$f_tag" "$f_asset" "$2"
+      return $?
+      ;;
+  esac
+  return 1
 }
 
 # ── 4. Download and verify the archive ──────────────────────────────────────

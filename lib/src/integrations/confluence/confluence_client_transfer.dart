@@ -110,8 +110,12 @@ extension ConfluenceTransfer on ConfluenceClient {
     output.createSync(recursive: true);
     final fileName =
         ConfluenceClient._sanitizeFileName(content['title']?.toString() ?? id);
-    File('${output.path}/$fileName.md')
-        .writeAsStringSync(confluenceStorageToMarkdown(value));
+    File('${output.path}/$fileName.md').writeAsStringSync(
+      confluenceStorageToMarkdownWithFallback(
+        value,
+        ConfluenceClient._exportViewValue(body),
+      ),
+    );
     var written = 1;
     if (downloadAttachments) {
       await _downloadAttachmentsOf(id, output, fileName);

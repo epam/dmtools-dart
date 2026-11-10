@@ -314,6 +314,38 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
                 }
             }
         elif (self.command == "GET"
+              and "/wiki/rest/api/content/890" in self.path
+              and "/child/" not in self.path):
+            # dm.ai#847 parity fixture: a child page with an ancestor (555)
+            # and an unresolved live macro whose rendered table lives in
+            # body.export_view.
+            payload.clear()
+            payload["id"] = "890"
+            payload["title"] = "Child Spec"
+            payload["ancestors"] = [{"id": "555", "title": "Parent"}]
+            payload["body"] = {
+                "storage": {
+                    "value": (
+                        "<h2>Live Matrix</h2>"
+                        "<ac:structured-macro ac:name=\"live-table-include\">"
+                        "<ac:parameter ac:name=\"name\">DynamicSource</ac:parameter>"
+                        "</ac:structured-macro>"
+                    ),
+                    "representation": "storage",
+                },
+                "export_view": {
+                    "value": (
+                        "<h2>Live Matrix</h2>"
+                        "<table><tbody><tr><th>Col1</th></tr>"
+                        "<tr><td>ExportRenderedRow</td></tr></tbody></table>"
+                    ),
+                },
+            }
+        elif (self.command == "GET"
+              and "/wiki/rest/api/content/890/child/page" in self.path):
+            payload.clear()
+            payload["results"] = []
+        elif (self.command == "GET"
               and "/wiki/rest/api/user?" in self.path
               and "accountId=acc-1" in self.path):
             self._send(json.dumps({"displayName": "Jane Roe"}).encode("utf-8"))
@@ -323,7 +355,14 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
               and "/child/" not in self.path):
             payload.clear()
             payload["id"] = "555"
+            payload["title"] = "Parent Spec"
             payload["version"] = {"number": 3}
+            payload["body"] = {
+                "storage": {
+                    "value": "<p>parent-shared-rules</p>",
+                    "representation": "storage",
+                }
+            }
         elif (self.command == "GET"
               and "/wiki/rest/api/content/555/child/page" in self.path):
             # Real Confluence only includes body.storage when the request

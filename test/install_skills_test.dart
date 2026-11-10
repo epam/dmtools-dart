@@ -27,6 +27,7 @@ void main() {
 
   _testDefaultAndSelectedSkills(() => sandbox);
   _testNoSkillsAndPruneAndFallback(() => sandbox);
+  _testGlobalOnlyFlag(() => sandbox);
 }
 
 void _testDefaultAndSelectedSkills(Directory Function() getSandbox) {
@@ -79,6 +80,22 @@ void _testDefaultAndSelectedSkills(Directory Function() getSandbox) {
         contains(
           'DMTOOLS_SKILLS="dmtools,jira,confluence,github,gitlab,figma,teams,sharepoint,ado,testrail,xray"',
         ),
+      );
+    });
+  });
+}
+
+void _testGlobalOnlyFlag(Directory Function() getSandbox) {
+  group('install.sh global-only skill flag parity (IstiN/dmtools-agents#1397)',
+      () {
+    test('accepts --global/--no-local-skills and ensures ~/.agents/skills', () {
+      final sb = getSandbox();
+      final res =
+          _runInstall(sb, ['--global', '--no-local-skills', '--skill=jira']);
+      expect(res.exitCode, equals(0), reason: '${res.stdout}\n${res.stderr}');
+      expect(
+        Directory('${sb.path}/home/.agents/skills').existsSync(),
+        isTrue,
       );
     });
   });

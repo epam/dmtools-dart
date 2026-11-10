@@ -100,7 +100,10 @@ class _PageDownloader {
     final rawTitle = content['title']?.toString() ?? id;
     final fileName = _sanitize(rawTitle);
     File('${_output.path}/$fileName.md').writeAsStringSync(
-      confluenceStorageToMarkdown(_resolvedBody(content, value)),
+      confluenceStorageToMarkdownWithFallback(
+        _resolvedBody(content, value),
+        _exportViewValueOf(content),
+      ),
     );
     _written++;
     _recordExtrasAndRecurse(content, id, rawTitle, fileName, value, depth);
@@ -112,6 +115,26 @@ class _PageDownloader {
         body is Map ? body['storage'] as Map<String, dynamic>? : null;
     final value = storage?['value'];
     return value is String ? value : null;
+  }
+
+  String? _exportViewValueOf(Map<String, dynamic> content) {
+    final body = content['body'];
+    final exportView =
+        body is Map ? body['export_view'] as Map<String, dynamic>? : null;
+    final value = exportView?['value'];
+    return value is String ? value : null;
+  }
+
+  String? _parentIdOf(Map<String, dynamic> content) {
+    final ancestors = content['ancestors'];
+    if (ancestors is List && ancestors.isNotEmpty) {
+      final last = ancestors.last;
+      if (last is Map) {
+        final id = last['id']?.toString().trim();
+        if (id != null && id.isNotEmpty) return id;
+      }
+    }
+    return null;
   }
 
   void _recordExtrasAndRecurse(
@@ -152,7 +175,22 @@ class _PageDownloader {
     related.addAll(
       _resolveInternalPageLinks(storage, confluenceSpaceKeyOf(page)),
     );
+    final parent = _resolveParentPage(page);
+    if (parent != null) related.add(parent);
     return related;
+  }
+
+  Map<String, dynamic>? _resolveParentPage(Map<String, dynamic> page) {
+    final parentId = _parentIdOf(page);
+    if (parentId == null || _processedIds.contains(parentId)) return null;
+    try {
+      final decoded = syncTryDecode(
+        syncBodyOrError(_pageByIdResponse(_config, parentId)),
+      );
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   List<Map<String, dynamic>> _resolveBodyConfluenceUrls(String storage) {

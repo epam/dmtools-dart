@@ -583,11 +583,16 @@ class ConfluenceClient {
     if (f != 'md' && f != 'markdown') return;
     for (final content in contents) {
       final body = content['body'];
-      final storage = body is Map ? body[_kStorage] : null;
+      if (body is! Map) continue;
+      final storage = body[_kStorage];
       if (storage is! Map || storage['value'] is! String) continue;
-      body.remove('export_view'); // redundant once Markdown is returned
-      storage['value'] =
-          confluenceStorageToMarkdown(storage['value'] as String);
+      final exportView = body.remove('export_view');
+      final exportHtml =
+          exportView is Map ? exportView['value']?.toString() : null;
+      storage['value'] = confluenceStorageToMarkdownWithFallback(
+        storage['value'] as String,
+        exportHtml,
+      );
       storage['representation'] = 'markdown';
     }
   }

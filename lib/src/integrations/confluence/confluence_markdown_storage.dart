@@ -272,19 +272,112 @@ String _taskToMarkdown(_XmlNode node) {
   return '- [${status == 'complete' ? 'x' : ' '}] $body\n';
 }
 
-/// Renders a `code` macro (or other macros as fenced plain text).
+const _kAcParameterTag = 'ac:parameter';
+const _kAcNameAttr = 'ac:name';
+
+/// Titled container macros whose optional `title` parameter is emitted as a
+/// bold paragraph above their rich-text body (`dm.ai#847` parity).
+const _titledContainerMacros = <String>{
+  'expand',
+  'panel',
+  'info',
+  'note',
+  'warning',
+  'tip',
+  'details',
+};
+
+/// Structured macros whose content is already meaningful from `body.storage`
+/// alone (`ConfluenceStorageMarkdown.SAFE_LOCAL_MACROS` parity).
+const _safeLocalMacros = <String>{
+  'toc',
+  'code',
+  'info',
+  'note',
+  'warning',
+  'tip',
+  'panel',
+  'expand',
+  'status',
+  'children',
+  'childpages',
+  'anchor',
+  'excerpt',
+};
+
+/// Renders a structured macro as Markdown (`code`, `children`, `whiteboard`,
+/// titled containers like `expand`/`panel`/`note`, or rich-text bodies).
 String _macroToMarkdown(_XmlNode node) {
-  if (node.attrs['ac:name'] == 'native-embed:whiteboard') {
-    return _whiteboardMarker(node);
+  final macroName = (node.attrs[_kAcNameAttr] ?? '').toLowerCase();
+  if (macroName == 'native-embed:whiteboard') return _whiteboardMarker(node);
+  if (macroName == 'children' || macroName == 'childpages') {
+    return '\n\n[Child pages]\n\n';
   }
-  final body = node.child('ac:plain-text-body')?.content ??
-      node.child('ac:rich-text-body')?.content ??
-      '';
-  final lang = node.attrs['ac:name'] == 'code'
-      ? node.child('ac:parameter')?.content ?? ''
-      : '';
+  if (macroName == 'toc' || macroName == 'anchor') return '';
+  if (macroName == 'status') return _statusMacroToMarkdown(node);
+  final plainBody = node.child('ac:plain-text-body');
+  if (macroName == 'code' || plainBody != null) {
+    return _codeMacroToMarkdown(node, plainBody?.content ?? '');
+  }
+  final richBody = node.child('ac:rich-text-body');
+  if (richBody != null) {
+    return _richBodyMacroToMarkdown(node, macroName, richBody);
+  }
+  return '';
+}
+
+String _statusMacroToMarkdown(_XmlNode node) {
+  for (final child in node.children) {
+    if (child.name == _kAcParameterTag &&
+        child.attrs[_kAcNameAttr] == 'title') {
+      final t = child.content.trim();
+      if (t.isNotEmpty) return '[$t]';
+    }
+  }
+  return '';
+}
+
+String _codeMacroToMarkdown(_XmlNode node, String body) {
+  var lang = '';
+  for (final child in node.children) {
+    if (child.name == _kAcParameterTag &&
+        (child.attrs[_kAcNameAttr] == 'language' ||
+            child.attrs[_kAcNameAttr] == null)) {
+      lang = child.content.trim();
+      if (lang.isNotEmpty) break;
+    }
+  }
   final fence = lang.isEmpty ? '```' : '```$lang';
   return '\n\n$fence\n$body\n```\n\n';
+}
+
+String _richBodyMacroToMarkdown(
+  _XmlNode node,
+  String macroName,
+  _XmlNode richBody,
+) {
+  final title = _extractMacroTitle(node, macroName);
+  final bodyMd = [
+    for (final child in richBody.children)
+      if (child.name != _kAcParameterTag) _storageNodeToMarkdown(child),
+  ].join().trim();
+  if (title.isNotEmpty && _titledContainerMacros.contains(macroName)) {
+    return bodyMd.isEmpty
+        ? '\n\n**$title**\n\n'
+        : '\n\n**$title**\n\n$bodyMd\n\n';
+  }
+  return bodyMd.isEmpty ? '' : '\n\n$bodyMd\n\n';
+}
+
+String _extractMacroTitle(_XmlNode node, String macroName) {
+  for (final child in node.children) {
+    if (child.name != _kAcParameterTag) continue;
+    final paramName = (child.attrs[_kAcNameAttr] ?? '').toLowerCase();
+    if (paramName == 'title' || (paramName.isEmpty && macroName == 'expand')) {
+      return child.content.trim();
+    }
+  }
+  return '';
 }
 
 /// `[Whiteboard (content not available via API)…]` marker for
@@ -293,7 +386,7 @@ String _macroToMarkdown(_XmlNode node) {
 /// `url` parameter (when present) is kept.
 String _whiteboardMarker(_XmlNode node) {
   for (final param in node.children) {
-    if (param.name == 'ac:parameter' && param.attrs['ac:name'] == 'url') {
+    if (param.name == _kAcParameterTag && param.attrs[_kAcNameAttr] == 'url') {
       final url = param.content.trim();
       if (url.isNotEmpty) {
         return '\n[Whiteboard (content not available via API): $url]\n';
@@ -317,18 +410,62 @@ String _tableToMarkdown(_XmlNode node) {
   return '\n\n$buf\n\n';
 }
 
-/// Collects `tr > th/td` cell text from [node] into [rows].
+/// Collects direct `tr > th/td` cell text from [node] into [rows] (`dm.ai#847`
+/// parity: nested tables inside a `<td>`/`<th>` cell are rendered inline rather
+/// than leaking as extra top-level rows of the enclosing table).
 void _collectRows(_XmlNode node, List<List<String>> rows) {
-  if (node.name == 'tr') {
-    rows.add([
-      for (final cell in node.children)
-        if (cell.name == 'td' || cell.name == 'th') cell.content.trim(),
-    ]);
-    return;
+  for (final tr in _directTableRows(node)) {
+    final cells = <String>[
+      for (final cell in tr.children)
+        if (cell.name == 'td' || cell.name == 'th') _cellToMarkdown(cell),
+    ];
+    if (cells.isNotEmpty) rows.add(cells);
   }
-  for (final child in node.children) {
-    _collectRows(child, rows);
+}
+
+List<_XmlNode> _directTableRows(_XmlNode table) {
+  final trs = <_XmlNode>[];
+  for (final child in table.children) {
+    final tag = (child.name ?? '').toLowerCase();
+    if (tag == 'tr') {
+      trs.add(child);
+    } else if (tag == 'thead' || tag == 'tbody' || tag == 'tfoot') {
+      for (final row in child.children) {
+        if ((row.name ?? '').toLowerCase() == 'tr') trs.add(row);
+      }
+    }
   }
+  return trs;
+}
+
+String _cellToMarkdown(_XmlNode cell) {
+  final parts = <String>[];
+  for (final child in cell.children) {
+    if ((child.name ?? '').toLowerCase() == 'table') {
+      final nested = _nestedTableInline(child);
+      if (nested.isNotEmpty) parts.add(nested);
+    } else {
+      parts.add(cell._childContent(child));
+    }
+  }
+  return parts
+      .join()
+      .replaceAll('|', r'\|')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+String _nestedTableInline(_XmlNode table) {
+  final rowStrings = <String>[];
+  for (final tr in _directTableRows(table)) {
+    final cells = <String>[
+      for (final cell in tr.children)
+        if (cell.name == 'td' || cell.name == 'th')
+          if (_cellToMarkdown(cell).isNotEmpty) _cellToMarkdown(cell),
+    ];
+    if (cells.isNotEmpty) rowStrings.add(cells.join(': '));
+  }
+  return rowStrings.join('<br/>');
 }
 
 /// Renders list items of [node] as Markdown lines (nested lists indented).
@@ -356,4 +493,140 @@ String _indentNested(String body) {
     for (var i = 0; i < lines.length; i++)
       i == 0 || lines[i].trim().isEmpty ? lines[i] : '    ${lines[i]}',
   ].join('\n');
+}
+
+// ── Storage + export_view section fallback (`dm.ai#847` parity) ────────────
+
+typedef _DocSection = ({String? headingKey, List<_XmlNode> nodes});
+
+String _renderStorageWithExportViewFallback(
+  String storageHtml,
+  String exportViewHtml,
+) {
+  final storageRoot = _parseXml(storageHtml);
+  final exportRoot = _parseXml(exportViewHtml);
+  final storageSections = _splitSections(_unwrapRootElements(storageRoot));
+  final exportSections = _splitSections(_unwrapRootElements(exportRoot));
+  final merged = _mergeSections(storageSections, exportSections);
+  final synthetic = _XmlNode.tag('#root')..children.addAll(merged);
+  final rendered = _storageNodeToMarkdown(synthetic);
+  return rendered
+      .replaceAll(RegExp(r'[ \t]+\n'), '\n')
+      .replaceAll(RegExp(r'\n[ \t]+\n'), '\n\n')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+}
+
+List<_XmlNode> _unwrapRootElements(_XmlNode node) {
+  if (node.children.length == 1) {
+    final single = node.children.first;
+    final tag = (single.name ?? '').toLowerCase();
+    if (tag == 'div' || tag == 'body' || tag == 'html') {
+      return _unwrapRootElements(single);
+    }
+  }
+  return node.children;
+}
+
+List<_DocSection> _splitSections(List<_XmlNode> nodes) {
+  final sections = <_DocSection>[];
+  var current = (headingKey: null as String?, nodes: <_XmlNode>[]);
+  sections.add(current);
+  for (final node in nodes) {
+    final name = (node.name ?? '').toLowerCase();
+    if (_storageHeadingTag.hasMatch(name)) {
+      final key =
+          node.content.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      current = (headingKey: key, nodes: <_XmlNode>[node]);
+      sections.add(current);
+    } else {
+      current.nodes.add(node);
+    }
+  }
+  return sections;
+}
+
+List<_XmlNode> _mergeSections(
+  List<_DocSection> storageSections,
+  List<_DocSection> exportSections,
+) {
+  final exportHeadingSections = [
+    for (final s in exportSections)
+      if (s.headingKey != null) s,
+  ];
+  final byHeading = <String, List<_DocSection>>{};
+  for (final s in exportHeadingSections) {
+    byHeading.putIfAbsent(s.headingKey!, () => <_DocSection>[]).add(s);
+  }
+  final out = <_XmlNode>[];
+  var ordinal = 0;
+  for (final s in storageSections) {
+    if (s.headingKey == null) {
+      out.addAll(s.nodes);
+      continue;
+    }
+    final idx = ordinal++;
+    if (!_sectionNeedsFallback(s.nodes)) {
+      out.addAll(s.nodes);
+      continue;
+    }
+    final match = _matchExportSection(
+      s.headingKey!,
+      byHeading,
+      idx,
+      exportHeadingSections,
+    );
+    if (match != null && _nodesContainTable(match.nodes)) {
+      out.add(s.nodes.first);
+      out.addAll(match.nodes.skip(1));
+    } else {
+      out.addAll(s.nodes);
+    }
+  }
+  return out;
+}
+
+_DocSection? _matchExportSection(
+  String key,
+  Map<String, List<_DocSection>> byHeading,
+  int ordinal,
+  List<_DocSection> allHeadingSections,
+) {
+  final queue = byHeading[key];
+  if (queue != null && queue.isNotEmpty) return queue.removeAt(0);
+  if (ordinal < allHeadingSections.length) return allHeadingSections[ordinal];
+  return null;
+}
+
+bool _sectionNeedsFallback(List<_XmlNode> nodes) {
+  for (final n in nodes) {
+    if (_hasUnresolvedMacro(n)) return true;
+  }
+  return false;
+}
+
+bool _hasUnresolvedMacro(_XmlNode node) {
+  if (node.name == 'ac:structured-macro') {
+    final macroName = (node.attrs['ac:name'] ?? '').toLowerCase();
+    if (!_safeLocalMacros.contains(macroName)) return true;
+  }
+  for (final c in node.children) {
+    if (_hasUnresolvedMacro(c)) return true;
+  }
+  return false;
+}
+
+bool _nodesContainTable(List<_XmlNode> nodes) {
+  for (final n in nodes) {
+    if (_hasTableNode(n)) return true;
+  }
+  return false;
+}
+
+bool _hasTableNode(_XmlNode node) {
+  if ((node.name ?? '').toLowerCase() == 'table') return true;
+  for (final c in node.children) {
+    if (_hasTableNode(c)) return true;
+  }
+  return false;
 }

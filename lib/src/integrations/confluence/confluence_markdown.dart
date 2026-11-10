@@ -108,6 +108,23 @@ String confluenceStorageToMarkdown(String storage) {
   return cleaned;
 }
 
+/// Converts Confluence Storage Format [storage] into Markdown, using the
+/// rendered [exportView] HTML as a section-level fallback for headings whose
+/// storage body contains unresolved live/third-party macros (`dm.ai#847` /
+/// `ConfluenceStorageMarkdown.toMarkdownWithRenderedFallback` parity).
+String confluenceStorageToMarkdownWithFallback(
+  String storage, [
+  String? exportView,
+]) {
+  if (exportView == null || exportView.trim().isEmpty) {
+    return confluenceStorageToMarkdown(storage);
+  }
+  if (storage.trim().isEmpty) {
+    return confluenceStorageToMarkdown(exportView);
+  }
+  return _renderStorageWithExportViewFallback(storage, exportView);
+}
+
 /// Extracts local attachment file names referenced by images/links in
 /// [markdown] (mirrors `MarkdownToConfluenceStorage.extractAttachmentReferences`).
 Set<String> extractAttachmentReferences(String markdown) {

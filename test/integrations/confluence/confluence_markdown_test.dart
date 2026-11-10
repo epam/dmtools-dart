@@ -9,6 +9,7 @@ void main() {
   _roundTripTests();
   _referenceTests();
   _javaConversionFixParityTests();
+  _contextExtractionParityTests();
 }
 
 void _markdownToStorageTests() {
@@ -440,6 +441,64 @@ void _strikeStorageTests() {
       final storage = markdownToConfluenceStorage('a ~~x~~ b');
       expect(storage, contains('<del>x</del>'));
       expect(confluenceStorageToMarkdown(storage), contains('~~x~~'));
+    });
+  });
+}
+
+void _contextExtractionParityTests() {
+  group('Confluence context extraction parity (dm.ai#847)', () {
+    test('preserves expand and note macro titles and nested rich bodies', () {
+      final md = confluenceStorageToMarkdown(
+        '<ac:structured-macro ac:name="expand">'
+        '<ac:parameter ac:name="title">Edge Case 1: Timeout</ac:parameter>'
+        '<ac:rich-text-body>'
+        '<p>When upstream times out after 30s, return 504.</p>'
+        '<ac:structured-macro ac:name="note">'
+        '<ac:parameter ac:name="title">Retry Policy</ac:parameter>'
+        '<ac:rich-text-body><p>Retry up to 2 times.</p></ac:rich-text-body>'
+        '</ac:structured-macro>'
+        '</ac:rich-text-body>'
+        '</ac:structured-macro>',
+      );
+      expect(md, contains('**Edge Case 1: Timeout**'));
+      expect(md, contains('When upstream times out after 30s, return 504.'));
+      expect(md, contains('**Retry Policy**'));
+      expect(md, contains('Retry up to 2 times.'));
+      expect(md, isNot(contains('```')));
+    });
+
+    test('nested table inside cell does not corrupt outer table rows', () {
+      final md = confluenceStorageToMarkdown(
+        '<table><tbody>'
+        '<tr><th>Field</th><th>Details</th></tr>'
+        '<tr><td>Config</td><td>'
+        '<table><tbody>'
+        '<tr><th>Key</th><th>Val</th></tr>'
+        '<tr><td>timeout</td><td>30s</td></tr>'
+        '</tbody></table>'
+        '</td></tr>'
+        '<tr><td>Status</td><td>Active</td></tr>'
+        '</tbody></table>',
+      );
+      expect(md, contains('| Field | Details |'));
+      expect(md, contains('| Status | Active |'));
+      expect(md, contains('timeout: 30s'));
+      expect(md.trim().split('\n'), hasLength(4));
+    });
+
+    test('confluenceStorageToMarkdownWithFallback recovers live tables', () {
+      const storage = '<h2>Live Section</h2>'
+          '<ac:structured-macro ac:name="live-table-include">'
+          '<ac:parameter ac:name="name">DynamicSource</ac:parameter>'
+          '</ac:structured-macro>';
+      const exportView = '<h2>Live Section</h2>'
+          '<table><tbody><tr><th>HeaderA</th><th>HeaderB</th></tr>'
+          '<tr><td>RenderedCell1</td><td>RenderedCell2</td></tr></tbody></table>';
+      final md = confluenceStorageToMarkdownWithFallback(storage, exportView);
+      expect(md, contains('## Live Section'));
+      expect(md, contains('| HeaderA | HeaderB |'));
+      expect(md, contains('| RenderedCell1 | RenderedCell2 |'));
+      expect(md, isNot(contains('DynamicSource')));
     });
   });
 }

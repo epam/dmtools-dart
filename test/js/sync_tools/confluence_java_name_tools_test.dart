@@ -547,6 +547,25 @@ void downloadPagesResolverTests() {
       expect(markdown, contains('@Jane Roe'));
       expect(markdown, isNot(contains('ri:user')));
     });
+
+    test(
+        'download_pages uses export_view fallback and discovers parent from ancestors',
+        () {
+      final out = Directory.systemTemp.createTempSync('dmtools_dl4_');
+      addTearDown(() => out.deleteSync(recursive: true));
+      final base = 'http://127.0.0.1:${server.port}';
+      final result = tools.dispatch('confluence_download_pages', {
+        'urlStrings': ['$base/wiki/spaces/DOCS/pages/890/Child_Spec'],
+        'outputPath': out.path,
+        'depth': 2,
+        'downloadAttachments': false,
+      });
+      expect(result, 'Downloaded 2 Confluence page(s) to ${out.path}');
+      final childMd = File('${out.path}/Child Spec.md').readAsStringSync();
+      expect(childMd, contains('ExportRenderedRow'));
+      final parentMd = File('${out.path}/Parent Spec.md').readAsStringSync();
+      expect(parentMd, contains('parent-shared-rules'));
+    });
   });
 }
 

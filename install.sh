@@ -108,6 +108,11 @@ while [ $# -gt 0 ]; do
       no_skill_files=1
       shift
       ;;
+    --global | --global-only | --global-skills | --no-local-skills)
+      # Skills are always installed globally into user-level agent directories;
+      # accept these flags explicitly for CLI parity with dm.ai install.sh.
+      shift
+      ;;
     --skill)
       if [ $# -lt 2 ]; then
         err "Missing value for --skill. Use --skill jira"
@@ -149,7 +154,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --help | -h)
-      echo "Usage: install.sh [--skill <name>] [--skills=<name,name>] [--all-skills] [--no-skills] [--prune] [--skip-unknown] [--strict] [version]"
+      echo "Usage: install.sh [--skill <name>] [--skills=<name,name>] [--all-skills] [--no-skills] [--global] [--prune] [--skip-unknown] [--strict] [version]"
       echo "  --skill <name>      Select a single skill. Repeat to add more skills."
       echo "  --skills=<csv>      Comma-separated skill selection (${AVAILABLE_SKILLS_CSV})."
       echo "  --all-skills        Install every supported skill."
@@ -750,7 +755,8 @@ else
     fi
     [ "$skip_unknown_skills" -eq 1 ] && set -- "$@" --skip-unknown
     [ "$prune_skills" -eq 1 ] && set -- "$@" --prune
-    if ! DMTOOLS_SKILL_RELEASE_BASE_URL="${DMTOOLS_SKILL_RELEASE_BASE_URL:-$skill_base}" bash "$skill_script" "$@"; then
+    mkdir -p "$HOME/.agents/skills" 2>/dev/null || true
+    if ! DMTOOLS_SKILLS_GLOBAL_ONLY=true DMTOOLS_SKILL_RELEASE_BASE_URL="${DMTOOLS_SKILL_RELEASE_BASE_URL:-$skill_base}" bash "$skill_script" "$@"; then
       warn "Skill installation did not complete; the DMTools CLI itself is installed."
     fi
   fi

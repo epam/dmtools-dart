@@ -190,8 +190,15 @@ void _convertStorageToMarkdown(Map<String, dynamic> content) {
   if (body is! Map) return;
   final storage = body['storage'];
   if (storage is! Map || storage['value'] is! String) return;
+  final exportView = body['export_view'];
+  final exportHtml = exportView is Map && exportView['value'] is String
+      ? exportView['value'] as String
+      : null;
   body.remove('export_view'); // large, redundant once Markdown is returned
-  storage['value'] = confluenceStorageToMarkdown(storage['value'] as String);
+  storage['value'] = confluenceStorageToMarkdownWithFallback(
+    storage['value'] as String,
+    exportHtml,
+  );
   storage['representation'] = 'markdown';
 }
 

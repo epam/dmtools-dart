@@ -107,11 +107,15 @@ extension ConfluenceTransfer on ConfluenceClient {
     final storage = body is Map ? body['storage'] as Map? : null;
     final value = storage?['value'];
     if (value is! String) return 0;
+    final exportView = body is Map ? body['export_view'] as Map? : null;
+    final exportHtml =
+        exportView?['value'] is String ? exportView!['value'] as String : null;
     output.createSync(recursive: true);
     final fileName =
         ConfluenceClient._sanitizeFileName(content['title']?.toString() ?? id);
-    File('${output.path}/$fileName.md')
-        .writeAsStringSync(confluenceStorageToMarkdown(value));
+    File('${output.path}/$fileName.md').writeAsStringSync(
+      confluenceStorageToMarkdownWithFallback(value, exportHtml),
+    );
     var written = 1;
     if (downloadAttachments) {
       await _downloadAttachmentsOf(id, output, fileName);

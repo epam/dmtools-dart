@@ -114,32 +114,34 @@ void verdictNormalizationTests() {
   });
 }
 
-/// The gh-71 core: REQUEST_CHANGES with zero BLOCKING findings converges to
-/// approve (approve-with-suggestions) instead of looping rework rounds.
+/// gh-1419 removed the gh-71 REQUEST_CHANGES→approve downgrade:
+/// REQUEST_CHANGES always resolves to `rework` (with `override=false`),
+/// even when `issueCounts.blocking == 0` or `issueCounts` is absent.
 void verdictOverrideTests() {
-  group('decide: blocking-0 override', () {
-    test('REQUEST_CHANGES with zero blocking findings → approve (gh-71)', () {
+  group('decide: blocking-0 no longer downgrades REQUEST_CHANGES (gh-1419)',
+      () {
+    test('REQUEST_CHANGES with zero blocking findings → rework (gh-1419)', () {
       final d = _decide(
         reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0,"important":0,"suggestions":4}}',
       );
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
     });
 
-    test('REQUEST_CHANGES with only important findings → approve', () {
+    test('REQUEST_CHANGES with only important findings → rework', () {
       final d = _decide(
         reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0,"important":1,"suggestions":0}}',
       );
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
     });
 
-    test('REQUEST_CHANGES with missing issueCounts → approve', () {
+    test('REQUEST_CHANGES with missing issueCounts → rework', () {
       final d = _decide(reviewJson: '{"recommendation":"REQUEST_CHANGES"}');
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
     });
 
     test('falls back to the verdict key when recommendation is absent', () {
@@ -147,8 +149,8 @@ void verdictOverrideTests() {
         reviewJson: '{"verdict":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0,"important":0,"suggestions":2}}',
       );
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
     });
 
     test('ticket-scoped alt path (outputs/gh-N/) is honored', () {
@@ -156,7 +158,7 @@ void verdictOverrideTests() {
         reviewJsonAlt: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0,"important":0,"suggestions":2}}',
       );
-      expect(d['decision'], 'approve');
+      expect(d['decision'], 'rework');
       expect(d['source'], 'pr_review_json');
     });
   });
@@ -200,11 +202,11 @@ void verdictMarkerCrossCheckTests() {
   });
 }
 
-/// The cross-check must not eat the override it guards: suggestion-level
-/// (or unreadable) inline comments leave the approve convergence intact.
+/// Inline comments without blocking markers still emit `blocking_markers=0`
+/// while keeping `decision=rework` and `override=false` under gh-1419.
 void verdictMarkerOverrideStillAppliesTests() {
-  group('decide: marker cross-check keeps the override usable', () {
-    test('suggestion-level inline comments do not block the override', () {
+  group('decide: non-blocking inline comments keep rework (gh-1419)', () {
+    test('suggestion-level inline comments keep rework and override=false', () {
       final d = _decide(
         reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0,"important":0,"suggestions":2},"inlineComments":'
@@ -214,23 +216,24 @@ void verdictMarkerOverrideStillAppliesTests() {
           'pr_review_comments/c1.md': '💡 reword the dartdoc reference',
         },
       );
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
+      expect(d['blocking_markers'], '0');
     });
 
     test(
-        'inline comments without severities or readable files keep the '
-        'override', () {
+        'inline comments without severities or readable files keep rework '
+        'and override=false', () {
       final d = _decide(
         reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'
             '{"blocking":0},"inlineComments":'
             '[{"path":"lib/a.dart","line":3},{"path":"lib/b.dart","line":9,'
             '"severity":"IMPORTANT","comment":"pr_review_comments/missing.md"}]}',
       );
-      expect(d['decision'], 'approve');
-      expect(d['override'], 'true');
+      expect(d['decision'], 'rework');
+      expect(d['override'], 'false');
+      expect(d['blocking_markers'], '0');
     });
-
     test('the marker scan is reported in the emitted assignments', () {
       final d = _decide(
         reviewJson: '{"recommendation":"REQUEST_CHANGES","issueCounts":'

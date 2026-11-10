@@ -485,7 +485,12 @@ void _contextExtractionParityTests() {
       expect(md, contains('timeout: 30s'));
       expect(md.trim().split('\n'), hasLength(4));
     });
+  });
+  _contextExtractionFallbackTests();
+}
 
+void _contextExtractionFallbackTests() {
+  group('Confluence export_view fallback parity (dm.ai#847)', () {
     test('confluenceStorageToMarkdownWithFallback recovers live tables', () {
       const storage = '<h2>Live Section</h2>'
           '<ac:structured-macro ac:name="live-table-include">'
@@ -499,6 +504,35 @@ void _contextExtractionParityTests() {
       expect(md, contains('| HeaderA | HeaderB |'));
       expect(md, contains('| RenderedCell1 | RenderedCell2 |'));
       expect(md, isNot(contains('DynamicSource')));
+    });
+
+    test('renders status, children, toc, anchor, and wrapped export_view', () {
+      final md = confluenceStorageToMarkdown(
+        '<p><ac:structured-macro ac:name="status">'
+        '<ac:parameter ac:name="colour">Green</ac:parameter>'
+        '<ac:parameter ac:name="title">READY</ac:parameter>'
+        '</ac:structured-macro>'
+        '<ac:structured-macro ac:name="status"></ac:structured-macro>'
+        '<ac:structured-macro ac:name="toc"></ac:structured-macro>'
+        '<ac:structured-macro ac:name="anchor">'
+        '<ac:parameter ac:name="">sec</ac:parameter>'
+        '</ac:structured-macro></p>'
+        '<ac:structured-macro ac:name="children"></ac:structured-macro>',
+      );
+      expect(md, contains('[READY]'));
+      expect(md, contains('[Child pages]'));
+
+      final fallback = confluenceStorageToMarkdownWithFallback(
+        '<div><h2>Wrapped</h2>'
+            '<ac:structured-macro ac:name="jira">'
+            '<ac:parameter ac:name="jql">project=X</ac:parameter>'
+            '</ac:structured-macro></div>',
+        '<html><body><div><h2>Wrapped</h2>'
+            '<table><tr><th>Key</th></tr><tr><td>X-1</td></tr></table>'
+            '</div></body></html>',
+      );
+      expect(fallback, contains('| Key |'));
+      expect(fallback, contains('| X-1 |'));
     });
   });
 }

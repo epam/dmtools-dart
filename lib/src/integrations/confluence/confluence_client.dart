@@ -586,15 +586,20 @@ class ConfluenceClient {
       if (body is! Map) continue;
       final storage = body[_kStorage];
       if (storage is! Map || storage['value'] is! String) continue;
-      final exportView = body.remove('export_view');
-      final exportHtml =
-          exportView is Map ? exportView['value']?.toString() : null;
       storage['value'] = confluenceStorageToMarkdownWithFallback(
         storage['value'] as String,
-        exportHtml,
+        _exportViewValue(body, remove: true),
       );
       storage['representation'] = 'markdown';
     }
+  }
+
+  static String? _exportViewValue(Map<dynamic, dynamic> body,
+      {bool remove = false}) {
+    final exportView =
+        remove ? body.remove('export_view') : body['export_view'];
+    final val = exportView is Map ? exportView['value'] : null;
+    return val is String ? val : null;
   }
 
   /// Filesystem-safe file name from a page title.

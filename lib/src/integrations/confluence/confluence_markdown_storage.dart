@@ -309,12 +309,9 @@ const _safeLocalMacros = <String>{
 /// titled containers like `expand`/`panel`/`note`, or rich-text bodies).
 String _macroToMarkdown(_XmlNode node) {
   final macroName = (node.attrs[_kAcNameAttr] ?? '').toLowerCase();
-  if (macroName == 'native-embed:whiteboard') return _whiteboardMarker(node);
-  if (macroName == 'children' || macroName == 'childpages') {
-    return '\n\n[Child pages]\n\n';
+  if (_simpleMacroHandlers.containsKey(macroName)) {
+    return _simpleMacroHandlers[macroName]!(node);
   }
-  if (macroName == 'toc' || macroName == 'anchor') return '';
-  if (macroName == 'status') return _statusMacroToMarkdown(node);
   final plainBody = node.child('ac:plain-text-body');
   if (macroName == 'code' || plainBody != null) {
     return _codeMacroToMarkdown(node, plainBody?.content ?? '');
@@ -325,6 +322,18 @@ String _macroToMarkdown(_XmlNode node) {
   }
   return '';
 }
+
+String _childPagesMacro(_XmlNode _) => '\n\n[Child pages]\n\n';
+String _emptyMacro(_XmlNode _) => '';
+
+final Map<String, String Function(_XmlNode)> _simpleMacroHandlers = {
+  'native-embed:whiteboard': _whiteboardMarker,
+  'children': _childPagesMacro,
+  'childpages': _childPagesMacro,
+  'toc': _emptyMacro,
+  'anchor': _emptyMacro,
+  'status': _statusMacroToMarkdown,
+};
 
 String _statusMacroToMarkdown(_XmlNode node) {
   for (final child in node.children) {
@@ -423,16 +432,18 @@ void _collectRows(_XmlNode node, List<List<String>> rows) {
   }
 }
 
+const Set<String> _tableSectionTags = {'thead', 'tbody', 'tfoot'};
+
 List<_XmlNode> _directTableRows(_XmlNode table) {
   final trs = <_XmlNode>[];
   for (final child in table.children) {
     final tag = (child.name ?? '').toLowerCase();
     if (tag == 'tr') {
       trs.add(child);
-    } else if (tag == 'thead' || tag == 'tbody' || tag == 'tfoot') {
-      for (final row in child.children) {
-        if ((row.name ?? '').toLowerCase() == 'tr') trs.add(row);
-      }
+    } else if (_tableSectionTags.contains(tag)) {
+      trs.addAll(
+        child.children.where((r) => (r.name ?? '').toLowerCase() == 'tr'),
+      );
     }
   }
   return trs;
@@ -517,15 +528,16 @@ String _renderStorageWithExportViewFallback(
       .trim();
 }
 
+const Set<String> _rootWrapperTags = {'div', 'body', 'html'};
+
 List<_XmlNode> _unwrapRootElements(_XmlNode node) {
-  if (node.children.length == 1) {
-    final single = node.children.first;
-    final tag = (single.name ?? '').toLowerCase();
-    if (tag == 'div' || tag == 'body' || tag == 'html') {
-      return _unwrapRootElements(single);
-    }
+  var cur = node;
+  while (cur.children.length == 1 &&
+      _rootWrapperTags
+          .contains((cur.children.first.name ?? '').toLowerCase())) {
+    cur = cur.children.first;
   }
-  return node.children;
+  return cur.children;
 }
 
 List<_DocSection> _splitSections(List<_XmlNode> nodes) {

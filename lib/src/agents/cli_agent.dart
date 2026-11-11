@@ -561,10 +561,17 @@ class CliAgent {
     return null;
   }
 
-  /// Top-level `metadata` binding merged into `params` for JS hooks (#623).
+  /// Top-level `metadata` and `initiator` bindings merged into `params` for JS
+  /// hooks (`TrackerParams.METADATA` / `TrackerParams.INITIATOR` parity, #623).
   Map<String, dynamic>? _metadataContextParams() {
     final md = params.metadata;
-    return md == null ? null : {'metadata': md};
+    final init = params.initiator;
+    final hasInit = init != null && init.isNotEmpty;
+    if (md == null && !hasInit) return null;
+    return {
+      if (md != null) 'metadata': md,
+      if (hasInit) 'initiator': init,
+    };
   }
 
   /// Merges the standard JS action globals with action-specific [context].

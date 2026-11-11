@@ -126,6 +126,7 @@ jobs:
           # apt hung twice on 2026-08-19 (no exit — jobs burned 19+ minutes on
           # this step before manual cancellation). Cap each attempt and retry
           # so a flaky mirror fails the job fast instead of stalling it.
+          command -v gcc >/dev/null 2>&1 && exit 0
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq && \
                timeout 300 sudo apt-get install -y -qq gcc; then
@@ -279,11 +280,35 @@ jobs:
       - name: Merge shard coverage
         if: needs.static.result == 'success' && needs.test.result == 'success'
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq lcov
           mkdir -p coverage
-          ARGS=$(for f in coverage-shards/lcov-*/lcov.info; do printf -- '-a %s ' "$f"; done)
-          # shellcheck disable=SC2086
-          lcov $ARGS -o coverage/lcov.info
+          python3 - <<'PY'
+          import glob
+          files = {}
+          for path in sorted(glob.glob('coverage-shards/lcov-*/lcov.info')):
+              sf = None
+              with open(path, 'r', encoding='utf-8') as f:
+                  for raw in f:
+                      line = raw.strip()
+                      if line.startswith('SF:'):
+                          sf = line[3:]
+                          files.setdefault(sf, {})
+                      elif line.startswith('DA:') and sf is not None:
+                          ln_str, cnt_str = line[3:].split(',', 1)
+                          ln = int(ln_str)
+                          cnt = int(cnt_str.split(',', 1)[0])
+                          files[sf][ln] = files[sf].get(ln, 0) + cnt
+                      elif line == 'end_of_record':
+                          sf = None
+          with open('coverage/lcov.info', 'w', encoding='utf-8') as out:
+              for sf in sorted(files):
+                  da = files[sf]
+                  out.write(f'SF:{sf}\n')
+                  for ln in sorted(da):
+                      out.write(f'DA:{ln},{da[ln]}\n')
+                  lf = len(da)
+                  lh = sum(1 for c in da.values() if c > 0)
+                  out.write(f'LF:{lf}\nLH:{lh}\nend_of_record\n')
+          PY
       - name: Sum shard test counts
         id: counts
         if: needs.static.result == 'success' && needs.test.result == 'success'
@@ -415,6 +440,7 @@ jobs:
           # apt hung twice on 2026-08-19 (no exit — jobs burned 19+ minutes on
           # this step before manual cancellation). Cap each attempt and retry
           # so a flaky mirror fails the job fast instead of stalling it.
+          command -v gcc >/dev/null 2>&1 && exit 0
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq && \
                timeout 300 sudo apt-get install -y -qq gcc; then

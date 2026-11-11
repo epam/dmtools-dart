@@ -645,6 +645,8 @@ class FixtureTree {
       'js/common/machineAuthor.js',
       'js/common/legRunVocab.js',
       'js/common/reviewVerdicts.js',
+      'js/common/remoteProjectConfig.js',
+      'js/common/branchSetup.js',
     ]) {
       final src = File('$agentsPath/$rel');
       if (!src.existsSync()) continue;

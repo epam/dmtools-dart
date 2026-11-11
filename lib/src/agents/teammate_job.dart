@@ -175,6 +175,7 @@ class TeammateJob {
       await _postCompletionComment(key);
     }
     return _TicketOutcome(
+      key: key,
       result: {'ticket': key, 'success': result['success'] == true, ...result},
       setupThrew: result['unexpectedSetupFailure'] == true,
       postJsError: result['postJsActionUncaught'] == true
@@ -502,16 +503,21 @@ Map<String, dynamic>? _decodeMap(String? raw) {
 class _TicketOutcome {
   _TicketOutcome({
     required this.result,
+    required String this.key,
     this.setupThrew = false,
     this.postJsError,
   });
 
   _TicketOutcome.resultOnly(this.result)
-      : setupThrew = false,
+      : key = null,
+        setupThrew = false,
         postJsError = null;
 
   /// The per-ticket result item merged into the job's `results` list.
   final Map<String, dynamic> result;
+
+  /// The ticket key, or null for a keyless search result.
+  final String? key;
 
   /// The ticket's `preCliJSAction` crashed with an uncaught exception.
   final bool setupThrew;

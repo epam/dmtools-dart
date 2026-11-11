@@ -276,6 +276,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           # Cap apt with timeout + retries — see ci-apt-hardening (#4).
+          command -v gcc >/dev/null 2>&1 && exit 0
           for attempt in 1 2 3; do
             if timeout 300 sudo apt-get update -qq && \
                timeout 300 sudo apt-get install -y -qq gcc; then

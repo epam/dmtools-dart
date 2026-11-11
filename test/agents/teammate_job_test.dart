@@ -21,6 +21,7 @@ void main() {
   githubTracePostingTests();
   tracePrefixTests();
   traceDisabledTests();
+  completionCommentTests();
   resultShapeTests();
   extractKeysTests();
   commentsHydrateTests();
@@ -479,6 +480,62 @@ void traceDisabledTests() {
         );
         await job.run();
         expect(posted, 0);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void completionCommentTests() {
+  group('TeammateJob completion comment — initiator tagging', () {
+    test('posts completion comment tagging Jira initiator', () async {
+      final tmp = await _createTempDir();
+      final bodies = <String>[];
+      try {
+        await TeammateJob(
+          params: {
+            'inputJql': 'key in (PROJ-1)',
+            'cliCommands': ['echo done'],
+            'alwaysPostComments': true,
+            'ciRunUrl': 'https://ci.example/run/42',
+            'initiator': '712020:user-1',
+            'metadata': {'contextId': 'MAPC'},
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [hydratedTicket],
+          commentPoster: (_, body) async => bodies.add(body),
+        ).run();
+        expect(bodies, [
+          '[MAPC] Processing started. CI Run: https://ci.example/run/42',
+          '[MAPC] [~accountid:712020:user-1], \n\n✅ Teammate run completed. CI Run: https://ci.example/run/42',
+        ]);
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('skips completion comment when preJSAction returns false', () async {
+      final tmp = await _createTempDir();
+      final bodies = <String>[];
+      try {
+        final skipPre = File('${tmp.path}/skip_pre.js')
+          ..writeAsStringSync('function action(params) { return false; }');
+        await TeammateJob(
+          params: {
+            'inputJql': 'key in (PROJ-1)',
+            'cliCommands': ['echo done'],
+            'preJSAction': skipPre.path,
+            'alwaysPostComments': true,
+            'ciRunUrl': 'https://ci.example/run/43',
+            'initiator': '[~accountid:712020:user-2]',
+          },
+          workingDirectory: tmp.path,
+          ticketSource: (_) async => [hydratedTicket],
+          commentPoster: (_, body) async => bodies.add(body),
+        ).run();
+        expect(
+            bodies, ['Processing started. CI Run: https://ci.example/run/43']);
       } finally {
         await tmp.delete(recursive: true);
       }

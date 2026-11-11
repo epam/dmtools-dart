@@ -14,6 +14,7 @@ void main() {
   metadataBindingJsActionTests();
   metadataContextHooksJsActionTests();
   metadataOmissionJsActionTests();
+  initiatorBindingJsActionTests();
   timerJsActionTests();
   cliErrorJsActionTests();
   cliOutputLineJsActionTests();
@@ -222,6 +223,46 @@ void metadataOmissionJsActionTests() {
         )).run();
         // Java null-omission parity: no key instead of a null value.
         expect((await File(log).readAsString()).trim(), 'undefined');
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+  });
+}
+
+void initiatorBindingJsActionTests() {
+  group('CliAgent JS actions — initiator binding', () {
+    test(
+        'preJSAction, preCliJSAction, postJSAction, and timerJSAction see top-level params.initiator',
+        () async {
+      final tmp = await _createTempDir();
+      final log = '${tmp.path}/js_initiator.log';
+      try {
+        final pre = _actionJs(tmp, 'pre_init.js',
+            'file_append({path: "$log", content: "pre=" + params.initiator + "\\n"});');
+        final preCli = _actionJs(tmp, 'precli_init.js',
+            'file_append({path: "$log", content: "preCli=" + params.initiator + "\\n"});');
+        final timer = _actionJs(tmp, 'timer_init.js',
+            'file_append({path: "$log", content: "timer=" + params.initiator + "\\n"});');
+        final post = _actionJs(tmp, 'post_init.js',
+            'file_append({path: "$log", content: "post=" + params.initiator + "\\n"});');
+        await (CliAgent(
+          params: CliAgentParams()
+            ..cliCommands = ['echo done']
+            ..initiator = '712020:abc-123'
+            ..preJSAction = pre.path
+            ..preCliJSAction = preCli.path
+            ..timerJSAction = timer.path
+            ..postJSAction = post.path
+            ..cleanupInputFolder = false,
+          workingDirectory: tmp.path,
+        )).run();
+        expect((await File(log).readAsString()).trim().split('\n'), [
+          'pre=712020:abc-123',
+          'preCli=712020:abc-123',
+          'timer=712020:abc-123',
+          'post=712020:abc-123',
+        ]);
       } finally {
         await tmp.delete(recursive: true);
       }

@@ -171,8 +171,10 @@ class TeammateJob {
       failOnJsActionErrors: true,
     );
     final result = await agent.run();
+    if (_shouldPostCompletionComment(result)) {
+      await _postCompletionComment(key);
+    }
     return _TicketOutcome(
-      key: key,
       result: {'ticket': key, 'success': result['success'] == true, ...result},
       setupThrew: result['unexpectedSetupFailure'] == true,
       postJsError: result['postJsActionUncaught'] == true
@@ -292,19 +294,65 @@ class TeammateJob {
   /// with `DEFAULT_TRACKER=github`), everything else through
   /// `jira_post_comment`. A failed trace comment never fails the job —
   /// Java catches, warns, and continues.
-  Future<void> _postTraceComment(String key) async {
+  Future<void> _postTraceComment(String key) =>
+      _postCiRunComment(key, (url) => 'Processing started. CI Run: $url');
+
+  /// Posts the completion comment when `ciRunUrl` is set, `initiator` is
+  /// provided, and comments are enabled (Java `Teammate.postCompletionComment`
+  /// parity).
+  Future<void> _postCompletionComment(String key) =>
+      _postCiRunComment(key, _buildCompletionComment);
+
+  /// Shared advisory CI-run comment poster: swallows poster failures so trace/
+  /// completion comments never abort ticket processing (Java parity).
+  Future<void> _postCiRunComment(
+      String key, String Function(String ciRunUrl) bodyBuilder) async {
     final ciRunUrl = (params['ciRunUrl'] as String?)?.trim() ?? '';
     if (ciRunUrl.isEmpty || !_shouldPostComments) return;
     final poster = commentPoster ??
         (_sourceIsGithub ? _githubCommentPoster : _jiraCommentPoster);
     try {
-      await poster(
-          key,
-          '${_agentNamePrefix()}'
-          'Processing started. CI Run: $ciRunUrl');
+      await poster(key, '${_agentNamePrefix()}${bodyBuilder(ciRunUrl)}');
     } catch (_) {
       // Advisory comment only — processing continues (Java parity).
     }
+  }
+
+  /// Whether [result] reached the end of `Teammate.runJobImpl` where Java
+  /// calls `postCompletionComment` with a non-empty `initiator`: skipped
+  /// tickets (`preJSAction` returned `false` or `preCliJSAction` failed/threw)
+  /// and uncaught `postJSAction` exceptions exit before completion notification,
+  /// and runs without `initiator` rely on `postJSAction` for completion updates.
+  bool _shouldPostCompletionComment(Map<String, dynamic> result) {
+    final initiator = (params['initiator'] as String?)?.trim() ?? '';
+    if (initiator.isEmpty) return false;
+    if (result['success'] != true) return false;
+    if (result['unexpectedSetupFailure'] == true) return false;
+    final response = result['response'];
+    return response != 'Skipped by pre-action' &&
+        response != 'Skipped: preCliJSAction reported failure';
+  }
+
+  /// Java `Teammate.buildCompletionComment`: tags the initiator when non-empty.
+  String _buildCompletionComment(String ciRunUrl) {
+    final initiator = (params['initiator'] as String?)?.trim() ?? '';
+    if (initiator.isNotEmpty) {
+      return '${_tagInitiator(initiator)}, \n\n✅ Teammate run completed. CI Run: $ciRunUrl';
+    }
+    return '✅ Teammate run completed. CI Run: $ciRunUrl';
+  }
+
+  /// Java `TrackerClient.tag(initiator)`: Jira wraps account IDs in
+  /// `[~accountid:...]` (or `[...]` if `~` is already present); GitHub returns
+  /// the initiator verbatim.
+  String _tagInitiator(String initiator) {
+    if (_sourceIsGithub) return initiator;
+    if (initiator.contains('~')) {
+      return initiator.startsWith('[') && initiator.endsWith(']')
+          ? initiator
+          : '[$initiator]';
+    }
+    return '[~accountid:$initiator]';
   }
 
   /// Java `AbstractJob.shouldPostComments`: `alwaysPostComments` wins, else

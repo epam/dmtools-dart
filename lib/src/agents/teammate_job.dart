@@ -502,21 +502,16 @@ Map<String, dynamic>? _decodeMap(String? raw) {
 class _TicketOutcome {
   _TicketOutcome({
     required this.result,
-    this.key,
     this.setupThrew = false,
     this.postJsError,
   });
 
   _TicketOutcome.resultOnly(this.result)
-      : key = null,
-        setupThrew = false,
+      : setupThrew = false,
         postJsError = null;
 
   /// The per-ticket result item merged into the job's `results` list.
   final Map<String, dynamic> result;
-
-  /// The ticket key, or null for a keyless search result.
-  final String? key;
 
   /// The ticket's `preCliJSAction` crashed with an uncaught exception.
   final bool setupThrew;

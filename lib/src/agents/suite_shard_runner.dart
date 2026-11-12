@@ -12,6 +12,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../config/property_reader.dart';
 import '../js/job_runner.dart';
 import 'suite_shard_args.dart';
 import 'suite_sharding.dart';
@@ -140,7 +141,16 @@ int runAgentsSuite(
   final planned = _planOrReport(args, config, err);
   if (planned == null) return 1;
   if (!_preflightOrReport(args, planned, err)) return 1;
-  return _runEngine(args, planned, config, out, err);
+  // Hermetic unit tests: the `java.lang.System.getenv` shim resolves via
+  // PropertyReader, so without isolation the CI runner's
+  // GITHUB_REPOSITORY / GITHUB_RUN_ID would leak into agent unit tests.
+  final wasIsolated = PropertyReader.testIsolation;
+  PropertyReader.testIsolation = true;
+  try {
+    return _runEngine(args, planned, config, out, err);
+  } finally {
+    PropertyReader.testIsolation = wasIsolated;
+  }
 }
 
 /// Semantic flag-combination validation (AC2); serial runs only carry the

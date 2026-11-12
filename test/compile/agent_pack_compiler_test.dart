@@ -20,6 +20,8 @@ void main() {
   });
 
   closureTests();
+  runtimePromptTests();
+  runtimePromptConditionTests();
   referenceKindTests();
   workerSourceTests();
   manifestTests();
@@ -105,65 +107,6 @@ void closureTests() {
         ),
       );
       expect(outDir.listSync(), isEmpty); // nothing written on failure
-    });
-
-    test(
-      'missing cliPrompts file is skipped with a warning (runtime-generated)',
-      () {
-        write('js/main.js', '// main\n');
-        write('prompts/real.md', 'real');
-        final entry = write(
-          'plan.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {
-              'jsPath': 'agents/js/main.js',
-              'cliPrompts': [
-                './prompts/real.md',
-                {'prompt': './.dmtools/development-mode-plan-appendix.md'},
-              ],
-            },
-          }),
-        );
-        final compiler = AgentPackCompiler(agentRoot.path);
-        final result = compiler.compile(entry, '1.0.0', 'abc123', outDir);
-        final names = zipNames(result.zipFile);
-        expect(names, contains('prompts/real.md'));
-        expect(
-          names,
-          isNot(contains('.dmtools/development-mode-plan-appendix.md')),
-        );
-        expect(
-          compiler.warnings.single,
-          contains('development-mode-plan-appendix.md'),
-        );
-      },
-    );
-
-    test('missing cliPrompts condition still fails hard', () {
-      write('js/main.js', '// main\n');
-      final entry = write(
-        'cond.json',
-        jsonEncode({
-          'name': 'X',
-          'params': {
-            'jsPath': 'agents/js/main.js',
-            'cliPrompts': [
-              {'prompt': 'inline text', 'condition': 'js/missing_cond.js'},
-            ],
-          },
-        }),
-      );
-      expect(
-        () => compileAgent(entry),
-        throwsA(
-          isA<AgentPackException>().having(
-            (e) => e.message,
-            'message',
-            contains('missing_cond.js'),
-          ),
-        ),
-      );
     });
   });
 }
@@ -662,6 +605,76 @@ function action(params) { return ms.ok; }
       final names = zipNames(result.zipFile);
       expect(names, contains('js/common/mergeState.js'));
       expect(names, contains('js/common/pullRequest.js'));
+    });
+  });
+}
+
+/// Runtime-generated cliPrompts files: skipped with a warning; conditions
+/// stay strict.
+void runtimePromptTests() {
+  group('AgentPackCompiler runtime-generated prompts', () {
+    test(
+      'missing cliPrompts file is skipped with a warning (runtime-generated)',
+      () {
+        write('js/main.js', '// main\n');
+        write('prompts/real.md', 'real');
+        final entry = write(
+          'plan.json',
+          jsonEncode({
+            'name': 'X',
+            'params': {
+              'jsPath': 'agents/js/main.js',
+              'cliPrompts': [
+                './prompts/real.md',
+                {'prompt': './.dmtools/development-mode-plan-appendix.md'},
+              ],
+            },
+          }),
+        );
+        final compiler = AgentPackCompiler(agentRoot.path);
+        final result = compiler.compile(entry, '1.0.0', 'abc123', outDir);
+        final names = zipNames(result.zipFile);
+        expect(names, contains('prompts/real.md'));
+        expect(
+          names,
+          isNot(contains('.dmtools/development-mode-plan-appendix.md')),
+        );
+        expect(
+          compiler.warnings.single,
+          contains('development-mode-plan-appendix.md'),
+        );
+      },
+    );
+  });
+}
+
+/// cliPrompts conditions stay strict.
+void runtimePromptConditionTests() {
+  group('AgentPackCompiler runtime-generated prompts', () {
+    test('missing cliPrompts condition still fails hard', () {
+      write('js/main.js', '// main\n');
+      final entry = write(
+        'cond.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {
+            'jsPath': 'agents/js/main.js',
+            'cliPrompts': [
+              {'prompt': 'inline text', 'condition': 'js/missing_cond.js'},
+            ],
+          },
+        }),
+      );
+      expect(
+        () => compileAgent(entry),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('missing_cond.js'),
+          ),
+        ),
+      );
     });
   });
 }

@@ -34,8 +34,7 @@ String? jsGetenv(Object? name, {String? Function(String name)? lookup}) {
 /// Host-function adapter: decodes the marshaled argument payload (a bare
 /// value for one argument, an array for several) and returns the JSON
 /// result the QuickJS bridge parses back into a JS value.
-String jsGetenvHost(String argsJson,
-    {String? Function(String name)? lookup}) {
+String jsGetenvHost(String argsJson, {String? Function(String name)? lookup}) {
   Object? parsed;
   try {
     parsed = jsonDecode(argsJson);

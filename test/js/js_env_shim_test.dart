@@ -73,7 +73,8 @@ void main() {
         run("return String(java.lang.System.getenv('SOURCE_GITHUB_TOKEN') === null);"),
         allOf(contains('true'), isNot(contains('ghp_secret'))),
       );
-      expect(run("return String(java.lang.System.getenv('CHECKOUT_REF') === null);"),
+      expect(
+          run("return String(java.lang.System.getenv('CHECKOUT_REF') === null);"),
           contains('true'));
     });
 

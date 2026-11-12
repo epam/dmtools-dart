@@ -10,7 +10,7 @@ DMTools-dart is the pure-Dart port of [DMTools](https://github.com/epam/dm.ai) (
 git clone https://github.com/epam/dmtools-dart.git
 cd dmtools-dart
 
-dart pub get
+make deps     # runs git config core.hooksPath .githooks + dart pub get
 make native   # compile the QuickJS shared library — required once per checkout
 
 # Credentials live in dmtools.env (git-ignored) — see README → Configuration
@@ -55,6 +55,8 @@ crap4dart analyze
 ```
 
 Coverage gate: 80% on `lib`. All logic lives in `lib/`; `bin/` only parses argv and delegates.
+
+The tracked `.githooks/pre-commit` hook (activated via `git config core.hooksPath .githooks` or `make hooks`) runs the fast static gates (`dart format`, `dart analyze`, `crap4dart check --staged`) plus targeted `dart test --coverage` + `crap4dart analyze` (CRAP ≤ 8.0) on staged `lib/` files before commit. Never bypass with `--no-verify`.
 
 ## Submitting a Pull Request
 

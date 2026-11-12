@@ -10,7 +10,7 @@
 # Windows requires MinGW-w64 (gcc) on PATH — the bridge uses GCC atomics.
 
 .DEFAULT_GOAL := help
-.PHONY: help deps native build run test test-cov analyze format gates install clean clean-native clean-build
+.PHONY: help deps hooks native build run test test-cov analyze format gates install clean clean-native clean-build
 
 # ── Platform detection ───────────────────────────────────────────────────
 
@@ -71,9 +71,13 @@ DART := dart
 
 # ── Targets ──────────────────────────────────────────────────────────────
 
-## deps: install Dart dependencies (dart pub get)
-deps:
+## deps: install Dart dependencies (dart pub get) and configure git hooks
+deps: hooks
 	$(DART) pub get
+
+## hooks: configure git core.hooksPath=.githooks
+hooks:
+	@bash tool/install_hooks.sh
 
 ## native: compile the QuickJS bridge shared library (quickjs_runtime package)
 native:

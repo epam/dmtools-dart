@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Pre-commit quality gate for epam/dmtools-dart:
+#   1. Fast static checks on staged .dart files:
+#      - dart format --output=none --set-exit-if-changed
+#      - dart analyze --fatal-infos --fatal-warnings
+#      - crap4dart check --staged --only loc,complexity,method_size,test_assertions,public_docs,duplication,magic_constants,class_size
+#   2. Targeted test coverage + CRAP <= 8 gate:
+#      - Resolves matching test/**/*_test.dart for staged lib/** (plus any staged test files)
+#      - Runs dart test --coverage on those tests and formats lcov
+#      - Runs crap4dart analyze --threshold 8.0 on staged lib/** files
+#
+# Activate via: git config core.hooksPath .githooks (or make hooks / bash tool/install_hooks.sh)
+
+set -euo pipefail
+
+export PATH="$HOME/.pub-cache/bin:$HOME/.dart-sdk/dart-sdk/bin:$PATH"
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+STAGED_FILES=()
+while IFS= read -r f; do
+  [ -n "$f" ] && STAGED_FILES+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ "${#STAGED_FILES[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+if [ ! -f "$REPO_ROOT/.dart_tool/package_config.json" ]; then
+  dart pub get >/dev/null
+fi
+
+# Resolve staged Dart files & matching unit tests
+SELECTION_JSON="$(dart run "$REPO_ROOT/tool/pre_commit_gate.dart" "${STAGED_FILES[@]}")"
+
+STAGED_DART=()
+while IFS= read -r f; do
+  [ -n "$f" ] && STAGED_DART+=("$f")
+done < <(python3 -c 'import json,sys; [print(x) for x in json.loads(sys.argv[1])["stagedDart"]]' "$SELECTION_JSON")
+
+if [ "${#STAGED_DART[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+STAGED_LIB=()
+while IFS= read -r f; do
+  [ -n "$f" ] && STAGED_LIB+=("$f")
+done < <(python3 -c 'import json,sys; [print(x) for x in json.loads(sys.argv[1])["stagedLib"]]' "$SELECTION_JSON")
+
+TARGET_TESTS=()
+while IFS= read -r f; do
+  [ -n "$f" ] && TARGET_TESTS+=("$f")
+done < <(python3 -c 'import json,sys; [print(x) for x in json.loads(sys.argv[1])["targetTests"]]' "$SELECTION_JSON")
+
+# 1. Fast static checks on staged .dart files
+echo "pre-commit: checking dart format on ${#STAGED_DART[@]} staged file(s)..."
+dart format --output=none --set-exit-if-changed "${STAGED_DART[@]}"
+
+echo "pre-commit: running dart analyze on ${#STAGED_DART[@]} staged file(s)..."
+dart analyze --fatal-infos --fatal-warnings "${STAGED_DART[@]}"
+
+if ! command -v crap4dart >/dev/null 2>&1; then
+  echo "pre-commit: activating crap4dart..."
+  dart pub global activate --source git https://github.com/IstiN/crap4dart.git >/dev/null
+fi
+
+echo "pre-commit: running crap4dart static gates (loc<=800, complexity<=10, method_size<=60, test_assertions)..."
+crap4dart check --staged --only loc,complexity,method_size,test_assertions,public_docs,duplication,magic_constants,class_size
+
+# 2. Targeted tests + CRAP <= 8 gate on staged lib/ files
+if [ "${#TARGET_TESTS[@]}" -gt 0 ]; then
+  if [ "${#STAGED_LIB[@]}" -gt 0 ]; then
+    TMP_COV="$(mktemp -d "${TMPDIR:-/tmp}/dmdart-precommit.XXXXXX")"
+    trap 'rm -rf "$TMP_COV"' EXIT
+
+    if ! dart pub global list 2>/dev/null | grep -q '^coverage '; then
+      dart pub global activate coverage >/dev/null
+    fi
+
+    echo "pre-commit: running ${#TARGET_TESTS[@]} matching test(s) with coverage for CRAP gate..."
+    dart test --coverage="$TMP_COV/raw" "${TARGET_TESTS[@]}"
+    dart pub global run coverage:format_coverage \
+      --lcov \
+      --in "$TMP_COV/raw" \
+      --out "$TMP_COV/lcov.info" \
+      --report-on lib
+
+    echo "pre-commit: checking CRAP <= 8.0 on ${#STAGED_LIB[@]} staged lib/ file(s)..."
+    crap4dart analyze --threshold 8.0 --lcov "$TMP_COV/lcov.info" "${STAGED_LIB[@]}"
+  else
+    echo "pre-commit: running ${#TARGET_TESTS[@]} staged test(s)..."
+    dart test "${TARGET_TESTS[@]}"
+  fi
+fi

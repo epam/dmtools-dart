@@ -14,11 +14,14 @@ class _XmlNode {
   String text;
 
   _XmlNode.text(String this.text)
-    : name = null,
-      attrs = const {},
-      children = const [];
+      : name = null,
+        attrs = const {},
+        children = const [];
 
-  _XmlNode.tag(String this.name) : attrs = {}, children = [], text = '';
+  _XmlNode.tag(String this.name)
+      : attrs = {},
+        children = [],
+        text = '';
 
   /// Concatenated descendant text (entities unescaped; `<time>` date
   /// lozenges contribute their `datetime` attribute — the Java preprocess
@@ -109,9 +112,6 @@ String _storageNodeToMarkdown(_XmlNode node) {
   final parts = [
     for (final child in node.children) _storageNodeToMarkdown(child),
   ];
-  return _wrapStorage(node, parts);
-}
-
 /// Joins child [parts], merging touching strike runs (`~~A~~~~B~~` →
 /// `~~AB~~`) so adjacent `<del>` siblings never emit `~~~~`.
 String _joinParts(_XmlNode node, List<String> parts) {
@@ -151,6 +151,9 @@ String _strike(String inner) {
   final body = m[2]!;
   if (body.isEmpty) return inner;
   return '${m[1]}~~$body~~${m[3]}';
+}
+
+  return _wrapStorage(node, parts);
 }
 
 /// Wraps already-rendered child [parts] for the storage tag [node.name].
@@ -254,10 +257,10 @@ const _inlineStyleMarkers = <String, String>{
   'em': '*',
   'i': '*',
 };
+  if (_isStrikeTag(node)) return _strike(inner);
 
 /// Inline emphasis/code tags (and unknown tags: children verbatim).
 String _wrapInlineStyle(_XmlNode node, String inner) {
-  if (_isStrikeTag(node)) return _strike(inner);
   final marker = _inlineStyleMarkers[node.name];
   if (marker != null) return '$marker$inner$marker';
   if (node.name == 'code') return '`${node.content}`';
@@ -569,9 +572,8 @@ const Set<String> _rootWrapperTags = {'div', 'body', 'html'};
 List<_XmlNode> _unwrapRootElements(_XmlNode node) {
   var cur = node;
   while (cur.children.length == 1 &&
-      _rootWrapperTags.contains(
-        (cur.children.first.name ?? '').toLowerCase(),
-      )) {
+      _rootWrapperTags
+          .contains((cur.children.first.name ?? '').toLowerCase())) {
     cur = cur.children.first;
   }
   return cur.children;
@@ -584,10 +586,8 @@ List<_DocSection> _splitSections(List<_XmlNode> nodes) {
   for (final node in nodes) {
     final name = (node.name ?? '').toLowerCase();
     if (_storageHeadingTag.hasMatch(name)) {
-      final key = node.content
-          .trim()
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .toLowerCase();
+      final key =
+          node.content.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
       current = (headingKey: key, nodes: <_XmlNode>[node]);
       sections.add(current);
     } else {

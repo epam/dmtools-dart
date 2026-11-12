@@ -353,9 +353,7 @@ extension GithubCiPrTools on GithubClient {
           queryParams: {'per_page': '100', 'page': '$page'},
         );
       } on DioException catch (e) {
-        final code = e.response?.statusCode;
-        if (tolerate404 && code == 404) break;
-        if (tolerate403 && code == 403) break;
+        if (_ghToleratedStatus(e, tolerate404, tolerate403)) break;
         rethrow;
       }
       final decoded = jsonDecode(body);
@@ -365,6 +363,12 @@ extension GithubCiPrTools on GithubClient {
     }
     return out;
   }
+}
+
+/// Whether [e] carries a status the caller asked to treat as end-of-list.
+bool _ghToleratedStatus(DioException e, bool tolerate404, bool tolerate403) {
+  final code = e.response?.statusCode;
+  return (tolerate404 && code == 404) || (tolerate403 && code == 403);
 }
 
 /// Whether [value] is non-null and not whitespace-only.

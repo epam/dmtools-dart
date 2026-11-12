@@ -115,9 +115,50 @@ String _storageNodeToMarkdown(_XmlNode node) {
   return _wrapStorage(node, parts);
 }
 
+/// Joins child [parts], merging touching strike runs (`~~A~~~~B~~` →
+/// `~~AB~~`) so adjacent `<del>` siblings never emit `~~~~`.
+String _joinParts(_XmlNode node, List<String> parts) {
+  final buf = StringBuffer();
+  var prevStrike = false;
+  for (var i = 0; i < parts.length; i++) {
+    final part = parts[i];
+    final strike = _isStrikeTag(node.children[i]);
+    final merge = prevStrike && strike && _touches(buf, part);
+    if (merge) {
+      final text = buf.toString();
+      buf
+        ..clear()
+        ..write(text.substring(0, text.length - 2))
+        ..write(part.substring(2));
+    } else {
+      buf.write(part);
+    }
+    prevStrike = strike;
+  }
+  return buf.toString();
+}
+
+/// Whether [buf] ends and [part] starts with a strike marker.
+bool _touches(StringBuffer buf, String part) =>
+    buf.toString().endsWith('~~') && part.startsWith('~~');
+
+/// Strike tags (`del`/`s`/`strike`, case-insensitive).
+const _strikeTags = {'del', 's', 'strike'};
+bool _isStrikeTag(_XmlNode node) =>
+    _strikeTags.contains(node.name?.toLowerCase());
+
+/// Wraps [inner] in `~~`, moving edge whitespace outside the markers;
+/// whitespace-only content yields just the whitespace.
+String _strike(String inner) {
+  final m = RegExp(r'^(\s*)([\s\S]*?)(\s*)$').firstMatch(inner)!;
+  final body = m[2]!;
+  if (body.isEmpty) return inner;
+  return '${m[1]}~~$body~~${m[3]}';
+}
+
 /// Wraps already-rendered child [parts] for the storage tag [node.name].
 String _wrapStorage(_XmlNode node, List<String> parts) {
-  final inner = parts.join();
+  final inner = _joinParts(node, parts);
   return _wrapHeadingOrParagraph(node, inner) ??
       _wrapListOrStructural(node, inner) ??
       _wrapConfluenceBlock(node, inner) ??
@@ -215,13 +256,11 @@ const _inlineStyleMarkers = <String, String>{
   'b': '**',
   'em': '*',
   'i': '*',
-  'del': '~~',
-  'strike': '~~',
-  's': '~~',
 };
 
 /// Inline emphasis/code tags (and unknown tags: children verbatim).
 String _wrapInlineStyle(_XmlNode node, String inner) {
+  if (_isStrikeTag(node)) return _strike(inner);
   final marker = _inlineStyleMarkers[node.name];
   if (marker != null) return '$marker$inner$marker';
   if (node.name == 'code') return '`${node.content}`';
@@ -230,7 +269,7 @@ String _wrapInlineStyle(_XmlNode node, String inner) {
 
 /// `<span style="…line-through…">` becomes strikethrough; other spans pass through.
 String _wrapStyledSpan(_XmlNode node, String inner) {
-  if (node.name == 'span' && _isLineThrough(node)) return '~~$inner~~';
+  if (node.name == 'span' && _isLineThrough(node)) return _strike(inner);
   return inner;
 }
 

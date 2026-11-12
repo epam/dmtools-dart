@@ -214,3 +214,4 @@ A runner missing either fa variable dies before fa starts: the leg writes no
 mandatory outputs and the SM ping-pongs review ↔ rework forever. The contract
 is enforced by the `faProviderPreconfigTests` pins in
 [test/machine_kit/runner_wiring_test.dart](test/machine_kit/runner_wiring_test.dart).
+

@@ -112,6 +112,9 @@ String _storageNodeToMarkdown(_XmlNode node) {
   final parts = [
     for (final child in node.children) _storageNodeToMarkdown(child),
   ];
+  return _wrapStorage(node, parts);
+}
+
 /// Joins child [parts], merging touching strike runs (`~~A~~~~B~~` →
 /// `~~AB~~`) so adjacent `<del>` siblings never emit `~~~~`.
 String _joinParts(_XmlNode node, List<String> parts) {
@@ -151,9 +154,6 @@ String _strike(String inner) {
   final body = m[2]!;
   if (body.isEmpty) return inner;
   return '${m[1]}~~$body~~${m[3]}';
-}
-
-  return _wrapStorage(node, parts);
 }
 
 /// Wraps already-rendered child [parts] for the storage tag [node.name].
@@ -257,10 +257,10 @@ const _inlineStyleMarkers = <String, String>{
   'em': '*',
   'i': '*',
 };
-  if (_isStrikeTag(node)) return _strike(inner);
 
 /// Inline emphasis/code tags (and unknown tags: children verbatim).
 String _wrapInlineStyle(_XmlNode node, String inner) {
+  if (_isStrikeTag(node)) return _strike(inner);
   final marker = _inlineStyleMarkers[node.name];
   if (marker != null) return '$marker$inner$marker';
   if (node.name == 'code') return '`${node.content}`';

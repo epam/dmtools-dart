@@ -47,11 +47,12 @@ File writeSimpleAgent() {
   write('js/common/util.js', '// util\n');
   write('js/main.js', "var u = require('./common/util.js');\n");
   return write(
-      'my_agent.json',
-      jsonEncode({
-        'name': 'Teammate',
-        'params': {'jsPath': 'agents/js/main.js'},
-      }));
+    'my_agent.json',
+    jsonEncode({
+      'name': 'Teammate',
+      'params': {'jsPath': 'agents/js/main.js'},
+    }),
+  );
 }
 
 /// Reads all zip entry names.
@@ -60,8 +61,11 @@ List<String> zipNames(File zipFile) {
   return archive.files.map((f) => f.name).toList();
 }
 
-PackResult compileAgent(File entry,
-        {String version = '1.0.0', List<String> extraDirs = const []}) =>
+PackResult compileAgent(
+  File entry, {
+  String version = '1.0.0',
+  List<String> extraDirs = const [],
+}) =>
     AgentPackCompiler(agentRoot.path)
         .compile(entry, version, 'abc123', outDir, extraDirs: extraDirs);
 
@@ -84,17 +88,82 @@ void closureTests() {
 
     test('missing referenced file fails with the exact path', () {
       final entry = write(
-          'broken.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {'jsPath': 'agents/js/does_not_exist.js'},
-          }));
+        'broken.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {'jsPath': 'agents/js/does_not_exist.js'},
+        }),
+      );
       expect(
         () => compileAgent(entry),
-        throwsA(isA<AgentPackException>().having(
-            (e) => e.message, 'message', contains('does_not_exist.js'))),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('does_not_exist.js'),
+          ),
+        ),
       );
       expect(outDir.listSync(), isEmpty); // nothing written on failure
+    });
+
+    test(
+      'missing cliPrompts file is skipped with a warning (runtime-generated)',
+      () {
+        write('js/main.js', '// main\n');
+        write('prompts/real.md', 'real');
+        final entry = write(
+          'plan.json',
+          jsonEncode({
+            'name': 'X',
+            'params': {
+              'jsPath': 'agents/js/main.js',
+              'cliPrompts': [
+                './prompts/real.md',
+                {'prompt': './.dmtools/development-mode-plan-appendix.md'},
+              ],
+            },
+          }),
+        );
+        final compiler = AgentPackCompiler(agentRoot.path);
+        final result = compiler.compile(entry, '1.0.0', 'abc123', outDir);
+        final names = zipNames(result.zipFile);
+        expect(names, contains('prompts/real.md'));
+        expect(
+          names,
+          isNot(contains('.dmtools/development-mode-plan-appendix.md')),
+        );
+        expect(
+          compiler.warnings.single,
+          contains('development-mode-plan-appendix.md'),
+        );
+      },
+    );
+
+    test('missing cliPrompts condition still fails hard', () {
+      write('js/main.js', '// main\n');
+      final entry = write(
+        'cond.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {
+            'jsPath': 'agents/js/main.js',
+            'cliPrompts': [
+              {'prompt': 'inline text', 'condition': 'js/missing_cond.js'},
+            ],
+          },
+        }),
+      );
+      expect(
+        () => compileAgent(entry),
+        throwsA(
+          isA<AgentPackException>().having(
+            (e) => e.message,
+            'message',
+            contains('missing_cond.js'),
+          ),
+        ),
+      );
     });
   });
 }
@@ -105,28 +174,32 @@ void referenceKindTests() {
     test('URL and classpath references are ignored', () {
       write('js/main.js', '// main\n');
       final entry = write(
-          'mixed.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {
-              'preJSAction': 'js/main.js',
-              'postJSAction': 'https://github.com/user/repo/blob/main/x.js',
-              'timerJSAction': 'classpath:js/timer.js',
-            },
-          }));
+        'mixed.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {
+            'preJSAction': 'js/main.js',
+            'postJSAction': 'https://github.com/user/repo/blob/main/x.js',
+            'timerJSAction': 'classpath:js/timer.js',
+          },
+        }),
+      );
       expect(compileAgent(entry).zipFile.existsSync(), isTrue);
     });
 
     test('require inside a JSDoc comment is not matched', () {
-      write('js/common/commentMarkup.js',
-          '/**\n * var m = require("./common/commentMarkup.js");\n */\n');
+      write(
+        'js/common/commentMarkup.js',
+        '/**\n * var m = require("./common/commentMarkup.js");\n */\n',
+      );
       write('js/main.js', "var c = require('./common/commentMarkup.js');\n");
       final entry = write(
-          'commented.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {'jsPath': 'agents/js/main.js'},
-          }));
+        'commented.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {'jsPath': 'agents/js/main.js'},
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/common/commentMarkup.js'));
     });
@@ -137,8 +210,7 @@ void referenceKindTests() {
 /// inside string literals must NOT enter the closure as real references.
 void workerSourceTests() {
   group('embedded worker-source strings', () {
-    test(
-        'require inside an embedded worker-source string is not matched '
+    test('require inside an embedded worker-source string is not matched '
         '(dmtools-agents f377609 smAsync workers)', () {
       // githubSource.js embeds runAsync worker bodies as string literals;
       // their `require('./common/smProvider.js')` must NOT be resolved
@@ -158,11 +230,12 @@ void workerSourceTests() {
         ].join('\n'),
       );
       final entry = write(
-          'worker.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {'jsPath': 'js/sm/sources/githubSource.js'},
-          }));
+        'worker.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {'jsPath': 'js/sm/sources/githubSource.js'},
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/common/smProvider.js')); // real require
       expect(names, isNot(contains('js/sm/common/smProvider.js')));
@@ -175,8 +248,9 @@ void manifestTests() {
   group('AgentPackCompiler manifest', () {
     test('carries agent, version, files with sha256+mode', () {
       final result = compileAgent(writeSimpleAgent(), version: '1.2.0');
-      final manifest = jsonDecode(result.manifestFile.readAsStringSync())
-          as Map<String, dynamic>;
+      final manifest = jsonDecode(
+        result.manifestFile.readAsStringSync(),
+      ) as Map<String, dynamic>;
 
       expect(manifest['agent'], 'my_agent');
       expect(manifest['version'], '1.2.0');
@@ -185,8 +259,9 @@ void manifestTests() {
       expect(manifest.containsKey('minDmtoolsVersion'), isTrue);
 
       final files = manifest['files'] as List;
-      final main = files.firstWhere((f) => (f as Map)['path'] == 'js/main.js')
-          as Map<String, dynamic>;
+      final main = files.firstWhere(
+        (f) => (f as Map)['path'] == 'js/main.js',
+      ) as Map<String, dynamic>;
       expect((main['sha256'] as String).length, 64);
       expect(main['mode'], '0644');
     });
@@ -214,13 +289,14 @@ void scriptsTests() {
       write('scripts/providers/_common.sh', '# common\n');
       write('scripts/providers/claude.sh', '# claude\n');
       final entry = write(
-          'with_scripts.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {
-              'cliCommands': ['./agents/scripts/run-agent.sh']
-            },
-          }));
+        'with_scripts.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {
+            'cliCommands': ['./agents/scripts/run-agent.sh'],
+          },
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('scripts/run-agent.sh'));
       expect(names, contains('scripts/providers/_common.sh'));
@@ -230,20 +306,21 @@ void scriptsTests() {
     test('shell scripts carry 0755 mode in the manifest', () {
       write('scripts/run-agent.sh', '#!/bin/bash\necho hi\n');
       final entry = write(
-          'mode_agent.json',
-          jsonEncode({
-            'name': 'X',
-            'params': {
-              'cliCommands': ['./agents/scripts/run-agent.sh']
-            },
-          }));
-      final manifest =
-          jsonDecode(compileAgent(entry).manifestFile.readAsStringSync())
-              as Map<String, dynamic>;
+        'mode_agent.json',
+        jsonEncode({
+          'name': 'X',
+          'params': {
+            'cliCommands': ['./agents/scripts/run-agent.sh'],
+          },
+        }),
+      );
+      final manifest = jsonDecode(
+        compileAgent(entry).manifestFile.readAsStringSync(),
+      ) as Map<String, dynamic>;
       final files = manifest['files'] as List;
-      final sh =
-          files.firstWhere((f) => (f as Map)['path'] == 'scripts/run-agent.sh')
-              as Map;
+      final sh = files.firstWhere(
+        (f) => (f as Map)['path'] == 'scripts/run-agent.sh',
+      ) as Map;
       expect(sh['mode'], '0755');
     });
   });
@@ -255,21 +332,23 @@ void prefixNormalizationTests() {
     test('parent.path chain config is included in the pack', () {
       write('js/base.js', '// base\n');
       write(
-          'base_config.json',
-          jsonEncode({
-            'name': 'Base',
-            'params': {'jsPath': 'agents/js/base.js'},
-          }));
+        'base_config.json',
+        jsonEncode({
+          'name': 'Base',
+          'params': {'jsPath': 'agents/js/base.js'},
+        }),
+      );
       final entry = write(
-          'child_config.json',
-          jsonEncode({
-            'name': 'Child',
-            'parent': {
-              'path': 'agents/base_config.json',
-              'override': ['params.agentParams']
-            },
-            'params': <String, dynamic>{},
-          }));
+        'child_config.json',
+        jsonEncode({
+          'name': 'Child',
+          'parent': {
+            'path': 'agents/base_config.json',
+            'override': ['params.agentParams'],
+          },
+          'params': <String, dynamic>{},
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('base_config.json'));
       expect(names, contains('js/base.js'));
@@ -279,14 +358,15 @@ void prefixNormalizationTests() {
       write('js/a.js', '// a\n');
       write('js/b.js', '// b\n');
       final entry = write(
-          'dual.json',
-          jsonEncode({
-            'name': 'Dual',
-            'params': {
-              'preJSAction': 'agents/js/a.js',
-              'postJSAction': 'js/b.js',
-            },
-          }));
+        'dual.json',
+        jsonEncode({
+          'name': 'Dual',
+          'params': {
+            'preJSAction': 'agents/js/a.js',
+            'postJSAction': 'js/b.js',
+          },
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/a.js'));
       expect(names, contains('js/b.js'));
@@ -306,39 +386,41 @@ void prefixNormalizationTests() {
 
 void conditionalCliPromptsTests() {
   group('AgentPackCompiler conditional cliPrompts', () {
-    test(
-        'structured conditional cliPrompts and cliPromptsByTracker embed prompt and condition JS with transitive requires',
-        () {
+    test('structured conditional cliPrompts and cliPromptsByTracker embed prompt and condition JS with transitive requires', () {
       write('prompts/codegraph_tools.md', '# CodeGraph\n');
       write('prompts/jira_tools.md', '# Jira\n');
-      write('js/common/cgHelper.js',
-          'exports.check = function() { return true; };\n');
-      write('js/conditions/isCodeGraphAvailable.js',
-          "var h = require('../common/cgHelper.js');\nfunction action() { return h.check(); }\n");
+      write(
+        'js/common/cgHelper.js',
+        'exports.check = function() { return true; };\n',
+      );
+      write(
+        'js/conditions/isCodeGraphAvailable.js',
+        "var h = require('../common/cgHelper.js');\nfunction action() { return h.check(); }\n",
+      );
       final entry = write(
-          'cond_agent.json',
-          jsonEncode({
-            'name': 'CondAgent',
-            'params': {
-              'cliPrompts': [
+        'cond_agent.json',
+        jsonEncode({
+          'name': 'CondAgent',
+          'params': {
+            'cliPrompts': [
+              {
+                'id': 'codegraph',
+                'prompt': './agents/prompts/codegraph_tools.md',
+                'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+              },
+            ],
+            'cliPromptsByTracker': {
+              'jira': [
                 {
-                  'id': 'codegraph',
-                  'prompt': './agents/prompts/codegraph_tools.md',
-                  'condition': 'agents/js/conditions/isCodeGraphAvailable.js',
+                  'id': 'jira_cg',
+                  'prompts': ['./agents/prompts/jira_tools.md'],
+                  'condition': './agents/js/conditions/isCodeGraphAvailable.js',
                 },
               ],
-              'cliPromptsByTracker': {
-                'jira': [
-                  {
-                    'id': 'jira_cg',
-                    'prompts': ['./agents/prompts/jira_tools.md'],
-                    'condition':
-                        './agents/js/conditions/isCodeGraphAvailable.js',
-                  },
-                ],
-              },
             },
-          }));
+          },
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('prompts/codegraph_tools.md'));
       expect(names, contains('prompts/jira_tools.md'));
@@ -350,24 +432,25 @@ void conditionalCliPromptsTests() {
 
 void thenActionClosureTests() {
   group('AgentPackCompiler thenAction closure', () {
-    test(
-        'customParams.contentOutput.thenAction embeds bare JS script and transitive requires',
-        () {
+    test('customParams.contentOutput.thenAction embeds bare JS script and transitive requires', () {
       write('js/common/assignHelper.js', 'exports.assign = function() {};\n');
-      write('js/assignForSolutionArchitecture.js',
-          "var a = require('./common/assignHelper.js');\nfunction action() { a.assign(); }\n");
+      write(
+        'js/assignForSolutionArchitecture.js',
+        "var a = require('./common/assignHelper.js');\nfunction action() { a.assign(); }\n",
+      );
       final entry = write(
-          'story_ac.json',
-          jsonEncode({
-            'name': 'StoryAC',
-            'params': {
-              'customParams': {
-                'contentOutput': {
-                  'thenAction': 'assignForSolutionArchitecture.js',
-                },
+        'story_ac.json',
+        jsonEncode({
+          'name': 'StoryAC',
+          'params': {
+            'customParams': {
+              'contentOutput': {
+                'thenAction': 'assignForSolutionArchitecture.js',
               },
             },
-          }));
+          },
+        }),
+      );
       final names = zipNames(compileAgent(entry).zipFile);
       expect(names, contains('js/assignForSolutionArchitecture.js'));
       expect(names, contains('js/common/assignHelper.js'));
@@ -384,8 +467,9 @@ void extraDirsTests() {
       final entry = writeSimpleAgent();
       write('instructions/pr_review/rules.md', '# rules\n');
       write('instructions/common/format.md', '# format\n');
-      final names =
-          zipNames(compileAgent(entry, extraDirs: ['instructions']).zipFile);
+      final names = zipNames(
+        compileAgent(entry, extraDirs: ['instructions']).zipFile,
+      );
       expect(names, contains('instructions/pr_review/rules.md'));
       expect(names, contains('instructions/common/format.md'));
       expect(
@@ -398,8 +482,9 @@ void extraDirsTests() {
     test('strips a leading agents/ prefix from the include dir', () {
       final entry = writeSimpleAgent();
       write('prompts/bash_tools.md', '# tools\n');
-      final names =
-          zipNames(compileAgent(entry, extraDirs: ['agents/prompts']).zipFile);
+      final names = zipNames(
+        compileAgent(entry, extraDirs: ['agents/prompts']).zipFile,
+      );
       expect(names, contains('prompts/bash_tools.md'));
     });
 
@@ -455,11 +540,12 @@ var s = 'not // a comment';
 /// live dmtools-agents pullRequest.js desync.
 void scrubForScanTests() {
   group('scrubForScan (gh-371: regex literals with quotes)', () {
-    test('an escaped backtick in a regex no longer swallows later requires',
-        () {
-      // Mirror of dmtools-agents js/common/pullRequest.js:48 + :154 —
-      // the live case that shipped pr_review packs without mergeState.js.
-      const src = '''
+    test(
+      'an escaped backtick in a regex no longer swallows later requires',
+      () {
+        // Mirror of dmtools-agents js/common/pullRequest.js:48 + :154 —
+        // the live case that shipped pr_review packs without mergeState.js.
+        const src = '''
 function shellEscape(v) {
     return String(v === null || v === undefined ? '' : v)
         .replace(/"/g, '\\\\"')
@@ -469,13 +555,18 @@ function shellEscape(v) {
 var MAX = 60000;
 var mergeState = require('./mergeState.js');
 ''';
-      final scrubbed = AgentPackCompiler.scrubForScan(src);
-      final re =
-          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
-      expect(re.allMatches(scrubbed).length, 1,
-          reason: 'the require must survive the regex-literal region');
-      expect(scrubbed.length, src.length, reason: 'length-preserving');
-    });
+        final scrubbed = AgentPackCompiler.scrubForScan(src);
+        final re = RegExp(
+          r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''',
+        );
+        expect(
+          re.allMatches(scrubbed).length,
+          1,
+          reason: 'the require must survive the regex-literal region',
+        );
+        expect(scrubbed.length, src.length, reason: 'length-preserving');
+      },
+    );
 
     test('quotes inside regex literals do not open phantom strings', () {
       const src = '''
@@ -513,8 +604,9 @@ var msg = `outer \${cond ? `in\${deep}er` : 'plain'} tail`;
 var u = require('./util.js');
 ''';
       final scrubbed = AgentPackCompiler.scrubForScan(src);
-      final re =
-          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
+      final re = RegExp(
+        r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''',
+      );
       expect(re.allMatches(scrubbed).length, 1);
     });
 
@@ -525,12 +617,15 @@ var s = "require('./never.js')";
 var u = require('./real.js');
 ''';
       final scrubbed = AgentPackCompiler.scrubForScan(src);
-      final re =
-          RegExp(r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''');
+      final re = RegExp(
+        r'''(?:require|loadModule)\(\s*['"]([^'"]+)['"]\s*\)''',
+      );
       final matches = re.allMatches(scrubbed).toList();
       expect(matches.length, 1);
-      expect(src.substring(matches[0].start, matches[0].end),
-          contains('./real.js'));
+      expect(
+        src.substring(matches[0].start, matches[0].end),
+        contains('./real.js'),
+      );
     });
   });
 }
@@ -550,11 +645,12 @@ function action(params) { return ms.ok; }
 ''');
       write('js/main.js', "var pr = require('./common/pullRequest.js');\n");
       final entry = write(
-          'my_agent.json',
-          jsonEncode({
-            'name': 'Teammate',
-            'params': {'jsPath': 'agents/js/main.js'},
-          }));
+        'my_agent.json',
+        jsonEncode({
+          'name': 'Teammate',
+          'params': {'jsPath': 'agents/js/main.js'},
+        }),
+      );
 
       final result = AgentPackCompiler(agentRoot.path)
           .compile(entry, '0.1.0', 'deadbeef', outDir);

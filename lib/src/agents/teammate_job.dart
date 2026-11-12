@@ -25,6 +25,7 @@ import 'github_tracker_client.dart';
 import 'cli_agent_params.dart';
 import 'input_context_config.dart';
 import 'ticket_smart_sources.dart';
+import 'tracker_selection.dart';
 
 /// Fetches the hydrated tickets for [inputJql]: each ticket is a raw tracker
 /// JSON map with at least `key` and `fields` (comments included).
@@ -105,7 +106,12 @@ class TeammateJob {
       _consumePreparedInput();
       return _runSingle(prepared);
     }
-    _sourceIsGithub = looksLikeGithubQuery(inputJql);
+    // GitHub when the query is GitHub-shaped, or when the tracker
+    // selection (DEFAULT_TRACKER=github, or GitHub as the only configured
+    // tracker) resolves to GitHub — Java ServerManagedIntegrationsModule
+    // parity (epam/dm.ai#730).
+    _sourceIsGithub = looksLikeGithubQuery(inputJql) ||
+        resolveTrackerType(propertyReader ?? PropertyReader()) == 'github';
     final source = ticketSource ??
         (_sourceIsGithub ? githubIssueTicketSource : jiraTicketSource);
     final tickets = await source(inputJql);

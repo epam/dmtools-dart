@@ -28,6 +28,7 @@ import '../mcp/tool_registry.dart';
 import 'package:path/path.dart' as p;
 import 'package:quickjs_runtime/quickjs_runtime.dart';
 
+import 'js_env_shim.dart';
 import 'loader_read_host.dart';
 import 'sync_tool_dispatcher.dart';
 
@@ -100,6 +101,7 @@ class ToolBridge {
     runtime.registerHostFunction('__fileReadHost', _fileReadHost);
     runtime.registerHostFunction('__loaderReadHost', loaderReadHost);
     runtime.registerHostFunction('__setEnvVariableHost', _setEnvVariable);
+    runtime.registerHostFunction('__jsGetenvHost', jsGetenvHost);
     _registerConsole(runtime, _consolePrefix);
   }
 
@@ -109,6 +111,7 @@ class ToolBridge {
   /// function keeps precedence over any generated wrapper.
   void installHostWrappers(QuickjsRuntime runtime) {
     runtime.eval(hostFunctionsBootstrap, filename: '<host_functions>');
+    runtime.eval(jsEnvShimBootstrap, filename: '<java_env_shim>');
   }
 
   /// Dispatch table for synchronous file tool execution.

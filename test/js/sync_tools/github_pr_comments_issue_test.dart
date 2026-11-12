@@ -51,6 +51,19 @@ void main() {
     expect(comments.map((c) => c['id']), [21]);
   });
 
+  test('github_get_pr_comments tolerates a 403 inline page (fine-grained PAT)',
+      () {
+    // epam/dm.ai#730: fine-grained PATs get 403 on /pulls/{n}/comments;
+    // treated like the plain-issue 404 — discussion comments still return.
+    final result = tools.handlers['github_get_pr_comments']!({
+      'workspace': 'o',
+      'repository': 'r',
+      'pullRequestId': '11',
+    });
+    final comments = jsonDecode(result) as List;
+    expect(comments.map((c) => c['id']), [23]);
+  });
+
   test('github_get_pr_comments still errors when both pages are missing', () {
     // The tolerance is inline-page-only: a 404 discussion page means the
     // caller asked for a comment listing that does not exist.

@@ -48,11 +48,31 @@ bool looksLikeGithubQuery(String inputJql) {
     'type:issue',
   ];
   if (markers.any(t.contains)) return true;
+  if (parseGithubIssueKeys(inputJql).isNotEmpty) return true;
   // Direct-issue forms: `repo:o/r#42`, `#42`, `gh-42`, `42`.
   return RegExp(
     r'^(repo:[\w./-]+#\d+|#\d+|gh-\d+|\d+)$',
     caseSensitive: false,
   ).hasMatch(inputJql.trim());
+}
+
+/// One GitHub issue key: `owner/repo#N` or `gh-N` (case-insensitive) —
+/// Java `GitHubTrackerClient.ISSUE_KEY` parity (epam/dm.ai#730).
+final RegExp _issueKey =
+    RegExp(r'^(?:[\w.-]+/[\w.-]+#\d+|gh-\d+)$', caseSensitive: false);
+
+/// Java `GitHubTrackerClient.parseIssueKeys`: when [query] is solely a
+/// comma/whitespace-separated list of issue keys, returns them in order;
+/// otherwise (blank, or any non-key token) returns an empty list.
+List<String> parseGithubIssueKeys(String? query) {
+  final trimmed = query?.trim() ?? '';
+  if (trimmed.isEmpty) return const [];
+  final keys = <String>[];
+  for (final token in trimmed.split(RegExp(r'[\s,]+'))) {
+    if (!_issueKey.hasMatch(token)) return const [];
+    keys.add(token);
+  }
+  return keys;
 }
 
 /// Expands `${VAR}` refs from [env] (defaults to the process environment);
@@ -91,6 +111,15 @@ class GithubIssueSource {
     if (effective.isEmpty) return const [];
     final single = _parseSingleIssue(effective);
     if (single != null) return [await _fetchIssue(single.$1, single.$2)];
+    // Key list (`o/r#1, o/r#2`, `gh-3 gh-4`): fetch each issue directly —
+    // Java `searchAndPerform` parity (epam/dm.ai#730), no search call.
+    final keys = parseGithubIssueKeys(effective);
+    if (keys.isNotEmpty) {
+      return [
+        for (final key in keys)
+          await _fetchIssue(_repoForKey(key, effective), _numberOf(key)),
+      ];
+    }
     final repo = _resolveRepo(effective);
     final searchPath =
         '/search/issues?per_page=50&q=${Uri.encodeQueryComponent(effective)}';
@@ -126,6 +155,16 @@ class GithubIssueSource {
     }
     return (repo, int.parse(bare));
   }
+
+  /// Repo of a parsed issue key: inline for `owner/repo#N`, else the
+  /// `GITHUB_REPOSITORY` env (same resolution as the single `gh-N` form).
+  String _repoForKey(String key, String effective) {
+    final hash = key.indexOf('#');
+    return hash > 0 ? key.substring(0, hash) : _resolveRepo(effective);
+  }
+
+  static int _numberOf(String key) =>
+      int.parse(RegExp(r'(\d+)$').firstMatch(key)!.group(1)!);
 
   /// Issue + comments hydration for one issue number.
   Future<Map<String, dynamic>> _fetchIssue(String repo, int number) async {

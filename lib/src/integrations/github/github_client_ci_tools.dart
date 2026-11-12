@@ -141,6 +141,7 @@ extension GithubCiPrTools on GithubClient {
     for (final comment in await _ghPaginated(
       'repos/$workspace/$repository/pulls/$pullRequestId/comments',
       tolerate404: true,
+      tolerate403: true,
     )) {
       activities.add({'action': 'COMMENTED', 'comment': comment});
     }
@@ -335,11 +336,13 @@ extension GithubCiPrTools on GithubClient {
   /// GETs all pages of a JSON-array endpoint (100 per page).
   ///
   /// With [tolerate404] a 404 simply ends the listing (plain issues have no
-  /// `pulls/{id}/comments` endpoint — Java `GitHubIssues` parity); any
-  /// other failure rethrows.
+  /// `pulls/{id}/comments` endpoint — Java `GitHubIssues` parity); with
+  /// [tolerate403] a 403 does too (fine-grained PATs get 403 on that
+  /// endpoint — epam/dm.ai#730). Any other failure rethrows.
   Future<List<Map<String, dynamic>>> _ghPaginated(
     String endpoint, {
     bool tolerate404 = false,
+    bool tolerate403 = false,
   }) async {
     final out = <Map<String, dynamic>>[];
     for (var page = 1;; page++) {
@@ -350,7 +353,9 @@ extension GithubCiPrTools on GithubClient {
           queryParams: {'per_page': '100', 'page': '$page'},
         );
       } on DioException catch (e) {
-        if (tolerate404 && e.response?.statusCode == 404) break;
+        final code = e.response?.statusCode;
+        if (tolerate404 && code == 404) break;
+        if (tolerate403 && code == 403) break;
         rethrow;
       }
       final decoded = jsonDecode(body);

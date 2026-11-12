@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
@@ -175,6 +176,43 @@ void prActivitiesTests() {
       expect(activities[2]['comment']['body'], 'inline note');
       expect(activities[3]['comment']['body'], 'discussion');
       expect(reviewPage, 1, reason: 'a short page stops the pagination');
+    });
+
+    for (final code in [403, 404]) {
+      test('tolerates $code on the inline page (epam/dm.ai#730)', () async {
+        final f = mockGithub((o) {
+          if (o.path.endsWith('/pulls/75/comments')) {
+            throw DioException.badResponse(
+              statusCode: code,
+              requestOptions: o,
+              response: Response(requestOptions: o, statusCode: code),
+            );
+          }
+          if (o.path.endsWith('/issues/75/comments')) return _discussionPage;
+          return '[]';
+        });
+        final activities =
+            await f.client.pullRequestActivities('epm', 'dm.ai', '75');
+        expect(activities, hasLength(1));
+        expect(activities[0]['comment']['body'], 'discussion');
+      });
+    }
+
+    test('rethrows other inline-page failures', () async {
+      final f = mockGithub((o) {
+        if (o.path.endsWith('/pulls/76/comments')) {
+          throw DioException.badResponse(
+            statusCode: 401,
+            requestOptions: o,
+            response: Response(requestOptions: o, statusCode: 401),
+          );
+        }
+        return '[]';
+      });
+      await expectLater(
+        f.client.pullRequestActivities('epm', 'dm.ai', '76'),
+        throwsA(isA<DioException>()),
+      );
     });
   });
 }

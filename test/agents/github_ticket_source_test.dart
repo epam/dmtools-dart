@@ -8,6 +8,7 @@ void main() {
   envExpansionTests();
   fetchTests();
   singleIssueTests();
+  keyListTests();
 }
 
 void routingTests() {
@@ -182,6 +183,60 @@ void singleIssueTests() {
         env: const {},
       );
       expect(() => source.fetch('#42'), throwsA(isA<StateError>()));
+    });
+  });
+}
+
+/// Key-list `inputJql` — Java `GitHubTrackerClient.searchAndPerform`
+/// parity (epam/dm.ai#730).
+void keyListTests() {
+  group('parseGithubIssueKeys', () {
+    test('accepts comma/space separated owner/repo#N and gh-N keys', () {
+      expect(parseGithubIssueKeys('o/r#7, o/r#42'), ['o/r#7', 'o/r#42']);
+      expect(parseGithubIssueKeys(' GH-1 gh-2,o.x/r-y_z#3 '),
+          ['GH-1', 'gh-2', 'o.x/r-y_z#3']);
+    });
+    test('any non-key token or blank yields an empty list', () {
+      expect(parseGithubIssueKeys('o/r#7 is:open'), isEmpty);
+      expect(parseGithubIssueKeys('repo:o/r is:issue'), isEmpty);
+      expect(parseGithubIssueKeys('#7'), isEmpty);
+      expect(parseGithubIssueKeys('   '), isEmpty);
+      expect(parseGithubIssueKeys(null), isEmpty);
+    });
+    test('key lists route to the GitHub source', () {
+      expect(looksLikeGithubQuery('o/r#7, o/r#42'), isTrue);
+    });
+  });
+
+  group('key-list fetch', () {
+    test('fetches each issue directly, no search call', () async {
+      final calls = <String>[];
+      final source = GithubIssueSource(
+        getJson: (path) => fakeGithubApi(calls, path),
+        env: const {},
+      );
+      final tickets = await source.fetch('o/r#7, o/r#42');
+      expect(tickets.map((t) => t['key']), ['GH-7', 'GH-42']);
+      expect(calls.any((c) => c.startsWith('/search/')), isFalse);
+    });
+    test('gh-N keys resolve the repo from GITHUB_REPOSITORY', () async {
+      final calls = <String>[];
+      final source = GithubIssueSource(
+        getJson: (path) => fakeGithubApi(calls, path),
+        env: {'GITHUB_REPOSITORY': 'o/r'},
+      );
+      final tickets = await source.fetch('gh-7 GH-42');
+      expect(tickets.map((t) => t['key']), ['GH-7', 'GH-42']);
+      expect(calls.any((c) => c.startsWith('/search/')), isFalse);
+    });
+    test('mixed query still uses search', () async {
+      final calls = <String>[];
+      final source = GithubIssueSource(
+        getJson: (path) => fakeGithubApi(calls, path),
+        env: const {},
+      );
+      await source.fetch('repo:o/r is:issue');
+      expect(calls.first, startsWith('/search/issues'));
     });
   });
 }

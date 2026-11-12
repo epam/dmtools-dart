@@ -60,6 +60,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../config/property_reader.dart';
 import 'job_runner.dart';
 
 /// Parsed `run_all.json` (JSRunner job config) — everything the suite
@@ -769,6 +770,11 @@ ChunkOutcome _evalChunk(ShardInvocation chunk) {
   final prefix = '[chunk ${chunk.index + 1}/${chunk.total}] ';
   final fileCount = (chunk.jobParams['testFiles'] as List?)?.length ?? 0;
   stderr.writeln('$prefix▶ start ($fileCount files to eval)');
+  // Unit tests run hermetic: the `java.lang.System.getenv` shim resolves
+  // through PropertyReader, so without isolation the CI runner's
+  // GITHUB_REPOSITORY / GITHUB_RUN_ID would leak into agent unit tests.
+  final wasIsolated = PropertyReader.testIsolation;
+  PropertyReader.testIsolation = true;
   try {
     final result = const JsJobRunner().runScript(
       scriptPath: chunk.scriptPath,
@@ -782,5 +788,7 @@ ChunkOutcome _evalChunk(ShardInvocation chunk) {
     return ChunkOutcome(index: chunk.index, result: result);
   } catch (e) {
     return ChunkOutcome.crashed(chunk.index, '$e');
+  } finally {
+    PropertyReader.testIsolation = wasIsolated;
   }
 }

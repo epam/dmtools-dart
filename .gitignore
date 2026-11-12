@@ -57,8 +57,8 @@ native/quickjs/*.dylib
 
 # CodeGraph generated index - regenerated per-run, must never be committed
 .codegraph/
-agents/
-agents/
+# Root-level agents checkout only — lib/src/agents and test/agents are source.
+/agents/
 
 # Playwright CLI session artifacts (console logs, page snapshots) — local run output.
 .playwright-cli/

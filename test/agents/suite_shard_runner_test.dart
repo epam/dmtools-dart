@@ -626,34 +626,32 @@ class FixtureTree {
   /// (copied read-only from the checked-out agents/ submodule).
   FixtureTree.fromRealRunner(String agentsPath) {
     root.createSync(recursive: true);
+    // Copy the runner, its top-level base modules and the whole js/common
+    // tree: the upstream preload graph grows with agents main, so a fixed
+    // file list goes stale (each new js/common leaf broke this test).
     for (final rel in [
       'js/unit-tests/testRunner.js',
       'js/config.js',
-      'js/common/scm.js',
-      // Upstream testRunner pre-loads machineNotice as a base module
-      // (added with the network guard, 2026-10) — the minimal tree must
-      // carry everything the preload reads.
-      'js/common/machineNotice.js',
       'js/configLoader.js',
-      // Preload inventory window: agents main testRunner preloads scmReal()
-      // and its gh-1248 leaf modules. Copied best-effort.
-      'js/common/reviewThreadInventory.js',
-      'js/common/githubReviewFetch.js',
-      'js/common/pullRequest.js',
-      'js/common/mergeState.js',
-      'js/common/loseJson.js',
-      'js/common/machineAuthor.js',
-      'js/common/legRunVocab.js',
-      'js/common/reviewVerdicts.js',
-      'js/common/remoteProjectConfig.js',
-      'js/common/branchSetup.js',
     ]) {
-      final src = File('$agentsPath/$rel');
-      if (!src.existsSync()) continue;
-      final dst = File('${root.path}/$rel');
-      dst.createSync(recursive: true);
-      dst.writeAsStringSync(src.readAsStringSync());
+      _copyIfPresent(agentsPath, rel);
     }
+    final common = Directory('$agentsPath/js/common');
+    if (common.existsSync()) {
+      for (final entity in common.listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.js')) continue;
+        _copyIfPresent(
+            agentsPath, entity.path.substring(agentsPath.length + 1));
+      }
+    }
+  }
+
+  void _copyIfPresent(String agentsPath, String rel) {
+    final src = File('$agentsPath/$rel');
+    if (!src.existsSync()) return;
+    final dst = File('${root.path}/$rel');
+    dst.createSync(recursive: true);
+    dst.writeAsStringSync(src.readAsStringSync());
   }
 
   final Directory root = Directory.systemTemp.createTempSync('agents_fixture_');

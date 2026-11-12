@@ -23,8 +23,10 @@ typedef PrCommentPages = ({
 /// "no comments", so a non-OK page surfaces as a [StateError] instead;
 /// callers convert it into a sync tool error result.
 ///
-/// [tolerateNotFound] treats a 404 as an empty listing: GitHub answers
-/// 404 for `/pulls/{n}/comments` when `n` is a plain issue (not a PR),
+/// [tolerateNotFound] treats a 404 or 403 as an empty listing: GitHub
+/// answers 404 for `/pulls/{n}/comments` when `n` is a plain issue (not a
+/// PR), and 403 "Resource not accessible by personal access token" for a
+/// fine-grained PAT on the same request (epam/dm.ai#730 parity),
 /// and the agents' tracker layer (`js/common/trackers.js`
 /// `githubGetComments`) relies on the runtime tolerating that — the
 /// review-comments page is simply empty for issues. All other non-OK
@@ -46,7 +48,10 @@ List<Map<String, dynamic>> fetchCommentPages({
     final resp = SyncHttpClient.get('$urlBase?per_page=100&page=$page',
         headers: headers);
     if (!resp.isOk) {
-      if (tolerateNotFound && resp.statusCode == 404) break;
+      if (tolerateNotFound &&
+          (resp.statusCode == 404 || resp.statusCode == 403)) {
+        break;
+      }
       throw StateError('HTTP ${resp.statusCode} fetching comments '
           '(page $page): ${resp.body}');
     }

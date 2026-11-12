@@ -8,6 +8,7 @@ export 'src/agents/cli_agent.dart';
 export 'src/agents/cli_agent_params.dart';
 export 'src/agents/github_ticket_source.dart';
 export 'src/agents/github_tracker_client.dart';
+export 'src/agents/tracker_selection.dart';
 export 'src/agents/cli_command_builder.dart';
 export 'src/agents/cli_execution_helper.dart';
 export 'src/agents/instruction_processor.dart';

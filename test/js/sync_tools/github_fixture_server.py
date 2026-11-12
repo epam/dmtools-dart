@@ -360,6 +360,23 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
                 ],
             )
             return
+        # Fine-grained PAT on issue #11: 403 for the review-comments page
+        # (epam/dm.ai#730), discussion page served normally.
+        if base.endswith("/pulls/11/comments"):
+            self._record(body)
+            self._respond(
+                403,
+                '{"message": "Resource not accessible by personal access token"}',
+            )
+            return
+        if base.endswith("/issues/11/comments"):
+            self._record(body)
+            self._respond(
+                200,
+                [{"id": 23, "body": "pat issue discussion",
+                  "created_at": "2026-09-12T10:00:00Z"}],
+            )
+            return
         # Missing #8: both pages 404 — the error must still surface.
         if base.endswith("/pulls/8/comments"):
             self._record(body)

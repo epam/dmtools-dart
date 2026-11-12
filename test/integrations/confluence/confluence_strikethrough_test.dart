@@ -60,15 +60,15 @@ void _nestingTests() {
   group('strike nesting', () {
     test(
       'strong around del',
-      () => _check(
-        '<strong><del>Title</del></strong><del> text</del>',
+      () => expect(
+        _md('<strong><del>Title</del></strong><del> text</del>'),
         '**~~Title~~** ~~text~~',
       ),
     );
     test(
       'strong inside del',
-      () => _check(
-        '<del><strong>Title</strong> text</del>',
+      () => expect(
+        _md('<del><strong>Title</strong> text</del>'),
         '~~**Title** text~~',
       ),
     );

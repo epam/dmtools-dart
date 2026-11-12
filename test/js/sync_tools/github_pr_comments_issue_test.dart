@@ -21,6 +21,11 @@ void main() {
 
   late GithubFixtureServer fx;
   late GitHubSyncTools tools;
+  String call(String id) => tools.handlers['github_get_pr_comments']!({
+        'workspace': 'o',
+        'repository': 'r',
+        'pullRequestId': id,
+      });
 
   setUp(() async {
     fx = GithubFixtureServer();
@@ -42,11 +47,7 @@ void main() {
     // 404 when n is a plain issue (only PRs have review comments) — the
     // runtime treats that page as empty and still returns the discussion
     // page, so the tracker layer can read issue comments.
-    final result = tools.handlers['github_get_pr_comments']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '9',
-    });
+    final result = call('9');
     final comments = jsonDecode(result) as List;
     expect(comments.map((c) => c['id']), [21]);
   });
@@ -55,11 +56,7 @@ void main() {
       () {
     // epam/dm.ai#730: fine-grained PATs get 403 on /pulls/{n}/comments;
     // treated like the plain-issue 404 — discussion comments still return.
-    final result = tools.handlers['github_get_pr_comments']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '11',
-    });
+    final result = call('11');
     final comments = jsonDecode(result) as List;
     expect(comments.map((c) => c['id']), [23]);
   });
@@ -67,11 +64,7 @@ void main() {
   test('github_get_pr_comments still errors when both pages are missing', () {
     // The tolerance is inline-page-only: a 404 discussion page means the
     // caller asked for a comment listing that does not exist.
-    final result = tools.handlers['github_get_pr_comments']!({
-      'workspace': 'o',
-      'repository': 'r',
-      'pullRequestId': '8',
-    });
+    final result = call('8');
     final decoded = jsonDecode(result) as Map<String, dynamic>;
     expect(decoded['error'], contains('HTTP 404'));
   });

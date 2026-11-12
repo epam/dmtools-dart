@@ -13,7 +13,11 @@ void main() {
     PropertyReader.testEnvironment.clear();
   });
   tearDown(PropertyReader.clearOverrides);
+  _getenvTests();
+  _jsGlobalTests();
+}
 
+void _getenvTests() {
   group('jsGetenv', () {
     test('allow-list matches the Java contract', () {
       expect(jsReadableEnvNames, {
@@ -46,7 +50,9 @@ void main() {
       expect(jsGetenvHost('{', lookup: lookup), 'null');
     });
   });
+}
 
+void _jsGlobalTests() {
   group('JS global', () {
     String? run(String body) => const JsJobRunner().runScript(
           scriptPath: 'function action(params) { $body }',

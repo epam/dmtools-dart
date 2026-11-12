@@ -148,72 +148,79 @@ void prCommentManagementTests() {
 /// `github_get_pr_activities` — reviews + wrapped inline + issue comments.
 void prActivitiesTests() {
   group('GithubClient.pullRequestActivities', () {
-    test('aggregates reviews, inline comments, and discussion comments',
-        () async {
-      var reviewPage = 0;
-      var inlinePage = 0;
-      var issuePage = 0;
-      final f = mockGithub((o) {
-        if (o.path.endsWith('/pulls/74/reviews')) {
-          return reviewPage++ == 0 ? _reviewsPage1 : '[]';
-        }
-        if (o.path.endsWith('/pulls/74/comments')) {
-          return inlinePage++ == 0 ? _inlinePage : '[]';
-        }
-        if (o.path.endsWith('/issues/74/comments')) {
-          return issuePage++ == 0 ? _discussionPage : '[]';
-        }
-        return '{}';
-      });
-      final activities =
-          await f.client.pullRequestActivities('epm', 'dm.ai', '74');
-      expect(activities, hasLength(4));
-      // Reviews first, raw JSON.
-      expect(activities[0]['state'], 'APPROVED');
-      expect(activities[1]['state'], 'CHANGES_REQUESTED');
-      // Comments wrapped as COMMENTED activities.
-      expect(activities[2]['action'], 'COMMENTED');
-      expect(activities[2]['comment']['body'], 'inline note');
-      expect(activities[3]['comment']['body'], 'discussion');
-      expect(reviewPage, 1, reason: 'a short page stops the pagination');
+    _prActivitiesAggregateTest();
+    _prActivitiesInlineErrorTests();
+  });
+}
+
+void _prActivitiesAggregateTest() {
+  test('aggregates reviews, inline comments, and discussion comments',
+      () async {
+    var reviewPage = 0;
+    var inlinePage = 0;
+    var issuePage = 0;
+    final f = mockGithub((o) {
+      if (o.path.endsWith('/pulls/74/reviews')) {
+        return reviewPage++ == 0 ? _reviewsPage1 : '[]';
+      }
+      if (o.path.endsWith('/pulls/74/comments')) {
+        return inlinePage++ == 0 ? _inlinePage : '[]';
+      }
+      if (o.path.endsWith('/issues/74/comments')) {
+        return issuePage++ == 0 ? _discussionPage : '[]';
+      }
+      return '{}';
     });
+    final activities =
+        await f.client.pullRequestActivities('epm', 'dm.ai', '74');
+    expect(activities, hasLength(4));
+    // Reviews first, raw JSON.
+    expect(activities[0]['state'], 'APPROVED');
+    expect(activities[1]['state'], 'CHANGES_REQUESTED');
+    // Comments wrapped as COMMENTED activities.
+    expect(activities[2]['action'], 'COMMENTED');
+    expect(activities[2]['comment']['body'], 'inline note');
+    expect(activities[3]['comment']['body'], 'discussion');
+    expect(reviewPage, 1, reason: 'a short page stops the pagination');
+  });
+}
 
-    for (final code in [403, 404]) {
-      test('tolerates $code on the inline page (epam/dm.ai#730)', () async {
-        final f = mockGithub((o) {
-          if (o.path.endsWith('/pulls/75/comments')) {
-            throw DioException.badResponse(
-              statusCode: code,
-              requestOptions: o,
-              response: Response(requestOptions: o, statusCode: code),
-            );
-          }
-          if (o.path.endsWith('/issues/75/comments')) return _discussionPage;
-          return '[]';
-        });
-        final activities =
-            await f.client.pullRequestActivities('epm', 'dm.ai', '75');
-        expect(activities, hasLength(1));
-        expect(activities[0]['comment']['body'], 'discussion');
-      });
-    }
-
-    test('rethrows other inline-page failures', () async {
+void _prActivitiesInlineErrorTests() {
+  for (final code in [403, 404]) {
+    test('tolerates $code on the inline page (epam/dm.ai#730)', () async {
       final f = mockGithub((o) {
-        if (o.path.endsWith('/pulls/76/comments')) {
+        if (o.path.endsWith('/pulls/75/comments')) {
           throw DioException.badResponse(
-            statusCode: 401,
+            statusCode: code,
             requestOptions: o,
-            response: Response(requestOptions: o, statusCode: 401),
+            response: Response(requestOptions: o, statusCode: code),
           );
         }
+        if (o.path.endsWith('/issues/75/comments')) return _discussionPage;
         return '[]';
       });
-      await expectLater(
-        f.client.pullRequestActivities('epm', 'dm.ai', '76'),
-        throwsA(isA<DioException>()),
-      );
+      final activities =
+          await f.client.pullRequestActivities('epm', 'dm.ai', '75');
+      expect(activities, hasLength(1));
+      expect(activities[0]['comment']['body'], 'discussion');
     });
+  }
+
+  test('rethrows other inline-page failures', () async {
+    final f = mockGithub((o) {
+      if (o.path.endsWith('/pulls/76/comments')) {
+        throw DioException.badResponse(
+          statusCode: 401,
+          requestOptions: o,
+          response: Response(requestOptions: o, statusCode: 401),
+        );
+      }
+      return '[]';
+    });
+    await expectLater(
+      f.client.pullRequestActivities('epm', 'dm.ai', '76'),
+      throwsA(isA<DioException>()),
+    );
   });
 }
 

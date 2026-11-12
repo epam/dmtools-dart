@@ -53,7 +53,7 @@ class AgentPackCompiler {
   /// Creates a compiler rooted at the agents checkout (contains `js/`,
   /// `instructions/`, etc.).
   AgentPackCompiler(this.agentRoot)
-    : _rootPath = p.normalize(Directory(agentRoot).absolute.path);
+      : _rootPath = p.normalize(Directory(agentRoot).absolute.path);
 
   /// The agents checkout root path as given.
   final String agentRoot;

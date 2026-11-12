@@ -210,7 +210,8 @@ void referenceKindTests() {
 /// inside string literals must NOT enter the closure as real references.
 void workerSourceTests() {
   group('embedded worker-source strings', () {
-    test('require inside an embedded worker-source string is not matched '
+    test(
+        'require inside an embedded worker-source string is not matched '
         '(dmtools-agents f377609 smAsync workers)', () {
       // githubSource.js embeds runAsync worker bodies as string literals;
       // their `require('./common/smProvider.js')` must NOT be resolved
@@ -386,7 +387,9 @@ void prefixNormalizationTests() {
 
 void conditionalCliPromptsTests() {
   group('AgentPackCompiler conditional cliPrompts', () {
-    test('structured conditional cliPrompts and cliPromptsByTracker embed prompt and condition JS with transitive requires', () {
+    test(
+        'structured conditional cliPrompts and cliPromptsByTracker embed prompt and condition JS with transitive requires',
+        () {
       write('prompts/codegraph_tools.md', '# CodeGraph\n');
       write('prompts/jira_tools.md', '# Jira\n');
       write(
@@ -432,7 +435,9 @@ void conditionalCliPromptsTests() {
 
 void thenActionClosureTests() {
   group('AgentPackCompiler thenAction closure', () {
-    test('customParams.contentOutput.thenAction embeds bare JS script and transitive requires', () {
+    test(
+        'customParams.contentOutput.thenAction embeds bare JS script and transitive requires',
+        () {
       write('js/common/assignHelper.js', 'exports.assign = function() {};\n');
       write(
         'js/assignForSolutionArchitecture.js',

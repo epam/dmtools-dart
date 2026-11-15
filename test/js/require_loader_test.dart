@@ -326,8 +326,8 @@ exports.marker = 'entry';
       final result = _run(main, {}) as Map<String, dynamic>;
       expect(result['fromModule'], 'entry');
       expect(result['fromExports'], 'entry');
-      expect(result['filename'] as String, endsWith('main.js'));
-      expect(result['dirname'] as String, endsWith('dmtools_req_entry'));
+      expect(result['filename'], '${dir.path}/main.js');
+      expect(result['dirname'], dir.path);
     } finally {
       dir.deleteSync(recursive: true);
     }

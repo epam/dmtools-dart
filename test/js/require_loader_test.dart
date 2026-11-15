@@ -20,6 +20,8 @@ void main() {
   _requireArgumentValidation();
   _requireLoadsPackModuleWithoutAnyAllowlist();
   _requireLoadsConfiguredPackModule();
+  _entryScriptSeesCommonJsModuleEnvironment();
+  _requiredModuleSeesFilenameAndDirname();
 }
 
 File _writeScript(String basePath, String name, String content) {
@@ -293,6 +295,67 @@ function action(params) { return loader.loaded === true; }
     } finally {
       PropertyReader.clearOverrides();
       packRoot.deleteSync(recursive: true);
+      dir.deleteSync(recursive: true);
+    }
+  });
+}
+
+/// Live red-main breakage (SM runs 43653744403 / 43654557483 /
+/// 43655004875, 2026-11-14): the agents rel-20261114-232424 bundle
+/// (sm_github-0.1.347, IstiN/dmtools-agents 992783c3 "decompose
+/// smAgent.js into js/sm/* modules") exports through an UNGUARDED
+/// top-level `module.exports = {...}` in the ENTRY script. The entry is
+/// evaluated in the global scope — its top-level `action` must stay a
+/// global for the JSRunner contract (`_callAction` evals
+/// `typeof action`) — so the CommonJS module environment rides the
+/// globals: `module`, `exports`, `__filename`, `__dirname` (`require`
+/// is already global). Node semantics: the entry sees the same module
+/// environment a wrapped module does.
+void _entryScriptSeesCommonJsModuleEnvironment() {
+  test('entry script executes with the CommonJS module environment', () {
+    final dir = Directory.systemTemp.createTempSync('dmtools_req_entry');
+    try {
+      final main = _writeScript(dir.path, 'main.js', '''
+function action(params) {
+  return { fromExports: exports.marker, fromModule: module.exports.marker,
+           filename: __filename, dirname: __dirname };
+}
+module.exports = { marker: 'entry' };
+exports.marker = 'entry';
+''');
+      final result = _run(main, {}) as Map<String, dynamic>;
+      expect(result['fromModule'], 'entry');
+      expect(result['fromExports'], 'entry');
+      expect(result['filename'] as String, endsWith('main.js'));
+      expect(result['dirname'] as String, endsWith('dmtools_req_entry'));
+    } finally {
+      dir.deleteSync(recursive: true);
+    }
+  });
+}
+
+/// Node CommonJS semantics for required modules: each module executes
+/// wrapped with its own `module`/`exports` AND the path globals
+/// `__filename`/`__dirname` (the wrapModuleCode IIFE previously provided
+/// only `module`/`exports`).
+void _requiredModuleSeesFilenameAndDirname() {
+  test('required modules see __filename and __dirname', () {
+    final dir = Directory.systemTemp.createTempSync('dmtools_req_paths');
+    try {
+      _writeScript('${dir.path}/lib', 'util.js', '''
+exports.self = __filename;
+exports.dir = __dirname;
+''');
+      final main = _writeScript(dir.path, 'main.js', '''
+var util = require('./lib/util.js');
+function action(params) {
+  return { self: util.self, dir: util.dir };
+}
+''');
+      final result = _run(main, {}) as Map<String, dynamic>;
+      expect(result['self'] as String, endsWith('lib/util.js'));
+      expect(result['dir'] as String, endsWith('lib'));
+    } finally {
       dir.deleteSync(recursive: true);
     }
   });

@@ -1,26 +1,4 @@
 {
-  "pr-469": [
-    {
-      "leg": "review",
-      "at": "2026-10-30T17:11:37Z",
-      "prompt": 49748,
-      "completion": 4400,
-      "total": 54148,
-      "cacheRead": 162629,
-      "model": "claude-haiku-5.5"
-    }
-  ],
-  "pr-470": [
-    {
-      "leg": "review",
-      "at": "2026-10-30T21:01:06Z",
-      "prompt": 80529,
-      "completion": 20316,
-      "total": 100845,
-      "cacheRead": 990697,
-      "model": "claude-haiku-5.5"
-    }
-  ],
   "pr-472": [
     {
       "leg": "review",
@@ -62,6 +40,17 @@
       "completion": 53595,
       "total": 301824,
       "cacheRead": 11463808,
+      "model": "glm-5.3-flash"
+    }
+  ],
+  "pr-492": [
+    {
+      "leg": "review",
+      "at": "2026-11-15T07:21:37Z",
+      "prompt": 140061,
+      "completion": 27621,
+      "total": 167682,
+      "cacheRead": 2544000,
       "model": "glm-5.3-flash"
     }
   ]

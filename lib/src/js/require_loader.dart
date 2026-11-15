@@ -26,7 +26,15 @@
 ///   real exports afterwards.
 /// - Module code runs wrapped exactly like Java:
 ///   `(function() { var module = { exports: {} }; var exports =
-///   module.exports; <CODE> return module.exports; })()`.
+///   module.exports; <CODE> return module.exports; })()`, plus the Node
+///   path globals `__filename`/`__dirname` per module.
+/// - The ENTRY script is evaluated in the global scope (its top-level
+///   `action` must stay a global for the JSRunner contract), so it
+///   cannot run wrapped; `__setScriptDirectory` installs the full
+///   CommonJS module environment (`module`, `exports`, `__filename`,
+///   `__dirname`; `require` is already global) as globals before the
+///   entry eval — main entry and worker engines alike (Node semantics:
+///   the entry sees the same module environment a wrapped module does).
 /// - On load failure the cache entry is removed and
 ///   `Failed to require module: <path>` is thrown; the cause message keeps
 ///   the Java `JavaScript file not found` substring visible.
@@ -133,10 +141,16 @@ const String _requireLoaderBootstrap = '''
         return content;
     }
 
-    function wrapModuleCode(code) {
-        return '(function() { var module = { exports: {} }; ' +
+    function wrapModuleCode(code, resolvedPath) {
+        // Node CommonJS semantics: each module also sees its own
+        // __filename/__dirname, injected as wrapper parameters (JSON
+        // escaping keeps arbitrary resolved paths safe inside the eval).
+        return '(function(__filename, __dirname) { ' +
+            'var module = { exports: {} }; ' +
             'var exports = module.exports;\\n' + code +
-            '\\nreturn module.exports; })()';
+            '\\nreturn module.exports; })(' +
+            JSON.stringify(resolvedPath) + ', ' +
+            JSON.stringify(scriptDirOf(resolvedPath)) + ')';
     }
 
     function loadModule(modulePath) {
@@ -158,7 +172,7 @@ const String _requireLoaderBootstrap = '''
                 dir: currentScriptDirectory
             });
             var moduleExports =
-                eval(wrapModuleCode(moduleCode));
+                eval(wrapModuleCode(moduleCode, resolvedPath));
             moduleCache[resolvedPath] = moduleExports;
             return moduleExports;
         } catch (e) {
@@ -181,6 +195,23 @@ const String _requireLoaderBootstrap = '''
 
     globalThis.__setScriptDirectory = function(path) {
         currentScriptDirectory = scriptDirOf(path);
+        // CommonJS module environment for the ENTRY script (Node
+        // semantics): the entry is evaluated in the global scope — its
+        // top-level `action` must stay a global for the JSRunner
+        // contract — so it cannot run inside the wrapModuleCode IIFE;
+        // it receives the same module environment as globals instead
+        // (`require` is already global). Worker engines install the
+        // same globals via their virtual job path, so dispatched
+        // function re-evals referencing `module` see it too. Upstream
+        // agents rel-20261114-232424 (sm_github-0.1.347) exports
+        // through an unguarded top-level `module.exports` (IstiN/
+        // dmtools-agents 992783c3); without `module` the entry eval
+        // died with `ReferenceError: 'module' is not defined` (SM runs
+        // 43653744403 / 43654557483 / 43655004875).
+        globalThis.module = { exports: {} };
+        globalThis.exports = globalThis.module.exports;
+        globalThis.__filename = path;
+        globalThis.__dirname = scriptDirOf(path);
     };
 
     // Read-only accessor for the host: the require base of the module

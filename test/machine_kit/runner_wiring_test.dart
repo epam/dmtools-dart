@@ -77,6 +77,32 @@ void formalReviewWiringTests() {
   });
 }
 
+/// gh-1406 (IstiN/dmtools-agents c8d53b50): the parent's cliPrompts mix
+/// plain strings with structured section entries (id/prompt/condition —
+/// e.g. the conditional codegraph prompt), and the old
+/// general_guidelines.md needle is gone (reviewer-pool restructure).
+/// The runner flattens both forms (cli_agent_params.dart
+/// _flattenCliPromptItem), so pin the shape instead of one literal:
+/// string entries resolve to in-repo files, section entries carry
+/// their prompts.
+void _expectParentPromptsMatchRunnerContract(List parentPrompts) {
+  for (final item in parentPrompts) {
+    if (item is String) {
+      if (item.startsWith('./agents/')) {
+        expect(File(item).existsSync(), isTrue, reason: item);
+      }
+    } else if (item is Map) {
+      expect(
+        item['prompt'] ?? item['prompts'],
+        anyOf(isA<String>(), isA<List>()),
+        reason: 'section entry ${item['id']} must carry its prompts',
+      );
+    } else {
+      fail('unexpected cliPrompts entry shape: $item');
+    }
+  }
+}
+
 /// Contract tests: the runners + workflow must stay wired to the script and
 /// the verdict-rules instruction file.
 void wiringTests() {
@@ -90,8 +116,7 @@ void wiringTests() {
       expect(runner['merge'], contains('params.cliPrompts'));
       final parentPrompts = ((_runnerJson('agents/pr_review.json')['params'])
           as Map)['cliPrompts'] as List;
-      expect(parentPrompts.cast<String>(),
-          contains('./agents/instructions/pr_review/general_guidelines.md'));
+      _expectParentPromptsMatchRunnerContract(parentPrompts);
       expect(
         (params['customParams'] as Map)['allowApproveWithSuggestions'],
         true,

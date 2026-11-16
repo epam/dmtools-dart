@@ -193,47 +193,45 @@ void _testConfigFileResolution() {
 void _testParentResolution() {
   group('parent-config resolution', () {
     test('deep-merges parent into child', () {
-      _writeFile('parent.json', '{"params":{"k1":"p1","k2":"p2"}}');
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"parent.json"},
-        "params":{"k2":"c2"}
-      }''');
+      _writeFile('hook.js', '// hook\n');
+      _writeFile(
+        'parent.json',
+        '{"preJSAction":"hook.js","postJSAction":"missing.js","params":{"k1":"p1","k2":"p2"}}',
+      );
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},"params":{"k2":"c2"}}',
+      );
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['name'], 'child');
       expect(json['params']['k1'], 'p1');
       expect(json['params']['k2'], 'c2');
+      expect(json['preJSAction'], '${_tmp.path}/hook.js');
+      expect(json['postJSAction'], 'missing.js');
     });
 
     test('concatenates arrays via merge directive', () {
       _writeFile('parent.json', '{"items":["a","b"]}');
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"parent.json"},
-        "merge":["items"],
-        "items":["c"]
-      }''');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},"merge":["items"],"items":["c"]}',
+      );
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['items'], ['a', 'b', 'c']);
     });
 
     test('applies override directive', () {
       _writeFile('parent.json', '{"params":{"k":"parent"}}');
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":"parent.json"},
-        "override":["params.k"],
-        "params":{"k":"child"}
-      }''');
+      _writeFile(
+        'child.json',
+        '{"name":"child","parent":{"path":"parent.json"},"override":["params.k"],"params":{"k":"child"}}',
+      );
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['params']['k'], 'child');
     });
 
     test('handles parent block with non-string path', () {
-      _writeFile('child.json', '''{
-        "name":"child",
-        "parent":{"path":123}
-      }''');
+      _writeFile('child.json', '{"name":"child","parent":{"path":123}}');
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
       expect(json['name'], 'child');
       expect(json.containsKey('parent'), isFalse);
@@ -264,6 +262,11 @@ void _testParentStructuredCliPromptsMerge() {
                 },
                 'base2',
               ],
+              'cliPromptsByTracker': {
+                'jira': [
+                  {'id': 'fmt', 'prompt': 'jira1.md'},
+                ],
+              },
             },
           }));
       _writeFile(
@@ -271,12 +274,16 @@ void _testParentStructuredCliPromptsMerge() {
           jsonEncode({
             'name': 'child',
             'parent': {'path': 'parent.json'},
-            // Omit 'merge' to also exercise implicit _applyStructuredCliPromptsMerge
             'params': {
               'cliPrompts': [
                 {'id': 'codegraph', 'prompt': 'cg2.md'},
                 'child1',
               ],
+              'cliPromptsByTracker': {
+                'jira': [
+                  {'id': 'fmt', 'prompt': 'jira2.md'},
+                ],
+              },
             },
           }));
       final json = jsonDecode(_run(['run', '${_tmp.path}/child.json'])) as Map;
@@ -290,6 +297,12 @@ void _testParentStructuredCliPromptsMerge() {
       });
       expect(cliPrompts[2], 'base2');
       expect(cliPrompts[3], 'child1');
+      expect(json['params']['cliPromptsByTracker']['jira'], [
+        {
+          'id': 'fmt',
+          'prompts': ['jira1.md', 'jira2.md'],
+        },
+      ]);
     });
   });
 }

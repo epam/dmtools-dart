@@ -176,22 +176,30 @@ class CliAgentParams {
 
   /// Flattens `cliPromptsByTracker` using an optional [conditionEvaluator] for
   /// sections that declare a `condition` script path.
+  ///
+  /// When [trackerType] is supplied (or defaults to `'ado'` when blank,
+  /// matching `CliCommandBuilder.resolveCliPrompts` and Java parity),
+  /// condition evaluation runs only for the effective tracker's entry so
+  /// unused tracker condition scripts do not execute.
   Map<String, List<String>>? flattenCliPromptsByTracker({
     bool Function(String condition)? conditionEvaluator,
+    String? trackerType,
   }) {
     final raw = cliPromptsByTrackerRaw;
-    if (raw != null) {
-      final result = <String, List<String>>{};
-      for (final entry in raw.entries) {
-        result[entry.key] = _flattenCliPrompts(
-              entry.value,
-              conditionEvaluator: conditionEvaluator,
-            ) ??
-            const <String>[];
-      }
-      return result;
+    if (raw == null) return cliPromptsByTracker;
+    final effectiveTracker = (trackerType == null || trackerType.trim().isEmpty)
+        ? 'ado'
+        : trackerType;
+    final result = <String, List<String>>{};
+    for (final entry in raw.entries) {
+      final eval = entry.key == effectiveTracker ? conditionEvaluator : null;
+      result[entry.key] = _flattenCliPrompts(
+            entry.value,
+            conditionEvaluator: eval,
+          ) ??
+          const <String>[];
     }
-    return cliPromptsByTracker;
+    return result;
   }
 
   /// Creates params from a JSON map (the `params` block of a job config).

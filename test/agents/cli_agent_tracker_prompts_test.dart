@@ -77,27 +77,7 @@ void conditionalTrackerPromptsTests() {
             .writeAsStringSync('function action() { return true; }\n');
         File('${tmp.path}/isTracker.js')
             .writeAsStringSync('function action() { return false; }\n');
-        final params = CliAgentParams.fromJson({
-          'cliCommands': ['cat'],
-          'cliPrompts': ['base-rules'],
-          'cliPromptsByTracker': {
-            'jira': [
-              {
-                'id': 'responseFormatJiraWiki',
-                'prompt': 'jira-wiki-comment-format',
-                'condition': '${tmp.path}/isTracker.js',
-              },
-              {
-                'id': 'responseFormatMarkdown',
-                'prompt': 'markdown-output-format',
-                'condition': '${tmp.path}/isScm.js',
-              },
-              'jira-context-rules',
-            ],
-          },
-          'envVariables': {'DEFAULT_TRACKER': 'jira'},
-          'cleanupInputFolder': false,
-        });
+        final params = _buildConditionalTrackerParams(tmp.path);
         expect(params.cliPromptsByTracker?['jira'], [
           'jira-wiki-comment-format',
           'markdown-output-format',
@@ -117,5 +97,50 @@ void conditionalTrackerPromptsTests() {
         await tmp.delete(recursive: true);
       }
     });
+
+    test('evaluates conditions only for effective tracker key', () {
+      final params = _buildConditionalTrackerParams('/tmp');
+      final evaluated = <String>[];
+      final resolved = params.flattenCliPromptsByTracker(
+        trackerType: 'jira',
+        conditionEvaluator: (cond) {
+          evaluated.add(cond);
+          return cond.endsWith('isScm.js');
+        },
+      );
+      expect(evaluated, ['/tmp/isTracker.js', '/tmp/isScm.js']);
+      expect(
+          resolved?['jira'], ['markdown-output-format', 'jira-context-rules']);
+    });
   });
 }
+
+CliAgentParams _buildConditionalTrackerParams(String dir) =>
+    CliAgentParams.fromJson({
+      'cliCommands': ['cat'],
+      'cliPrompts': ['base-rules'],
+      'cliPromptsByTracker': {
+        'jira': [
+          {
+            'id': 'responseFormatJiraWiki',
+            'prompt': 'jira-wiki-comment-format',
+            'condition': '$dir/isTracker.js',
+          },
+          {
+            'id': 'responseFormatMarkdown',
+            'prompt': 'markdown-output-format',
+            'condition': '$dir/isScm.js',
+          },
+          'jira-context-rules',
+        ],
+        'github': [
+          {
+            'id': 'unusedGithubSection',
+            'prompt': 'github-cond-format',
+            'condition': '$dir/unusedGithubCond.js',
+          },
+        ],
+      },
+      'envVariables': {'DEFAULT_TRACKER': 'jira'},
+      'cleanupInputFolder': false,
+    });

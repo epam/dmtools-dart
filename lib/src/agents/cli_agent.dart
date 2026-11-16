@@ -364,12 +364,16 @@ class CliAgent {
   /// periodically / per-line / on error. Otherwise the buffered path is used.
   Future<String> _executeCliCommands(String workDir) async {
     bool evalCond(String cond) => _evaluateCliPromptCondition(cond, workDir);
+    final trackerType = propertyReader.getDefaultTracker();
     final finalCommands = const CliCommandBuilder().buildCommands(
       params.cliCommands,
       params.cliPrompt,
       params.flattenCliPrompts(params.cliPrompts, conditionEvaluator: evalCond),
-      params.flattenCliPromptsByTracker(conditionEvaluator: evalCond),
-      trackerType: propertyReader.getDefaultTracker(),
+      params.flattenCliPromptsByTracker(
+        conditionEvaluator: evalCond,
+        trackerType: trackerType,
+      ),
+      trackerType: trackerType,
       workingDirectory: workDir,
     );
     _ensureOutputFolder(workDir);

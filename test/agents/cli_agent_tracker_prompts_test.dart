@@ -13,7 +13,10 @@ import 'dart:io';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
-void main() => lifecycleTrackerPromptsTests();
+void main() {
+  lifecycleTrackerPromptsTests();
+  conditionalTrackerPromptsTests();
+}
 
 void lifecycleTrackerPromptsTests() {
   group('CliAgent tracker prompts', () {
@@ -62,3 +65,82 @@ void lifecycleTrackerPromptsTests() {
     });
   });
 }
+
+void conditionalTrackerPromptsTests() {
+  group('CliAgent conditional tracker prompts', () {
+    test('evaluates conditional section objects inside cliPromptsByTracker',
+        () async {
+      final tmp =
+          await Directory.systemTemp.createTemp('cli_tracker_cond_prompt_');
+      try {
+        File('${tmp.path}/isScm.js')
+            .writeAsStringSync('function action() { return true; }\n');
+        File('${tmp.path}/isTracker.js')
+            .writeAsStringSync('function action() { return false; }\n');
+        final params = _buildConditionalTrackerParams(tmp.path);
+        expect(params.cliPromptsByTracker?['jira'], [
+          'jira-wiki-comment-format',
+          'markdown-output-format',
+          'jira-context-rules',
+        ]);
+        final result = await CliAgent(
+          params: params,
+          workingDirectory: tmp.path,
+        ).run();
+        expect(result['success'], isTrue, reason: '${result['error']}');
+        final prompt = result['response'] as String;
+        expect(prompt, contains('base-rules'));
+        expect(prompt, isNot(contains('jira-wiki-comment-format')));
+        expect(prompt, contains('markdown-output-format'));
+        expect(prompt, contains('jira-context-rules'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
+    });
+
+    test('evaluates conditions only for effective tracker key', () {
+      final params = _buildConditionalTrackerParams('/tmp');
+      final evaluated = <String>[];
+      final resolved = params.flattenCliPromptsByTracker(
+        trackerType: 'jira',
+        conditionEvaluator: (cond) {
+          evaluated.add(cond);
+          return cond.endsWith('isScm.js');
+        },
+      );
+      expect(evaluated, ['/tmp/isTracker.js', '/tmp/isScm.js']);
+      expect(
+          resolved?['jira'], ['markdown-output-format', 'jira-context-rules']);
+    });
+  });
+}
+
+CliAgentParams _buildConditionalTrackerParams(String dir) =>
+    CliAgentParams.fromJson({
+      'cliCommands': ['cat'],
+      'cliPrompts': ['base-rules'],
+      'cliPromptsByTracker': {
+        'jira': [
+          {
+            'id': 'responseFormatJiraWiki',
+            'prompt': 'jira-wiki-comment-format',
+            'condition': '$dir/isTracker.js',
+          },
+          {
+            'id': 'responseFormatMarkdown',
+            'prompt': 'markdown-output-format',
+            'condition': '$dir/isScm.js',
+          },
+          'jira-context-rules',
+        ],
+        'github': [
+          {
+            'id': 'unusedGithubSection',
+            'prompt': 'github-cond-format',
+            'condition': '$dir/unusedGithubCond.js',
+          },
+        ],
+      },
+      'envVariables': {'DEFAULT_TRACKER': 'jira'},
+      'cleanupInputFolder': false,
+    });

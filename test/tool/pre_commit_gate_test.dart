@@ -10,6 +10,7 @@ import '../../tool/pre_commit_gate.dart';
 void main() {
   pathHelperTests();
   selectionResolverTests();
+  siblingResolverTests();
   hookContractTests();
 }
 
@@ -56,7 +57,6 @@ void selectionResolverTests() {
       expect(res.stagedTests, isEmpty);
       expect(res.targetTests, equals(['test/version_test.dart']));
     });
-
     test('falls back to import reference scan when no 1:1 test exists', () {
       final existing = <String>{
         'lib/src/mcp/default_tool_registry.dart',
@@ -72,7 +72,6 @@ void selectionResolverTests() {
       );
       expect(res.targetTests, equals(['test/scm_ci_gates_test.dart']));
     });
-
     test('includes staged test files in targetTests', () {
       final existing = <String>{'test/tool/pre_commit_gate_test.dart'};
       final res = resolvePreCommitSelection([
@@ -85,6 +84,32 @@ void selectionResolverTests() {
         res.toJson()['targetTests'],
         equals(['test/tool/pre_commit_gate_test.dart']),
       );
+    });
+  });
+}
+
+void siblingResolverTests() {
+  group('resolvePreCommitSelection sibling suites', () {
+    test('includes split sibling suites by prefix and class hint', () {
+      final existing = <String>{
+        'lib/src/agents/cli_agent.dart',
+        'test/agents/cli_agent_test.dart',
+      };
+      final res = resolvePreCommitSelection(
+        ['lib/src/agents/cli_agent.dart'],
+        fileExists: existing.contains,
+        allTestFiles: {
+          'test/agents/cli_agent_test.dart': 'void main() {}',
+          'test/agents/cli_agent_tracker_prompts_test.dart': 'void main() {}',
+          'test/agents/loud_js_action_failures_test.dart': '// CliAgent\n',
+          'test/agents/unrelated_test.dart': 'void main() {}',
+        },
+      );
+      expect(res.targetTests, [
+        'test/agents/cli_agent_test.dart',
+        'test/agents/cli_agent_tracker_prompts_test.dart',
+        'test/agents/loud_js_action_failures_test.dart',
+      ]);
     });
   });
 }

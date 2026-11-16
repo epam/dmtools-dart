@@ -103,10 +103,14 @@ PreCommitSelection resolvePreCommitSelection(
   }
 
   for (final libFile in stagedLib) {
-    final directMatches =
-        candidateTestPathsForLib(libFile).where(fileExists).toList();
+    final directMatches = candidateTestPathsForLib(
+      libFile,
+    ).where(fileExists).toList();
     if (directMatches.isNotEmpty) {
       targetTests.addAll(directMatches);
+      targetTests.addAll(
+        _findSiblingPrefixTests(directMatches, allTestFiles),
+      );
     } else {
       targetTests.addAll(_findReferencingTests(libFile, allTestFiles));
     }
@@ -119,6 +123,49 @@ PreCommitSelection resolvePreCommitSelection(
     targetTests: targetTests.toList()..sort(),
   );
 }
+
+List<String> _findSiblingPrefixTests(
+  List<String> directMatches,
+  Map<String, String> allTestFiles,
+) {
+  final siblings = <String>[];
+  for (final direct in directMatches) {
+    if (!direct.endsWith(_testFileSuffix)) continue;
+    siblings.addAll(_siblingsForDirectTest(direct, allTestFiles));
+  }
+  return siblings;
+}
+
+List<String> _siblingsForDirectTest(
+  String direct,
+  Map<String, String> allTestFiles,
+) {
+  final slash = direct.lastIndexOf('/');
+  final dir = slash >= 0 ? direct.substring(0, slash + 1) : '';
+  final stem = direct.substring(
+    slash + 1,
+    direct.length - _testFileSuffix.length,
+  );
+  final prefix =
+      '${direct.substring(0, direct.length - _testFileSuffix.length)}_';
+  final classHint = _toPascalCase(stem);
+  return allTestFiles.entries
+      .where(
+        (e) =>
+            e.key.startsWith(prefix) ||
+            (dir.isNotEmpty &&
+                e.key.startsWith(dir) &&
+                e.value.contains(classHint)),
+      )
+      .map((e) => e.key)
+      .toList();
+}
+
+String _toPascalCase(String snake) => snake
+    .split('_')
+    .where((w) => w.isNotEmpty)
+    .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+    .join();
 
 List<String> _findReferencingTests(
   String libFile,

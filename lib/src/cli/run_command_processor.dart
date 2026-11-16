@@ -537,10 +537,13 @@ class _ParentConfigResolver {
     for (final path in mergePaths) {
       _applyMergeDirective(result, parent, child, path);
     }
-    if (!overridePaths.contains(_kParamsCliPrompts) &&
-        !mergePaths.contains(_kParamsCliPrompts)) {
-      _applyStructuredCliPromptsMerge(result, parent, child);
-    }
+    _applyAllStructuredPromptsMerges(
+      result,
+      parent,
+      child,
+      overridePaths,
+      mergePaths,
+    );
     return result;
   }
 
@@ -556,7 +559,8 @@ class _ParentConfigResolver {
     final parentValue = _getByPath(parent, path);
     final childValue = _getByPath(child, path);
     if (parentValue is List && childValue is List) {
-      if (path == _kParamsCliPrompts &&
+      if ((path == _kParamsCliPrompts ||
+              path.startsWith('params.cliPromptsByTracker.')) &&
           (_containsStructuredPrompts(parentValue) ||
               _containsStructuredPrompts(childValue))) {
         _setByPath(
@@ -570,21 +574,57 @@ class _ParentConfigResolver {
     }
   }
 
-  /// Merges structured `params.cliPrompts` by section `id` when either parent
-  /// or child uses section objects (Java `ParentConfigResolver` parity).
-  void _applyStructuredCliPromptsMerge(
+  /// Merges structured `params.cliPrompts` and `params.cliPromptsByTracker.*`
+  /// by section `id` when both parent and child define the list and either
+  /// uses section objects (Java `ParentConfigResolver` parity).
+  void _applyAllStructuredPromptsMerges(
     Map<String, dynamic> result,
     Map<String, dynamic> parent,
     Map<String, dynamic> child,
+    List<String> overridePaths,
+    List<String> mergePaths,
   ) {
-    final parentValue = _getByPath(parent, _kParamsCliPrompts);
-    final childValue = _getByPath(child, _kParamsCliPrompts);
+    _mergeStructuredPathIfApplicable(
+      result,
+      parent,
+      child,
+      _kParamsCliPrompts,
+      overridePaths,
+      mergePaths,
+    );
+    if (overridePaths.contains('params.cliPromptsByTracker')) return;
+    final parentByTracker = _getByPath(parent, 'params.cliPromptsByTracker');
+    final childByTracker = _getByPath(child, 'params.cliPromptsByTracker');
+    if (parentByTracker is! Map || childByTracker is! Map) return;
+    for (final key in parentByTracker.keys) {
+      _mergeStructuredPathIfApplicable(
+        result,
+        parent,
+        child,
+        'params.cliPromptsByTracker.$key',
+        overridePaths,
+        mergePaths,
+      );
+    }
+  }
+
+  void _mergeStructuredPathIfApplicable(
+    Map<String, dynamic> result,
+    Map<String, dynamic> parent,
+    Map<String, dynamic> child,
+    String path,
+    List<String> overridePaths,
+    List<String> mergePaths,
+  ) {
+    if (overridePaths.contains(path) || mergePaths.contains(path)) return;
+    final parentValue = _getByPath(parent, path);
+    final childValue = _getByPath(child, path);
     if (parentValue is! List || childValue is! List) return;
     if (_containsStructuredPrompts(parentValue) ||
         _containsStructuredPrompts(childValue)) {
       _setByPath(
         result,
-        _kParamsCliPrompts,
+        path,
         _mergeStructuredCliPrompts(parentValue, childValue),
       );
     }

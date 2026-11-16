@@ -10,6 +10,7 @@ import '../../mcp/tool_param.dart';
 import 'gitlab_client.dart';
 part 'gitlab_project_tools.dart';
 part 'gitlab_release_tools.dart';
+part 'gitlab_issue_tracker_tools.dart';
 
 /// Returns all GitLab MCP tool definitions.
 ///
@@ -20,6 +21,7 @@ List<ToolDefinition> gitlabTools() => [
       ..._agentMergeRequestTools(),
       ..._agentMrReviewTools(),
       ..._issueTools(),
+      ..._issueTrackerTools(),
       ..._repositoryTools(),
       ..._pipelineTools(),
       ..._memberTools(),

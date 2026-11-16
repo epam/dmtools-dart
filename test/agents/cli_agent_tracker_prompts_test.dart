@@ -13,7 +13,10 @@ import 'dart:io';
 import 'package:dmtools/dmtools.dart';
 import 'package:test/test.dart';
 
-void main() => lifecycleTrackerPromptsTests();
+void main() {
+  lifecycleTrackerPromptsTests();
+  conditionalTrackerPromptsTests();
+}
 
 void lifecycleTrackerPromptsTests() {
   group('CliAgent tracker prompts', () {
@@ -59,6 +62,60 @@ void lifecycleTrackerPromptsTests() {
       final prompt = await runPrompt({'DEFAULT_TRACKER': ''});
       expect(prompt, contains('ado-rules'));
       expect(prompt, isNot(contains('github-markdown-rules')));
+    });
+  });
+}
+
+void conditionalTrackerPromptsTests() {
+  group('CliAgent conditional tracker prompts', () {
+    test('evaluates conditional section objects inside cliPromptsByTracker',
+        () async {
+      final tmp =
+          await Directory.systemTemp.createTemp('cli_tracker_cond_prompt_');
+      try {
+        File('${tmp.path}/isScm.js')
+            .writeAsStringSync('function action() { return true; }\n');
+        File('${tmp.path}/isTracker.js')
+            .writeAsStringSync('function action() { return false; }\n');
+        final params = CliAgentParams.fromJson({
+          'cliCommands': ['cat'],
+          'cliPrompts': ['base-rules'],
+          'cliPromptsByTracker': {
+            'jira': [
+              {
+                'id': 'responseFormatJiraWiki',
+                'prompt': 'jira-wiki-comment-format',
+                'condition': '${tmp.path}/isTracker.js',
+              },
+              {
+                'id': 'responseFormatMarkdown',
+                'prompt': 'markdown-output-format',
+                'condition': '${tmp.path}/isScm.js',
+              },
+              'jira-context-rules',
+            ],
+          },
+          'envVariables': {'DEFAULT_TRACKER': 'jira'},
+          'cleanupInputFolder': false,
+        });
+        expect(params.cliPromptsByTracker?['jira'], [
+          'jira-wiki-comment-format',
+          'markdown-output-format',
+          'jira-context-rules',
+        ]);
+        final result = await CliAgent(
+          params: params,
+          workingDirectory: tmp.path,
+        ).run();
+        expect(result['success'], isTrue, reason: '${result['error']}');
+        final prompt = result['response'] as String;
+        expect(prompt, contains('base-rules'));
+        expect(prompt, isNot(contains('jira-wiki-comment-format')));
+        expect(prompt, contains('markdown-output-format'));
+        expect(prompt, contains('jira-context-rules'));
+      } finally {
+        await tmp.delete(recursive: true);
+      }
     });
   });
 }

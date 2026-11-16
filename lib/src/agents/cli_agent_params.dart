@@ -44,6 +44,9 @@ class CliAgentParams {
   /// Tracker-specific CLI prompts, keyed by tracker type name.
   Map<String, List<String>>? cliPromptsByTracker;
 
+  /// Raw structured tracker-specific CLI prompts (strings and/or section objects).
+  Map<String, List<dynamic>>? cliPromptsByTrackerRaw;
+
   /// Setup hook — shell command or `.js` path (runs first).
   String? setup;
 
@@ -171,6 +174,26 @@ class CliAgentParams {
   }) =>
       _flattenCliPrompts(value, conditionEvaluator: conditionEvaluator);
 
+  /// Flattens `cliPromptsByTracker` using an optional [conditionEvaluator] for
+  /// sections that declare a `condition` script path.
+  Map<String, List<String>>? flattenCliPromptsByTracker({
+    bool Function(String condition)? conditionEvaluator,
+  }) {
+    final raw = cliPromptsByTrackerRaw;
+    if (raw != null) {
+      final result = <String, List<String>>{};
+      for (final entry in raw.entries) {
+        result[entry.key] = _flattenCliPrompts(
+              entry.value,
+              conditionEvaluator: conditionEvaluator,
+            ) ??
+            const <String>[];
+      }
+      return result;
+    }
+    return cliPromptsByTracker;
+  }
+
   /// Creates params from a JSON map (the `params` block of a job config).
   factory CliAgentParams.fromJson(Map<String, dynamic> json) {
     return CliAgentParams()
@@ -180,6 +203,8 @@ class CliAgentParams {
       ..cliPrompts = json['cliPrompts']
       ..cliPromptsByTracker =
           _parsePromptsByTracker(json['cliPromptsByTracker'])
+      ..cliPromptsByTrackerRaw =
+          _parseRawPromptsByTracker(json['cliPromptsByTracker'])
       ..setup = _parseString(json['setup'])
       ..cache = _parseString(json['cache'])
       ..reset = _parseString(json['reset'])
@@ -276,7 +301,18 @@ Map<String, List<String>>? _parsePromptsByTracker(dynamic value) {
   for (final entry in value.entries) {
     if (entry.value is List) {
       result[entry.key.toString()] =
-          (entry.value as List).whereType<String>().toList();
+          _flattenCliPrompts(entry.value) ?? const <String>[];
+    }
+  }
+  return result;
+}
+
+Map<String, List<dynamic>>? _parseRawPromptsByTracker(dynamic value) {
+  if (value is! Map) return null;
+  final result = <String, List<dynamic>>{};
+  for (final entry in value.entries) {
+    if (entry.value is List) {
+      result[entry.key.toString()] = List<dynamic>.from(entry.value as List);
     }
   }
   return result;

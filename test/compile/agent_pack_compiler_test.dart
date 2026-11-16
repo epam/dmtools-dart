@@ -87,7 +87,6 @@ void closureTests() {
       expect(names, contains('manifest.json'));
       expect(names, isNot(contains('agents/js/main.js'))); // prefix stripped
     });
-
     test('missing referenced file fails with the exact path', () {
       final entry = write(
         'broken.json',

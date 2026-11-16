@@ -175,6 +175,16 @@ const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_get_pipeline': ['workspace', 'repository', 'pipelineId'],
   'gitlab_get_pipelines': ['workspace', 'repository'],
   'gitlab_list_issues': ['workspace', 'repository'],
+  // GitLab issue-tracker family (Java `GitLabIssues.java`): only the
+  // genuinely required scalar args are validated — the issue reference
+  // itself (workspace/repository/issueNumber vs composite `key`) is
+  // resolved at call time, so none of those may be required.
+  'gitlab_add_issue_label': ['label'],
+  'gitlab_create_issue': ['title'],
+  'gitlab_create_issue_comment': ['body'],
+  'gitlab_move_issue_to_status': ['statusName'],
+  'gitlab_remove_issue_label': ['label'],
+  'gitlab_search_issues': ['query'],
   'gitlab_list_mrs': ['workspace', 'repository', 'state'],
   'gitlab_list_pipeline_runs': ['workspace', 'repository'],
   'gitlab_list_project_jobs': ['workspace', 'repository'],
@@ -228,6 +238,38 @@ const Map<String, Map<String, List<String>>> kGithubParamAliases = {
 
 /// Alias tables for the GitLab family (Java `GitLab.java` annotations).
 const Map<String, Map<String, List<String>>> kGitlabParamAliases = {
+  'gitlab_add_issue_label': {
+    'label': ['labels'],
+    'workspace': ['owner'],
+    'repository': ['repo'],
+    'issueNumber': ['number', 'iid', 'pullRequestId'],
+  },
+  'gitlab_create_issue': {
+    'workspace': ['owner'],
+    'repository': ['repo'],
+    'title': ['summary'],
+    'body': ['description'],
+    'key': ['project'],
+  },
+  'gitlab_create_issue_comment': {
+    'workspace': ['owner'],
+    'repository': ['repo'],
+    'issueNumber': ['number', 'iid', 'pullRequestId'],
+    'body': ['text', 'comment'],
+  },
+  'gitlab_move_issue_to_status': {
+    'workspace': ['owner'],
+    'repository': ['repo'],
+    'issueNumber': ['number', 'iid', 'pullRequestId'],
+  },
+  'gitlab_remove_issue_label': {
+    'workspace': ['owner'],
+    'repository': ['repo'],
+    'issueNumber': ['number', 'iid', 'pullRequestId'],
+  },
+  'gitlab_search_issues': {
+    'query': ['jql', 'wiql'],
+  },
   'gitlab_add_inline_mr_comment': {
     'path': ['filePath'],
   },

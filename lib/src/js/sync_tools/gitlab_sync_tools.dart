@@ -31,6 +31,8 @@ import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
 import 'sync_required_params.dart';
 
+part 'gitlab_issue_sync_tools.dart';
+
 /// Connection config for the sync GitLab client.
 typedef _GitlabConfig = ({String baseUrl, Map<String, String> headers});
 
@@ -72,9 +74,12 @@ Map<String, String Function(Map<String, dynamic>)> _wrapHandlers(
         },
     };
 
-/// All GitLab sync executors (Java `GitLab` MCP tool surface).
+/// All GitLab sync executors (Java `GitLab` + `GitLabIssues` MCP tool
+/// surfaces). The issue-tracker family ([GitLabIssueSyncTools]) resolves
+/// its own config per call, so it merges after the config wrapper.
 final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
-    _wrapHandlers({
+    {
+  ..._wrapHandlers({
   'gitlab_get_mr': _getMr,
   'gitlab_list_mrs': _listMrs,
   'gitlab_get_mr_pipelines': _getMrPipelines,
@@ -105,7 +110,9 @@ final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
   'gitlab_get_or_create_release': _getOrCreateRelease,
   'gitlab_upload_release_asset': _uploadReleaseAsset,
   'gitlab_download_release_asset': _downloadReleaseAsset,
-});
+  }),
+  ...const GitLabIssueSyncTools().handlers,
+};
 
 /// Builds GitLab config, or `null` when base path / token is missing.
 _GitlabConfig? _gitlabConfig() {

@@ -140,12 +140,10 @@ github_update_pr
 gitlab_add_project_hook
 gitlab_close_mr
 gitlab_create_branch
-gitlab_create_issue
 gitlab_create_tag
 gitlab_get_branches
 gitlab_get_file_content
 gitlab_get_group_members
-gitlab_get_issue
 gitlab_get_mr_approvals
 gitlab_get_mr_notes
 gitlab_get_project_details

@@ -17,6 +17,11 @@ void main() {
     'SOURCE_GITHUB_REPOSITORY': 'test-repo',
   };
   const jira = {'JIRA_BASE_PATH': 'https://jira.example.com'};
+  const gitlab = {
+    'GITLAB_TOKEN': 'glpat_x',
+    'GITLAB_WORKSPACE': 'my-group',
+    'GITLAB_REPOSITORY': 'my-repo',
+  };
 
   test('DEFAULT_TRACKER=github wins over configured Jira', () {
     PropertyReader.setOverrides(
@@ -47,5 +52,25 @@ void main() {
     expect(c.repository, 'test-repo');
     expect(c.branch, 'main');
     expect(c.basePath, 'https://api.github.com');
+  });
+
+  test('DEFAULT_TRACKER=gitlab wins over configured Jira and GitHub', () {
+    PropertyReader.setOverrides({
+      ...jira,
+      ...github,
+      ...gitlab,
+      'DEFAULT_TRACKER': 'GitLab',
+    });
+    expect(resolveTrackerType(PropertyReader()), 'gitlab');
+  });
+
+  test('GitLab-only config auto-detects GitLab as fallback', () {
+    PropertyReader.setOverrides(gitlab);
+    expect(resolveTrackerType(PropertyReader()), 'gitlab');
+    final c = resolveGitlabTrackerConfig(PropertyReader())!;
+    expect(c.workspace, 'my-group');
+    expect(c.repository, 'my-repo');
+    expect(c.branch, 'main');
+    expect(c.basePath, 'https://gitlab.com');
   });
 }

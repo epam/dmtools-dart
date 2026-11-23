@@ -453,6 +453,27 @@ void _openAiRequestTests() {
     expect(body['temperature'], 0.5);
     expect(body.containsKey('max_completion_tokens'), isFalse);
   });
+
+  test('openai_ai_chat merges OPENAI_EXTRA_BODY and guards model/messages', () {
+    final server = _aiServer!;
+    final echo = _echoOf(
+      server,
+      {
+        'OPENAI_API_KEY': 'oai-test-key',
+        'OPENAI_BASE_PATH': 'http://127.0.0.1:${server.port}/v1',
+        'OPENAI_MODEL': 'qwen',
+        'OPENAI_EXTRA_BODY': '{"model":"hijack","messages":[],"top_k":20}',
+      },
+      'openai_ai_chat',
+      'hi',
+    );
+    final body = jsonDecode(echo['body'] as String);
+    expect(body['model'], 'qwen');
+    expect(body['messages'], [
+      {'role': 'user', 'content': 'hi'},
+    ]);
+    expect(body['top_k'], 20);
+  });
 }
 
 void _anthropicRequestTests() {

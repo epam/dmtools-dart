@@ -10,6 +10,7 @@ import '../../mcp/tool_param.dart';
 import 'gitlab_client.dart';
 part 'gitlab_project_tools.dart';
 part 'gitlab_release_tools.dart';
+part 'gitlab_issue_tracker_tools.dart';
 
 /// Returns all GitLab MCP tool definitions.
 ///
@@ -20,6 +21,7 @@ List<ToolDefinition> gitlabTools() => [
       ..._agentMergeRequestTools(),
       ..._agentMrReviewTools(),
       ..._issueTools(),
+      ..._issueTrackerTools(),
       ..._repositoryTools(),
       ..._pipelineTools(),
       ..._memberTools(),
@@ -600,19 +602,28 @@ class GitlabToolExecutor {
   /// Issue tool handlers.
   Map<String, Future<dynamic> Function(Map<String, dynamic>)>
       _issueHandlers() => {
-            'gitlab_get_issue': (a) => _client.getIssue(
-                  a['project'] as String,
-                  _toInt(a['iid']),
+            'gitlab_get_issue': (a) => _client.getIssueByRef(
+                  project: a['project'] as String?,
+                  iid: a['iid'] == null ? null : _toInt(a['iid']),
+                  workspace: _glArgStr(a['workspace']),
+                  repository: _glArgStr(a['repository']),
+                  issueNumber: _glArgStr(a['issueNumber']),
+                  key: _glArgStr(a['key']),
                 ),
-            'gitlab_create_issue': (a) => _client.createIssue(
-                  a['project'] as String,
-                  a['title'] as String,
-                  a['description'] as String?,
+            'gitlab_create_issue': (a) => _client.createIssueByRef(
+                  _glArgStr(a['title']) ?? '',
+                  project: a['project'] as String?,
+                  description: a['description'] as String?,
+                  body: _glArgStr(a['body']),
+                  workspace: _glArgStr(a['workspace']),
+                  repository: _glArgStr(a['repository']),
+                  key: _glArgStr(a['key']),
                 ),
             'gitlab_list_issues': (a) => _client.listIssues(
                   a['project'] as String,
                   a['state'] as String? ?? 'opened',
                 ),
+            ..._glIssueTrackerHandlers(_client),
           };
 
   /// Repository tool handlers.

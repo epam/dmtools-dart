@@ -5,6 +5,11 @@ import 'tool_definition.dart';
 final RegExp _gitHubKeyHint =
     RegExp(r'^(?:gh-\d+|[\w.-]+/[\w.-]+#\d+)$', caseSensitive: false);
 
+/// GitLab key formats (`gl-123` or 3+ segment `group/sub/project#123`) —
+/// unambiguously GitLab keys (dm.ai #876 `ToolAliasResolver`).
+final RegExp _gitLabKeyHint =
+    RegExp(r'^(?:gl-\d+|(?:[\w.-]+/){2,}[\w.-]+#\d+)$', caseSensitive: false);
+
 /// Classic Jira key: `PROJ-123`.
 final RegExp _jiraKeyHint = RegExp(r'^[A-Z][A-Z0-9]+-\d+$');
 
@@ -95,10 +100,12 @@ class ToolRegistry {
     if (_tools.containsKey(name)) return name;
     final candidates = _aliasCandidates(name, integrations);
     if (candidates.isEmpty) return null;
-    // 1. An explicit GitHub key format (`gh-123`, `owner/repo#123`)
-    //    always routes to GitHub — it is not a valid key anywhere else.
+    // 1. Explicit GitHub (`gh-123`, `owner/repo#123`) and GitLab (`gl-123`,
+    //    `group/sub/project#123`) key formats route to their forge.
     final githubHint = _githubHintCarrier(candidates, keyHint);
     if (githubHint != null) return githubHint.name;
+    final gitlabHint = _gitlabHintCarrier(candidates, keyHint);
+    if (gitlabHint != null) return gitlabHint.name;
     // 2. A single registered candidate needs no disambiguation.
     if (candidates.length == 1) return candidates.first.name;
     // 3. DEFAULT_TRACKER / DEFAULT_SOURCE_CODE from the property chain.
@@ -129,6 +136,19 @@ class ToolRegistry {
       return null;
     }
     return _firstByIntegration(candidates, 'github');
+  }
+
+  /// The GitLab carrier for an explicit GitLab key format — `gl-123` or
+  /// `group/sub/project#123` (case-insensitive, surrounding whitespace
+  /// trimmed) — or `null` when [keyHint] gives no such signal or no GitLab
+  /// carrier exists.
+  ToolDefinition? _gitlabHintCarrier(
+      List<ToolDefinition> candidates, String? keyHint) {
+    final hint = keyHint?.trim();
+    if (hint == null || hint.isEmpty || !_gitLabKeyHint.hasMatch(hint)) {
+      return null;
+    }
+    return _firstByIntegration(candidates, 'gitlab');
   }
 
   /// The carrier picked by key-format detection — a classic Jira key

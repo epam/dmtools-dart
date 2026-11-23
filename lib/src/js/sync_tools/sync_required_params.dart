@@ -145,9 +145,13 @@ const Map<String, List<String>> kGitlabRequiredParams = {
     'line',
     'text',
   ],
+  'gitlab_add_issue_label': ['label'],
+  'gitlab_assign_issue': ['user'],
   'gitlab_add_mr_comment': ['workspace', 'repository', 'pullRequestId', 'text'],
   'gitlab_add_mr_label': ['workspace', 'repository', 'pullRequestId', 'label'],
   'gitlab_approve_mr': ['workspace', 'repository', 'pullRequestId'],
+  'gitlab_create_issue': ['title'],
+  'gitlab_create_issue_comment': ['body'],
   'gitlab_create_mr': [
     'workspace',
     'repository',
@@ -179,6 +183,7 @@ const Map<String, List<String>> kGitlabRequiredParams = {
   'gitlab_list_pipeline_runs': ['workspace', 'repository'],
   'gitlab_list_project_jobs': ['workspace', 'repository'],
   'gitlab_merge_mr': ['workspace', 'repository', 'pullRequestId'],
+  'gitlab_move_issue_to_status': ['statusName'],
   'gitlab_rebase_mr': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_remove_mr_label': [
     'workspace',
@@ -186,6 +191,7 @@ const Map<String, List<String>> kGitlabRequiredParams = {
     'pullRequestId',
     'label',
   ],
+  'gitlab_remove_issue_label': ['label'],
   'gitlab_reply_to_mr_thread': [
     'workspace',
     'repository',
@@ -199,6 +205,7 @@ const Map<String, List<String>> kGitlabRequiredParams = {
     'pullRequestId',
     'discussionId',
   ],
+  'gitlab_search_issues': ['query'],
   'gitlab_trigger_pipeline': ['workspace', 'repository', 'ref'],
   'gitlab_unapprove_mr': ['workspace', 'repository', 'pullRequestId'],
   'gitlab_upload_release_asset': [
@@ -228,6 +235,24 @@ const Map<String, Map<String, List<String>>> kGithubParamAliases = {
 
 /// Alias tables for the GitLab family (Java `GitLab.java` annotations).
 const Map<String, Map<String, List<String>>> kGitlabParamAliases = {
+  'gitlab_add_issue_label': {
+    'label': ['labels'],
+  },
+  'gitlab_assign_issue': {
+    'user': ['accountId', 'assignee', 'userName'],
+  },
+  'gitlab_create_issue': {
+    'title': ['summary'],
+  },
+  'gitlab_create_issue_comment': {
+    'body': ['text', 'comment'],
+  },
+  'gitlab_move_issue_to_status': {
+    'statusName': ['state', 'status'],
+  },
+  'gitlab_search_issues': {
+    'query': ['jql', 'wiql'],
+  },
   'gitlab_add_inline_mr_comment': {
     'path': ['filePath'],
   },

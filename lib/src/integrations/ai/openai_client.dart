@@ -5,6 +5,8 @@
 /// text from the first choice's message content.
 library;
 
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import '../../config/property_reader.dart';
@@ -21,13 +23,15 @@ class OpenAIClient implements AiChatClient {
   final int _maxTokens;
   final double _temperature;
   final String _maxTokensParamName;
+  Map<String, dynamic>? _extraBody;
 
   /// Creates a client from [reader]'s OpenAI configuration.
   ///
   /// Pass [dio] to inject a custom HTTP transport (tests); production code
   /// omits it and gets a default [Dio] with 60-second timeouts.
   ///
-  /// Throws [StateError] when `OPENAI_API_KEY` is missing or empty.
+  /// Throws [StateError] when `OPENAI_API_KEY` is missing or empty, or
+  /// [ArgumentError] when `OPENAI_EXTRA_BODY` is not a valid JSON object.
   factory OpenAIClient(PropertyReader reader, {Dio? dio}) => OpenAIClient._(
         dio ?? createDefaultAiDio(),
         reader.getOpenAIBasePath(),
@@ -35,6 +39,7 @@ class OpenAIClient implements AiChatClient {
         reader.getOpenAIMaxTokens(),
         reader.getOpenAITemperature(),
         reader.getOpenAIMaxTokensParamName(),
+        reader.getOpenAIExtraBody(),
       );
 
   OpenAIClient._(
@@ -44,7 +49,52 @@ class OpenAIClient implements AiChatClient {
     this._maxTokens,
     this._temperature,
     this._maxTokensParamName,
-  );
+    String? extraBodyJson,
+  ) {
+    setExtraBody(extraBodyJson);
+  }
+
+  /// Parses [extraBodyJson] as a JSON object; returns `null` when unset,
+  /// blank, or an unresolved `$` placeholder, or throws [ArgumentError]
+  /// when the value is not a JSON object (Java `OpenAIClient.setExtraBody`).
+  static Map<String, dynamic>? parseExtraBody(String? extraBodyJson) {
+    final trimmed = extraBodyJson?.trim() ?? '';
+    if (trimmed.isEmpty || trimmed.startsWith(r'$')) return null;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        return jsonDecode(jsonEncode(decoded)) as Map<String, dynamic>;
+      }
+    } on FormatException catch (e) {
+      throw ArgumentError('OPENAI_EXTRA_BODY must be a JSON object: $e');
+    }
+    throw ArgumentError('OPENAI_EXTRA_BODY must be a JSON object');
+  }
+
+  /// Merges [extraBody] fields into [body], skipping `model` and `messages`
+  /// (Java `OpenAIClient.performChatCompletion` parity).
+  static void mergeExtraBody(
+    Map<String, dynamic> body,
+    Map<String, dynamic>? extraBody,
+  ) {
+    if (extraBody == null) return;
+    for (final entry in extraBody.entries) {
+      if (entry.key == 'model' || entry.key == 'messages') continue;
+      body[entry.key] = jsonDecode(jsonEncode(entry.value));
+    }
+  }
+
+  /// Sets extra fields merged into every chat request body, overriding
+  /// temperature and the max-tokens field (`model` and `messages` cannot
+  /// be overridden).
+  void setExtraBody(String? extraBodyJson) {
+    _extraBody = parseExtraBody(extraBodyJson);
+  }
+
+  /// Defensive copy of the configured extra body, or `null` when unset.
+  Map<String, dynamic>? get extraBody => _extraBody == null
+      ? null
+      : jsonDecode(jsonEncode(_extraBody)) as Map<String, dynamic>;
 
   /// Sends a multi-turn chat request built from [messages] and returns the
   /// response text.
@@ -111,11 +161,13 @@ class OpenAIClient implements AiChatClient {
     final body = <String, dynamic>{
       'model': model,
       'messages': withSystemMessage(messages, systemPrompt),
-      _maxTokensParamName: maxTokens,
+      if (_maxTokensParamName.trim().isNotEmpty)
+        _maxTokensParamName.trim(): maxTokens,
     };
     if (temperature >= 0) {
       body['temperature'] = temperature;
     }
+    mergeExtraBody(body, _extraBody);
     return body;
   }
 

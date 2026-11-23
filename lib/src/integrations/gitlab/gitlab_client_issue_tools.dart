@@ -48,9 +48,7 @@ GlIssueRef resolveGlIssueRef({
       _glBlankToNull(project) ?? _glJoinPair(workspace, repository);
   final initialIid = _glBlankToNull(issueNumber);
   final parsed = parseGlIssueKey(_glBlankToNull(key));
-  final finalProj = initialProj ??
-      parsed.projectPath ??
-      _glJoinPair(_glDefaultWorkspace(), _glDefaultRepository());
+  final finalProj = initialProj ?? parsed.projectPath ?? _glDefaultProject();
   final finalIid = initialIid ?? parsed.iid;
   if (finalProj == null || finalIid == null) {
     throw ArgumentError(
@@ -101,15 +99,15 @@ String resolveGlProjectPath({
   if (k != null && k.contains('/')) return k;
   final p = _glBlankToNull(project);
   if (p != null) return p;
-  final ws = _glBlankToNull(workspace) ?? _glDefaultWorkspace();
-  final rp = _glBlankToNull(repository) ?? _glDefaultRepository();
-  if (ws == null || rp == null) {
-    throw ArgumentError(
-      'GitLab project is not configured. Pass workspace/repository '
-      'or set GITLAB_WORKSPACE and GITLAB_REPOSITORY.',
-    );
-  }
-  return '$ws/$rp';
+  final ws = _glBlankToNull(workspace);
+  final rp = _glBlankToNull(repository);
+  if (ws != null && rp != null) return '$ws/$rp';
+  final def = _glDefaultProject(workspaceOverride: ws, repositoryOverride: rp);
+  if (def != null) return def;
+  throw ArgumentError(
+    'GitLab project is not configured. Pass workspace/repository '
+    'or set GITLAB_WORKSPACE and GITLAB_REPOSITORY.',
+  );
 }
 
 String? _glBlankToNull(String? value) {
@@ -117,11 +115,19 @@ String? _glBlankToNull(String? value) {
   return t.isEmpty ? null : t;
 }
 
-String? _glDefaultWorkspace() =>
-    _glBlankToNull(PropertyReader().getGitLabWorkspace());
-
-String? _glDefaultRepository() =>
-    _glBlankToNull(PropertyReader().getGitLabRepository());
+String? _glDefaultProject({
+  String? workspaceOverride,
+  String? repositoryOverride,
+}) {
+  final reader = PropertyReader();
+  if (workspaceOverride == null && repositoryOverride == null) {
+    final ciPath = _glBlankToNull(reader.getValue('CI_PROJECT_PATH'));
+    if (ciPath != null && ciPath.contains('/')) return ciPath;
+  }
+  final ws = workspaceOverride ?? _glBlankToNull(reader.getGitLabWorkspace());
+  final rp = repositoryOverride ?? _glBlankToNull(reader.getGitLabRepository());
+  return (ws != null && rp != null) ? '$ws/$rp' : null;
+}
 
 /// Issue-tracker methods on [GitlabClient] (Java `GitLabIssues` parity).
 extension GitlabIssueTrackerTools on GitlabClient {

@@ -4,9 +4,9 @@
 /// sync config/HTTP helpers. Every issue tool resolves its reference from
 /// explicit parts (`workspace`/`repository`/`issueNumber`, or the legacy
 /// `project`/`iid` pair), a composite `key` (`namespace/project#123`,
-/// `gl-123`, or a bare IID), or the configured `GITLAB_WORKSPACE` /
-/// `GITLAB_REPOSITORY` defaults — Java `GitLabIssues.resolveIssueRef`
-/// parity.
+/// `gl-123`, or a bare IID), or the configured `CI_PROJECT_PATH` /
+/// `GITLAB_WORKSPACE` + `GITLAB_REPOSITORY` defaults — Java
+/// `GitLabIssues.resolveIssueRef` parity.
 part of 'gitlab_sync_tools.dart';
 
 /// A resolved GitLab issue reference for one sync call.
@@ -76,10 +76,12 @@ String _glExplicitProject(Map<String, dynamic> args) {
 }
 
 String _glConfiguredProjectPath() {
-  final reader = PropertyReader();
-  final ws = reader.getGitLabWorkspace()?.trim() ?? '';
-  final rp = reader.getGitLabRepository()?.trim() ?? '';
-  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : '';
+  final r = PropertyReader();
+  final ci = syncAsStr(r.getValue('CI_PROJECT_PATH')).trim();
+  if (ci.contains('/')) return ci;
+  final w = (r.getGitLabWorkspace() ?? '').trim();
+  final p = (r.getGitLabRepository() ?? '').trim();
+  return (w.isNotEmpty && p.isNotEmpty) ? '$w/$p' : '';
 }
 
 /// Parses composite `namespace/project#123`, `gl-123`, or bare IID [key].
@@ -107,14 +109,8 @@ String? _resolveGlSyncProjectPath(Map<String, dynamic> args) {
   if (key.contains('/')) return key;
   final explicit = _glExplicitProject(args);
   if (explicit.isNotEmpty) return explicit;
-  final reader = PropertyReader();
-  final wsArg = _glFirstStr(args, const ['workspace', 'owner']);
-  final rpArg = _glFirstStr(args, const ['repository', 'repo']);
-  final ws =
-      wsArg.isNotEmpty ? wsArg : reader.getGitLabWorkspace()?.trim() ?? '';
-  final rp =
-      rpArg.isNotEmpty ? rpArg : reader.getGitLabRepository()?.trim() ?? '';
-  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : null;
+  final configured = _glConfiguredProjectPath();
+  return configured.isNotEmpty ? configured : null;
 }
 
 /// Runs [fn] with the resolved GitLab issue reference, or returns the JSON
@@ -134,11 +130,16 @@ String _withGlIssueRef(
 String _glFirstStr(Map<String, dynamic> args, List<String> names) =>
     syncFirstStr(args, names);
 
+String _putIssueJson(_GitlabConfig c, String url, Map<String, dynamic> body) =>
+    syncStrictBodyOrError(
+      SyncHttpClient.put(url, headers: c.headers, body: jsonEncode(body)),
+    );
+
 /// `gitlab_get_issue` — GET `projects/{id}/issues/{iid}`.
 String _getIssue(_GitlabConfig c, Map<String, dynamic> a) => _withGlIssueRef(
       c,
       a,
-      (c, ref) => syncBodyOrError(
+      (c, ref) => syncStrictBodyOrError(
         SyncHttpClient.get('${c.baseUrl}/${ref.issueSeg}', headers: c.headers),
       ),
     );
@@ -159,7 +160,7 @@ String _searchIssues(_GitlabConfig c, Map<String, dynamic> a) {
       '?state=${Uri.encodeQueryComponent(state)}'
       '&per_page=100'
       '&search=${Uri.encodeQueryComponent(query)}';
-  return syncBodyOrError(SyncHttpClient.get(url, headers: c.headers));
+  return syncStrictBodyOrError(SyncHttpClient.get(url, headers: c.headers));
 }
 
 /// `gitlab_create_issue` — POST `projects/{id}/issues`.
@@ -174,10 +175,12 @@ String _createIssue(_GitlabConfig c, Map<String, dynamic> a) {
   final payload = <String, dynamic>{'title': syncAsStr(a['title'])};
   final desc = _glFirstStr(a, const ['body', 'description']);
   if (desc.isNotEmpty) payload['description'] = desc;
-  return syncPostJson(
-    c.headers,
-    '${c.baseUrl}/projects/${Uri.encodeComponent(projectPath)}/issues',
-    jsonEncode(payload),
+  return syncStrictBodyOrError(
+    SyncHttpClient.post(
+      '${c.baseUrl}/projects/${Uri.encodeComponent(projectPath)}/issues',
+      headers: c.headers,
+      body: jsonEncode(payload),
+    ),
   );
 }
 
@@ -185,10 +188,10 @@ String _createIssue(_GitlabConfig c, Map<String, dynamic> a) {
 String _closeIssue(_GitlabConfig c, Map<String, dynamic> a) => _withGlIssueRef(
       c,
       a,
-      (c, ref) => _putBody(
+      (c, ref) => _putIssueJson(
         c,
         '${c.baseUrl}/${ref.issueSeg}',
-        jsonEncode({'state_event': 'close'}),
+        const {'state_event': 'close'},
       ),
     );
 
@@ -196,10 +199,10 @@ String _closeIssue(_GitlabConfig c, Map<String, dynamic> a) => _withGlIssueRef(
 String _reopenIssue(_GitlabConfig c, Map<String, dynamic> a) => _withGlIssueRef(
       c,
       a,
-      (c, ref) => _putBody(
+      (c, ref) => _putIssueJson(
         c,
         '${c.baseUrl}/${ref.issueSeg}',
-        jsonEncode({'state_event': 'reopen'}),
+        const {'state_event': 'reopen'},
       ),
     );
 
@@ -215,7 +218,7 @@ String _moveIssueToStatus(_GitlabConfig c, Map<String, dynamic> a) {
       : _syncGlOpenStatuses.contains(lower)
           ? const <String, dynamic>{'state_event': 'reopen'}
           : <String, dynamic>{'add_labels': 'status::$status'};
-  return _putBody(c, '${c.baseUrl}/${resolved.issueSeg}', jsonEncode(payload));
+  return _putIssueJson(c, '${c.baseUrl}/${resolved.issueSeg}', payload);
 }
 
 /// `gitlab_assign_issue` — looks up user via `/users?username=…`, then PUTs
@@ -225,24 +228,19 @@ String _assignIssue(_GitlabConfig c, Map<String, dynamic> a) {
   if (user.isEmpty) return syncErr('GitLab username must not be empty');
   final resolved = _resolveGlSyncIssueRef(a);
   if (resolved is! _GlSyncIssueRef) return resolved as String;
-  final usersRaw = syncBodyOrError(
-    SyncHttpClient.get(
-      '${c.baseUrl}/users?username=${Uri.encodeQueryComponent(user)}',
-      headers: c.headers,
-    ),
+  final usersResp = SyncHttpClient.get(
+    '${c.baseUrl}/users?username=${Uri.encodeQueryComponent(user)}',
+    headers: c.headers,
   );
-  final users = syncTryDecode(usersRaw);
+  if (!usersResp.isOk) return syncStrictBodyOrError(usersResp);
+  final users = syncTryDecode(usersResp.body);
   if (users is! List || users.isEmpty || users.first is! Map) {
     return syncErr('GitLab user not found: $user');
   }
   final userId = (users.first as Map)['id'];
-  return _putBody(
-    c,
-    '${c.baseUrl}/${resolved.issueSeg}',
-    jsonEncode({
-      'assignee_ids': [userId],
-    }),
-  );
+  return _putIssueJson(c, '${c.baseUrl}/${resolved.issueSeg}', {
+    'assignee_ids': [userId],
+  });
 }
 
 /// `gitlab_add_issue_label` — PUT `add_labels` on the issue.
@@ -250,10 +248,10 @@ String _addIssueLabel(_GitlabConfig c, Map<String, dynamic> a) =>
     _withGlIssueRef(
       c,
       a,
-      (c, ref) => _putBody(
+      (c, ref) => _putIssueJson(
         c,
         '${c.baseUrl}/${ref.issueSeg}',
-        jsonEncode({'add_labels': syncAsStr(a['label'])}),
+        {'add_labels': syncAsStr(a['label'])},
       ),
     );
 
@@ -262,10 +260,10 @@ String _removeIssueLabel(_GitlabConfig c, Map<String, dynamic> a) =>
     _withGlIssueRef(
       c,
       a,
-      (c, ref) => _putBody(
+      (c, ref) => _putIssueJson(
         c,
         '${c.baseUrl}/${ref.issueSeg}',
-        jsonEncode({'remove_labels': syncAsStr(a['label'])}),
+        {'remove_labels': syncAsStr(a['label'])},
       ),
     );
 
@@ -274,24 +272,35 @@ String _createIssueComment(_GitlabConfig c, Map<String, dynamic> a) =>
     _withGlIssueRef(
       c,
       a,
-      (c, ref) => syncPostJson(
-        c.headers,
-        '${c.baseUrl}/${ref.issueSeg}/notes',
-        jsonEncode({
-          'body': _glFirstStr(a, const ['body', 'text', 'comment'])
-        }),
-      ),
-    );
-
-/// `gitlab_get_issue_comments` — GET `…/issues/{iid}/notes?sort=asc&per_page=100`.
-String _getIssueComments(_GitlabConfig c, Map<String, dynamic> a) =>
-    _withGlIssueRef(
-      c,
-      a,
-      (c, ref) => syncBodyOrError(
-        SyncHttpClient.get(
-          '${c.baseUrl}/${ref.issueSeg}/notes?sort=asc&per_page=100',
+      (c, ref) => syncStrictBodyOrError(
+        SyncHttpClient.post(
+          '${c.baseUrl}/${ref.issueSeg}/notes',
           headers: c.headers,
+          body: jsonEncode({
+            'body': _glFirstStr(a, const ['body', 'text', 'comment']),
+          }),
         ),
       ),
     );
+
+/// `gitlab_get_issue_comments` — paginated GET `…/issues/{iid}/notes?sort=asc`
+/// (Java `GitLabIssues.getIssueComments` parity).
+String _getIssueComments(_GitlabConfig c, Map<String, dynamic> a) =>
+    _withGlIssueRef(c, a, _fetchAllIssueComments);
+
+String _fetchAllIssueComments(_GitlabConfig c, _GlSyncIssueRef ref) {
+  final all = <dynamic>[];
+  var page = 1;
+  while (true) {
+    final resp = SyncHttpClient.get(
+      '${c.baseUrl}/${ref.issueSeg}/notes?sort=asc&per_page=100&page=$page',
+      headers: c.headers,
+    );
+    if (!resp.isOk) return syncStrictBodyOrError(resp);
+    final decoded = syncTryDecode(resp.body);
+    if (decoded is! List) return resp.body;
+    all.addAll(decoded);
+    if (decoded.length < 100) return jsonEncode(all);
+    page++;
+  }
+}

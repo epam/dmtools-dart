@@ -149,12 +149,16 @@ class GitlabTrackerClient {
     return validProj ? (proj, iid) : null;
   }
 
-  static String? _defaultProjectPath() {
-    final reader = PropertyReader();
-    final ciPath = (reader.getValue('CI_PROJECT_PATH') ?? '').trim();
-    if (ciPath.contains('/')) return ciPath;
-    final ws = reader.getGitLabWorkspace()?.trim() ?? '';
-    final rp = reader.getGitLabRepository()?.trim() ?? '';
-    return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : null;
-  }
+  static String? _defaultProjectPath() => resolveConfiguredGitlabProjectPath();
+}
+
+/// Resolves the configured default GitLab project path (`CI_PROJECT_PATH`,
+/// then `GITLAB_WORKSPACE` + `GITLAB_REPOSITORY`), or `null` when absent.
+String? resolveConfiguredGitlabProjectPath([PropertyReader? customReader]) {
+  final reader = customReader ?? PropertyReader();
+  final ciPath = (reader.getValue('CI_PROJECT_PATH') ?? '').trim();
+  if (ciPath.contains('/')) return ciPath;
+  final ws = reader.getGitLabWorkspace()?.trim() ?? '';
+  final rp = reader.getGitLabRepository()?.trim() ?? '';
+  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : null;
 }

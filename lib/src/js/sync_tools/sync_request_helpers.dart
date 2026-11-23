@@ -67,6 +67,23 @@ String syncBodyOrError(SyncHttpResponse resp) {
   return resp.body;
 }
 
+/// Returns the response body on 2xx, or a JSON `{"error": …}` envelope on
+/// transport or HTTP status failures (Java `AbstractRestClient` loud non-2xx
+/// parity).
+String syncStrictBodyOrError(SyncHttpResponse resp) {
+  if (resp.statusCode == 0) {
+    return syncErr('HTTP request failed: ${resp.body}');
+  }
+  if (!resp.isOk) {
+    final decoded = syncTryDecode(resp.body);
+    final detail = decoded is Map
+        ? (decoded['error'] ?? decoded['message'] ?? resp.body).toString()
+        : resp.body;
+    return syncErr('HTTP ${resp.statusCode}: $detail');
+  }
+  return resp.body;
+}
+
 /// POSTs [body] to [url] and returns the result string.
 String syncPostJson(Map<String, String> headers, String url, String body) =>
     syncBodyOrError(SyncHttpClient.post(url, headers: headers, body: body));

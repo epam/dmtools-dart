@@ -228,6 +228,10 @@ class SourceCapabilities {
   /// Whether GitHub (`SOURCE_GITHUB_TOKEN` or `GITHUB_TOKEN`) is configured.
   bool get isGithubConfigured => resolveGithubToken(reader) != null;
 
+  /// Whether GitLab (`GITLAB_TOKEN`) is configured.
+  bool get isGitlabConfigured =>
+      (reader.getGitLabToken()?.trim() ?? '').isNotEmpty;
+
   /// Whether Azure DevOps (`ADO_ORGANIZATION` + `ADO_PROJECT` +
   /// `ADO_PAT_TOKEN`) is configured.
   bool get isAdoConfigured {

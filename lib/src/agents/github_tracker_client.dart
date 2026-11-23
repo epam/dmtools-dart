@@ -222,11 +222,17 @@ dynamic trackerTryDecode(String raw) {
   }
 }
 
-/// Returns the `error` field of an `{"error": …}` JSON envelope, else `null`.
+/// Returns the `error` field of an `{"error": …}` JSON envelope (or a GitLab
+/// `{"message": …}` error envelope without issue fields), else `null`.
 String? trackerErrorOf(String raw) {
   final decoded = trackerTryDecode(raw);
-  if (decoded is Map && decoded['error'] != null) {
-    return decoded['error'].toString();
+  if (decoded is Map) {
+    if (decoded['error'] != null) return decoded['error'].toString();
+    if (decoded['message'] != null &&
+        decoded['id'] == null &&
+        decoded['iid'] == null) {
+      return decoded['message'].toString();
+    }
   }
   return null;
 }

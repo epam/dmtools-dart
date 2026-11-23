@@ -97,7 +97,7 @@ void _writeOperationTests() {
 }
 
 void _writeErrorTests() {
-  test('throws StateError on unresolvable key or error envelope', () {
+  test('throws StateError on unresolvable key or error/message envelope', () {
     final calls = <_Call>[];
     final c = _client(
       calls,
@@ -105,6 +105,12 @@ void _writeErrorTests() {
     );
     expect(() => c.postComment('bad', 'x'), throwsStateError);
     expect(() => c.postComment('grp/proj#1', 'x'), throwsStateError);
+
+    final cMsg = _client(
+      calls,
+      onCall: (_, __) => jsonEncode({'message': '404 Issue Not Found'}),
+    );
+    expect(() => cMsg.postComment('grp/proj#1', 'x'), throwsStateError);
   });
 }
 

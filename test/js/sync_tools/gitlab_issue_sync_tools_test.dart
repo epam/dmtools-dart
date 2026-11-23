@@ -155,7 +155,7 @@ void _testIssueLabelAndCommentTools() {
   group('GitLabSyncTools issue label and comment tools', () {
     _setUpIssueServer();
 
-    test('gitlab_add_issue_label, remove_label, and issue comments', () {
+    test('gitlab_add_issue_label, remove_label, and paginated comments', () {
       final added = _echo('gitlab_add_issue_label', {
         'key': 'gl-5',
         'label': 'bug',
@@ -179,13 +179,12 @@ void _testIssueLabelAndCommentTools() {
       );
       expect(jsonDecode(comment['body'] as String), {'body': 'Note text'});
 
-      final notes = _echo('gitlab_get_issue_comments', {'key': 'gl-5'});
-      expect(notes['method'], 'GET');
-      expect(
-        notes['path'],
-        '/api/v4/projects/defgroup%2Fdefrepo/issues/5/notes'
-        '?sort=asc&per_page=100',
-      );
+      final pagedRaw =
+          _tools.handlers['gitlab_get_issue_comments']!({'key': 'gl-105'});
+      final paged = jsonDecode(pagedRaw) as List;
+      expect(paged, hasLength(102));
+      expect((paged.first as Map)['body'], 'n1');
+      expect((paged.last as Map)['body'], 'n102');
     });
   });
 }
@@ -207,29 +206,29 @@ void _testIssueAssignAndErrorTools() {
       expect(jsonDecode(assigned['body'] as String), {
         'assignee_ids': [77],
       });
-
-      final missingUser = _echo('gitlab_assign_issue', {
-        'key': 'gl-5',
-        'user': 'ghost',
-      });
-      expect(missingUser['error'], contains('GitLab user not found'));
-
-      final blankUser = _echo('gitlab_assign_issue', {
-        'key': 'gl-5',
-        'user': '  ',
-      });
-      expect(blankUser['error'], contains('username must not be empty'));
+      final missing =
+          _echo('gitlab_assign_issue', {'key': 'gl-5', 'user': 'ghost'});
+      expect(missing['error'], contains('GitLab user not found'));
+      final blank = _echo('gitlab_assign_issue', {'key': 'gl-5', 'user': '  '});
+      expect(blank['error'], contains('username must not be empty'));
     });
 
-    test('returns JSON errors on bad key or missing project', () {
+    test('surfaces non-2xx HTTP status and CI_PROJECT_PATH fallback', () {
+      final notFound = _echo('gitlab_get_issue', {'key': 'gl-404'});
+      expect(notFound['error'], contains('HTTP 404'));
+      expect(notFound['error'], contains('404 Issue Not Found'));
       final badKey = _echo('gitlab_get_issue', {'key': 'not-a-key'});
       expect(badKey['error'], contains('Cannot parse GitLab issue key'));
-
       PropertyReader.setOverrides({
         'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
         'GITLAB_TOKEN': 'glpat-test',
-        'GITLAB_WORKSPACE': '',
-        'GITLAB_REPOSITORY': '',
+        'CI_PROJECT_PATH': 'cigroup/cirepo',
+      });
+      final fromCi = _echo('gitlab_get_issue', {'key': 'gl-7'});
+      expect(fromCi['path'], '/api/v4/projects/cigroup%2Fcirepo/issues/7');
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
+        'GITLAB_TOKEN': 'glpat-test',
       });
       final noProj = _echo('gitlab_get_issue', {'key': 'gl-5'});
       expect(noProj['error'], contains('requires workspace/repository'));

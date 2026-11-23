@@ -128,25 +128,33 @@ class GitlabTrackerClient {
   /// `GITLAB_REPOSITORY`. `null` when anything is missing.
   GitlabTrackerIssueRef? resolveIssueRef(String key) {
     final trimmed = key.trim();
-    final sep = trimmed.lastIndexOf('#');
-    if (sep > 0 &&
-        sep < trimmed.length - 1 &&
-        RegExp(r'^\d+$').hasMatch(trimmed.substring(sep + 1))) {
-      final proj = trimmed.substring(0, sep).trim();
-      if (proj.contains('/') &&
-          proj.split('/').every((p) => p.trim().isNotEmpty)) {
-        return (proj, trimmed.substring(sep + 1));
-      }
-    }
+    final composite = _parseCompositeIssueRef(trimmed);
+    if (composite != null) return composite;
     final bare = RegExp(r'^(?:gl-)?(\d+)$', caseSensitive: false)
         .firstMatch(trimmed)
         ?.group(1);
     if (bare == null) return null;
+    final defaultProj = _defaultProjectPath();
+    return defaultProj == null ? null : (defaultProj, bare);
+  }
+
+  static GitlabTrackerIssueRef? _parseCompositeIssueRef(String trimmed) {
+    final sep = trimmed.lastIndexOf('#');
+    if (sep <= 0 || sep >= trimmed.length - 1) return null;
+    final iid = trimmed.substring(sep + 1);
+    if (!RegExp(r'^\d+$').hasMatch(iid)) return null;
+    final proj = trimmed.substring(0, sep).trim();
+    final validProj =
+        proj.contains('/') && proj.split('/').every((p) => p.trim().isNotEmpty);
+    return validProj ? (proj, iid) : null;
+  }
+
+  static String? _defaultProjectPath() {
     final reader = PropertyReader();
     final ciPath = (reader.getValue('CI_PROJECT_PATH') ?? '').trim();
-    if (ciPath.contains('/')) return (ciPath, bare);
+    if (ciPath.contains('/')) return ciPath;
     final ws = reader.getGitLabWorkspace()?.trim() ?? '';
     final rp = reader.getGitLabRepository()?.trim() ?? '';
-    return (ws.isNotEmpty && rp.isNotEmpty) ? ('$ws/$rp', bare) : null;
+    return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : null;
   }
 }

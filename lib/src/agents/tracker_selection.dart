@@ -27,11 +27,12 @@ typedef GitlabTrackerConfig = ({
 });
 
 bool _set(String? v) => v != null && v.trim().isNotEmpty;
+bool _bothSet(String? a, String? b) => _set(a) && _set(b);
 
 bool _configured(PropertyReader r, String tracker) => switch (tracker) {
       'jira' => _set(r.getJiraBasePath()),
-      'ado' => _set(r.getAdoOrganization()) && _set(r.getAdoPatToken()),
-      'rally' => _set(r.getRallyPath()) && _set(r.getRallyToken()),
+      'ado' => _bothSet(r.getAdoOrganization(), r.getAdoPatToken()),
+      'rally' => _bothSet(r.getRallyPath(), r.getRallyToken()),
       'github' => _set(r.getGithubToken()),
       'gitlab' => _set(r.getGitLabToken()),
       _ => false,

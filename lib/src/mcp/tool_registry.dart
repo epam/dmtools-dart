@@ -102,10 +102,8 @@ class ToolRegistry {
     if (candidates.isEmpty) return null;
     // 1. Explicit GitHub (`gh-123`, `owner/repo#123`) and GitLab (`gl-123`,
     //    `group/sub/project#123`) key formats route to their forge.
-    final githubHint = _githubHintCarrier(candidates, keyHint);
-    if (githubHint != null) return githubHint.name;
-    final gitlabHint = _gitlabHintCarrier(candidates, keyHint);
-    if (gitlabHint != null) return gitlabHint.name;
+    final forgeHint = _forgeHintCarrier(candidates, keyHint);
+    if (forgeHint != null) return forgeHint.name;
     // 2. A single registered candidate needs no disambiguation.
     if (candidates.length == 1) return candidates.first.name;
     // 3. DEFAULT_TRACKER / DEFAULT_SOURCE_CODE from the property chain.
@@ -125,30 +123,20 @@ class ToolRegistry {
     return candidates.first.name;
   }
 
-  /// The GitHub carrier for an explicit GitHub key format — `gh-123` or
-  /// `owner/repo#123` (case-insensitive, surrounding whitespace trimmed) —
-  /// or `null` when [hint] gives no such signal or no GitHub carrier
-  /// exists.
-  ToolDefinition? _githubHintCarrier(
+  /// The GitHub or GitLab carrier for an explicit forge key format (`gh-123`,
+  /// `owner/repo#123`, `gl-123`, or `group/sub/project#123`), or `null` when
+  /// [keyHint] gives no such signal or no matching carrier exists.
+  ToolDefinition? _forgeHintCarrier(
       List<ToolDefinition> candidates, String? keyHint) {
-    final hint = keyHint?.trim();
-    if (hint == null || hint.isEmpty || !_gitHubKeyHint.hasMatch(hint)) {
-      return null;
+    final hint = keyHint?.trim() ?? '';
+    if (hint.isEmpty) return null;
+    if (_gitHubKeyHint.hasMatch(hint)) {
+      return _firstByIntegration(candidates, 'github');
     }
-    return _firstByIntegration(candidates, 'github');
-  }
-
-  /// The GitLab carrier for an explicit GitLab key format — `gl-123` or
-  /// `group/sub/project#123` (case-insensitive, surrounding whitespace
-  /// trimmed) — or `null` when [keyHint] gives no such signal or no GitLab
-  /// carrier exists.
-  ToolDefinition? _gitlabHintCarrier(
-      List<ToolDefinition> candidates, String? keyHint) {
-    final hint = keyHint?.trim();
-    if (hint == null || hint.isEmpty || !_gitLabKeyHint.hasMatch(hint)) {
-      return null;
+    if (_gitLabKeyHint.hasMatch(hint)) {
+      return _firstByIntegration(candidates, 'gitlab');
     }
-    return _firstByIntegration(candidates, 'gitlab');
+    return null;
   }
 
   /// The carrier picked by key-format detection — a classic Jira key

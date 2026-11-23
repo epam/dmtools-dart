@@ -799,6 +799,12 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             # so the client's per_page/maxResults walk is exercised.
             self._send(json.dumps([{"id": 1}, {"id": 2}]).encode("utf-8"))
             return
+        elif self.command == "GET" and "/api/v4/users?" in self.path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            username = query.get("username", [""])[0]
+            rows = [{"id": 77, "username": username}] if username != "ghost" else []
+            self._send(json.dumps(rows).encode("utf-8"))
+            return
         # ADO stub shapes for the WIQL two-step regression test: the WIQL
         # POST answers id/url stubs, the ids= detail GET answers full items
         # (mirrors the real dev.azure.com response envelopes).

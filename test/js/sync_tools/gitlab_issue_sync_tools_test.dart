@@ -23,6 +23,7 @@ void main() {
   if (hasPython3()) {
     _testIssueReadAndCreateTools();
     _testIssueMutationTools();
+    _testIssueAssignAndErrorTools();
   }
 }
 
@@ -70,13 +71,16 @@ void _testIssueReadAndCreateTools() {
   group('GitLabSyncTools issue read/create tools', () {
     _setUpIssueServer();
 
-    test('gitlab_get_issue resolves composite key and gl-N key', () {
+    test('gitlab_get_issue resolves composite key, gl-N, and bare IID', () {
       final b1 = _echo('gitlab_get_issue', {'key': 'org/sub/repo#12'});
       expect(b1['method'], 'GET');
       expect(b1['path'], '/api/v4/projects/org%2Fsub%2Frepo/issues/12');
 
       final b2 = _echo('gitlab_get_issue', {'key': 'gl-99'});
       expect(b2['path'], '/api/v4/projects/defgroup%2Fdefrepo/issues/99');
+
+      final b3 = _echo('gitlab_get_issue', {'key': '88'});
+      expect(b3['path'], '/api/v4/projects/defgroup%2Fdefrepo/issues/88');
     });
 
     test('gitlab_search_issues queries project issues with state and search',
@@ -127,6 +131,13 @@ void _testIssueMutationTools() {
       });
       expect(jsonDecode(movedDone['body'] as String), {'state_event': 'close'});
 
+      final movedOpen = _echo('gitlab_move_issue_to_status', {
+        'key': 'gl-5',
+        'statusName': 'reopened',
+      });
+      expect(
+          jsonDecode(movedOpen['body'] as String), {'state_event': 'reopen'});
+
       final movedCustom = _echo('gitlab_move_issue_to_status', {
         'key': 'gl-5',
         'statusName': 'In Review',
@@ -137,7 +148,7 @@ void _testIssueMutationTools() {
       );
     });
 
-    test('gitlab_add_issue_label, remove_label, and create_issue_comment', () {
+    test('gitlab_add_issue_label, remove_label, and issue comments', () {
       final added = _echo('gitlab_add_issue_label', {
         'key': 'gl-5',
         'label': 'bug',
@@ -160,6 +171,61 @@ void _testIssueMutationTools() {
         '/api/v4/projects/defgroup%2Fdefrepo/issues/5/notes',
       );
       expect(jsonDecode(comment['body'] as String), {'body': 'Note text'});
+
+      final notes = _echo('gitlab_get_issue_comments', {'key': 'gl-5'});
+      expect(notes['method'], 'GET');
+      expect(
+        notes['path'],
+        '/api/v4/projects/defgroup%2Fdefrepo/issues/5/notes'
+        '?sort=asc&per_page=100',
+      );
+    });
+  });
+}
+
+void _testIssueAssignAndErrorTools() {
+  group('GitLabSyncTools assign_issue and error branches', () {
+    _setUpIssueServer();
+
+    test('gitlab_assign_issue resolves user id and PUTs assignee_ids', () {
+      final assigned = _echo('gitlab_assign_issue', {
+        'key': 'gl-5',
+        'user': 'alice',
+      });
+      expect(assigned['method'], 'PUT');
+      expect(
+        assigned['path'],
+        '/api/v4/projects/defgroup%2Fdefrepo/issues/5',
+      );
+      expect(jsonDecode(assigned['body'] as String), {
+        'assignee_ids': [77],
+      });
+
+      final missingUser = _echo('gitlab_assign_issue', {
+        'key': 'gl-5',
+        'user': 'ghost',
+      });
+      expect(missingUser['error'], contains('GitLab user not found'));
+
+      final blankUser = _echo('gitlab_assign_issue', {
+        'key': 'gl-5',
+        'user': '  ',
+      });
+      expect(blankUser['error'], contains('username must not be empty'));
+    });
+
+    test('returns JSON errors on bad key or missing project', () {
+      final badKey = _echo('gitlab_get_issue', {'key': 'not-a-key'});
+      expect(badKey['error'], contains('Cannot parse GitLab issue key'));
+
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
+        'GITLAB_TOKEN': 'glpat-test',
+        'GITLAB_WORKSPACE': '',
+        'GITLAB_REPOSITORY': '',
+      });
+      final noProj = _echo('gitlab_get_issue', {'key': 'gl-5'});
+      expect(noProj['error'], contains('requires workspace/repository'));
     });
   });
 }

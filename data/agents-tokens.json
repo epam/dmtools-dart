@@ -1,0 +1,15 @@
+{
+  "pr-496": [
+    {
+      "leg": "review",
+      "at": "2026-11-23T20:58:52Z",
+      "prompt": 150435,
+      "completion": 44618,
+      "total": 195053,
+      "cacheRead": 5910528,
+      "requests": 68,
+      "source": "reported",
+      "model": "glm-5.3-flash"
+    }
+  ]
+}

@@ -32,73 +32,71 @@ const _syncGlClosedStatuses = {'done', 'closed', 'completed', 'resolved'};
 /// Statuses that reopen a GitLab issue (Java parity).
 const _syncGlOpenStatuses = {'open', 'opened', 'reopen', 'reopened'};
 
+/// Parsed composite/partial GitLab sync key parts.
+typedef _GlSyncKeyParts = ({String projectPath, String iid});
+
 /// Resolves the GitLab issue reference from tool [args] (Java
 /// `GitLabIssues.resolveIssueRef`). Returns a JSON error string when
 /// unresolved.
 Object _resolveGlSyncIssueRef(Map<String, dynamic> args) {
-  var projectPath = _glFirstStr(args, const ['project']);
-  if (projectPath.isEmpty) {
-    final ws = _glFirstStr(args, const ['workspace', 'owner']);
-    final rp = _glFirstStr(args, const ['repository', 'repo']);
-    if (ws.isNotEmpty && rp.isNotEmpty) projectPath = '$ws/$rp';
-  }
-  var iid = _glFirstStr(
+  final initialProj = _glExplicitProject(args);
+  final initialIid = _glFirstStr(
     args,
     const ['issueNumber', 'number', 'iid', 'pullRequestId'],
   );
   final key = syncAsStr(args['key']).trim();
-  if (key.isNotEmpty && (projectPath.isEmpty || iid.isEmpty)) {
-    final fromKey = _applyGlSyncIssueKey(key, projectPath, iid);
-    if (fromKey == null) {
-      return syncErr(
-        "Cannot parse GitLab issue key: '$key'. Expected "
-        "'namespace/project#123', 'gl-123', or a bare issue IID.",
-      );
-    }
-    projectPath = fromKey.$1;
-    iid = fromKey.$2;
+  final parsed = _parseGlSyncIssueKey(key);
+  if (key.isNotEmpty && parsed == null) {
+    return syncErr(
+      "Cannot parse GitLab issue key: '$key'. Expected "
+      "'namespace/project#123', 'gl-123', or a bare issue IID.",
+    );
   }
-  if (projectPath.isEmpty) {
-    final reader = PropertyReader();
-    final ws = reader.getGitLabWorkspace()?.trim() ?? '';
-    final rp = reader.getGitLabRepository()?.trim() ?? '';
-    if (ws.isNotEmpty && rp.isNotEmpty) projectPath = '$ws/$rp';
-  }
-  if (projectPath.isEmpty || iid.isEmpty) {
+  final projFromKey =
+      initialProj.isNotEmpty ? initialProj : (parsed?.projectPath ?? '');
+  final finalProj =
+      projFromKey.isNotEmpty ? projFromKey : _glConfiguredProjectPath();
+  final finalIid = initialIid.isNotEmpty ? initialIid : (parsed?.iid ?? '');
+  if (finalProj.isEmpty || finalIid.isEmpty) {
     return syncErr(
       'GitLab issue reference requires workspace/repository/issueNumber '
       "or a composite key 'namespace/project#123' (or 'gl-123' with a "
       'configured default project).',
     );
   }
-  return _GlSyncIssueRef(projectPath, iid);
+  return _GlSyncIssueRef(finalProj, finalIid);
 }
 
-/// Applies composite `namespace/project#123`, `gl-123`, or bare IID [key].
-(String, String)? _applyGlSyncIssueKey(
-  String key,
-  String projectPath,
-  String iid,
-) {
-  var proj = projectPath;
-  var numStr = iid;
+String _glExplicitProject(Map<String, dynamic> args) {
+  final direct = _glFirstStr(args, const ['project']);
+  if (direct.isNotEmpty) return direct;
+  final ws = _glFirstStr(args, const ['workspace', 'owner']);
+  final rp = _glFirstStr(args, const ['repository', 'repo']);
+  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : '';
+}
+
+String _glConfiguredProjectPath() {
+  final reader = PropertyReader();
+  final ws = reader.getGitLabWorkspace()?.trim() ?? '';
+  final rp = reader.getGitLabRepository()?.trim() ?? '';
+  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : '';
+}
+
+/// Parses composite `namespace/project#123`, `gl-123`, or bare IID [key].
+_GlSyncKeyParts? _parseGlSyncIssueKey(String key) {
+  if (key.isEmpty) return (projectPath: '', iid: '');
   final sep = key.lastIndexOf('#');
-  final router = _syncGlRouterKey.firstMatch(key);
   if (sep > 0 &&
       sep < key.length - 1 &&
       _syncGlBareDigits.hasMatch(key.substring(sep + 1))) {
-    if (proj.isEmpty) proj = key.substring(0, sep);
-    if (numStr.isEmpty) numStr = key.substring(sep + 1);
-    return (proj, numStr);
+    return (
+      projectPath: key.substring(0, sep),
+      iid: key.substring(sep + 1),
+    );
   }
-  if (router != null) {
-    if (numStr.isEmpty) numStr = router.group(1)!;
-    return (proj, numStr);
-  }
-  if (_syncGlBareDigits.hasMatch(key)) {
-    if (numStr.isEmpty) numStr = key;
-    return (proj, numStr);
-  }
+  final router = _syncGlRouterKey.firstMatch(key)?.group(1);
+  if (router != null) return (projectPath: '', iid: router);
+  if (_syncGlBareDigits.hasMatch(key)) return (projectPath: '', iid: key);
   return null;
 }
 
@@ -107,17 +105,16 @@ Object _resolveGlSyncIssueRef(Map<String, dynamic> args) {
 String? _resolveGlSyncProjectPath(Map<String, dynamic> args) {
   final key = syncAsStr(args['key']).trim();
   if (key.contains('/')) return key;
-  final project = _glFirstStr(args, const ['project']);
-  if (project.isNotEmpty) return project;
+  final explicit = _glExplicitProject(args);
+  if (explicit.isNotEmpty) return explicit;
   final reader = PropertyReader();
-  final ws = _glFirstStr(args, const ['workspace', 'owner']).isNotEmpty
-      ? _glFirstStr(args, const ['workspace', 'owner'])
-      : reader.getGitLabWorkspace()?.trim() ?? '';
-  final rp = _glFirstStr(args, const ['repository', 'repo']).isNotEmpty
-      ? _glFirstStr(args, const ['repository', 'repo'])
-      : reader.getGitLabRepository()?.trim() ?? '';
-  if (ws.isEmpty || rp.isEmpty) return null;
-  return '$ws/$rp';
+  final wsArg = _glFirstStr(args, const ['workspace', 'owner']);
+  final rpArg = _glFirstStr(args, const ['repository', 'repo']);
+  final ws =
+      wsArg.isNotEmpty ? wsArg : reader.getGitLabWorkspace()?.trim() ?? '';
+  final rp =
+      rpArg.isNotEmpty ? rpArg : reader.getGitLabRepository()?.trim() ?? '';
+  return (ws.isNotEmpty && rp.isNotEmpty) ? '$ws/$rp' : null;
 }
 
 /// Runs [fn] with the resolved GitLab issue reference, or returns the JSON
@@ -134,13 +131,8 @@ String _withGlIssueRef(
 }
 
 /// First non-blank string among [names] in [args].
-String _glFirstStr(Map<String, dynamic> args, List<String> names) {
-  for (final name in names) {
-    final value = syncAsStr(args[name]).trim();
-    if (value.isNotEmpty) return value;
-  }
-  return '';
-}
+String _glFirstStr(Map<String, dynamic> args, List<String> names) =>
+    syncFirstStr(args, names);
 
 /// `gitlab_get_issue` — GET `projects/{id}/issues/{iid}`.
 String _getIssue(_GitlabConfig c, Map<String, dynamic> a) => _withGlIssueRef(
@@ -218,25 +210,12 @@ String _moveIssueToStatus(_GitlabConfig c, Map<String, dynamic> a) {
   final resolved = _resolveGlSyncIssueRef(a);
   if (resolved is! _GlSyncIssueRef) return resolved as String;
   final lower = status.toLowerCase();
-  if (_syncGlClosedStatuses.contains(lower)) {
-    return _putBody(
-      c,
-      '${c.baseUrl}/${resolved.issueSeg}',
-      jsonEncode({'state_event': 'close'}),
-    );
-  }
-  if (_syncGlOpenStatuses.contains(lower)) {
-    return _putBody(
-      c,
-      '${c.baseUrl}/${resolved.issueSeg}',
-      jsonEncode({'state_event': 'reopen'}),
-    );
-  }
-  return _putBody(
-    c,
-    '${c.baseUrl}/${resolved.issueSeg}',
-    jsonEncode({'add_labels': 'status::$status'}),
-  );
+  final payload = _syncGlClosedStatuses.contains(lower)
+      ? const <String, dynamic>{'state_event': 'close'}
+      : _syncGlOpenStatuses.contains(lower)
+          ? const <String, dynamic>{'state_event': 'reopen'}
+          : <String, dynamic>{'add_labels': 'status::$status'};
+  return _putBody(c, '${c.baseUrl}/${resolved.issueSeg}', jsonEncode(payload));
 }
 
 /// `gitlab_assign_issue` — looks up user via `/users?username=…`, then PUTs
@@ -299,21 +278,20 @@ String _createIssueComment(_GitlabConfig c, Map<String, dynamic> a) =>
         c.headers,
         '${c.baseUrl}/${ref.issueSeg}/notes',
         jsonEncode({
-          'body': _glFirstStr(a, const ['body', 'text', 'comment']),
+          'body': _glFirstStr(a, const ['body', 'text', 'comment'])
         }),
       ),
     );
 
-/// `gitlab_get_issue_comments` — paginated GET `…/issues/{iid}/notes?sort=asc`.
+/// `gitlab_get_issue_comments` — GET `…/issues/{iid}/notes?sort=asc&per_page=100`.
 String _getIssueComments(_GitlabConfig c, Map<String, dynamic> a) =>
     _withGlIssueRef(
       c,
       a,
-      (c, ref) => jsonEncode(
-        gitlabFetchAllPages(
-          c.baseUrl,
-          c.headers,
-          '${ref.issueSeg}/notes?sort=asc',
+      (c, ref) => syncBodyOrError(
+        SyncHttpClient.get(
+          '${c.baseUrl}/${ref.issueSeg}/notes?sort=asc&per_page=100',
+          headers: c.headers,
         ),
       ),
     );

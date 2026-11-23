@@ -23,12 +23,14 @@
 /// Java's `IOException` parity.
 library;
 
-import 'dart:convert';
-
 import '../config/property_reader.dart';
 import '../config/property_reader_getters.dart';
-import '../js/sync_tool_dispatcher.dart';
-import 'github_tracker_client.dart' show SyncToolExecute;
+import 'github_tracker_client.dart'
+    show
+        SyncToolExecute,
+        defaultTrackerExecute,
+        trackerErrorOf,
+        trackerTryDecode;
 
 /// A resolved `(projectPath, iid)` GitLab issue reference.
 typedef GitlabTrackerIssueRef = (String projectPath, String iid);
@@ -37,7 +39,7 @@ typedef GitlabTrackerIssueRef = (String projectPath, String iid);
 class GitlabTrackerClient {
   /// Creates the client; [execute] defaults to the real sync dispatcher.
   GitlabTrackerClient({SyncToolExecute? execute})
-      : _execute = execute ?? _defaultExecute;
+      : _execute = execute ?? defaultTrackerExecute;
 
   final SyncToolExecute _execute;
 
@@ -46,56 +48,26 @@ class GitlabTrackerClient {
   bool get isConfigured => (PropertyReader().getGitLabToken() ?? '').isNotEmpty;
 
   /// Posts a comment to the issue [key] refers to (Java `postComment`).
-  void postComment(String key, String body) => _run(
-        key,
-        'gitlab_create_issue_comment',
-        (projectPath, iid) => {
-          'key': '$projectPath#$iid',
-          'body': body,
-        },
-      );
+  void postComment(String key, String body) =>
+      _dispatchKeyed(key, 'gitlab_create_issue_comment', {'body': body});
 
   /// Moves the issue to [status] — done/closed/completed/resolved close it,
   /// open/reopened reopen it, anything else lands as `status::<status>`
   /// (Java `moveToStatus`).
-  void moveToStatus(String key, String status) => _run(
-        key,
-        'gitlab_move_issue_to_status',
-        (projectPath, iid) => {
-          'key': '$projectPath#$iid',
-          'statusName': status,
-        },
-      );
+  void moveToStatus(String key, String status) => _dispatchKeyed(
+      key, 'gitlab_move_issue_to_status', {'statusName': status});
 
   /// Assigns the issue to [user] (Java `assignTo`).
-  void assignTo(String key, String user) => _run(
-        key,
-        'gitlab_assign_issue',
-        (projectPath, iid) => {
-          'key': '$projectPath#$iid',
-          'user': user,
-        },
-      );
+  void assignTo(String key, String user) =>
+      _dispatchKeyed(key, 'gitlab_assign_issue', {'user': user});
 
   /// Adds [label] to the issue (Java `addLabelIfNotExists`).
-  void addLabel(String key, String label) => _run(
-        key,
-        'gitlab_add_issue_label',
-        (projectPath, iid) => {
-          'key': '$projectPath#$iid',
-          'label': label,
-        },
-      );
+  void addLabel(String key, String label) =>
+      _dispatchKeyed(key, 'gitlab_add_issue_label', {'label': label});
 
   /// Removes [label] from the issue (Java `deleteLabelInTicket`).
-  void removeLabel(String key, String label) => _run(
-        key,
-        'gitlab_remove_issue_label',
-        (projectPath, iid) => {
-          'key': '$projectPath#$iid',
-          'label': label,
-        },
-      );
+  void removeLabel(String key, String label) =>
+      _dispatchKeyed(key, 'gitlab_remove_issue_label', {'label': label});
 
   /// Creates an issue in [project] (`namespace/project`) and returns the
   /// composite key `namespace/project#<iid>` (Java `createTicketInProject`
@@ -117,24 +89,22 @@ class GitlabTrackerClient {
       'title': summary,
       if (description.isNotEmpty) 'body': description,
     });
-    final decoded = raw == null ? null : _tryDecode(raw);
+    final decoded = raw == null ? null : trackerTryDecode(raw);
     final iid = decoded is Map ? decoded['iid'] : null;
     if (iid == null) {
       throw StateError(
         'gitlab_create_issue returned no issue iid: '
-        '${raw == null ? 'tool not dispatchable' : _errorOf(raw)}',
+        '${raw == null ? 'tool not dispatchable' : trackerErrorOf(raw)}',
       );
     }
     return '$trimmedProject#$iid';
   }
 
-  /// Dispatches [tool] with the resolved parts of [key] and the args
-  /// built by [argsFor]; [StateError] on unresolvable keys or error
-  /// envelopes (Java IOException parity).
-  void _run(
+  /// Dispatches [tool] with the resolved composite `key` and [extraArgs].
+  void _dispatchKeyed(
     String key,
     String tool,
-    Map<String, dynamic> Function(String projectPath, String iid) argsFor,
+    Map<String, dynamic> extraArgs,
   ) {
     final ref = resolveIssueRef(key);
     if (ref == null) {
@@ -145,10 +115,10 @@ class GitlabTrackerClient {
       );
     }
     final (projectPath, iid) = ref;
-    final raw = _execute(tool, argsFor(projectPath, iid));
+    final raw = _execute(tool, {'key': '$projectPath#$iid', ...extraArgs});
     final error = raw == null
         ? '$tool is not dispatchable in this runtime'
-        : _errorOf(raw);
+        : trackerErrorOf(raw);
     if (error != null) throw StateError(error);
   }
 
@@ -174,31 +144,9 @@ class GitlabTrackerClient {
     if (bare == null) return null;
     final reader = PropertyReader();
     final ciPath = (reader.getValue('CI_PROJECT_PATH') ?? '').trim();
-    if (ciPath.contains('/')) {
-      return (ciPath, bare);
-    }
+    if (ciPath.contains('/')) return (ciPath, bare);
     final ws = reader.getGitLabWorkspace()?.trim() ?? '';
     final rp = reader.getGitLabRepository()?.trim() ?? '';
-    if (ws.isEmpty || rp.isEmpty) return null;
-    return ('$ws/$rp', bare);
+    return (ws.isNotEmpty && rp.isNotEmpty) ? ('$ws/$rp', bare) : null;
   }
-
-  static String? _errorOf(String raw) {
-    final decoded = _tryDecode(raw);
-    if (decoded is Map && decoded['error'] != null) {
-      return decoded['error'].toString();
-    }
-    return null;
-  }
-
-  static dynamic _tryDecode(String raw) {
-    try {
-      return jsonDecode(raw);
-    } on FormatException {
-      return null;
-    }
-  }
-
-  static String? _defaultExecute(String tool, Map<String, dynamic> args) =>
-      SyncToolDispatcher(PropertyReader()).execute(tool, args);
 }

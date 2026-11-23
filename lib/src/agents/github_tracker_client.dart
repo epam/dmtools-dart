@@ -203,24 +203,34 @@ class GithubTrackerClient {
   }
 
   /// The `error` field of an `{"error": …}` envelope, else `null`.
-  static String? _errorOf(String raw) {
-    final decoded = _tryDecode(raw);
-    if (decoded is Map && decoded['error'] != null) {
-      return decoded['error'].toString();
-    }
-    return null;
-  }
+  static String? _errorOf(String raw) => trackerErrorOf(raw);
 
-  static dynamic _tryDecode(String raw) {
-    try {
-      return jsonDecode(raw);
-    } on FormatException {
-      return null;
-    }
-  }
+  static dynamic _tryDecode(String raw) => trackerTryDecode(raw);
 
   /// The real dispatch entry (fresh reader — config can change between
   /// runs, matching the sync tools' read-per-dispatch contract).
   static String? _defaultExecute(String tool, Map<String, dynamic> args) =>
-      SyncToolDispatcher(PropertyReader()).execute(tool, args);
+      defaultTrackerExecute(tool, args);
 }
+
+/// Decodes [raw] as JSON, or returns `null` when it is not valid JSON.
+dynamic trackerTryDecode(String raw) {
+  try {
+    return jsonDecode(raw);
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Returns the `error` field of an `{"error": …}` JSON envelope, else `null`.
+String? trackerErrorOf(String raw) {
+  final decoded = trackerTryDecode(raw);
+  if (decoded is Map && decoded['error'] != null) {
+    return decoded['error'].toString();
+  }
+  return null;
+}
+
+/// Default sync-dispatcher entry point for tracker clients.
+String? defaultTrackerExecute(String tool, Map<String, dynamic> args) =>
+    SyncToolDispatcher(PropertyReader()).execute(tool, args);

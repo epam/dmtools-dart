@@ -26,6 +26,27 @@ int syncAsInt(dynamic value) {
   return 0;
 }
 
+/// First non-blank string among [names] in [args].
+String syncFirstStr(Map<String, dynamic> args, List<String> names) {
+  for (final name in names) {
+    final value = syncAsStr(args[name]).trim();
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+/// First parseable int among [names] in [args].
+int? syncFirstInt(Map<String, dynamic> args, List<String> names) {
+  for (final name in names) {
+    final value = args[name];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final parsed = int.tryParse(syncAsStr(value).trim());
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
 /// Whether [value] is `null` or whitespace-only.
 bool syncIsBlank(dynamic value) => syncAsStr(value).trim().isEmpty;
 

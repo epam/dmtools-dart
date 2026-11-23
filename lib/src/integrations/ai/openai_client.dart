@@ -39,8 +39,7 @@ class OpenAIClient implements AiChatClient {
         reader.getOpenAIMaxTokens(),
         reader.getOpenAITemperature(),
         reader.getOpenAIMaxTokensParamName(),
-        reader.getOpenAIExtraBody(),
-      );
+      )..setExtraBody(reader.getOpenAIExtraBody());
 
   OpenAIClient._(
     this._dio,
@@ -49,10 +48,7 @@ class OpenAIClient implements AiChatClient {
     this._maxTokens,
     this._temperature,
     this._maxTokensParamName,
-    String? extraBodyJson,
-  ) {
-    setExtraBody(extraBodyJson);
-  }
+  );
 
   /// Parses [extraBodyJson] as a JSON object; returns `null` when unset,
   /// blank, or an unresolved `$` placeholder, or throws [ArgumentError]

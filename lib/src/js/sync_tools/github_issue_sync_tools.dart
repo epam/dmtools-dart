@@ -40,10 +40,10 @@ final RegExp _syncGhKey = RegExp(r'^gh-(\d+)$', caseSensitive: false);
 ///
 /// Returns a JSON error string when the reference cannot be resolved.
 Object _resolveSyncIssueRef(Map<String, dynamic> args) {
-  var owner = _firstStr(args, const ['owner', 'workspace']);
-  var repo = _firstStr(args, const ['repo', 'repository']);
+  var owner = syncFirstStr(args, const ['owner', 'workspace']);
+  var repo = syncFirstStr(args, const ['repo', 'repository']);
   var number =
-      _firstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
+      syncFirstInt(args, const ['number', 'issueNumber', 'pullRequestId']);
   final key = syncAsStr(args['key']).trim();
   if (key.isNotEmpty) {
     final fromKey = _applyIssueKey(key, owner, repo, number);
@@ -120,27 +120,6 @@ String _withIssueRef(
           : resolved as String;
     }, args);
 
-/// First non-blank string among [names] in [args].
-String _firstStr(Map<String, dynamic> args, List<String> names) {
-  for (final name in names) {
-    final value = syncAsStr(args[name]).trim();
-    if (value.isNotEmpty) return value;
-  }
-  return '';
-}
-
-/// First parseable int among [names] in [args].
-int? _firstInt(Map<String, dynamic> args, List<String> names) {
-  for (final name in names) {
-    final value = args[name];
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    final parsed = int.tryParse(syncAsStr(value).trim());
-    if (parsed != null) return parsed;
-  }
-  return null;
-}
-
 /// Synchronous executors for the issue-tracker family.
 class GitHubIssueSyncTools {
   /// Creates the issue-family sync tooling.
@@ -177,11 +156,11 @@ class GitHubIssueSyncTools {
   String _searchIssues(GhSyncConfig c, Map<String, dynamic> a) {
     var query = syncAsStr(a['query']);
     final reader = PropertyReader();
-    final ws = _firstStr(a, const ['workspace']).isNotEmpty
-        ? _firstStr(a, const ['workspace'])
+    final ws = syncFirstStr(a, const ['workspace']).isNotEmpty
+        ? syncFirstStr(a, const ['workspace'])
         : reader.getGithubWorkspace()?.trim() ?? '';
-    final rp = _firstStr(a, const ['repository']).isNotEmpty
-        ? _firstStr(a, const ['repository'])
+    final rp = syncFirstStr(a, const ['repository']).isNotEmpty
+        ? syncFirstStr(a, const ['repository'])
         : reader.getGithubRepository()?.trim() ?? '';
     if (!query.contains('repo:') && ws.isNotEmpty && rp.isNotEmpty) {
       query = 'repo:$ws/$rp $query';
@@ -199,8 +178,8 @@ class GitHubIssueSyncTools {
   /// composite project reference `owner/repo`; blank parts fall back to
   /// the configured defaults.
   String _createIssue(GhSyncConfig c, Map<String, dynamic> a) {
-    var owner = _firstStr(a, const ['owner']);
-    var repo = _firstStr(a, const ['repo']);
+    var owner = syncFirstStr(a, const ['owner']);
+    var repo = syncFirstStr(a, const ['repo']);
     final key = syncAsStr(a['key']).trim();
     if (key.contains('/')) {
       owner = key.substring(0, key.indexOf('/'));

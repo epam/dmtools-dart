@@ -20,6 +20,9 @@ class GlIssueRef {
   const GlIssueRef(this.projectPath, this.iid);
 }
 
+/// Composite or partial GitLab issue-key parts.
+typedef GlKeyParts = ({String? projectPath, String? iid});
+
 /// `gl-123` router key convention.
 final RegExp _glRouterKey = RegExp(r'^gl-(\d+)$', caseSensitive: false);
 
@@ -41,60 +44,49 @@ GlIssueRef resolveGlIssueRef({
   String? issueNumber,
   String? project,
 }) {
-  var resolvedProject = _glBlankToNull(project);
-  if (resolvedProject == null) {
-    final ws = _glBlankToNull(workspace);
-    final rp = _glBlankToNull(repository);
-    if (ws != null && rp != null) resolvedProject = '$ws/$rp';
-  }
-  var resolvedIid = _glBlankToNull(issueNumber);
-  final k = _glBlankToNull(key);
-  if (k != null && (resolvedProject == null || resolvedIid == null)) {
-    final applied = _applyGlIssueKey(k, resolvedProject, resolvedIid);
-    resolvedProject = applied.$1;
-    resolvedIid = applied.$2;
-  }
-  if (resolvedProject == null) {
-    final ws = _glDefaultWorkspace();
-    final rp = _glDefaultRepository();
-    if (ws != null && rp != null) resolvedProject = '$ws/$rp';
-  }
-  if (resolvedProject == null || resolvedIid == null) {
+  final initialProj =
+      _glBlankToNull(project) ?? _glJoinPair(workspace, repository);
+  final initialIid = _glBlankToNull(issueNumber);
+  final parsed = parseGlIssueKey(_glBlankToNull(key));
+  final finalProj = initialProj ??
+      parsed.projectPath ??
+      _glJoinPair(_glDefaultWorkspace(), _glDefaultRepository());
+  final finalIid = initialIid ?? parsed.iid;
+  if (finalProj == null || finalIid == null) {
     throw ArgumentError(
       'GitLab issue reference requires workspace/repository/issueNumber '
       "or a composite key 'namespace/project#123' (or 'gl-123' with a "
       'configured default project).',
     );
   }
-  return GlIssueRef(resolvedProject, resolvedIid);
+  return GlIssueRef(finalProj, finalIid);
+}
+
+String? _glJoinPair(String? ws, String? rp) {
+  final w = _glBlankToNull(ws);
+  final r = _glBlankToNull(rp);
+  return (w != null && r != null) ? '$w/$r' : null;
 }
 
 /// Parses composite `namespace/project#123`, `gl-123`, or bare IID [k].
-(String?, String?) _applyGlIssueKey(
-  String k,
-  String? currentProject,
-  String? currentIid,
-) {
-  var proj = currentProject;
-  var iid = currentIid;
+GlKeyParts parseGlIssueKey(String? k) {
+  if (k == null) return (projectPath: null, iid: null);
   final sep = k.lastIndexOf('#');
-  final router = _glRouterKey.firstMatch(k);
   if (sep > 0 &&
       sep < k.length - 1 &&
       _glBareDigits.hasMatch(k.substring(sep + 1))) {
-    proj ??= k.substring(0, sep);
-    iid ??= k.substring(sep + 1);
-  } else if (router != null) {
-    iid ??= router.group(1);
-  } else if (_glBareDigits.hasMatch(k)) {
-    iid ??= k;
-  } else {
-    throw ArgumentError(
-      "Cannot parse GitLab issue key: '$k'. Expected 'namespace/project#123', "
-      "'gl-123', or a bare issue IID.",
+    return (
+      projectPath: k.substring(0, sep),
+      iid: k.substring(sep + 1),
     );
   }
-  return (proj, iid);
+  final router = _glRouterKey.firstMatch(k);
+  if (router != null) return (projectPath: null, iid: router.group(1));
+  if (_glBareDigits.hasMatch(k)) return (projectPath: null, iid: k);
+  throw ArgumentError(
+    "Cannot parse GitLab issue key: '$k'. Expected 'namespace/project#123', "
+    "'gl-123', or a bare issue IID.",
+  );
 }
 
 /// Resolves a GitLab project path from explicit parts, `project`/`key`, or
@@ -162,19 +154,17 @@ extension GitlabIssueTrackerTools on GitlabClient {
     String title, {
     String? project,
     String? description,
-    String? body,
     String? workspace,
     String? repository,
     String? key,
   }) {
-    final desc = _glBlankToNull(description) ?? _glBlankToNull(body);
     final resolvedProject = resolveGlProjectPath(
       workspace: workspace,
       repository: repository,
       project: project,
       key: key,
     );
-    return createIssue(resolvedProject, title, desc);
+    return createIssue(resolvedProject, title, _glBlankToNull(description));
   }
 
   /// `gitlab_search_issues` — GET `projects/{id}/issues?state=…&search=…`.
@@ -202,93 +192,39 @@ extension GitlabIssueTrackerTools on GitlabClient {
   }
 
   /// `gitlab_close_issue` — PUT `projects/{id}/issues/{iid}` `state_event=close`.
-  Future<Map<String, dynamic>?> closeIssueByRef({
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
-    return _putObject(_issuePath(ref), jsonEncode({'state_event': 'close'}));
-  }
+  Future<Map<String, dynamic>?> closeIssueByRef(GlIssueRef ref) =>
+      _putObject(_issuePath(ref), jsonEncode(const {'state_event': 'close'}));
 
   /// `gitlab_reopen_issue` — PUT `projects/{id}/issues/{iid}` `state_event=reopen`.
-  Future<Map<String, dynamic>?> reopenIssueByRef({
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
-    return _putObject(_issuePath(ref), jsonEncode({'state_event': 'reopen'}));
-  }
+  Future<Map<String, dynamic>?> reopenIssueByRef(GlIssueRef ref) =>
+      _putObject(_issuePath(ref), jsonEncode(const {'state_event': 'reopen'}));
 
   /// `gitlab_move_issue_to_status` — close/reopen/scoped-label semantics.
   Future<Map<String, dynamic>?> moveIssueToStatus(
-    String statusName, {
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
+    GlIssueRef ref,
+    String statusName,
+  ) {
     final trimmed = _glBlankToNull(statusName);
     if (trimmed == null) throw ArgumentError('statusName is required');
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
     final lower = trimmed.toLowerCase();
-    if (_glClosedStatuses.contains(lower)) {
-      return _putObject(_issuePath(ref), jsonEncode({'state_event': 'close'}));
-    }
-    if (_glOpenStatuses.contains(lower)) {
-      return _putObject(_issuePath(ref), jsonEncode({'state_event': 'reopen'}));
-    }
-    return _putObject(
-      _issuePath(ref),
-      jsonEncode({'add_labels': 'status::$trimmed'}),
-    );
+    final payload = _glClosedStatuses.contains(lower)
+        ? const <String, dynamic>{'state_event': 'close'}
+        : _glOpenStatuses.contains(lower)
+            ? const <String, dynamic>{'state_event': 'reopen'}
+            : <String, dynamic>{'add_labels': 'status::$trimmed'};
+    return _putObject(_issuePath(ref), jsonEncode(payload));
   }
 
   /// `gitlab_assign_issue` — resolves username via `/users?username=…`, then
   /// PUTs `assignee_ids` on the issue.
   Future<Map<String, dynamic>?> assignIssue(
-    String user, {
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) async {
+    GlIssueRef ref,
+    String user,
+  ) async {
     final trimmed = _glBlankToNull(user);
     if (trimmed == null) {
       throw ArgumentError('GitLab username must not be empty');
     }
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
     final users = await _getList('users', queryParams: {'username': trimmed});
     if (users.isEmpty) {
       throw StateError('GitLab user not found: $user');
@@ -303,80 +239,25 @@ extension GitlabIssueTrackerTools on GitlabClient {
   }
 
   /// `gitlab_add_issue_label` — PUT `add_labels` on the issue.
-  Future<Map<String, dynamic>?> addIssueLabel(
-    String label, {
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
-    return _putObject(_issuePath(ref), jsonEncode({'add_labels': label}));
-  }
+  Future<Map<String, dynamic>?> addIssueLabel(GlIssueRef ref, String label) =>
+      _putObject(_issuePath(ref), jsonEncode({'add_labels': label}));
 
   /// `gitlab_remove_issue_label` — PUT `remove_labels` on the issue.
   Future<Map<String, dynamic>?> removeIssueLabel(
-    String label, {
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
-    return _putObject(_issuePath(ref), jsonEncode({'remove_labels': label}));
-  }
+    GlIssueRef ref,
+    String label,
+  ) =>
+      _putObject(_issuePath(ref), jsonEncode({'remove_labels': label}));
 
   /// `gitlab_create_issue_comment` — POST `{body}` to `…/issues/{iid}/notes`.
   Future<Map<String, dynamic>?> createIssueComment(
-    String body, {
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
-    return _postObject(
-      '${_issuePath(ref)}/notes',
-      jsonEncode({'body': body}),
-    );
-  }
+    GlIssueRef ref,
+    String body,
+  ) =>
+      _postObject('${_issuePath(ref)}/notes', jsonEncode({'body': body}));
 
   /// `gitlab_get_issue_comments` — paginated GET `…/issues/{iid}/notes?sort=asc`.
-  Future<List<Map<String, dynamic>>> getIssueComments({
-    String? workspace,
-    String? repository,
-    String? issueNumber,
-    String? key,
-    String? project,
-  }) async {
-    final ref = resolveGlIssueRef(
-      key: key,
-      workspace: workspace,
-      repository: repository,
-      issueNumber: issueNumber,
-      project: project,
-    );
+  Future<List<Map<String, dynamic>>> getIssueComments(GlIssueRef ref) async {
     final all = <Map<String, dynamic>>[];
     var page = 1;
     while (true) {

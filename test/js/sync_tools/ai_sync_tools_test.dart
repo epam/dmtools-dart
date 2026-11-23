@@ -453,7 +453,10 @@ void _openAiRequestTests() {
     expect(body['temperature'], 0.5);
     expect(body.containsKey('max_completion_tokens'), isFalse);
   });
+  _openAiExtraBodyTest();
+}
 
+void _openAiExtraBodyTest() {
   test('openai_ai_chat merges OPENAI_EXTRA_BODY and guards model/messages', () {
     final server = _aiServer!;
     final echo = _echoOf(

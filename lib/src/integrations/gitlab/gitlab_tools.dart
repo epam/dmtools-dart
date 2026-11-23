@@ -613,8 +613,8 @@ class GitlabToolExecutor {
             'gitlab_create_issue': (a) => _client.createIssueByRef(
                   _glArgStr(a['title']) ?? '',
                   project: a['project'] as String?,
-                  description: a['description'] as String?,
-                  body: _glArgStr(a['body']),
+                  description:
+                      (a['description'] as String?) ?? _glArgStr(a['body']),
                   workspace: _glArgStr(a['workspace']),
                   repository: _glArgStr(a['repository']),
                   key: _glArgStr(a['key']),

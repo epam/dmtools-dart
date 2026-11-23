@@ -76,6 +76,7 @@ GitlabTrackerConfig? resolveGitlabTrackerConfig(PropertyReader reader) {
   );
 }
 
+/// Strips trailing `/` characters from [value].
 String rTrimSlashes(String value) {
   var result = value;
   while (result.endsWith('/')) {

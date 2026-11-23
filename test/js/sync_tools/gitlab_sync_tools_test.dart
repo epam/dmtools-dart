@@ -36,7 +36,6 @@ void main() {
     _testCiTools();
     _testReleaseTools();
   }
-  _testIssueTools();
   _testDiffHelpers();
   _testStatusDedupe();
 }
@@ -77,17 +76,6 @@ void _testHandlerSurface() {
       'gitlab_get_or_create_release',
       'gitlab_upload_release_asset',
       'gitlab_download_release_asset',
-      'gitlab_get_issue',
-      'gitlab_search_issues',
-      'gitlab_create_issue',
-      'gitlab_close_issue',
-      'gitlab_reopen_issue',
-      'gitlab_move_issue_to_status',
-      'gitlab_assign_issue',
-      'gitlab_add_issue_label',
-      'gitlab_remove_issue_label',
-      'gitlab_create_issue_comment',
-      'gitlab_get_issue_comments',
     ];
     for (final name in names) {
       expect(tools.handlers, containsPair(name, anything),
@@ -779,111 +767,5 @@ void _testStatusDedupe() {
       {'name': 'ci', 'status': 'success'},
     ]);
     expect(latest.single['status'], 'success');
-  });
-}
-
-/// GitLab issue-tracker sync tools (`GitLabIssues.java` parity).
-void _testIssueTools() {
-  group('GitLabSyncTools issue tracker tools', () {
-    setUp(() async {
-      server = EchoServer();
-      await server.start();
-      PropertyReader.setOverrides({
-        'GITLAB_BASE_PATH': 'http://127.0.0.1:${server.port}',
-        'GITLAB_TOKEN': 'glpat-test',
-        'GITLAB_WORKSPACE': 'defgroup',
-        'GITLAB_REPOSITORY': 'defrepo',
-      });
-    });
-
-    tearDown(() {
-      PropertyReader.clearOverrides();
-      server.stop();
-    });
-
-    test('gitlab_get_issue resolves composite key and gl-N key', () {
-      final b1 = echo('gitlab_get_issue', {'key': 'org/sub/repo#12'});
-      expect(b1['method'], 'GET');
-      expect(b1['path'], '/api/v4/projects/org%2Fsub%2Frepo/issues/12');
-
-      final b2 = echo('gitlab_get_issue', {'key': 'gl-99'});
-      expect(b2['path'], '/api/v4/projects/defgroup%2Fdefrepo/issues/99');
-    });
-
-    test('gitlab_search_issues queries project issues with state and search',
-        () {
-      final b = echo('gitlab_search_issues', {
-        'query': 'login bug',
-        'state': 'opened',
-      });
-      expect(b['method'], 'GET');
-      expect(
-        b['path'],
-        '/api/v4/projects/defgroup%2Fdefrepo/issues'
-        '?state=opened&per_page=100&search=login+bug',
-      );
-    });
-
-    test('gitlab_create_issue POSTs title and description', () {
-      final b = echo('gitlab_create_issue', {
-        'key': 'grp/proj',
-        'title': 'Broken',
-        'body': 'Details',
-      });
-      expect(b['method'], 'POST');
-      expect(b['path'], '/api/v4/projects/grp%2Fproj/issues');
-      expect(jsonDecode(b['body'] as String), {
-        'title': 'Broken',
-        'description': 'Details',
-      });
-    });
-
-    test('gitlab_close_issue, reopen, move_issue_to_status, labels, comments',
-        () {
-      final closed = echo('gitlab_close_issue', {'key': 'gl-5'});
-      expect(closed['method'], 'PUT');
-      expect(jsonDecode(closed['body'] as String), {'state_event': 'close'});
-
-      final reopened = echo('gitlab_reopen_issue', {'key': 'gl-5'});
-      expect(jsonDecode(reopened['body'] as String), {'state_event': 'reopen'});
-
-      final movedDone = echo('gitlab_move_issue_to_status', {
-        'key': 'gl-5',
-        'statusName': 'completed',
-      });
-      expect(jsonDecode(movedDone['body'] as String), {'state_event': 'close'});
-
-      final movedCustom = echo('gitlab_move_issue_to_status', {
-        'key': 'gl-5',
-        'statusName': 'In Review',
-      });
-      expect(
-        jsonDecode(movedCustom['body'] as String),
-        {'add_labels': 'status::In Review'},
-      );
-
-      final added = echo('gitlab_add_issue_label', {
-        'key': 'gl-5',
-        'label': 'bug',
-      });
-      expect(jsonDecode(added['body'] as String), {'add_labels': 'bug'});
-
-      final removed = echo('gitlab_remove_issue_label', {
-        'key': 'gl-5',
-        'label': 'bug',
-      });
-      expect(jsonDecode(removed['body'] as String), {'remove_labels': 'bug'});
-
-      final comment = echo('gitlab_create_issue_comment', {
-        'key': 'gl-5',
-        'body': 'Note text',
-      });
-      expect(comment['method'], 'POST');
-      expect(
-        comment['path'],
-        '/api/v4/projects/defgroup%2Fdefrepo/issues/5/notes',
-      );
-      expect(jsonDecode(comment['body'] as String), {'body': 'Note text'});
-    });
   });
 }

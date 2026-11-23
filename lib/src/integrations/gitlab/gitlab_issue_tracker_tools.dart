@@ -229,75 +229,54 @@ ToolParam _glIssueKeyParam() => const ToolParam(
 /// Executor routes for the GitLab issue-tracker family.
 Map<String, Future<dynamic> Function(Map<String, dynamic>)>
     _glIssueTrackerHandlers(GitlabClient client) => {
-          'gitlab_search_issues': (a) => client.searchIssues(
+          ..._glIssueStateHandlers(client),
+          ..._glIssueMetaHandlers(client),
+        };
+
+/// Search + state/status transition routes for GitLab issues.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+    _glIssueStateHandlers(GitlabClient c) => {
+          'gitlab_search_issues': (a) => c.searchIssues(
                 _glArgStr(a['query']) ?? '',
                 workspace: _glArgStr(a['workspace']),
                 repository: _glArgStr(a['repository']),
                 state: _glArgStr(a['state']),
                 project: _glArgStr(a['project']),
               ),
-          'gitlab_close_issue': (a) => client.closeIssueByRef(
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_reopen_issue': (a) => client.reopenIssueByRef(
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_move_issue_to_status': (a) => client.moveIssueToStatus(
+          'gitlab_close_issue': (a) => c.closeIssueByRef(_glRefFromArgs(a)),
+          'gitlab_reopen_issue': (a) => c.reopenIssueByRef(_glRefFromArgs(a)),
+          'gitlab_move_issue_to_status': (a) => c.moveIssueToStatus(
+                _glRefFromArgs(a),
                 _glArgStr(a['statusName']) ?? '',
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_assign_issue': (a) => client.assignIssue(
-                _glArgStr(a['user']) ?? '',
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_add_issue_label': (a) => client.addIssueLabel(
-                _glArgStr(a['label']) ?? '',
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_remove_issue_label': (a) => client.removeIssueLabel(
-                _glArgStr(a['label']) ?? '',
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_create_issue_comment': (a) => client.createIssueComment(
-                _glArgStr(a['body']) ?? _glArgStr(a['text']) ?? '',
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
-              ),
-          'gitlab_get_issue_comments': (a) => client.getIssueComments(
-                workspace: _glArgStr(a['workspace']),
-                repository: _glArgStr(a['repository']),
-                issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
-                key: _glArgStr(a['key']),
-                project: _glArgStr(a['project']),
               ),
         };
+
+/// Assignee, label, and comment routes for GitLab issues.
+Map<String, Future<dynamic> Function(Map<String, dynamic>)>
+    _glIssueMetaHandlers(GitlabClient c) => {
+          'gitlab_assign_issue': (a) =>
+              c.assignIssue(_glRefFromArgs(a), _glArgStr(a['user']) ?? ''),
+          'gitlab_add_issue_label': (a) =>
+              c.addIssueLabel(_glRefFromArgs(a), _glArgStr(a['label']) ?? ''),
+          'gitlab_remove_issue_label': (a) => c.removeIssueLabel(
+                _glRefFromArgs(a),
+                _glArgStr(a['label']) ?? '',
+              ),
+          'gitlab_create_issue_comment': (a) => c.createIssueComment(
+                _glRefFromArgs(a),
+                _glArgStr(a['body']) ?? _glArgStr(a['text']) ?? '',
+              ),
+          'gitlab_get_issue_comments': (a) =>
+              c.getIssueComments(_glRefFromArgs(a)),
+        };
+
+GlIssueRef _glRefFromArgs(Map<String, dynamic> a) => resolveGlIssueRef(
+      workspace: _glArgStr(a['workspace']),
+      repository: _glArgStr(a['repository']),
+      issueNumber: _glArgStr(a['issueNumber']) ?? _glArgStr(a['iid']),
+      key: _glArgStr(a['key']),
+      project: _glArgStr(a['project']),
+    );
 
 /// Coerces a loosely-typed executor argument to a string.
 String? _glArgStr(dynamic value) => value?.toString();

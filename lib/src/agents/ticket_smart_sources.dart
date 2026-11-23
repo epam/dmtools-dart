@@ -22,6 +22,8 @@ import '../js/sync_parallel.dart';
 import 'input_context_parallel.dart';
 import 'ticket_input_context_builder.dart';
 import 'ticket_reference_extractor.dart';
+import 'gitlab_ticket_source.dart';
+import 'gitlab_tracker_client.dart';
 
 typedef _FetchedTicketEntry = ({String key, Map<String, dynamic> ticket});
 
@@ -571,6 +573,9 @@ class TicketSmartSources {
   Map<String, dynamic>? fetchTicketByKey(String key) {
     final trimmed = key.trim();
     if (trimmed.isEmpty) return null;
+    if (_looksLikeGitlabKey(trimmed)) {
+      return _fetchGitlabIfConfigured(trimmed);
+    }
     if (_looksLikeGithubKey(trimmed)) {
       return _fetchGithubIfConfigured(trimmed);
     }
@@ -592,6 +597,18 @@ class TicketSmartSources {
   bool _looksLikeGithubKey(String key) =>
       RegExp(r'^(?:[\w.-]+/[\w.-]+#\d+|#\d+|gh-\d+)$', caseSensitive: false)
           .hasMatch(key);
+
+  bool _looksLikeGitlabKey(String key) =>
+      RegExp(
+        r'^(?:[\w.-]+/[\w.-]+/[\w.-]+(?:/[\w.-]+)*#\d+|gl-\d+)$',
+        caseSensitive: false,
+      ).hasMatch(key) ||
+      (!capabilities.isGithubConfigured &&
+          capabilities.isGitlabConfigured &&
+          RegExp(r'^(?:[\w.-]+/[\w.-]+#\d+|#\d+)$').hasMatch(key));
+
+  Map<String, dynamic>? _fetchGitlabIfConfigured(String key) =>
+      capabilities.isGitlabConfigured ? _fetchGitlabTicket(key) : null;
 
   Map<String, dynamic>? _fetchJiraTicket(String key) {
     try {
@@ -738,6 +755,29 @@ class TicketSmartSources {
         reader.getGithubRepository();
     if (repo != null && repo.contains('/')) return repo.trim();
     return null;
+  }
+
+  Map<String, dynamic>? _fetchGitlabTicket(String rawKey) {
+    final ref = GitlabTrackerClient().resolveIssueRef(
+      rawKey.startsWith('#') ? rawKey.substring(1) : rawKey,
+    );
+    if (ref == null) return null;
+    final base = reader.getGitLabBasePath() ?? 'https://gitlab.com';
+    final token = reader.getGitLabToken() ?? '';
+    final headers = {'PRIVATE-TOKEN': token};
+    final enc = Uri.encodeComponent(ref.$1);
+    final issueUrl = '$base/api/v4/projects/$enc/issues/${ref.$2}';
+    final issueResp = SyncHttpClient.get(issueUrl, headers: headers);
+    if (!issueResp.isOk) return null;
+    final issue = jsonDecode(issueResp.body);
+    if (issue is! Map<String, dynamic>) return null;
+    final notesResp = SyncHttpClient.get(
+      '$issueUrl/notes?sort=asc&per_page=100',
+      headers: headers,
+    );
+    final rawNotes = notesResp.isOk ? jsonDecode(notesResp.body) : const [];
+    final notes = rawNotes is List ? rawNotes : const [];
+    return hydrateGitlabIssue(issue, notes, key: '${ref.$1}#${ref.$2}');
   }
 
   String? _ticketKey(Map<String, dynamic> ticket) {

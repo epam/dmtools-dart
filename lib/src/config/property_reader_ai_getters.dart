@@ -284,6 +284,10 @@ extension PropertyReaderAIGetters on PropertyReader {
         'max_completion_tokens',
       );
 
+  /// JSON object whose fields are merged into every OpenAI chat request body.
+  /// Key: `OPENAI_EXTRA_BODY`.
+  String? getOpenAIExtraBody() => getValue(PropertyNames.OPENAI_EXTRA_BODY);
+
   // --- JSAI ---
 
   /// JSAI script file path. Key: `JSAI_SCRIPT_PATH`.

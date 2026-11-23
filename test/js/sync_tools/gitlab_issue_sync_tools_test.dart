@@ -1,0 +1,237 @@
+import 'dart:convert';
+
+import 'package:dmtools/src/config/property_reader.dart';
+import 'package:dmtools/src/js/sync_tools/gitlab_sync_tools.dart';
+import 'package:test/test.dart';
+
+import '../echo_server_helper.dart';
+
+late EchoServer _server;
+const _tools = GitLabSyncTools();
+
+Map<String, dynamic> _echo(String tool, Map<String, dynamic> args) =>
+    jsonDecode(_tools.handlers[tool]!(args)) as Map<String, dynamic>;
+
+/// Tests for GitLab issue-tracker sync tools (`GitLabIssues.java` parity).
+void main() {
+  setUpAll(() => PropertyReader.testIsolation = true);
+  tearDownAll(() {
+    PropertyReader.testIsolation = false;
+    PropertyReader.testEnvironment.clear();
+  });
+  _testIssueHandlerSurface();
+  if (hasPython3()) {
+    _testIssueReadAndCreateTools();
+    _testIssueStateTransitionTools();
+    _testIssueLabelAndCommentTools();
+    _testIssueAssignAndErrorTools();
+  }
+}
+
+void _testIssueHandlerSurface() {
+  test('GitLabSyncTools.handlers covers the issue tracker surface', () {
+    const names = [
+      'gitlab_get_issue',
+      'gitlab_search_issues',
+      'gitlab_create_issue',
+      'gitlab_close_issue',
+      'gitlab_reopen_issue',
+      'gitlab_move_issue_to_status',
+      'gitlab_assign_issue',
+      'gitlab_add_issue_label',
+      'gitlab_remove_issue_label',
+      'gitlab_create_issue_comment',
+      'gitlab_get_issue_comments',
+    ];
+    for (final name in names) {
+      expect(_tools.handlers, containsPair(name, anything),
+          reason: 'missing handler for $name');
+    }
+  });
+}
+
+void _setUpIssueServer() {
+  setUp(() async {
+    _server = EchoServer();
+    await _server.start();
+    PropertyReader.setOverrides({
+      'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
+      'GITLAB_TOKEN': 'glpat-test',
+      'GITLAB_WORKSPACE': 'defgroup',
+      'GITLAB_REPOSITORY': 'defrepo',
+    });
+  });
+
+  tearDown(() {
+    PropertyReader.clearOverrides();
+    _server.stop();
+  });
+}
+
+void _testIssueReadAndCreateTools() {
+  group('GitLabSyncTools issue read/create tools', () {
+    _setUpIssueServer();
+
+    test('gitlab_get_issue resolves composite key, gl-N, and bare IID', () {
+      final b1 = _echo('gitlab_get_issue', {'key': 'org/sub/repo#12'});
+      expect(b1['method'], 'GET');
+      expect(b1['path'], '/api/v4/projects/org%2Fsub%2Frepo/issues/12');
+
+      final b2 = _echo('gitlab_get_issue', {'key': 'gl-99'});
+      expect(b2['path'], '/api/v4/projects/defgroup%2Fdefrepo/issues/99');
+
+      final b3 = _echo('gitlab_get_issue', {'key': '88'});
+      expect(b3['path'], '/api/v4/projects/defgroup%2Fdefrepo/issues/88');
+    });
+
+    test('gitlab_search_issues queries project issues with state and search',
+        () {
+      final b = _echo('gitlab_search_issues', {
+        'query': 'login bug',
+        'state': 'opened',
+      });
+      expect(b['method'], 'GET');
+      expect(
+        b['path'],
+        '/api/v4/projects/defgroup%2Fdefrepo/issues'
+        '?state=opened&per_page=100&search=login+bug',
+      );
+    });
+
+    test('gitlab_create_issue POSTs title and description', () {
+      final b = _echo('gitlab_create_issue', {
+        'key': 'grp/proj',
+        'title': 'Broken',
+        'body': 'Details',
+      });
+      expect(b['method'], 'POST');
+      expect(b['path'], '/api/v4/projects/grp%2Fproj/issues');
+      expect(jsonDecode(b['body'] as String), {
+        'title': 'Broken',
+        'description': 'Details',
+      });
+    });
+  });
+}
+
+void _testIssueStateTransitionTools() {
+  group('GitLabSyncTools issue state transition tools', () {
+    _setUpIssueServer();
+
+    test('gitlab_close_issue, reopen, and move_issue_to_status', () {
+      final closed = _echo('gitlab_close_issue', {'key': 'gl-5'});
+      expect(closed['method'], 'PUT');
+      expect(jsonDecode(closed['body'] as String), {'state_event': 'close'});
+
+      final reopened = _echo('gitlab_reopen_issue', {'key': 'gl-5'});
+      expect(jsonDecode(reopened['body'] as String), {'state_event': 'reopen'});
+
+      final movedDone = _echo('gitlab_move_issue_to_status', {
+        'key': 'gl-5',
+        'statusName': 'completed',
+      });
+      expect(jsonDecode(movedDone['body'] as String), {'state_event': 'close'});
+
+      final movedOpen = _echo('gitlab_move_issue_to_status', {
+        'key': 'gl-5',
+        'statusName': 'reopened',
+      });
+      expect(
+          jsonDecode(movedOpen['body'] as String), {'state_event': 'reopen'});
+
+      final movedCustom = _echo('gitlab_move_issue_to_status', {
+        'key': 'gl-5',
+        'statusName': 'In Review',
+      });
+      expect(
+        jsonDecode(movedCustom['body'] as String),
+        {'add_labels': 'status::In Review'},
+      );
+    });
+  });
+}
+
+void _testIssueLabelAndCommentTools() {
+  group('GitLabSyncTools issue label and comment tools', () {
+    _setUpIssueServer();
+
+    test('gitlab_add_issue_label, remove_label, and paginated comments', () {
+      final added = _echo('gitlab_add_issue_label', {
+        'key': 'gl-5',
+        'label': 'bug',
+      });
+      expect(jsonDecode(added['body'] as String), {'add_labels': 'bug'});
+
+      final removed = _echo('gitlab_remove_issue_label', {
+        'key': 'gl-5',
+        'label': 'bug',
+      });
+      expect(jsonDecode(removed['body'] as String), {'remove_labels': 'bug'});
+
+      final comment = _echo('gitlab_create_issue_comment', {
+        'key': 'gl-5',
+        'body': 'Note text',
+      });
+      expect(comment['method'], 'POST');
+      expect(
+        comment['path'],
+        '/api/v4/projects/defgroup%2Fdefrepo/issues/5/notes',
+      );
+      expect(jsonDecode(comment['body'] as String), {'body': 'Note text'});
+
+      final pagedRaw =
+          _tools.handlers['gitlab_get_issue_comments']!({'key': 'gl-105'});
+      final paged = jsonDecode(pagedRaw) as List;
+      expect(paged, hasLength(102));
+      expect((paged.first as Map)['body'], 'n1');
+      expect((paged.last as Map)['body'], 'n102');
+    });
+  });
+}
+
+void _testIssueAssignAndErrorTools() {
+  group('GitLabSyncTools assign_issue and error branches', () {
+    _setUpIssueServer();
+
+    test('gitlab_assign_issue resolves user id and PUTs assignee_ids', () {
+      final assigned = _echo('gitlab_assign_issue', {
+        'key': 'gl-5',
+        'user': 'alice',
+      });
+      expect(assigned['method'], 'PUT');
+      expect(
+        assigned['path'],
+        '/api/v4/projects/defgroup%2Fdefrepo/issues/5',
+      );
+      expect(jsonDecode(assigned['body'] as String), {
+        'assignee_ids': [77],
+      });
+      final missing =
+          _echo('gitlab_assign_issue', {'key': 'gl-5', 'user': 'ghost'});
+      expect(missing['error'], contains('GitLab user not found'));
+      final blank = _echo('gitlab_assign_issue', {'key': 'gl-5', 'user': '  '});
+      expect(blank['error'], contains('username must not be empty'));
+    });
+
+    test('surfaces non-2xx HTTP status and CI_PROJECT_PATH fallback', () {
+      final notFound = _echo('gitlab_get_issue', {'key': 'gl-404'});
+      expect(notFound['error'], contains('HTTP 404'));
+      expect(notFound['error'], contains('404 Issue Not Found'));
+      final badKey = _echo('gitlab_get_issue', {'key': 'not-a-key'});
+      expect(badKey['error'], contains('Cannot parse GitLab issue key'));
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
+        'GITLAB_TOKEN': 'glpat-test',
+        'CI_PROJECT_PATH': 'cigroup/cirepo',
+      });
+      final fromCi = _echo('gitlab_get_issue', {'key': 'gl-7'});
+      expect(fromCi['path'], '/api/v4/projects/cigroup%2Fcirepo/issues/7');
+      PropertyReader.setOverrides({
+        'GITLAB_BASE_PATH': 'http://127.0.0.1:${_server.port}',
+        'GITLAB_TOKEN': 'glpat-test',
+      });
+      final noProj = _echo('gitlab_get_issue', {'key': 'gl-5'});
+      expect(noProj['error'], contains('requires workspace/repository'));
+    });
+  });
+}

@@ -64,15 +64,16 @@ final RegExp _issueKey =
 /// Java `GitHubTrackerClient.parseIssueKeys`: when [query] is solely a
 /// comma/whitespace-separated list of issue keys, returns them in order;
 /// otherwise (blank, or any non-key token) returns an empty list.
-List<String> parseGithubIssueKeys(String? query) {
+List<String> parseGithubIssueKeys(String? query) =>
+    parseIssueKeyTokens(query, _issueKey);
+
+/// Splits [query] on whitespace/commas and returns the tokens when every
+/// token matches [pattern], else returns an empty list.
+List<String> parseIssueKeyTokens(String? query, RegExp pattern) {
   final trimmed = query?.trim() ?? '';
   if (trimmed.isEmpty) return const [];
-  final keys = <String>[];
-  for (final token in trimmed.split(RegExp(r'[\s,]+'))) {
-    if (!_issueKey.hasMatch(token)) return const [];
-    keys.add(token);
-  }
-  return keys;
+  final tokens = trimmed.split(RegExp(r'[\s,]+'));
+  return tokens.every(pattern.hasMatch) ? tokens : const [];
 }
 
 /// Expands `${VAR}` refs from [env] (defaults to the process environment);

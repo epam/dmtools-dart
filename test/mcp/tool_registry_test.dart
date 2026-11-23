@@ -492,6 +492,37 @@ void registryAliasKeyHintTests() {
         'ado_get_work_item',
       );
     });
+    _gitlabKeyHintTests();
+  });
+}
+
+void _gitlabKeyHintTests() {
+  test('gl-123 and 3-segment group/sub/repo#123 route to GitLab', () {
+    final gitlabGet = ToolDefinition(
+      name: 'gitlab_get_issue',
+      description: 'Get GitLab issue',
+      integration: 'gitlab',
+      aliases: const ['tracker_get_ticket'],
+    );
+    final registry = ToolRegistry()
+      ..register(jiraTool(aliases: ['tracker_get_ticket']))
+      ..register(gitlabGet);
+    expect(
+      registry.resolveToolAlias(
+        'tracker_get_ticket',
+        keyHint: 'gl-42',
+        defaultTracker: 'jira',
+      ),
+      'gitlab_get_issue',
+    );
+    expect(
+      registry.resolveToolAlias(
+        'tracker_get_ticket',
+        keyHint: 'org/sub/repo#42',
+        defaultTracker: 'jira',
+      ),
+      'gitlab_get_issue',
+    );
   });
 }
 

@@ -31,6 +31,8 @@ import '../sync_http_client.dart';
 import 'sync_request_helpers.dart';
 import 'sync_required_params.dart';
 
+part 'gitlab_issue_sync_tools.dart';
+
 /// Connection config for the sync GitLab client.
 typedef _GitlabConfig = ({String baseUrl, Map<String, String> headers});
 
@@ -105,6 +107,17 @@ final Map<String, String Function(Map<String, dynamic> args)> _gitlabHandlers =
   'gitlab_get_or_create_release': _getOrCreateRelease,
   'gitlab_upload_release_asset': _uploadReleaseAsset,
   'gitlab_download_release_asset': _downloadReleaseAsset,
+  'gitlab_get_issue': _getIssue,
+  'gitlab_search_issues': _searchIssues,
+  'gitlab_create_issue': _createIssue,
+  'gitlab_close_issue': _closeIssue,
+  'gitlab_reopen_issue': _reopenIssue,
+  'gitlab_move_issue_to_status': _moveIssueToStatus,
+  'gitlab_assign_issue': _assignIssue,
+  'gitlab_add_issue_label': _addIssueLabel,
+  'gitlab_remove_issue_label': _removeIssueLabel,
+  'gitlab_create_issue_comment': _createIssueComment,
+  'gitlab_get_issue_comments': _getIssueComments,
 });
 
 /// Builds GitLab config, or `null` when base path / token is missing.

@@ -158,6 +158,7 @@ ToolDefinition _triggerMrDiscussionResolveTool() => ToolDefinition(
 /// Issue-read tool: `gitlab_get_issue`.
 ToolDefinition _getIssueTool() => ToolDefinition(
       name: 'gitlab_get_issue',
+      aliases: ['tracker_get_ticket'],
       description: 'Get a GitLab issue by project and iid',
       integration: 'gitlab',
       category: 'issues',
@@ -167,6 +168,7 @@ ToolDefinition _getIssueTool() => ToolDefinition(
 /// Issue-create tool: `gitlab_create_issue`.
 ToolDefinition _createIssueTool() => ToolDefinition(
       name: 'gitlab_create_issue',
+      aliases: ['tracker_create_ticket'],
       description: 'Create an issue in a GitLab project',
       integration: 'gitlab',
       category: 'issues',

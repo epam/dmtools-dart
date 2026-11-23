@@ -9,6 +9,10 @@ library;
 import 'dart:convert';
 
 import 'gitlab_http_client.dart';
+import '../../config/property_reader.dart';
+import '../../config/property_reader_getters.dart';
+
+part 'gitlab_client_issue_tools.dart';
 
 /// GitLab API methods exposed to the MCP tool runtime.
 class GitlabClient {

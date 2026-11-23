@@ -26,6 +26,27 @@ int syncAsInt(dynamic value) {
   return 0;
 }
 
+/// First non-blank string among [names] in [args].
+String syncFirstStr(Map<String, dynamic> args, List<String> names) {
+  for (final name in names) {
+    final value = syncAsStr(args[name]).trim();
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+/// First parseable int among [names] in [args].
+int? syncFirstInt(Map<String, dynamic> args, List<String> names) {
+  for (final name in names) {
+    final value = args[name];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final parsed = int.tryParse(syncAsStr(value).trim());
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
 /// Whether [value] is `null` or whitespace-only.
 bool syncIsBlank(dynamic value) => syncAsStr(value).trim().isEmpty;
 
@@ -42,6 +63,23 @@ dynamic syncTryDecode(String body) {
 String syncBodyOrError(SyncHttpResponse resp) {
   if (resp.statusCode == 0) {
     return syncErr('HTTP request failed: ${resp.body}');
+  }
+  return resp.body;
+}
+
+/// Returns the response body on 2xx, or a JSON `{"error": …}` envelope on
+/// transport or HTTP status failures (Java `AbstractRestClient` loud non-2xx
+/// parity).
+String syncStrictBodyOrError(SyncHttpResponse resp) {
+  if (resp.statusCode == 0) {
+    return syncErr('HTTP request failed: ${resp.body}');
+  }
+  if (!resp.isOk) {
+    final decoded = syncTryDecode(resp.body);
+    final detail = decoded is Map
+        ? (decoded['error'] ?? decoded['message'] ?? resp.body).toString()
+        : resp.body;
+    return syncErr('HTTP ${resp.statusCode}: $detail');
   }
   return resp.body;
 }

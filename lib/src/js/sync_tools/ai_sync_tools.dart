@@ -48,6 +48,7 @@ import '../../integrations/ai/ai_request.dart'
         firstBlock,
         jsonHeaders;
 import '../../integrations/ai/ai_tools.dart' show aiModels;
+import '../../integrations/ai/openai_client.dart' show OpenAIClient;
 import '../sync_http_client.dart';
 
 /// Bedrock model families, each with its own wire envelope.
@@ -246,13 +247,22 @@ class AiSyncTools {
     if (apiKey == null || apiKey.isEmpty) {
       return _jsError('OpenAI is not configured (OPENAI_API_KEY)');
     }
+    final Map<String, dynamic>? extraBody;
+    try {
+      extraBody = OpenAIClient.parseExtraBody(_reader.getOpenAIExtraBody());
+    } on ArgumentError catch (e) {
+      return _jsError('$e');
+    }
+    final maxTokensParam = _reader.getOpenAIMaxTokensParamName().trim();
     final body = <String, dynamic>{
       'model': _reader.getOpenAIModel() ?? _defaultModel('openai'),
       'messages': [_userMessage(_message(args))],
-      _reader.getOpenAIMaxTokensParamName(): _reader.getOpenAIMaxTokens(),
+      if (maxTokensParam.isNotEmpty)
+        maxTokensParam: _reader.getOpenAIMaxTokens(),
     };
     final temperature = _reader.getOpenAITemperature();
     if (temperature >= 0) body['temperature'] = temperature;
+    OpenAIClient.mergeExtraBody(body, extraBody);
     return _postChat(
       _reader.getOpenAIBasePath(),
       bearerHeaders(apiKey),

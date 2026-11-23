@@ -439,6 +439,9 @@ class PropertyNames {
   /// `OPENAI_BASE_PATH` configuration property name (Java `PropertyReader` parity).
   static const String OPENAI_BASE_PATH = 'OPENAI_BASE_PATH';
 
+  /// `OPENAI_EXTRA_BODY` configuration property name (Java `PropertyReader` parity).
+  static const String OPENAI_EXTRA_BODY = 'OPENAI_EXTRA_BODY';
+
   /// `OPENAI_MAX_TOKENS` configuration property name (Java `PropertyReader` parity).
   static const String OPENAI_MAX_TOKENS = 'OPENAI_MAX_TOKENS';
 
@@ -735,6 +738,7 @@ class PropertyNames {
     OLLAMA_NUM_PREDICT,
     OPENAI_API_KEY,
     OPENAI_BASE_PATH,
+    OPENAI_EXTRA_BODY,
     OPENAI_MAX_TOKENS,
     OPENAI_MAX_TOKENS_PARAM_NAME,
     OPENAI_MODEL,

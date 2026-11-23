@@ -44,6 +44,15 @@ const _expectedToolOrder = [
   'gitlab_get_issue',
   'gitlab_create_issue',
   'gitlab_list_issues',
+  'gitlab_search_issues',
+  'gitlab_close_issue',
+  'gitlab_reopen_issue',
+  'gitlab_move_issue_to_status',
+  'gitlab_assign_issue',
+  'gitlab_add_issue_label',
+  'gitlab_remove_issue_label',
+  'gitlab_create_issue_comment',
+  'gitlab_get_issue_comments',
   'gitlab_create_branch',
   'gitlab_get_file_content',
   'gitlab_create_tag',
@@ -73,7 +82,7 @@ void toolCatalogTests() {
   group('gitlabTools catalog', () {
     final tools = gitlabTools();
 
-    test('registers the forty-eight tools in declaration order', () {
+    test('registers the fifty-seven tools in declaration order', () {
       expect(tools.map((t) => t.name), _expectedToolOrder);
     });
 

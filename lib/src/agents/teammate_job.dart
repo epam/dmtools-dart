@@ -22,6 +22,8 @@ import 'dart:io';
 import 'cli_agent.dart';
 import 'github_ticket_source.dart';
 import 'github_tracker_client.dart';
+import 'gitlab_ticket_source.dart';
+import 'gitlab_tracker_client.dart';
 import 'cli_agent_params.dart';
 import 'input_context_config.dart';
 import 'ticket_smart_sources.dart';
@@ -93,12 +95,6 @@ class TeammateJob {
           {'key': explicitKey, 'fields': <String, dynamic>{}, ...?fetched},
         ]);
       }
-      // Issues-driven pass-through: the caller prepared `input/ticket.md`
-      // (e.g. the ai-teammate workflow wrote the issue body). Run
-      // the config AS-IS through one [CliAgent] with a synthetic ticket —
-      // the canonical `input/<contextId>/` context is built from it.
-      // Without a prepared input this is Java parity: "skipping ticket
-      // processing" → empty result list.
       final prepared = _preparedInputTicket();
       if (prepared == null) {
         return const {'success': true, 'results': []};
@@ -106,16 +102,22 @@ class TeammateJob {
       _consumePreparedInput();
       return _runSingle(prepared);
     }
-    // GitHub when the query is GitHub-shaped, or when the tracker
-    // selection (DEFAULT_TRACKER=github, or GitHub as the only configured
-    // tracker) resolves to GitHub — Java ServerManagedIntegrationsModule
-    // parity (epam/dm.ai#730).
-    _sourceIsGithub = looksLikeGithubQuery(inputJql) ||
-        resolveTrackerType(propertyReader ?? PropertyReader()) == 'github';
-    final source = ticketSource ??
-        (_sourceIsGithub ? githubIssueTicketSource : jiraTicketSource);
+    final source = _selectTicketSource(inputJql);
     final tickets = await source(inputJql);
     return _runTickets(tickets);
+  }
+
+  TeammateTicketSource _selectTicketSource(String inputJql) {
+    final resolvedTracker =
+        resolveTrackerType(propertyReader ?? PropertyReader());
+    _sourceIsGitlab =
+        looksLikeGitlabQuery(inputJql) || resolvedTracker == 'gitlab';
+    _sourceIsGithub = !_sourceIsGitlab &&
+        (looksLikeGithubQuery(inputJql) || resolvedTracker == 'github');
+    if (ticketSource != null) return ticketSource!;
+    if (_sourceIsGitlab) return gitlabIssueTicketSource;
+    if (_sourceIsGithub) return githubIssueTicketSource;
+    return jiraTicketSource;
   }
 
   /// Runs every resolved ticket through a loud [CliAgent], then applies
@@ -317,7 +319,9 @@ class TeammateJob {
     final ciRunUrl = (params['ciRunUrl'] as String?)?.trim() ?? '';
     if (ciRunUrl.isEmpty || !_shouldPostComments) return;
     final poster = commentPoster ??
-        (_sourceIsGithub ? _githubCommentPoster : _jiraCommentPoster);
+        (_sourceIsGitlab
+            ? _gitlabCommentPoster
+            : (_sourceIsGithub ? _githubCommentPoster : _jiraCommentPoster));
     try {
       await poster(key, '${_agentNamePrefix()}${bodyBuilder(ciRunUrl)}');
     } catch (_) {
@@ -353,7 +357,7 @@ class TeammateJob {
   /// `[~accountid:...]` (or `[...]` if `~` is already present); GitHub returns
   /// the initiator verbatim.
   String _tagInitiator(String initiator) {
-    if (_sourceIsGithub) return initiator;
+    if (_sourceIsGithub || _sourceIsGitlab) return initiator;
     if (initiator.contains('~')) {
       return initiator.startsWith('[') && initiator.endsWith(']')
           ? initiator
@@ -373,6 +377,9 @@ class TeammateJob {
   /// Whether the resolved ticket source is the GitHub-issues one — trace
   /// comments are Jira-specific and are skipped in that mode.
   bool _sourceIsGithub = false;
+
+  /// Whether the resolved ticket source is the GitLab-issues one.
+  bool _sourceIsGitlab = false;
 
   /// Java `AbstractJob.agentNamePrefix`: `[<contextId>|<agentId>] ` or `''`.
   String _agentNamePrefix() {
@@ -429,6 +436,12 @@ Future<void> _jiraCommentPoster(String key, String body) async {
 /// GitHub issues tracker client (Java `GitHubTrackerClient.postComment`).
 Future<void> _githubCommentPoster(String key, String body) async {
   GithubTrackerClient().postComment(key, body);
+}
+
+/// Default comment sink for GitLab-sourced tickets: the write-side
+/// GitLab issues tracker client (Java `GitLabTrackerClient.postComment`).
+Future<void> _gitlabCommentPoster(String key, String body) async {
+  GitlabTrackerClient().postComment(key, body);
 }
 
 /// Merges a raw ticket payload and a raw comments payload into one ticket

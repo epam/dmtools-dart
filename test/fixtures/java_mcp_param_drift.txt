@@ -16,7 +16,9 @@ confluence_create_page:title,parentId,body,space
 confluence_download_attachment:attachment,targetDir
 confluence_sync_markdown_directory:directory,parentId,space,deleteOrphans,attachmentsDir,preserveInlineComments
 gitlab_approve_mr:workspace,repository,pullRequestId
+gitlab_create_issue:workspace,repository,title,body,key
 gitlab_create_mr_note:workspace,repository,pullRequestId,text
+gitlab_get_issue:workspace,repository,issueNumber,key
 gitlab_get_mr:workspace,repository,pullRequestId
 gitlab_get_mr_diff:workspace,repository,pullRequestId
 gitlab_get_mr_discussions:workspace,repository,pullRequestId

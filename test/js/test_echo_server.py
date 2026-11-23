@@ -799,6 +799,37 @@ class EchoHandler(http.server.BaseHTTPRequestHandler):
             # so the client's per_page/maxResults walk is exercised.
             self._send(json.dumps([{"id": 1}, {"id": 2}]).encode("utf-8"))
             return
+        elif self.command == "GET" and "/api/v4/users?" in self.path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            username = query.get("username", [""])[0]
+            rows = [{"id": 77, "username": username}] if username != "ghost" else []
+            self._send(json.dumps(rows).encode("utf-8"))
+            return
+        elif self.command == "GET" and "/issues/404/notes" in self.path:
+            encoded = b'{"message": "404 Issue Not Found"}'
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+        elif self.command == "GET" and "/issues/105/notes" in self.path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            page = int(query.get("page", ["1"])[0])
+            if page == 1:
+                notes = [{"id": i, "body": "n%d" % i} for i in range(1, 101)]
+            else:
+                notes = [{"id": 101, "body": "n101"}, {"id": 102, "body": "n102"}]
+            self._send(json.dumps(notes).encode("utf-8"))
+            return
+        elif "/issues/404" in self.path:
+            encoded = b'{"message": "404 Issue Not Found"}'
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         # ADO stub shapes for the WIQL two-step regression test: the WIQL
         # POST answers id/url stubs, the ids= detail GET answers full items
         # (mirrors the real dev.azure.com response envelopes).

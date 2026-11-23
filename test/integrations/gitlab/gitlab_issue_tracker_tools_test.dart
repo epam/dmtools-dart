@@ -17,7 +17,8 @@ void main() {
   tearDown(PropertyReader.clearOverrides);
 
   _testIssueRefResolution();
-  _testIssueTrackerClientAndExecutor();
+  _testIssueTrackerReadAndStateRoutes();
+  _testIssueTrackerMetaRoutes();
 }
 
 void _testIssueRefResolution() {
@@ -61,69 +62,79 @@ void _testIssueRefResolution() {
   });
 }
 
-void _testIssueTrackerClientAndExecutor() {
-  group('GitlabToolExecutor issue tracker routes', () {
-    test('executes get, search, create, close, reopen, move, labels, comments',
-        () async {
-      final fix = mockGitlab(_issueRouter);
-      PropertyReader.setOverrides({
-        'GITLAB_BASE_PATH': 'https://gitlab.example.com',
-        'GITLAB_TOKEN': 'glpat-123',
-        'GITLAB_WORKSPACE': 'ws',
-        'GITLAB_REPOSITORY': 'rp',
-      });
-      final exec = GitlabToolExecutor(fix.client);
-
-      await exec.execute('gitlab_get_issue', {'key': 'ws/rp#3'});
-      await exec.execute('gitlab_search_issues', {'query': 'bug'});
-      await exec.execute('gitlab_create_issue', {
-        'key': 'ws/rp',
-        'title': 'New',
-        'body': 'Desc',
-      });
-      await exec.execute('gitlab_close_issue', {'key': 'gl-3'});
-      await exec.execute('gitlab_reopen_issue', {'key': 'gl-3'});
-      await exec.execute('gitlab_move_issue_to_status', {
-        'key': 'gl-3',
-        'statusName': 'done',
-      });
-      await exec.execute('gitlab_move_issue_to_status', {
-        'key': 'gl-3',
-        'statusName': 'reopened',
-      });
-      await exec.execute('gitlab_move_issue_to_status', {
-        'key': 'gl-3',
-        'statusName': 'In Progress',
-      });
-      await exec.execute('gitlab_add_issue_label', {
-        'key': 'gl-3',
-        'label': 'l1',
-      });
-      await exec.execute('gitlab_remove_issue_label', {
-        'key': 'gl-3',
-        'label': 'l1',
-      });
-      await exec.execute('gitlab_create_issue_comment', {
-        'key': 'gl-3',
-        'body': 'hi',
-      });
-      final notes = await exec
-          .execute('gitlab_get_issue_comments', {'key': 'gl-3'}) as List;
-      expect(notes, hasLength(1));
-
-      await exec.execute('gitlab_assign_issue', {
-        'key': 'gl-3',
-        'user': 'alice',
-      });
-      expect(
-        () => exec.execute('gitlab_assign_issue', {
-          'key': 'gl-3',
-          'user': 'ghost',
-        }),
-        throwsStateError,
-      );
-      expect(fix.adapter.calls, isNotEmpty);
+void _testIssueTrackerReadAndStateRoutes() {
+  test('executes get, search, create, close, reopen, and move_issue_to_status',
+      () async {
+    final fix = mockGitlab(_issueRouter);
+    PropertyReader.setOverrides({
+      'GITLAB_BASE_PATH': 'https://gitlab.example.com',
+      'GITLAB_TOKEN': 'glpat-123',
+      'GITLAB_WORKSPACE': 'ws',
+      'GITLAB_REPOSITORY': 'rp',
     });
+    final exec = GitlabToolExecutor(fix.client);
+    await exec.execute('gitlab_get_issue', {'key': 'ws/rp#3'});
+    await exec.execute('gitlab_search_issues', {'query': 'bug'});
+    await exec.execute('gitlab_create_issue', {
+      'key': 'ws/rp',
+      'title': 'New',
+      'body': 'Desc',
+    });
+    await exec.execute('gitlab_close_issue', {'key': 'gl-3'});
+    await exec.execute('gitlab_reopen_issue', {'key': 'gl-3'});
+    await exec.execute('gitlab_move_issue_to_status', {
+      'key': 'gl-3',
+      'statusName': 'done',
+    });
+    await exec.execute('gitlab_move_issue_to_status', {
+      'key': 'gl-3',
+      'statusName': 'reopened',
+    });
+    await exec.execute('gitlab_move_issue_to_status', {
+      'key': 'gl-3',
+      'statusName': 'In Progress',
+    });
+    expect(fix.adapter.calls, isNotEmpty);
+  });
+}
+
+void _testIssueTrackerMetaRoutes() {
+  test('executes labels, comments, and assign_issue', () async {
+    final fix = mockGitlab(_issueRouter);
+    PropertyReader.setOverrides({
+      'GITLAB_BASE_PATH': 'https://gitlab.example.com',
+      'GITLAB_TOKEN': 'glpat-123',
+      'GITLAB_WORKSPACE': 'ws',
+      'GITLAB_REPOSITORY': 'rp',
+    });
+    final exec = GitlabToolExecutor(fix.client);
+    await exec.execute('gitlab_add_issue_label', {
+      'key': 'gl-3',
+      'label': 'l1',
+    });
+    await exec.execute('gitlab_remove_issue_label', {
+      'key': 'gl-3',
+      'label': 'l1',
+    });
+    await exec.execute('gitlab_create_issue_comment', {
+      'key': 'gl-3',
+      'body': 'hi',
+    });
+    final notes = await exec
+        .execute('gitlab_get_issue_comments', {'key': 'gl-3'}) as List;
+    expect(notes, hasLength(1));
+
+    await exec.execute('gitlab_assign_issue', {
+      'key': 'gl-3',
+      'user': 'alice',
+    });
+    expect(
+      () => exec.execute('gitlab_assign_issue', {
+        'key': 'gl-3',
+        'user': 'ghost',
+      }),
+      throwsStateError,
+    );
   });
 }
 

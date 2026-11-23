@@ -22,7 +22,8 @@ void main() {
   _testIssueHandlerSurface();
   if (hasPython3()) {
     _testIssueReadAndCreateTools();
-    _testIssueMutationTools();
+    _testIssueStateTransitionTools();
+    _testIssueLabelAndCommentTools();
     _testIssueAssignAndErrorTools();
   }
 }
@@ -113,8 +114,8 @@ void _testIssueReadAndCreateTools() {
   });
 }
 
-void _testIssueMutationTools() {
-  group('GitLabSyncTools issue mutation tools', () {
+void _testIssueStateTransitionTools() {
+  group('GitLabSyncTools issue state transition tools', () {
     _setUpIssueServer();
 
     test('gitlab_close_issue, reopen, and move_issue_to_status', () {
@@ -147,6 +148,12 @@ void _testIssueMutationTools() {
         {'add_labels': 'status::In Review'},
       );
     });
+  });
+}
+
+void _testIssueLabelAndCommentTools() {
+  group('GitLabSyncTools issue label and comment tools', () {
+    _setUpIssueServer();
 
     test('gitlab_add_issue_label, remove_label, and issue comments', () {
       final added = _echo('gitlab_add_issue_label', {

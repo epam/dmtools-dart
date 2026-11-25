@@ -42,6 +42,7 @@ export 'src/integrations/integration_clients.dart';
 export 'src/integrations/ai/ai_http.dart';
 export 'src/integrations/ai/ai_messages.dart';
 export 'src/integrations/ai/ai_request.dart';
+export 'src/integrations/ai/ai_response_parser.dart';
 export 'src/integrations/ai/ai_tools.dart';
 export 'src/integrations/ai/anthropic_client.dart';
 export 'src/integrations/ai/dial_client.dart';

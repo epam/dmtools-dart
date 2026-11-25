@@ -19,6 +19,12 @@ void _registerPlainBooleanWithExplanationTests() {
       expect(trueWithExpl.value, isTrue);
       expect(trueWithExpl.explanation, 'because it validates the same flow');
 
+      final sExplanation = AIResponseParser.parseBooleanWithExplanation(
+        'true, status is tracked across tests',
+      );
+      expect(sExplanation.value, isTrue);
+      expect(sExplanation.explanation, 'status is tracked across tests');
+
       final truePlain = AIResponseParser.parseBooleanWithExplanation('true');
       expect(truePlain.value, isTrue);
       expect(truePlain.explanation, isNull);
@@ -226,14 +232,12 @@ void _registerStructuredResponseTests() {
         AIResponseParser.parseCodeResponse('  plain code  '),
         'plain code',
       );
-      expect(
-        () => AIResponseParser.parseCodeResponse(''),
-        throwsArgumentError,
-      );
-      expect(
-        () => AIResponseParser.parseCodeResponse(null),
-        throwsArgumentError,
-      );
+      for (final invalid in <String?>['', null]) {
+        expect(
+          () => AIResponseParser.parseCodeResponse(invalid),
+          throwsArgumentError,
+        );
+      }
     });
   });
 }

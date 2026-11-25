@@ -43,8 +43,8 @@ class AIResponseParser {
   );
 
   static final RegExp _leadingPunctuation = RegExp(r'''^[*_`"'\]\)\s.,:\-]+''');
-  static final RegExp _leadingWrap = RegExp(r'''^[*_`"'\\s]+''');
-  static final RegExp _trailingWrap = RegExp(r'''[*_`"'\\s]+$''');
+  static final RegExp _leadingWrap = RegExp(r'''^[*_`"'\s]+''');
+  static final RegExp _trailingWrap = RegExp(r'''[*_`"'\s]+$''');
   static final RegExp _codeBlockPattern = RegExp(
     r'```(?:\w*\s*)?\n?(.*?)\n?```',
     dotAll: true,
@@ -181,8 +181,8 @@ class AIResponseParser {
     if (match == null) return null;
     final isTrue = (match.group(1) ?? '').toLowerCase() == 'true';
     if (!isTrue) return const BooleanWithExplanation(false);
-    final remainder =
-        trimmed.substring(match.end).replaceFirst(_leadingPunctuation, '');
+    final afterMatch = trimmed.substring(match.end);
+    final remainder = afterMatch.replaceFirst(_leadingPunctuation, '');
     return BooleanWithExplanation(true, _cleanExplanation(remainder));
   }
 
